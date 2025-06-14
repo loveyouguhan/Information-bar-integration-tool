@@ -1,0 +1,150 @@
+{
+    "id": "inventory",
+    "label": "背包仓库",
+    "icon": "fa-box",
+    "description": "配置物品、装备、资源等库存信息的显示",
+    "category": "panel",
+    "defaultEnabled": true,
+    "priority": 7,
+    "aiPromptHint": "记录角色携带的物品、装备和各种资源，包括货币、消耗品、装备等",
+    "exampleData": {
+        "inventoryItems": "魔法水晶x3、治疗药水x5、魔法笔记本、地图",
+        "equipment": "见习法师袍（装备中）、橡木法杖（装备中）、学院徽章",
+        "currency": "金币:150、银币:30、学院积分:450",
+        "keyItems": "图书馆通行证、导师的推荐信"
+    },
+    "items": [
+        {
+            "id": "inventoryItems",
+            "label": "背包物品",
+            "type": "text",
+            "category": "items",
+            "defaultValue": true,
+            "priority": 1,
+            "description": "背包中的普通物品",
+            "aiHint": "列出背包中的物品和数量",
+            "example": "魔法水晶x3、治疗药水x5"
+        },
+        {
+            "id": "equipment",
+            "label": "装备",
+            "type": "text",
+            "category": "equipment",
+            "defaultValue": true,
+            "priority": 2,
+            "description": "当前装备和可用装备",
+            "aiHint": "穿戴中的装备和背包中的装备",
+            "example": "见习法师袍（装备中）、橡木法杖"
+        },
+        {
+            "id": "currency",
+            "label": "货币",
+            "type": "text",
+            "category": "resources",
+            "defaultValue": true,
+            "priority": 3,
+            "description": "拥有的各种货币",
+            "aiHint": "金币、银币或其他货币系统",
+            "example": "金币:150、银币:30"
+        },
+        {
+            "id": "keyItems",
+            "label": "关键物品",
+            "type": "text",
+            "category": "items",
+            "defaultValue": true,
+            "priority": 4,
+            "description": "重要的剧情物品",
+            "aiHint": "任务物品或重要道具",
+            "example": "图书馆通行证、神秘钥匙"
+        },
+        {
+            "id": "consumables",
+            "label": "消耗品",
+            "type": "text",
+            "category": "items",
+            "defaultValue": false,
+            "priority": 5,
+            "description": "可使用的消耗品",
+            "aiHint": "药水、卷轴等一次性物品",
+            "example": "生命药水x3、魔力药水x2"
+        },
+        {
+            "id": "materials",
+            "label": "材料",
+            "type": "text",
+            "category": "resources",
+            "defaultValue": false,
+            "priority": 6,
+            "description": "制作或合成用的材料",
+            "aiHint": "各种原材料和素材",
+            "example": "魔法粉末x10、精铁矿石x5"
+        },
+        {
+            "id": "storage",
+            "label": "仓库存储",
+            "type": "text",
+            "category": "items",
+            "defaultValue": false,
+            "priority": 7,
+            "description": "存放在仓库的物品",
+            "aiHint": "不在身上但可访问的物品",
+            "example": "仓库：旧装备若干、收藏品"
+        },
+        {
+            "id": "capacity",
+            "label": "背包容量",
+            "type": "text",
+            "category": "items",
+            "defaultValue": false,
+            "priority": 8,
+            "description": "背包的容量限制",
+            "aiHint": "当前负重或格子数",
+            "example": "背包：24/30格"
+        },
+        {
+            "id": "weapons",
+            "label": "武器",
+            "type": "text",
+            "category": "equipment",
+            "defaultValue": false,
+            "priority": 9,
+            "description": "拥有的武器列表",
+            "aiHint": "各种武器和法器",
+            "example": "初级法杖、训练用短剑"
+        },
+        {
+            "id": "accessories",
+            "label": "饰品",
+            "type": "text",
+            "category": "equipment",
+            "defaultValue": false,
+            "priority": 10,
+            "description": "装饰品和饰品",
+            "aiHint": "戒指、项链、护符等",
+            "example": "幸运护符、魔力戒指"
+        },
+        {
+            "id": "books",
+            "label": "书籍笔记",
+            "type": "text",
+            "category": "items",
+            "defaultValue": false,
+            "priority": 11,
+            "description": "携带的书籍和笔记",
+            "aiHint": "知识类物品",
+            "example": "《基础魔法原理》、研究笔记"
+        },
+        {
+            "id": "specialItems",
+            "label": "特殊物品",
+            "type": "text",
+            "category": "items",
+            "defaultValue": false,
+            "priority": 12,
+            "description": "独特或神秘的物品",
+            "aiHint": "具有特殊属性的物品",
+            "example": "发光的神秘宝珠"
+        }
+    ]
+}

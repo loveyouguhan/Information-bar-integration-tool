@@ -1,0 +1,150 @@
+{
+    "id": "abilities",
+    "label": "能力系统",
+    "icon": "fa-magic",
+    "description": "配置角色能力、技能、魔法等特殊能力的显示",
+    "category": "panel",
+    "defaultEnabled": true,
+    "priority": 8,
+    "aiPromptHint": "记录角色拥有的各种能力，包括魔法、技能、天赋、特殊能力等",
+    "exampleData": {
+        "specialAbilities": "火球术（初级）、魔法感知、快速阅读",
+        "learnedSkills": "基础元素操控、魔法阵绘制、药剂学入门",
+        "combatSkills": "魔法护盾、能量弹",
+        "passiveAbilities": "魔力亲和：恢复速度+20%"
+    },
+    "items": [
+        {
+            "id": "specialAbilities",
+            "label": "特殊能力",
+            "type": "text",
+            "category": "abilities",
+            "defaultValue": true,
+            "priority": 1,
+            "description": "角色的特殊能力或天赋",
+            "aiHint": "独特的能力或天赋技能",
+            "example": "火球术（初级）、魔法感知"
+        },
+        {
+            "id": "learnedSkills",
+            "label": "已学技能",
+            "type": "text",
+            "category": "skills",
+            "defaultValue": true,
+            "priority": 2,
+            "description": "通过学习获得的技能",
+            "aiHint": "已经掌握的各种技能",
+            "example": "基础元素操控、魔法阵绘制"
+        },
+        {
+            "id": "combatSkills",
+            "label": "战斗技能",
+            "type": "text",
+            "category": "combat",
+            "defaultValue": true,
+            "priority": 3,
+            "description": "战斗中可使用的技能",
+            "aiHint": "攻击、防御等战斗技能",
+            "example": "魔法护盾、能量弹"
+        },
+        {
+            "id": "magicSpells",
+            "label": "魔法咒语",
+            "type": "text",
+            "category": "magic",
+            "defaultValue": true,
+            "priority": 4,
+            "description": "掌握的魔法咒语",
+            "aiHint": "可以施放的各类魔法",
+            "example": "光明术、治愈术、浮空术"
+        },
+        {
+            "id": "passiveAbilities",
+            "label": "被动能力",
+            "type": "text",
+            "category": "abilities",
+            "defaultValue": true,
+            "priority": 5,
+            "description": "持续生效的被动能力",
+            "aiHint": "永久加成或被动效果",
+            "example": "魔力亲和：恢复速度+20%"
+        },
+        {
+            "id": "skillLevels",
+            "label": "技能等级",
+            "type": "text",
+            "category": "skills",
+            "defaultValue": false,
+            "priority": 6,
+            "description": "各技能的熟练度",
+            "aiHint": "技能的等级或熟练度",
+            "example": "火球术Lv.2、冥想Lv.3"
+        },
+        {
+            "id": "talentTree",
+            "label": "天赋树",
+            "type": "text",
+            "category": "abilities",
+            "defaultValue": false,
+            "priority": 7,
+            "description": "天赋点分配情况",
+            "aiHint": "天赋树或技能树的点数分配",
+            "example": "元素系:5点、精神系:3点"
+        },
+        {
+            "id": "cooldowns",
+            "label": "技能冷却",
+            "type": "text",
+            "category": "combat",
+            "defaultValue": false,
+            "priority": 8,
+            "description": "技能的冷却状态",
+            "aiHint": "正在冷却中的技能",
+            "example": "大火球:冷却中(2回合)"
+        },
+        {
+            "id": "manaUsage",
+            "label": "魔力消耗",
+            "type": "text",
+            "category": "magic",
+            "defaultValue": false,
+            "priority": 9,
+            "description": "技能的魔力消耗",
+            "aiHint": "使用技能需要的资源",
+            "example": "火球术:10MP、治愈术:15MP"
+        },
+        {
+            "id": "learningProgress",
+            "label": "学习进度",
+            "type": "text",
+            "category": "skills",
+            "defaultValue": false,
+            "priority": 10,
+            "description": "正在学习的技能进度",
+            "aiHint": "新技能的学习进展",
+            "example": "雷电术:学习中(60%)"
+        },
+        {
+            "id": "specialMoves",
+            "label": "必杀技",
+            "type": "text",
+            "category": "combat",
+            "defaultValue": false,
+            "priority": 11,
+            "description": "强力的特殊招式",
+            "aiHint": "大招或必杀技",
+            "example": "元素风暴（需要3回合充能）"
+        },
+        {
+            "id": "restrictions",
+            "label": "能力限制",
+            "type": "text",
+            "category": "abilities",
+            "defaultValue": false,
+            "priority": 12,
+            "description": "能力使用的限制条件",
+            "aiHint": "使用能力的特殊限制",
+            "example": "黑暗魔法：仅夜晚可用"
+        }
+    ]
+}

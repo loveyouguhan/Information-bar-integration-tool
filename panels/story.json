@@ -1,0 +1,150 @@
+{
+    "id": "story",
+    "label": "剧情面板",
+    "icon": "fa-book",
+    "description": "配置剧情进展、章节、关键事件等叙事信息的显示",
+    "category": "panel",
+    "defaultEnabled": true,
+    "priority": 9,
+    "aiPromptHint": "记录故事的进展情况，包括当前章节、重要事件、剧情摘要等叙事要素",
+    "exampleData": {
+        "currentChapter": "第三章：魔法的觉醒",
+        "storyProgress": "35%",
+        "keyEvents": "发现了神秘的魔法石、与导师建立信任关系",
+        "plotSummary": "在寻找失落魔法书的过程中，意外发现了古代遗迹的线索"
+    },
+    "items": [
+        {
+            "id": "currentChapter",
+            "label": "当前章节",
+            "type": "text",
+            "category": "progress",
+            "defaultValue": true,
+            "priority": 1,
+            "description": "故事当前所在的章节",
+            "aiHint": "当前的故事章节或篇章",
+            "example": "第三章：魔法的觉醒"
+        },
+        {
+            "id": "storyProgress",
+            "label": "剧情进度",
+            "type": "text",
+            "category": "progress",
+            "defaultValue": true,
+            "priority": 2,
+            "description": "整体剧情的完成进度",
+            "aiHint": "用百分比或描述表示剧情进展",
+            "example": "主线剧情：35%"
+        },
+        {
+            "id": "keyEvents",
+            "label": "关键事件",
+            "type": "text",
+            "category": "events",
+            "defaultValue": true,
+            "priority": 3,
+            "description": "已发生的重要剧情事件",
+            "aiHint": "影响剧情的重要事件记录",
+            "example": "发现神秘魔法石、导师的认可"
+        },
+        {
+            "id": "plotSummary",
+            "label": "剧情摘要",
+            "type": "text",
+            "category": "summary",
+            "defaultValue": true,
+            "priority": 4,
+            "description": "当前剧情的简要总结",
+            "aiHint": "最近剧情发展的概述",
+            "example": "在寻找魔法书时发现古代遗迹线索"
+        },
+        {
+            "id": "nextObjective",
+            "label": "下个目标",
+            "type": "text",
+            "category": "progress",
+            "defaultValue": false,
+            "priority": 5,
+            "description": "剧情的下一个主要目标",
+            "aiHint": "故事接下来的发展方向",
+            "example": "探索北方森林的古代遗迹"
+        },
+        {
+            "id": "characterDevelopment",
+            "label": "角色成长",
+            "type": "text",
+            "category": "development",
+            "defaultValue": false,
+            "priority": 6,
+            "description": "主角的成长和变化",
+            "aiHint": "角色在剧情中的成长记录",
+            "example": "从胆怯新生成长为自信的魔法师"
+        },
+        {
+            "id": "relationships",
+            "label": "关系变化",
+            "type": "text",
+            "category": "development",
+            "defaultValue": true,
+            "priority": 7,
+            "description": "与其他角色关系的变化",
+            "aiHint": "重要人物关系的发展",
+            "example": "与导师从陌生到信任"
+        },
+        {
+            "id": "worldChanges",
+            "label": "世界变化",
+            "type": "text",
+            "category": "events",
+            "defaultValue": false,
+            "priority": 8,
+            "description": "世界观的重大变化",
+            "aiHint": "影响世界的重大事件或变化",
+            "example": "古代魔法的复苏引起各方关注"
+        },
+        {
+            "id": "foreshadowing",
+            "label": "伏笔暗示",
+            "type": "text",
+            "category": "summary",
+            "defaultValue": false,
+            "priority": 9,
+            "description": "潜在的伏笔或暗示",
+            "aiHint": "尚未揭示的神秘线索",
+            "example": "神秘人留下的密码信息"
+        },
+        {
+            "id": "choices",
+            "label": "重要选择",
+            "type": "text",
+            "category": "choices",
+            "defaultValue": false,
+            "priority": 10,
+            "description": "做出的重要选择及后果",
+            "aiHint": "影响剧情走向的关键决定",
+            "example": "选择帮助村民，获得了重要情报"
+        },
+        {
+            "id": "timeline",
+            "label": "时间线",
+            "type": "text",
+            "category": "progress",
+            "defaultValue": false,
+            "priority": 11,
+            "description": "故事的时间进展",
+            "aiHint": "从故事开始经过的时间",
+            "example": "冒险开始后第15天"
+        },
+        {
+            "id": "endings",
+            "label": "结局走向",
+            "type": "text",
+            "category": "progress",
+            "defaultValue": false,
+            "priority": 12,
+            "description": "可能的结局方向",
+            "aiHint": "基于当前选择的结局倾向",
+            "example": "倾向：光明结局路线"
+        }
+    ]
+}

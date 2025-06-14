@@ -1,0 +1,128 @@
+{
+    "id": "tasks",
+    "label": "任务系统",
+    "icon": "fa-tasks",
+    "description": "配置任务和目标的显示，包括主线任务、支线任务和当前目标",
+    "category": "panel",
+    "defaultEnabled": true,
+    "priority": 4,
+    "aiPromptHint": "记录当前的任务状态，包括主线任务、支线任务和即时目标。任务可以是对象格式",
+    "exampleData": {
+        "mainQuest": "{'name':'寻找失落的魔法典籍','status':'进行中','progress':'已找到3/5条线索'}",
+        "sideQuests": "[{'name':'帮助图书管理员整理书籍','status':'已接受'},{'name':'调查奇怪的魔法波动','status':'待完成'}]",
+        "currentObjective": "前往禁书区查找古代魔法文献",
+        "dailyTasks": "完成魔法理论作业"
+    },
+    "items": [
+        {
+            "id": "mainQuest",
+            "label": "主线任务",
+            "type": "object",
+            "category": "type",
+            "defaultValue": true,
+            "priority": 1,
+            "description": "当前的主要任务",
+            "aiHint": "主线剧情任务，可以是字符串或包含name、status、progress等字段的对象",
+            "example": "{'name':'寻找失落的魔法典籍','status':'进行中'}"
+        },
+        {
+            "id": "sideQuests",
+            "label": "支线任务",
+            "type": "array",
+            "category": "type",
+            "defaultValue": true,
+            "priority": 2,
+            "description": "当前的支线任务列表",
+            "aiHint": "支线任务数组，每个任务可以包含name、status等信息",
+            "example": "[{'name':'帮助图书管理员','status':'已接受'}]"
+        },
+        {
+            "id": "currentObjective",
+            "label": "当前目标",
+            "type": "text",
+            "category": "display",
+            "defaultValue": true,
+            "priority": 3,
+            "description": "当前的即时目标或下一步行动",
+            "aiHint": "角色当前需要完成的具体目标",
+            "example": "前往禁书区查找资料"
+        },
+        {
+            "id": "dailyTasks",
+            "label": "日常任务",
+            "type": "text",
+            "category": "type",
+            "defaultValue": false,
+            "priority": 4,
+            "description": "每日或例行任务",
+            "aiHint": "日常需要完成的任务",
+            "example": "完成魔法理论作业"
+        },
+        {
+            "id": "questProgress",
+            "label": "任务进度",
+            "type": "text",
+            "category": "display",
+            "defaultValue": false,
+            "priority": 5,
+            "description": "主要任务的进度描述",
+            "aiHint": "用文字或数字描述任务完成度",
+            "example": "已找到3/5条线索"
+        },
+        {
+            "id": "questRewards",
+            "label": "任务奖励",
+            "type": "text",
+            "category": "display",
+            "defaultValue": false,
+            "priority": 6,
+            "description": "完成任务可获得的奖励",
+            "aiHint": "任务完成后的奖励描述",
+            "example": "高级魔法技能点+1"
+        },
+        {
+            "id": "questDeadline",
+            "label": "任务期限",
+            "type": "text",
+            "category": "display",
+            "defaultValue": false,
+            "priority": 7,
+            "description": "任务的截止时间",
+            "aiHint": "任务必须完成的时限",
+            "example": "本周末前"
+        },
+        {
+            "id": "failedQuests",
+            "label": "失败任务",
+            "type": "array",
+            "category": "type",
+            "defaultValue": false,
+            "priority": 8,
+            "description": "已失败或放弃的任务",
+            "aiHint": "记录失败的任务以供参考",
+            "example": "[{'name':'寻找丢失的猫','reason':'超时'}]"
+        },
+        {
+            "id": "completedQuests",
+            "label": "完成任务",
+            "type": "text",
+            "category": "display",
+            "defaultValue": false,
+            "priority": 9,
+            "description": "最近完成的重要任务",
+            "aiHint": "记录最近完成的任务成就",
+            "example": "成功通过初级魔法师考试"
+        },
+        {
+            "id": "hiddenObjectives",
+            "label": "隐藏目标",
+            "type": "text",
+            "category": "type",
+            "defaultValue": false,
+            "priority": 10,
+            "description": "未公开的隐藏任务目标",
+            "aiHint": "角色尚未意识到的任务目标",
+            "example": "？？？"
+        }
+    ]
+}

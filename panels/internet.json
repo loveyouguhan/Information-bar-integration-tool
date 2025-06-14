@@ -1,0 +1,128 @@
+{
+    "id": "internet",
+    "label": "资讯内容",
+    "icon": "fa-newspaper",
+    "description": "配置社交媒体、新闻、论坛等信息流的显示",
+    "category": "panel",
+    "defaultEnabled": false,
+    "priority": 6,
+    "aiPromptHint": "记录角色接触到的各种信息流，包括社交媒体动态、新闻头条、论坛讨论等",
+    "exampleData": {
+        "socialMediaFeed": "好友分享了魔法大赛的照片，获得523个赞",
+        "newsHeadlines": "皇家魔法协会宣布新的魔法使用规范",
+        "forumPosts": "热门讨论：关于元素魔法与精神魔法哪个更强",
+        "notifications": "收到3条新消息"
+    },
+    "items": [
+        {
+            "id": "socialMediaFeed",
+            "label": "社交动态",
+            "type": "text",
+            "category": "social",
+            "defaultValue": true,
+            "priority": 1,
+            "description": "社交媒体上的最新动态",
+            "aiHint": "朋友圈、社交平台的动态更新",
+            "example": "好友发布了魔法实验成功的照片"
+        },
+        {
+            "id": "newsHeadlines",
+            "label": "新闻头条",
+            "type": "text",
+            "category": "news",
+            "defaultValue": false,
+            "priority": 2,
+            "description": "重要的新闻标题",
+            "aiHint": "世界或地区的重要新闻",
+            "example": "皇家魔法协会宣布新规范"
+        },
+        {
+            "id": "forumPosts",
+            "label": "论坛热帖",
+            "type": "text",
+            "category": "forum",
+            "defaultValue": true,
+            "priority": 3,
+            "description": "论坛或社区的热门讨论",
+            "aiHint": "网络论坛的热门话题",
+            "example": "讨论：元素魔法VS精神魔法"
+        },
+        {
+            "id": "notifications",
+            "label": "通知消息",
+            "type": "text",
+            "category": "social",
+            "defaultValue": true,
+            "priority": 4,
+            "description": "收到的通知和消息",
+            "aiHint": "未读消息、系统通知等",
+            "example": "收到3条新消息，2个好友请求"
+        },
+        {
+            "id": "trendingTopics",
+            "label": "热门话题",
+            "type": "text",
+            "category": "social",
+            "defaultValue": false,
+            "priority": 5,
+            "description": "当前的热门话题标签",
+            "aiHint": "社交媒体上的流行话题",
+            "example": "#魔法大赛2024 #元素觉醒"
+        },
+        {
+            "id": "privateMessages",
+            "label": "私信内容",
+            "type": "text",
+            "category": "social",
+            "defaultValue": false,
+            "priority": 6,
+            "description": "重要的私人消息",
+            "aiHint": "收到的重要私信摘要",
+            "example": "导师：明天记得带上研究笔记"
+        },
+        {
+            "id": "advertisements",
+            "label": "广告推送",
+            "type": "text",
+            "category": "business",
+            "defaultValue": false,
+            "priority": 7,
+            "description": "收到的广告或推广信息",
+            "aiHint": "商业广告或活动推广",
+            "example": "魔法书店大促销，全场8折"
+        },
+        {
+            "id": "weatherAlert",
+            "label": "天气预警",
+            "type": "text",
+            "category": "news",
+            "defaultValue": false,
+            "priority": 8,
+            "description": "天气或环境预警信息",
+            "aiHint": "重要的天气或环境警告",
+            "example": "魔法风暴预警：建议室内活动"
+        },
+        {
+            "id": "eventReminders",
+            "label": "活动提醒",
+            "type": "text",
+            "category": "social",
+            "defaultValue": false,
+            "priority": 9,
+            "description": "即将到来的活动提醒",
+            "aiHint": "日程或活动提醒",
+            "example": "明天：魔法理论期中考试"
+        },
+        {
+            "id": "streamingContent",
+            "label": "直播/视频",
+            "type": "text",
+            "category": "social",
+            "defaultValue": false,
+            "priority": 10,
+            "description": "正在观看或推荐的视频内容",
+            "aiHint": "直播、视频推荐等",
+            "example": "热门直播：高级法师的施法技巧"
+        }
+    ]
+}
