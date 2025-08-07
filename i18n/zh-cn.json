@@ -1,9 +1,0 @@
-{
-    "display_name": "高级信息栏系统",
-    "description": "为SillyTavern提供强大的信息面板功能，解决AI不生成信息栏数据的问题",
-    "settings": {
-        "enabled": "启用信息栏系统",
-        "renderInfoBarInChat": "在聊天中显示信息栏",
-        "memoryAssistEnabled": "启用记忆辅助"
-    }
-}
