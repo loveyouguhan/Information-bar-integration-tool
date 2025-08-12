@@ -723,11 +723,13 @@ export class InfoBarSettings {
                 }
             });
 
-            // 按钮点击事件
+            // 按钮点击事件  
             this.modal.addEventListener('click', (e) => {
-                const action = e.target.dataset.action;
+                // 🔧 修复：使用closest查找具有data-action属性的父元素，解决按钮内子元素点击问题
+                const actionElement = e.target.closest('[data-action]');
+                const action = actionElement?.dataset?.action;
                 if (action) {
-                    this.handleAction(action);
+                    this.handleAction(action, e);
                 }
 
                 // API配置相关按钮
@@ -871,7 +873,7 @@ export class InfoBarSettings {
                     this.addSubItem();
                     break;
                 case 'remove-sub-item':
-                    this.removeSubItem(e.target);
+                    this.removeSubItem(event?.target?.closest('[data-action="remove-sub-item"]') || event?.target);
                     break;
             }
 
@@ -1351,6 +1353,18 @@ export class InfoBarSettings {
      */
     selectPanelForEdit(panelId, panelType) {
         try {
+            // 🔧 修复：切换面板前自动保存当前正在编辑的面板，避免勾选状态丢失
+            if (this.currentEditingPanel && this.modal?.querySelector('.panel-properties-form')) {
+                try {
+                    // 仅在表单可见时尝试保存，且不打断用户
+                    const propertiesForm = this.modal.querySelector('.panel-properties-form');
+                    if (propertiesForm && propertiesForm.style.display !== 'none') {
+                        this.savePanelProperties();
+                    }
+                } catch (e) {
+                    console.warn('[InfoBarSettings] ⚠️ 自动保存当前面板失败，将继续切换:', e);
+                }
+            }
             // 更新面板列表项选中状态
             this.modal.querySelectorAll('.panel-list-item').forEach(item => {
                 item.classList.toggle('selected', item.dataset.panelId === panelId);
@@ -1812,7 +1826,15 @@ export class InfoBarSettings {
                 console.log('[InfoBarSettings] 💾 保存基础面板属性:', id);
 
                 // 🔧 修复：基础面板单独收集表单数据，不包含子项
-                const formData = this.collectBasicPanelFormData();
+            // 读取当前勾选状态，避免因DOM重绘造成状态丢失
+            const form = this.modal.querySelector('.panel-properties-form');
+            const memoryInjectChecked = !!form?.querySelector('#panel-memory-inject')?.checked;
+            const requiredChecked = !!form?.querySelector('#panel-required')?.checked;
+
+            const formData = this.collectBasicPanelFormData();
+            // 覆盖关键布尔位，以当前UI为准
+            formData.memoryInject = memoryInjectChecked;
+            formData.required = requiredChecked;
 
                 // 保存到extensionSettings
                 const context = SillyTavern.getContext();
@@ -2725,8 +2747,8 @@ export class InfoBarSettings {
         form.querySelector('#panel-description').value = panelData.description || '';
         form.querySelector('#panel-icon').value = panelData.icon || '🎨';
 
-        form.querySelector('#panel-required').checked = panelData.required || false;
-        form.querySelector('#panel-memory-inject').checked = panelData.memoryInject || false;
+        form.querySelector('#panel-required').checked = !!panelData.required;
+        form.querySelector('#panel-memory-inject').checked = !!panelData.memoryInject;
 
 
         // 基础面板只限制名称和键名不可修改
@@ -2889,7 +2911,7 @@ export class InfoBarSettings {
                     <input type="text" class="sub-item-name" value="${subItem.name || ''}" placeholder="子项名称" />
                 </div>
                 <button type="button" class="btn-icon btn-remove-sub-item" data-action="remove-sub-item" title="删除子项">
-                    🗑️
+                    <span style="pointer-events: none;">🗑️</span>
                 </button>
             </div>
         `;
@@ -3038,7 +3060,7 @@ export class InfoBarSettings {
     /**
      * 处理操作按钮
      */
-    handleAction(action) {
+    handleAction(action, event = null) {
         try {
             switch (action) {
                 case 'close':
@@ -3963,8 +3985,8 @@ export class InfoBarSettings {
                     <div class="sub-items-header">
                         <span>子项列表</span>
                         <button type="button" class="btn-small btn-add-sub-item" data-action="add-sub-item">
-                            <span class="btn-icon">➕</span>
-                            <span class="btn-text">新增子项</span>
+                            <span class="btn-icon" style="pointer-events: none;">➕</span>
+                            <span class="btn-text" style="pointer-events: none;">新增子项</span>
                         </button>
                     </div>
                     <div class="sub-items-container">
@@ -4565,26 +4587,28 @@ export class InfoBarSettings {
                 extensionSettings['Information bar integration tool'] = {};
             }
 
-            // 🔧 修复：保护基础面板属性配置，避免被覆盖
-            // 先备份已有的基础面板属性配置
-            const existingBasicPanelConfigs = {};
+            // 🔧 修复：完全保护基础面板属性配置，避免被基础设置页面覆盖
+            // 基础面板的属性配置（description、icon、required、memoryInject、prompts等）
+            // 应该只通过面板管理页面修改，不应该被基础设置页面的表单数据覆盖
             const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+            const preservedBasicPanelConfigs = {};
             
+            // 完整备份所有基础面板配置
             basicPanelIds.forEach(panelId => {
                 const existingConfig = extensionSettings['Information bar integration tool'][panelId];
-                if (existingConfig && (existingConfig.description || existingConfig.icon || existingConfig.required !== undefined || existingConfig.memoryInject !== undefined || existingConfig.prompts)) {
-                    existingBasicPanelConfigs[panelId] = existingConfig;
-                    console.log(`[InfoBarSettings] 💾 备份基础面板 ${panelId} 的属性配置`);
+                if (existingConfig) {
+                    preservedBasicPanelConfigs[panelId] = { ...existingConfig };
+                    console.log(`[InfoBarSettings] 🛡️ 保护基础面板 ${panelId} 的完整属性配置`);
                 }
             });
 
-            // 保存所有配置数据到 extensionSettings
+            // 保存基础设置表单数据（不包含基础面板属性）
             Object.assign(extensionSettings['Information bar integration tool'], formData);
             
-            // 🔧 修复：恢复基础面板属性配置，防止被表单数据覆盖
-            Object.keys(existingBasicPanelConfigs).forEach(panelId => {
-                extensionSettings['Information bar integration tool'][panelId] = existingBasicPanelConfigs[panelId];
-                console.log(`[InfoBarSettings] 🔄 恢复基础面板 ${panelId} 的属性配置`);
+            // 🔧 修复：完全恢复基础面板属性配置，确保不被覆盖
+            Object.keys(preservedBasicPanelConfigs).forEach(panelId => {
+                extensionSettings['Information bar integration tool'][panelId] = preservedBasicPanelConfigs[panelId];
+                console.log(`[InfoBarSettings] 🔄 完全恢复基础面板 ${panelId} 的属性配置`);
             });
 
             // 触发 SillyTavern 保存设置
@@ -12963,26 +12987,25 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                 return false;
             }
 
-            // 检查消息是否已经包含infobar_data
-            if (lastMessage.mes && lastMessage.mes.includes('<infobar_data>')) {
-                console.log('[InfoBarSettings] ℹ️ 消息已包含infobar_data，替换现有内容');
-                // 移除现有的infobar_data
-                lastMessage.mes = lastMessage.mes.replace(/<infobar_data>[\s\S]*?<\/infobar_data>/gi, '').trim();
+            // 检查消息是否已经包含自定义API数据标签，如果有则替换
+            if (lastMessage.mes && (lastMessage.mes.includes('<infobar_data>') || lastMessage.mes.includes('<aiThinkProcess>'))) {
+                console.log('[InfoBarSettings] ℹ️ 消息已包含API数据标签，替换现有内容');
+                // 移除现有的API数据标签内容
+                lastMessage.mes = lastMessage.mes
+                    .replace(/<infobar_data>[\s\S]*?<\/infobar_data>/gi, '')
+                    .replace(/<aiThinkProcess>[\s\S]*?<\/aiThinkProcess>/gi, '')
+                    .trim();
             }
 
-            // 🔧 新增：提取aiThinkProcess内容并合并到AI消息中（保留标签）
-            const { aiThinkContent, cleanedInfobarData } = this.extractAndMergeAPIResult(infobarData);
-
-            // 如果有aiThinkProcess内容，合并到消息正文中
-            if (aiThinkContent) {
-                console.log('[InfoBarSettings] 🧠 合并aiThinkProcess内容到AI消息');
-                const wrappedThink = `<aiThinkProcess>\n${aiThinkContent}\n</aiThinkProcess>`;
-                lastMessage.mes = lastMessage.mes.trim() + '\n\n' + wrappedThink;
-            }
-
-            // 追加清理后的infobar_data到消息末尾
-            if (cleanedInfobarData) {
-                lastMessage.mes = lastMessage.mes.trim() + '\n\n' + cleanedInfobarData;
+            // 🔧 修复：直接将完整的API返回数据追加到消息中，不进行拆分
+            // 自定义API返回的是一条完整的响应，包含 <aiThinkProcess> 和 <infobar_data>
+            // 应该保持数据的完整性和语义连贯性
+            if (infobarData && infobarData.trim()) {
+                console.log('[InfoBarSettings] 📝 追加完整的API返回数据到消息');
+                lastMessage.mes = lastMessage.mes.trim() + '\n\n' + infobarData.trim();
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ API返回数据为空');
+                return false;
             }
 
             // 保存聊天数据
@@ -13000,50 +13023,9 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
         }
     }
 
-    /**
-     * 提取并合并API结果，分离aiThinkProcess和infobar_data
-     */
-    extractAndMergeAPIResult(apiResult) {
-        try {
-            console.log('[InfoBarSettings] 🧹 开始提取和合并API结果...');
-
-            if (!apiResult || typeof apiResult !== 'string') {
-                console.warn('[InfoBarSettings] ⚠️ API结果为空或格式无效');
-                return { aiThinkContent: null, cleanedInfobarData: null };
-            }
-
-            // 提取aiThinkProcess内容
-            let aiThinkContent = null;
-            const aiThinkMatch = apiResult.match(/<aiThinkProcess>([\s\S]*?)<\/aiThinkProcess>/i);
-            if (aiThinkMatch && aiThinkMatch[1]) {
-                aiThinkContent = aiThinkMatch[1].trim();
-                console.log('[InfoBarSettings] 🧠 提取到aiThinkProcess内容，长度:', aiThinkContent.length);
-            }
-
-            // 移除aiThinkProcess标签，只保留其他内容
-            let cleanedResult = apiResult.replace(/<aiThinkProcess>[\s\S]*?<\/aiThinkProcess>/gi, '');
-
-            // 清理多余的空白行
-            cleanedResult = cleanedResult.replace(/\n\s*\n\s*\n/g, '\n\n').trim();
-
-            // 验证是否包含infobar_data标签
-            let cleanedInfobarData = null;
-            if (cleanedResult.includes('<infobar_data>')) {
-                cleanedInfobarData = cleanedResult;
-                console.log('[InfoBarSettings] 📊 提取到infobar_data内容，长度:', cleanedInfobarData.length);
-            } else {
-                console.warn('[InfoBarSettings] ⚠️ 清理后的结果不包含infobar_data标签');
-            }
-
-            console.log('[InfoBarSettings] ✅ API结果提取和合并完成');
-
-            return { aiThinkContent, cleanedInfobarData };
-
-        } catch (error) {
-            console.error('[InfoBarSettings] ❌ 提取和合并API结果失败:', error);
-            return { aiThinkContent: null, cleanedInfobarData: null };
-        }
-    }
+    // 注释：extractAndMergeAPIResult 函数已移除
+    // 原因：自定义API返回的是完整响应数据，不应该人为拆分 <aiThinkProcess> 和 <infobar_data>
+    // 新的处理逻辑直接将完整数据追加到消息中，保持数据的完整性和语义连贯性
 
     /**
      * 获取API提供商

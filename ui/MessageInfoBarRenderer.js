@@ -1400,17 +1400,50 @@ export class MessageInfoBarRenderer {
             const floatingWindow = container.querySelector('.infobar-floating-window');
             if (!floatingWindow) return;
 
+            // 🔧 修复：先获取小球位置，再隐藏小球
+            const orbRect = floatingOrb.getBoundingClientRect();
+            console.log('[MessageInfoBarRenderer] 🎯 小球位置:', {
+                left: orbRect.left,
+                top: orbRect.top,
+                right: orbRect.right,
+                bottom: orbRect.bottom
+            });
+
             // 隐藏小球，显示窗口
             floatingOrb.style.display = 'none';
             floatingWindow.style.display = 'block';
 
-            // 设置窗口位置（在小球附近）
-            const orbRect = floatingOrb.getBoundingClientRect();
+            // 🔧 优化：根据小球位置智能定位窗口
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const windowWidth = 400; // 预估窗口宽度
+            const windowHeight = 300; // 预估窗口高度
+            
+            let left, top;
+            
+            // 如果小球在右侧，窗口显示在左侧
+            if (orbRect.left > viewportWidth / 2) {
+                left = Math.max(10, orbRect.left - windowWidth - 20);
+            } else {
+                // 如果小球在左侧，窗口显示在右侧
+                left = Math.min(viewportWidth - windowWidth - 10, orbRect.right + 20);
+            }
+            
+            // 如果小球在下半部分，窗口向上显示
+            if (orbRect.top > viewportHeight / 2) {
+                top = Math.max(10, orbRect.bottom - windowHeight);
+            } else {
+                // 如果小球在上半部分，窗口向下显示
+                top = Math.min(viewportHeight - windowHeight - 10, orbRect.top);
+            }
+
             floatingWindow.style.position = 'fixed';
-            floatingWindow.style.left = Math.max(10, orbRect.left - 50) + 'px';
-            floatingWindow.style.top = Math.max(10, orbRect.top - 50) + 'px';
+            floatingWindow.style.left = left + 'px';
+            floatingWindow.style.top = top + 'px';
             floatingWindow.style.right = 'auto';
             floatingWindow.style.bottom = 'auto';
+            
+            console.log('[MessageInfoBarRenderer] 🎈 窗口定位:', { left, top, orbPosition: { x: orbRect.left, y: orbRect.top } });
 
             console.log('[MessageInfoBarRenderer] 🎈 浮动小球已展开为窗口');
         });
