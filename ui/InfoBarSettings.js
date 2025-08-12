@@ -4422,6 +4422,9 @@ export class InfoBarSettings {
                 console.log('[InfoBarSettings] 📊 初始化空的自定义面板配置');
             }
 
+            // 🔧 新增：加载基础面板子项的勾选状态
+            this.loadBasicPanelSubItemStates(configs);
+
             // 特别处理主题配置
             if (configs.theme && configs.theme.current) {
                 const themeId = configs.theme.current;
@@ -4605,10 +4608,42 @@ export class InfoBarSettings {
             // 保存基础设置表单数据（不包含基础面板属性）
             Object.assign(extensionSettings['Information bar integration tool'], formData);
             
-            // 🔧 修复：完全恢复基础面板属性配置，确保不被覆盖
+            // 🔧 修复：智能恢复基础面板属性配置，保留子项启用状态
             Object.keys(preservedBasicPanelConfigs).forEach(panelId => {
-                extensionSettings['Information bar integration tool'][panelId] = preservedBasicPanelConfigs[panelId];
-                console.log(`[InfoBarSettings] 🔄 完全恢复基础面板 ${panelId} 的属性配置`);
+                const currentConfig = extensionSettings['Information bar integration tool'][panelId];
+                const preservedConfig = preservedBasicPanelConfigs[panelId];
+                
+                // 合并配置：保留新的子项启用状态，恢复其他属性
+                if (currentConfig && preservedConfig) {
+                    // 备份当前的子项启用状态（来自formData）
+                    const currentSubItemStates = {};
+                    if (currentConfig && typeof currentConfig === 'object') {
+                        Object.keys(currentConfig).forEach(key => {
+                            if (key !== 'enabled' && typeof currentConfig[key] === 'object' && 
+                                currentConfig[key] && typeof currentConfig[key].enabled === 'boolean') {
+                                currentSubItemStates[key] = currentConfig[key];
+                            }
+                        });
+                    }
+                    
+                    // 恢复基础面板属性配置
+                    extensionSettings['Information bar integration tool'][panelId] = { ...preservedConfig };
+                    
+                    // 重新应用子项启用状态
+                    Object.keys(currentSubItemStates).forEach(subItemKey => {
+                        const existingSubItem = extensionSettings['Information bar integration tool'][panelId][subItemKey];
+                        if (!existingSubItem || typeof existingSubItem !== 'object' || Array.isArray(existingSubItem)) {
+                            extensionSettings['Information bar integration tool'][panelId][subItemKey] = {};
+                        }
+                        extensionSettings['Information bar integration tool'][panelId][subItemKey].enabled = currentSubItemStates[subItemKey].enabled;
+                    });
+                    
+                    console.log(`[InfoBarSettings] 🔄 智能恢复基础面板 ${panelId} 的属性配置，保留 ${Object.keys(currentSubItemStates).length} 个子项状态`);
+                } else {
+                    // 如果没有当前配置，直接恢复旧配置
+                    extensionSettings['Information bar integration tool'][panelId] = preservedBasicPanelConfigs[panelId];
+                    console.log(`[InfoBarSettings] 🔄 完全恢复基础面板 ${panelId} 的属性配置`);
+                }
             });
 
             // 触发 SillyTavern 保存设置
@@ -4747,6 +4782,40 @@ export class InfoBarSettings {
             }
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 加载自定义面板子项状态失败:', error);
+        }
+    }
+
+    /**
+     * 加载基础面板子项的勾选状态到表单
+     */
+    loadBasicPanelSubItemStates(configs) {
+        try {
+            const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+            
+            // 遍历所有基础面板
+            basicPanelIds.forEach(panelId => {
+                const panelConfig = configs[panelId];
+                if (panelConfig && typeof panelConfig === 'object') {
+                    console.log(`[InfoBarSettings] 📊 加载基础面板 ${panelId} 的子项状态`);
+                    
+                    // 遍历面板的所有子项
+                    Object.keys(panelConfig).forEach(subItemKey => {
+                        if (subItemKey !== 'enabled' && typeof panelConfig[subItemKey] === 'object' && 
+                            panelConfig[subItemKey] && typeof panelConfig[subItemKey].enabled === 'boolean') {
+                            
+                            const fieldName = `${panelId}.${subItemKey}.enabled`;
+                            const checkbox = this.modal.querySelector(`input[name="${fieldName}"]`);
+                            
+                            if (checkbox && checkbox.type === 'checkbox') {
+                                checkbox.checked = panelConfig[subItemKey].enabled;
+                                console.log(`[InfoBarSettings] 📊 设置基础面板子项勾选状态: ${fieldName} = ${checkbox.checked}`);
+                            }
+                        }
+                    });
+                }
+            });
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载基础面板子项状态失败:', error);
         }
     }
 
