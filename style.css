@@ -101,7 +101,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 2147483600; /* 确保盖过主界面底部输入栏等 */
+    z-index: 1000; /* 适中的层级，避免遮挡原生UI元素 */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1341,7 +1341,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 10000;
+    z-index: 999;
     backdrop-filter: blur(8px);
 }
 
@@ -1554,6 +1554,7 @@
 /* 开关样式 */
 .infobar-modal-new .toggle-switch {
     position: relative;
+    flex-shrink: 0;
 }
 
 .infobar-modal-new .toggle-switch input[type="checkbox"] {
@@ -1606,8 +1607,22 @@
 .infobar-modal-new .card-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 12px;
     margin-bottom: 15px;
+}
+
+.infobar-modal-new .card-info-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.infobar-modal-new .card-text {
+    flex: 1;
+    min-width: 0;
 }
 
 .infobar-modal-new .card-icon {
@@ -1619,17 +1634,32 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .infobar-modal-new .card-title {
     font-size: 18px;
     font-weight: 600;
     color: #ffffff;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .infobar-modal-new .card-subtitle {
     font-size: 14px;
     color: #a0aec0;
+    margin: 0;
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.infobar-modal-new .card-toggle {
+    flex-shrink: 0;
+    margin-left: 12px;
 }
 
 .infobar-modal-new .card-content {
@@ -1945,6 +1975,34 @@
     .infobar-modal-new .content-panel {
         padding: 16px;
     }
+    
+    /* 移动端卡片头部布局优化 */
+    .infobar-modal-new .card-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .infobar-modal-new .card-info-left {
+        min-width: 0;
+        flex: 1;
+    }
+    
+    .infobar-modal-new .card-toggle {
+        margin-left: 0;
+        flex-shrink: 0;
+    }
+    
+    .infobar-modal-new .toggle-switch {
+        transform: scale(0.9);
+    }
+    
+    .infobar-modal-new .card-title {
+        font-size: 16px;
+    }
+    
+    .infobar-modal-new .card-subtitle {
+        font-size: 12px;
+    }
 }
 
 /* 面板管理移动端：上下布局 + 左侧横向滚动 + 侧边滑动块 */
@@ -2064,7 +2122,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 10000;
+    z-index: 999;
     backdrop-filter: blur(8px);
 }
 
@@ -4108,7 +4166,7 @@
     position: fixed;
     top: 20px;
     right: 20px;
-    z-index: 9999;
+    z-index: 998;
     max-width: 400px;
     max-height: 80vh;
 }
@@ -4123,7 +4181,7 @@
     background: linear-gradient(135deg, var(--infobar-primary, #007bff), var(--infobar-secondary, #0056b3));
     border-radius: 50%;
     cursor: pointer;
-    z-index: 10000;
+    z-index: 999;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4349,7 +4407,7 @@
     position: fixed;
     top: 50px;
     right: 50px;
-    z-index: 10000;
+    z-index: 999;
     max-width: 600px;
     max-height: 80vh;
 }
@@ -4769,7 +4827,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10000;
+    z-index: 999;
     animation: fadeIn 0.3s ease;
 }
 
@@ -4780,7 +4838,7 @@
     border: 1px solid var(--theme-border-color, #e0e0e0);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    z-index: 10000;
+    z-index: 999;
     max-width: 800px;
     min-width: 600px;
     animation: slideUp 0.3s ease;
@@ -5130,7 +5188,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 9999;
+    z-index: 998;
     animation: fadeIn 0.3s ease;
 }
 
@@ -5367,7 +5425,7 @@
 /* 面板弹窗样式 */
 .panel-popup {
     position: fixed !important;
-    z-index: 10000 !important;
+    z-index: 999 !important;
     background: var(--theme-bg-primary, #2a2a2a) !important;
     color: var(--theme-text-primary, #ffffff) !important;
     border: 1px solid var(--theme-border-color, rgba(255, 255, 255, 0.1)) !important;
@@ -5383,21 +5441,33 @@
 @media (max-width: 768px) {
     .panel-popup {
         position: fixed !important;
-        z-index: 10000 !important;
-        left: 50% !important;
-        top: 50% !important;
-        transform: translate(-50%, -50%) !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        z-index: 999 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        margin: 0 !important;
+        padding: 20px !important;
+        box-sizing: border-box !important;
+    }
+    
+    .panel-popup .popup-content {
+        position: relative !important;
         width: 90vw !important;
         min-width: 280px !important;
         max-width: 340px !important;
         height: auto !important;
         min-height: 200px !important;
         max-height: 80vh !important;
-        margin: 0 !important;
         border-radius: 8px !important;
         box-sizing: border-box !important;
         overflow-y: auto !important;
-        display: block !important;
+        transform: none !important;
+        top: auto !important;
+        left: auto !important;
     }
     
     .panel-popup .popup-header {
@@ -5565,14 +5635,15 @@
 /* 手机端响应式按钮尺寸优化 */
 @media (max-width: 768px) {
     .panel-button {
-        padding: 4px 8px !important;
-        font-size: 11px !important;
-        min-height: 28px;
+        padding: 6px 10px !important;
+        font-size: 12px !important;
+        min-height: 32px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 80px;
+        max-width: 100px;
         margin: 2px !important;
+        border-radius: 6px !important;
     }
     
     .panel-button.small {
@@ -5646,7 +5717,7 @@
     position: fixed;
     background: rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(4px);
-    z-index: 10001;
+    z-index: 950;
     animation: fadeIn 0.3s ease;
 }
 
@@ -5749,16 +5820,16 @@
 
 /* 面板弹窗 */
 .panel-popup {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10002;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(0, 0, 0, 0.6) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 951 !important;
     backdrop-filter: blur(8px);
     animation: fadeIn 0.3s ease;
 }
@@ -5862,13 +5933,18 @@
     }
     
     .embedded-panels {
-        flex-direction: column;
-        gap: 8px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: flex-start;
     }
     
     .panel-button {
-        width: 100%;
+        width: auto;
+        flex: 0 0 auto;
         justify-content: center;
+        min-width: 50px;
+        max-width: 120px;
     }
     
     .demo-popup-content {
@@ -5899,8 +5975,43 @@
     }
     
     .embedded-panels-container {
-        padding: 12px;
-        gap: 8px;
+        padding: 10px;
+        gap: 6px;
+    }
+    
+    /* 移动端子项样式优化 */
+    .subitem-display {
+        padding: 4px 8px !important;
+        font-size: 11px !important;
+        margin: 2px !important;
+        border-radius: 4px !important;
+        max-width: 120px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .subitem-display .field-name {
+        font-size: 10px !important;
+        max-width: 40px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .subitem-display .field-value {
+        font-size: 11px !important;
+        max-width: 60px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    /* 前端预览容器移动端优化 */
+    .frontend-preview-container .top-embedded-panels,
+    .frontend-preview-container .bottom-embedded-panels {
+        min-height: 35px !important;
+        padding: 6px !important;
+        gap: 4px !important;
+        flex-wrap: wrap !important;
     }
 }
 
@@ -6178,47 +6289,6 @@
     box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
 }
 
-/* Swipes计数器区域 */
-.message-swipes-counter {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 8px !important;
-    padding: 8px 12px !important;
-    background: var(--theme-bg-secondary, rgba(255, 255, 255, 0.05)) !important;
-    border-top: 1px solid var(--theme-border-light, rgba(255, 255, 255, 0.1)) !important;
-    border-radius: 0 0 8px 8px !important;
-    margin-top: 8px !important;
-}
-
-/* Swipes导航按钮 */
-.swipe-nav-button {
-    background: var(--theme-button-bg, rgba(255, 255, 255, 0.1)) !important;
-    border: 1px solid var(--theme-border-color, rgba(255, 255, 255, 0.2)) !important;
-    border-radius: 4px !important;
-    padding: 4px 6px !important;
-    color: var(--theme-text-primary, #ffffff) !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-    width: 24px !important;
-    height: 24px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 11px !important;
-}
-.swipe-nav-button:hover {
-    background: var(--theme-button-hover, rgba(255, 255, 255, 0.15)) !important;
-    border-color: var(--theme-border-hover, rgba(255, 255, 255, 0.3)) !important;
-    transform: translateY(-1px) !important;
-}
-
-/* 已删除：绿色swipe图标按钮样式 (用户要求删除该按钮) */
-
-.message-swipes-counter .reorganized-counter {
-    font-size: 12px !important;
-    color: var(--theme-text-secondary, rgba(255, 255, 255, 0.7)) !important;
-    font-weight: 500 !important;
-    min-width: 30px !important;
-    text-align: center !important;
-}
+/* 🔧 删除：Swipes计数器相关样式 - 用户不需要分页按钮功能 */
+/* 原样式包括：.message-swipes-counter, .swipe-nav-button, .reorganized-counter */
+/* 删除原因：用户明确表示不需要前端交互界面内的分页按钮部分内容 */
