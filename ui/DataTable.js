@@ -606,20 +606,44 @@ export class DataTable {
                 return this.createInteractionTable(panel);
             }
 
+            // 🔧 智能计算自适应列宽
+            const columnAnalysis = this.calculateAdaptiveColumnWidths(panel);
+            
             // 生成表头
-            const headers = panel.subItems.map(item =>
-                `<th class="col-property">${item.name}</th>`
-            ).join('');
+            const headers = columnAnalysis.map((analysis, index) => {
+                const { item, adaptiveWidth } = analysis;
+                return `<th class="col-property" style="
+                    width: ${adaptiveWidth}px;
+                    min-width: 50px;
+                    max-width: 300px;
+                    padding: 8px;
+                    text-align: center;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                ">${item.name}</th>`;
+            }).join('');
 
             // 生成数据行 - 根据面板类型获取对应的数据值
             const dataRow = panel.subItems.map(item => {
                 const value = this.getPanelItemValue(panel, item);
-                return `<td class="cell-value" data-property="${item.name}">${value}</td>`;
+                const formattedValue = this.formatCellValue(value);
+                return `<td class="cell-value" data-property="${item.name}" title="${this.escapeHtml(value)}" style="
+                    padding: 8px;
+                    vertical-align: top;
+                    word-wrap: break-word;
+                    max-width: 300px;
+                ">${formattedValue}</td>`;
             }).join('');
 
             return `
-                <div class="data-table-container">
-                    <table class="data-table dark-table horizontal-layout">
+                <div class="data-table-container" style="overflow-x: auto; max-width: 100%;">
+                    <table class="data-table dark-table horizontal-layout" style="
+                        table-layout: fixed;
+                        width: auto;
+                        min-width: fit-content;
+                        border-collapse: collapse;
+                    ">
                         <thead>
                             <tr>
                                 <th class="col-select">
@@ -674,10 +698,34 @@ export class DataTable {
                 return this.createEmptyTable(panel);
             }
 
+            // 🔧 智能计算自适应列宽（包含NPC名称列）
+            const columnAnalysis = this.calculateAdaptiveColumnWidths(panel);
+            
             // 生成表头（添加NPC名称列）
             const headers = `
-                <th class="col-property">NPC名称</th>
-                ${panel.subItems.map(item => `<th class="col-property">${item.name}</th>`).join('')}
+                <th class="col-property" style="
+                    width: 100px;
+                    min-width: 80px;
+                    max-width: 150px;
+                    padding: 8px;
+                    text-align: center;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                ">NPC名称</th>
+                ${columnAnalysis.map(analysis => {
+                    const { item, adaptiveWidth } = analysis;
+                    return `<th class="col-property" style="
+                        width: ${adaptiveWidth}px;
+                        min-width: 50px;
+                        max-width: 300px;
+                        padding: 8px;
+                        text-align: center;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                    ">${item.name}</th>`;
+                }).join('')}
             `;
 
             // 为每个NPC生成数据行
@@ -685,7 +733,13 @@ export class DataTable {
                 const npcName = this.getNpcDisplayName(npcId, npcData);
                 const dataRow = panel.subItems.map(item => {
                     const value = this.getNpcFieldValue(npcData, item);
-                    return `<td class="cell-value" data-property="${item.name}">${value}</td>`;
+                    const formattedValue = this.formatCellValue(value);
+                    return `<td class="cell-value" data-property="${item.name}" title="${this.escapeHtml(value)}" style="
+                        padding: 8px;
+                        vertical-align: top;
+                        word-wrap: break-word;
+                        max-width: 300px;
+                    ">${formattedValue}</td>`;
                 }).join('');
 
                 return `
@@ -700,8 +754,13 @@ export class DataTable {
             }).join('');
 
             return `
-                <div class="data-table-container">
-                    <table class="data-table dark-table horizontal-layout">
+                <div class="data-table-container" style="overflow-x: auto; max-width: 100%;">
+                    <table class="data-table dark-table horizontal-layout" style="
+                        table-layout: fixed;
+                        width: auto;
+                        min-width: fit-content;
+                        border-collapse: collapse;
+                    ">
                         <thead>
                             <tr>
                                 <th class="col-select">
@@ -931,6 +990,157 @@ export class DataTable {
         } catch (error) {
             console.error('[DataTable] ❌ 字段值查找失败:', error);
             return null;
+        }
+    }
+
+    /**
+     * 格式化单元格内容，控制文本长度和显示方式
+     */
+    formatCellValue(value) {
+        try {
+            if (!value || value === '') {
+                return '';
+            }
+
+            // 将值转换为字符串
+            const strValue = String(value);
+
+            // 🔧 控制文本长度，避免单元格过高
+            const maxLength = 100; // 最大显示字符数
+            const maxLines = 3;    // 最大显示行数
+
+            // 处理换行符，限制行数
+            const lines = strValue.split('\n');
+            let truncatedLines = lines.slice(0, maxLines);
+
+            // 如果有更多行，添加省略号
+            if (lines.length > maxLines) {
+                if (truncatedLines[maxLines - 1].length > 0) {
+                    truncatedLines[maxLines - 1] += '...';
+                } else {
+                    truncatedLines.push('...');
+                }
+            }
+
+            // 合并行并限制总长度
+            let result = truncatedLines.join('\n');
+            
+            // 如果总长度超过限制，进行截断
+            if (result.length > maxLength) {
+                result = result.substring(0, maxLength - 3) + '...';
+            }
+
+            // 🔧 应用CSS样式，确保横向显示为主
+            return `<div class="cell-content" style="
+                max-width: 300px;
+                max-height: 80px;
+                overflow: hidden;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                word-break: break-word;
+                line-height: 1.4;
+                text-overflow: ellipsis;
+                display: -webkit-box;
+                -webkit-line-clamp: 3;
+                -webkit-box-orient: vertical;
+            ">${this.escapeHtml(result)}</div>`;
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 格式化单元格内容失败:', error);
+            return this.escapeHtml(String(value || ''));
+        }
+    }
+
+    /**
+     * HTML转义函数，防止XSS攻击
+     */
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    /**
+     * 智能计算表格列宽，根据内容长度自适应
+     */
+    calculateAdaptiveColumnWidths(panel) {
+        try {
+            const columnAnalysis = panel.subItems.map(item => {
+                // 分析列标题长度
+                const headerLength = (item.name || '').length;
+                
+                // 分析该列所有数据的长度
+                const dataLengths = [];
+                
+                // 获取该列的样本数据来估算内容长度
+                const sampleValue = this.getPanelItemValue(panel, item);
+                const sampleLength = String(sampleValue || '').length;
+                dataLengths.push(sampleLength);
+                
+                // 计算最大内容长度
+                const maxContentLength = Math.max(headerLength, ...dataLengths);
+                
+                // 🔧 根据内容长度和类型智能计算列宽
+                let adaptiveWidth;
+                
+                // 特殊字段类型的优化处理
+                const fieldName = item.name.toLowerCase();
+                if (fieldName.includes('年龄') || fieldName.includes('age')) {
+                    adaptiveWidth = 70; // 年龄通常是1-3位数字
+                } else if (fieldName.includes('性别') || fieldName.includes('gender')) {
+                    adaptiveWidth = 70; // 性别通常是2-3个字符
+                } else if (fieldName.includes('身高') || fieldName.includes('体重') || fieldName.includes('血型')) {
+                    adaptiveWidth = 85; // 身高体重血型等固定格式
+                } else if (fieldName.includes('生日') || fieldName.includes('date')) {
+                    adaptiveWidth = 95; // 日期格式
+                } else {
+                    // 根据内容长度动态计算
+                    if (maxContentLength <= 2) {
+                        adaptiveWidth = 65; // 很短的内容（如O型、男）
+                    } else if (maxContentLength <= 5) {
+                        adaptiveWidth = 85; // 短内容（如学生、女性）
+                    } else if (maxContentLength <= 10) {
+                        adaptiveWidth = 110; // 中等内容（如软件工程师）
+                    } else if (maxContentLength <= 20) {
+                        adaptiveWidth = 150; // 较长内容（如详细地址）
+                    } else if (maxContentLength <= 40) {
+                        adaptiveWidth = 200; // 长内容
+                    } else {
+                        adaptiveWidth = 250; // 很长内容（如详细描述）
+                    }
+                }
+                
+                // 考虑中文字符的显示宽度（中文字符通常比英文宽）
+                const headerText = item.name || '';
+                const chineseCharCount = (headerText.match(/[\u4e00-\u9fa5]/g) || []).length;
+                const baseHeaderWidth = headerText.length * 14; // 每个字符约14px
+                const minimumForHeader = Math.max(baseHeaderWidth, 50);
+                
+                // 确保列宽足够显示表头
+                adaptiveWidth = Math.max(adaptiveWidth, minimumForHeader);
+                
+                return {
+                    item,
+                    headerLength,
+                    maxContentLength,
+                    adaptiveWidth: Math.min(Math.max(adaptiveWidth, 50), 300) // 限制在50-300px之间
+                };
+            });
+            
+            console.log(`[DataTable] 📊 ${panel.name} 列宽分析:`, 
+                columnAnalysis.map(col => `${col.item.name}:${col.adaptiveWidth}px`)
+            );
+            
+            return columnAnalysis;
+            
+        } catch (error) {
+            console.error('[DataTable] ❌ 计算自适应列宽失败:', error);
+            // 回退到默认宽度
+            return panel.subItems.map(item => ({
+                item,
+                adaptiveWidth: 150
+            }));
         }
     }
 

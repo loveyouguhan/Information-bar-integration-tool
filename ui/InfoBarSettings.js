@@ -9617,19 +9617,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>都市现代配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="modern-toggle" name="modern.enabled" checked />
-                    <label for="modern-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 都市现代卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">🏙️</div>
-                        <div class="card-title">都市现代</div>
-                        <div class="card-subtitle">现代都市生活设定</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">🏙️</div>
+                            <div class="card-text">
+                                <div class="card-title">都市现代</div>
+                                <div class="card-subtitle">现代都市生活设定</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="modern-toggle" name="modern.enabled" checked />
+                                <label for="modern-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
