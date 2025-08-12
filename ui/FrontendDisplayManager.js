@@ -816,8 +816,8 @@ export class FrontendDisplayManager {
 
                 // 构建并挂载左侧展开的功能菜单（与消息操作关联）
                 this.attachActionsMenu(buttonWrapper, messageElement);
-                // 处理底部swipes计数器
-                this.handleSwipesCounter(frontendFrame, messageElement);
+                // 🔧 删除：用户不需要底部swipes计数器分页按钮
+                // this.handleSwipesCounter(frontendFrame, messageElement);
             }
             
             // 4. 隐藏原始元素（保持DOM结构完整但不显示）
@@ -961,125 +961,9 @@ export class FrontendDisplayManager {
         }
     }
 
-    /**
-     * 🔧 新增：处理swipes计数器显示
-     */
-    handleSwipesCounter(frontendFrame, messageElement) {
-        try {
-            const messageContent = frontendFrame.querySelector('.message-content');
-            if (!messageContent) return;
-
-            const counterElement = messageElement.querySelector('.swipes-counter, .swipe_counter, [class*="counter"]');
-            const leftSwipeButton = messageElement.querySelector('.swipe_left');
-            const rightSwipeButton = messageElement.querySelector('.swipe_right');
-
-            const swipesContainer = document.createElement('div');
-            swipesContainer.className = 'message-swipes-counter';
-
-            if (leftSwipeButton) {
-                const leftBtn = document.createElement('div');
-                leftBtn.className = 'swipe-nav-button swipe-left';
-                leftBtn.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
-                leftBtn.title = 'Previous variant';
-                leftBtn.style.display = 'flex';
-                leftBtn.tabIndex = 0;
-                
-                // 🔧 修复：使用SillyTavern官方API优先，降级到DOM事件
-                leftBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    console.log('[FrontendDisplayManager] 🔄 触发左swipe (官方API)');
-                    
-                    try {
-                        // 方法1: 使用SillyTavern官方swipe API
-                        const context = window.SillyTavern?.getContext();
-                        if (context && context.swipe && typeof context.swipe.left === 'function') {
-                            // 使用官方swipe.left函数
-                            context.swipe.left();
-                            console.log('[FrontendDisplayManager] ✅ 官方API左swipe调用成功');
-                            return;
-                        }
-                        
-                        // 方法2: 降级到DOM事件触发（已验证工作正常）
-                        console.log('[FrontendDisplayManager] 🔄 降级到DOM事件');
-                        leftSwipeButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                        leftSwipeButton.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-                        leftSwipeButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                        
-                    } catch (error) {
-                        console.error('[FrontendDisplayManager] ❌ 左swipe触发失败:', error.message);
-                    }
-                });
-                
-                swipesContainer.appendChild(leftBtn);
-            }
-
-            // 🔧 删除：移除中间的绿色swipe图标按钮，用户不需要
-            // const swipeButton = document.createElement('button');
-            // swipeButton.className = 'swipe-icon-button';
-            // swipeButton.innerHTML = '<i class="fa-solid fa-arrows-left-right"></i>';
-            // swipeButton.title = 'Swipes';
-            // swipesContainer.appendChild(swipeButton);
-
-            if (counterElement) {
-                const newCounter = counterElement.cloneNode(true);
-                newCounter.className = 'reorganized-counter';
-                swipesContainer.appendChild(newCounter);
-            } else {
-                const fallback = document.createElement('span');
-                fallback.className = 'reorganized-counter';
-                fallback.textContent = '1/1';
-                swipesContainer.appendChild(fallback);
-            }
-
-            if (rightSwipeButton) {
-                const rightBtn = document.createElement('div');
-                rightBtn.className = 'swipe-nav-button swipe-right';
-                rightBtn.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
-                rightBtn.title = 'Next variant';
-                rightBtn.style.display = 'flex';
-                rightBtn.tabIndex = 0;
-                
-                // 🔧 修复：使用SillyTavern官方API避免DOM问题
-                rightBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    console.log('[FrontendDisplayManager] 🔄 触发右swipe (官方API)');
-                    
-                    try {
-                        // 方法1: 使用SillyTavern官方swipe API
-                        const context = window.SillyTavern?.getContext();
-                        if (context && context.swipe && typeof context.swipe.right === 'function') {
-                            // 使用官方swipe.right函数
-                            context.swipe.right();
-                            console.log('[FrontendDisplayManager] ✅ 官方API右swipe调用成功');
-                            return;
-                        }
-                        
-                        // 方法2: 降级到安全的事件触发
-                        console.log('[FrontendDisplayManager] 🔄 降级到事件触发');
-                        
-                        // 只触发必要的事件，避免DOM操作问题
-                        if (window.eventSource && typeof window.eventSource.emit === 'function') {
-                            const mesId = parseInt(messageElement.getAttribute('mesid'));
-                            window.eventSource.emit('message_swiped', { mesId: mesId, direction: 'right' });
-                            console.log('[FrontendDisplayManager] ✅ 事件触发成功');
-                        } else {
-                            console.warn('[FrontendDisplayManager] ⚠️ 无法触发右swipe，API不可用');
-                        }
-                        
-                    } catch (error) {
-                        console.error('[FrontendDisplayManager] ❌ 右swipe触发失败:', error.message);
-                    }
-                });
-                
-                swipesContainer.appendChild(rightBtn);
-            }
-
-            messageContent.appendChild(swipesContainer);
-            console.log('[FrontendDisplayManager] ✅ swipes计数器处理完成');
-        } catch (error) {
-            console.error('[FrontendDisplayManager] ❌ 处理swipes计数器失败:', error);
-        }
-    }
+    // 🔧 删除：handleSwipesCounter函数已删除 - 用户不需要分页按钮
+    // 原函数功能：处理swipes计数器显示（左右箭头按钮和1/1计数器）
+    // 删除原因：用户明确表示不需要前端交互界面的分页按钮功能
 
     /**
      * 🔧 新增：触发原生swipe菜单或功能
@@ -1718,42 +1602,46 @@ export class FrontendDisplayManager {
             // 手机端适配 - 优化尺寸和居中
             const isMobile = window.innerWidth <= 768;
             if (isMobile) {
+                console.log('[FrontendDisplayManager] 📱 应用移动端弹窗适配');
+                
                 // 计算理想尺寸
                 const viewport = {
                     width: window.innerWidth,
                     height: window.innerHeight
                 };
                 
-                const idealWidth = Math.min(320, viewport.width * 0.85);
+                // 优化宽度计算，确保更好的适配
+                const idealWidth = Math.min(360, viewport.width * 0.9);
                 const idealLeft = (viewport.width - idealWidth) / 2;
                 
-                // 设置宽度和位置 - 使用绝对定位而非transform
+                // 设置宽度和位置
                 popup.style.setProperty('width', idealWidth + 'px', 'important');
                 popup.style.setProperty('min-width', '280px', 'important');
-                popup.style.setProperty('max-width', idealWidth + 'px', 'important');
+                popup.style.setProperty('max-width', `${viewport.width - 40}px`, 'important');
                 
                 // 设置高度
                 popup.style.setProperty('height', 'auto', 'important');
                 popup.style.setProperty('min-height', '200px', 'important');
-                popup.style.setProperty('max-height', (viewport.height * 0.8) + 'px', 'important');
+                popup.style.setProperty('max-height', `${viewport.height * 0.85}px`, 'important');
                 
-                // 使用绝对定位确保居中
+                // 重置transform并使用固定定位确保完全居中
                 popup.style.setProperty('position', 'fixed', 'important');
-                popup.style.setProperty('left', idealLeft + 'px', 'important');
-                popup.style.setProperty('transform', 'none', 'important');
+                popup.style.setProperty('left', '50%', 'important');
+                popup.style.setProperty('top', '50%', 'important');
+                popup.style.setProperty('transform', 'translate(-50%, -50%)', 'important');
                 popup.style.setProperty('margin', '0', 'important');
                 
-                // 其他样式
-                popup.style.setProperty('border-radius', '8px', 'important');
+                // 其他移动端优化样式
+                popup.style.setProperty('border-radius', '12px', 'important');
                 popup.style.setProperty('box-sizing', 'border-box', 'important');
                 popup.style.setProperty('overflow-y', 'auto', 'important');
+                popup.style.setProperty('padding', '0', 'important');
                 
-                // 延迟设置top位置，确保高度计算完成
-                setTimeout(() => {
-                    const rect = popup.getBoundingClientRect();
-                    const idealTop = Math.max(20, (viewport.height - rect.height) / 2);
-                    popup.style.setProperty('top', idealTop + 'px', 'important');
-                }, 50);
+                // 确保弹窗在视口内
+                popup.style.setProperty('max-width', `${viewport.width - 20}px`, 'important');
+                popup.style.setProperty('max-height', `${viewport.height - 40}px`, 'important');
+                
+                console.log(`[FrontendDisplayManager] ✅ 移动端弹窗适配完成: ${idealWidth}px x auto, 视口: ${viewport.width}x${viewport.height}`);
             }
 
             // 添加到页面
@@ -2336,10 +2224,42 @@ export class FrontendDisplayManager {
      */
     positionMenu(menu, slotElement) {
         const rect = slotElement.getBoundingClientRect();
+        const isMobile = window.innerWidth <= 768;
+        
         menu.style.position = 'fixed';
-        menu.style.left = `${rect.left}px`;
-        menu.style.top = `${rect.bottom + 10}px`;
         menu.style.zIndex = '10000';
+        
+        if (isMobile) {
+            console.log('[FrontendDisplayManager] 📱 应用移动端菜单居中定位');
+            
+            // 移动端使用全屏遮罩加居中内容
+            menu.style.left = '0';
+            menu.style.top = '0';
+            menu.style.width = '100vw';
+            menu.style.height = '100vh';
+            menu.style.background = 'rgba(0, 0, 0, 0.5)';
+            menu.style.backdropFilter = 'blur(4px)';
+            menu.style.display = 'flex';
+            menu.style.alignItems = 'center';
+            menu.style.justifyContent = 'center';
+            menu.style.transform = 'none';
+            
+            // 确保menu-content在移动端正确居中
+            const menuContent = menu.querySelector('.menu-content');
+            if (menuContent) {
+                menuContent.style.width = '90vw';
+                menuContent.style.maxWidth = '350px';
+                menuContent.style.maxHeight = '80vh';
+                menuContent.style.overflow = 'auto';
+                menuContent.style.margin = '0';
+            }
+            
+            console.log('[FrontendDisplayManager] ✅ 移动端菜单定位完成');
+        } else {
+            // 桌面端保持原有定位逻辑
+            menu.style.left = `${rect.left}px`;
+            menu.style.top = `${rect.bottom + 10}px`;
+        }
     }
 
     /**

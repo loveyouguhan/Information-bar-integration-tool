@@ -615,7 +615,6 @@ export class InfoBarSettings {
             throw error;
         }
     }
-
     /**
      * 创建新的基础设置面板 - 垂直布局
      */
@@ -1218,46 +1217,86 @@ export class InfoBarSettings {
             menu.className = 'demo-add-panel-menu';
             menu.innerHTML = `
                 <div class="demo-menu-content">
-                    <h4>选择要添加的内容</h4>
-                    <div class="demo-menu-options">
-                        <div class="demo-menu-option" data-type="panel">
-                            <span class="option-icon">📊</span>
-                            <span class="option-text">面板按钮</span>
-                        </div>
-                        <div class="demo-menu-option" data-type="subitem">
-                            <span class="option-icon">🔤</span>
-                            <span class="option-text">子项显示</span>
+                    <div class="menu-header">
+                        <h3>添加到${area === 'top' ? '顶部' : '底部'}区域</h3>
+                        <button class="menu-close-btn">&times;</button>
+                    </div>
+                    <div class="menu-body">
+                        <div class="menu-layout">
+                            <!-- 左侧面板导航 -->
+                            <div class="panel-navigation">
+                                <h4>📋 启用的面板 (${Object.keys(enabledPanels).length})</h4>
+                                <div class="panel-list">
+                                    ${panelListHtml}
+                                </div>
+                            </div>
+                            
+                            <!-- 右侧子项列表 -->
+                            <div class="subitem-list">
+                                ${subitemListHtml}
+                            </div>
                         </div>
                     </div>
                 </div>
             `;
-            
+
+            // 定位菜单（移动端全屏遮罩，桌面端居中）
+            const isMobile = window.innerWidth <= 768;
+            menu.style.position = 'fixed';
+            menu.style.zIndex = '10000';
+            if (isMobile) {
+                // 全屏遮罩
+                menu.style.left = '0';
+                menu.style.top = '0';
+                menu.style.width = '100vw';
+                menu.style.height = '100vh';
+                menu.style.background = 'rgba(0, 0, 0, 0.5)';
+                menu.style.backdropFilter = 'blur(4px)';
+                menu.style.display = 'flex';
+                menu.style.alignItems = 'center';
+                menu.style.justifyContent = 'center';
+
+                // 内容容器限制尺寸并居中
+                const menuContent = menu.querySelector('.demo-menu-content');
+                if (menuContent) {
+                    menuContent.style.width = '90vw';
+                    menuContent.style.maxWidth = '360px';
+                    menuContent.style.maxHeight = '80vh';
+                    menuContent.style.overflow = 'auto';
+                    menuContent.style.borderRadius = '12px';
+                }
+            } else {
+                // 桌面居中
+                menu.style.left = '50%';
+                menu.style.top = '50%';
+                menu.style.transform = 'translate(-50%, -50%)';
+            }
+
+            // 添加到页面
             document.body.appendChild(menu);
-            
-            // 3秒后自动关闭
-            setTimeout(() => {
-                if (menu.parentNode) {
-                    menu.parentNode.removeChild(menu);
-                }
-            }, 3000);
-            
-            // 点击选项事件
-            menu.addEventListener('click', (e) => {
-                const option = e.target.closest('.demo-menu-option');
-                if (option) {
-                    const type = option.dataset.type;
-                    console.log(`[InfoBarSettings] 选择添加类型: ${type}`);
-                    if (menu.parentNode) {
-                        menu.parentNode.removeChild(menu);
+
+            // 点击遮罩关闭（仅移动端全屏时）
+            if (isMobile) {
+                menu.addEventListener('click', (evt) => {
+                    const content = menu.querySelector('.demo-menu-content');
+                    if (content && !content.contains(evt.target)) {
+                        menu.remove();
                     }
-                }
-            });
+                });
+            }
+
+            // 绑定关闭按钮
+            const closeBtn = menu.querySelector('.menu-close-btn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    menu.remove();
+                });
+            }
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 测试添加面板失败:', error);
         }
     }
-
     /**
      * 切换面板分类
      */
@@ -1890,7 +1929,6 @@ export class InfoBarSettings {
             this.showMessage('面板删除失败: ' + error.message, 'error');
         }
     }
-
     /**
      * 添加子项
      */
@@ -2309,19 +2347,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>${panel.name}</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" name="${panel.key}.enabled" id="${panel.id}-enabled" ${panel.enabled ? 'checked' : ''} />
-                    <label for="${panel.id}-enabled" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 自定义面板卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-    
-                        <div class="card-title">${panel.name}</div>
-                        <div class="card-subtitle">${panel.description}</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">📄</div>
+                            <div class="card-text">
+                                <div class="card-title">${panel.name}</div>
+                                <div class="card-subtitle">${panel.description}</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" name="${panel.key}.enabled" id="${panel.id}-enabled" ${panel.enabled ? 'checked' : ''} />
+                                <label for="${panel.id}-enabled" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -2520,7 +2564,6 @@ export class InfoBarSettings {
                 return defaultInput?.value || '';
         }
     }
-
     /**
      * 获取子项选项（用于select类型）
      */
@@ -3046,9 +3089,6 @@ export class InfoBarSettings {
             console.error('[InfoBarSettings] ❌ 处理复选框变更失败:', error);
         }
     }
-
-
-
     /**
      * 创建API配置面板
      */
@@ -3694,7 +3734,6 @@ export class InfoBarSettings {
             console.error('[InfoBarSettings] ❌ 修复重复键名失败:', error);
         }
     }
-
     /**
      * 保存所有自定义面板配置
      */
@@ -4270,7 +4309,6 @@ export class InfoBarSettings {
             this.handleError(error);
         }
     }
-
     /**
      * 加载设置到表单
      */
@@ -4542,9 +4580,21 @@ export class InfoBarSettings {
             // 显示成功消息
             this.showMessage('设置保存成功', 'success');
             
-            // 🔧 修复：保存设置后检查并重新包装AI消息
+            // 🔧 修复：只有在前端显示功能启用时才检查并重新包装AI消息
             setTimeout(() => {
-                this.ensureAIMessagesWrapped();
+                // 检查前端显示功能是否启用
+                const configManager = window.SillyTavernInfobar?.modules?.configManager;
+                if (configManager) {
+                    const frontendConfig = configManager.getFrontendDisplayConfig();
+                    if (frontendConfig && frontendConfig.enabled) {
+                        console.log('[InfoBarSettings] 🔄 前端显示功能已启用，检查AI消息包装状态');
+                        this.ensureAIMessagesWrapped();
+                    } else {
+                        console.log('[InfoBarSettings] ⏹️ 前端显示功能已禁用，跳过AI消息包装检查');
+                    }
+                } else {
+                    console.warn('[InfoBarSettings] ⚠️ 未找到配置管理器，跳过AI消息包装检查');
+                }
             }, 500);
 
             console.log('[InfoBarSettings] ✅ 设置保存完成');
@@ -4912,7 +4962,6 @@ export class InfoBarSettings {
             statsElement.textContent = `${stats.success}/${stats.total} (${stats.successRate})`;
         }
     }
-
     /**
      * 显示顶部提示消息
      */
@@ -5182,19 +5231,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>个人信息配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="personal-info-toggle" checked />
-                    <label for="personal-info-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 个人信息卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">👤</div>
-                        <div class="card-title">个人信息</div>
-                        <div class="card-subtitle">角色自身的基础信息</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">👤</div>
+                            <div class="card-text">
+                                <div class="card-title">个人信息</div>
+                                <div class="card-subtitle">角色自身的基础信息</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="personal-info-toggle" checked />
+                                <label for="personal-info-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -5534,7 +5589,6 @@ export class InfoBarSettings {
                             </div>
                         </div>
                     </div>
-
                     <!-- 兴趣爱好 -->
                     <div class="sub-item-row">
                         <div class="sub-item">
@@ -5635,19 +5689,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>交互对象配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="interaction-toggle" name="interaction.enabled" checked />
-                    <label for="interaction-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 交互对象卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">👥</div>
-                        <div class="card-title">交互对象</div>
-                        <div class="card-subtitle">角色交互和关系管理</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">👥</div>
+                            <div class="card-text">
+                                <div class="card-title">交互对象</div>
+                                <div class="card-subtitle">角色交互和关系管理</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="interaction-toggle" name="interaction.enabled" checked />
+                                <label for="interaction-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -5993,7 +6053,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建任务系统面板
      */
@@ -6001,19 +6060,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>任务系统配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="tasks-toggle" name="tasks.enabled" checked />
-                    <label for="tasks-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 任务系统卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">📋</div>
-                        <div class="card-title">任务系统</div>
-                        <div class="card-subtitle">任务管理和进度跟踪</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">📋</div>
+                            <div class="card-text">
+                                <div class="card-title">任务系统</div>
+                                <div class="card-subtitle">任务管理和进度跟踪</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="tasks-toggle" name="tasks.enabled" checked />
+                                <label for="tasks-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -6358,7 +6423,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建世界信息面板
      */
@@ -6366,19 +6430,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>世界信息配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="world-toggle" name="world.enabled" checked />
-                    <label for="world-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 世界信息卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">🌍</div>
-                        <div class="card-title">世界信息</div>
-                        <div class="card-subtitle">世界设定和环境管理</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">🌍</div>
+                            <div class="card-text">
+                                <div class="card-title">世界信息</div>
+                                <div class="card-subtitle">世界设定和环境管理</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="world-toggle" name="world.enabled" checked />
+                                <label for="world-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -6723,7 +6793,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建组织信息面板
      */
@@ -6731,19 +6800,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>组织信息配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="organization-toggle" name="organization.enabled" checked />
-                    <label for="organization-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 组织信息卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">🏛️</div>
-                        <div class="card-title">组织信息</div>
-                        <div class="card-subtitle">组织管理和成员关系</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">🏛️</div>
+                            <div class="card-text">
+                                <div class="card-title">组织信息</div>
+                                <div class="card-subtitle">组织管理和成员关系</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="organization-toggle" name="organization.enabled" checked />
+                                <label for="organization-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -7088,7 +7163,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建资讯内容面板
      */
@@ -7096,19 +7170,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>资讯内容配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="news-toggle" name="news.enabled" checked />
-                    <label for="news-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 资讯内容卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">📰</div>
-                        <div class="card-title">资讯内容</div>
-                        <div class="card-subtitle">信息管理和内容分发</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">📰</div>
+                            <div class="card-text">
+                                <div class="card-title">资讯内容</div>
+                                <div class="card-subtitle">信息管理和内容分发</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="news-toggle" name="news.enabled" checked />
+                                <label for="news-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -7453,7 +7533,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建背包仓库面板
      */
@@ -7461,19 +7540,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>背包仓库配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="inventory-toggle" name="inventory.enabled" checked />
-                    <label for="inventory-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 背包仓库卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">🎒</div>
-                        <div class="card-title">背包仓库</div>
-                        <div class="card-subtitle">物品管理和存储系统</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">🎒</div>
+                            <div class="card-text">
+                                <div class="card-title">背包仓库</div>
+                                <div class="card-subtitle">物品管理和存储系统</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="inventory-toggle" name="inventory.enabled" checked />
+                                <label for="inventory-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -7818,7 +7903,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建能力系统面板
      */
@@ -7826,19 +7910,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>能力系统配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="abilities-toggle" name="abilities.enabled" checked />
-                    <label for="abilities-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 能力系统卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">⚡</div>
-                        <div class="card-title">能力系统</div>
-                        <div class="card-subtitle">技能和属性管理系统</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">⚡</div>
+                            <div class="card-text">
+                                <div class="card-title">能力系统</div>
+                                <div class="card-subtitle">技能和属性管理系统</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="abilities-toggle" name="abilities.enabled" checked />
+                                <label for="abilities-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -8183,7 +8273,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建剧情面板
      */
@@ -8191,19 +8280,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>剧情面板配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="plot-toggle" name="plot.enabled" checked />
-                    <label for="plot-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 剧情面板卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">📖</div>
-                        <div class="card-title">剧情面板</div>
-                        <div class="card-subtitle">故事情节和叙事管理</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">📖</div>
+                            <div class="card-text">
+                                <div class="card-title">剧情面板</div>
+                                <div class="card-subtitle">故事情节和叙事管理</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="plot-toggle" name="plot.enabled" checked />
+                                <label for="plot-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -8548,7 +8643,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建修仙世界面板
      */
@@ -8556,19 +8650,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>修仙世界配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="cultivation-toggle" name="cultivation.enabled" checked />
-                    <label for="cultivation-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 修仙世界卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">⚡</div>
-                        <div class="card-title">修仙世界</div>
-                        <div class="card-subtitle">仙侠修炼体系设定</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">⚡</div>
+                            <div class="card-text">
+                                <div class="card-title">修仙世界</div>
+                                <div class="card-subtitle">仙侠修炼体系设定</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="cultivation-toggle" name="cultivation.enabled" checked />
+                                <label for="cultivation-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -8940,7 +9040,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建玄幻世界面板
      */
@@ -8948,19 +9047,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>玄幻世界配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="fantasy-toggle" name="fantasy.enabled" checked />
-                    <label for="fantasy-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 玄幻世界卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">🐉</div>
-                        <div class="card-title">玄幻世界</div>
-                        <div class="card-subtitle">奇幻魔法世界设定</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">🐉</div>
+                            <div class="card-text">
+                                <div class="card-title">玄幻世界</div>
+                                <div class="card-subtitle">奇幻魔法世界设定</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="fantasy-toggle" name="fantasy.enabled" checked />
+                                <label for="fantasy-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -9331,7 +9436,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建都市现代面板
      */
@@ -9695,7 +9799,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建历史古代面板
      */
@@ -9703,19 +9806,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>历史古代配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="historical-toggle" name="historical.enabled" checked />
-                    <label for="historical-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 历史古代卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">🏛️</div>
-                        <div class="card-title">历史古代</div>
-                        <div class="card-subtitle">古代历史背景设定</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">🏛️</div>
+                            <div class="card-text">
+                                <div class="card-title">历史古代</div>
+                                <div class="card-subtitle">古代历史背景设定</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="historical-toggle" name="historical.enabled" checked />
+                                <label for="historical-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -10059,7 +10168,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建魔法能力面板
      */
@@ -10067,19 +10175,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>魔法能力配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="magic-toggle" name="magic.enabled" checked />
-                    <label for="magic-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 魔法能力卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">🔮</div>
-                        <div class="card-title">魔法能力</div>
-                        <div class="card-subtitle">魔法系统能力设定</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">🔮</div>
+                            <div class="card-text">
+                                <div class="card-title">魔法能力</div>
+                                <div class="card-subtitle">魔法系统能力设定</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="magic-toggle" name="magic.enabled" checked />
+                                <label for="magic-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -10429,7 +10543,6 @@ export class InfoBarSettings {
             </div>
         `;
     }
-
     /**
      * 创建调教系统面板
      */
@@ -10437,19 +10550,25 @@ export class InfoBarSettings {
         return `
             <div class="content-header">
                 <h3>调教系统配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="training-toggle" name="training.enabled" checked />
-                    <label for="training-toggle" class="switch-slider"></label>
-                </div>
             </div>
 
             <div class="content-body">
                 <!-- 调教系统卡片 -->
                 <div class="info-card">
                     <div class="card-header">
-                        <div class="card-icon">🎯</div>
-                        <div class="card-title">调教系统</div>
-                        <div class="card-subtitle">训练系统功能设定</div>
+                        <div class="card-info-left">
+                            <div class="card-icon">🎯</div>
+                            <div class="card-text">
+                                <div class="card-title">调教系统</div>
+                                <div class="card-subtitle">训练系统功能设定</div>
+                            </div>
+                        </div>
+                        <div class="card-toggle">
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="training-toggle" name="training.enabled" checked />
+                                <label for="training-toggle" class="switch-slider"></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-status">
@@ -11053,7 +11172,6 @@ export class InfoBarSettings {
                 return `<div class="demo-default">📊</div>`;
         }
     }
-
     /**
      * 选择主题
      * @param {string} themeId - 主题ID
@@ -11691,7 +11809,6 @@ export class InfoBarSettings {
             console.error('[InfoBarSettings] ❌ 应用主题到数据表格失败:', error);
         }
     }
-
     /**
      * 更新数据表格标题的主题样式
      * @param {Object} theme - 主题配置对象
@@ -12196,7 +12313,6 @@ export class InfoBarSettings {
      */
     createRestrictionPrompt() {
         return `【重要技术性限制 - 禁止输出特定标签】
-
 ⚠️ 严格禁止在回复中包含以下技术性标签：
 
 🚫 禁止输出的XML标签：
@@ -12596,7 +12712,6 @@ export class InfoBarSettings {
      */
     getBackupSystemPrompt() {
         return `你是一个专业的信息栏数据生成助手。请根据用户提供的剧情内容，生成结构化的信息栏数据。
-
 请严格按照以下格式输出：
 
 <infobar_data>
@@ -13185,7 +13300,6 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             console.error('[InfoBarSettings] ❌ 显示总结内容失败:', error);
         }
     }
-
     /**
      * 绑定总结面板事件
      */
@@ -13589,17 +13703,52 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                 </div>
             `;
 
-            // 定位菜单（居中显示）
+            // 定位菜单（移动端全屏遮罩，桌面端居中）
+            const isMobile = window.innerWidth <= 768;
             menu.style.position = 'fixed';
-            menu.style.left = '50%';
-            menu.style.top = '50%';
-            menu.style.transform = 'translate(-50%, -50%)';
             menu.style.zIndex = '10000';
+            if (isMobile) {
+                // 全屏遮罩
+                menu.style.left = '0';
+                menu.style.top = '0';
+                menu.style.width = '100vw';
+                menu.style.height = '100vh';
+                menu.style.background = 'rgba(0, 0, 0, 0.5)';
+                menu.style.backdropFilter = 'blur(4px)';
+                menu.style.display = 'flex';
+                menu.style.alignItems = 'center';
+                menu.style.justifyContent = 'center';
+
+                // 内容容器限制尺寸并居中
+                const menuContent = menu.querySelector('.demo-menu-content');
+                if (menuContent) {
+                    menuContent.style.width = '90vw';
+                    menuContent.style.maxWidth = '360px';
+                    menuContent.style.maxHeight = '80vh';
+                    menuContent.style.overflow = 'auto';
+                    menuContent.style.borderRadius = '12px';
+                }
+            } else {
+                // 桌面居中
+                menu.style.left = '50%';
+                menu.style.top = '50%';
+                menu.style.transform = 'translate(-50%, -50%)';
+            }
 
             // 添加到页面
             document.body.appendChild(menu);
 
-            // 绑定关闭事件
+            // 点击遮罩关闭（仅移动端全屏时）
+            if (isMobile) {
+                menu.addEventListener('click', (evt) => {
+                    const content = menu.querySelector('.demo-menu-content');
+                    if (content && !content.contains(evt.target)) {
+                        menu.remove();
+                    }
+                });
+            }
+
+            // 绑定关闭按钮
             const closeBtn = menu.querySelector('.menu-close-btn');
             if (closeBtn) {
                 closeBtn.addEventListener('click', () => {
@@ -13827,7 +13976,6 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             console.error('[InfoBarSettings] ❌ 切换动画效果失败:', error);
         }
     }
-
     /**
      * 获取启用的面板配置
      */
@@ -14436,7 +14584,6 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             console.error('[InfoBarSettings] ❌ 添加子项到预览失败:', error);
         }
     }
-
     /**
      * 获取子项显示名称
      */
@@ -15017,4 +15164,3 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
         }
     }
 }
-
