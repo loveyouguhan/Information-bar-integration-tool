@@ -46,7 +46,8 @@ export class ConfigManager {
             'theme.custom': { type: 'object', default: {} },
             
             // 前端显示配置验证
-            'frontendDisplay.enabled': { type: 'boolean', default: true },
+            // 默认关闭前端显示（首次安装时为关闭状态）
+            'frontendDisplay.enabled': { type: 'boolean', default: false },
             'frontendDisplay.style': { type: 'string', enum: ['left', 'center', 'right'], default: 'center' },
             'frontendDisplay.showAddButtons': { type: 'boolean', default: true },
             'frontendDisplay.animationEnabled': { type: 'boolean', default: true },
