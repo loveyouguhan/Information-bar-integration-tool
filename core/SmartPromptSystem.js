@@ -1589,33 +1589,62 @@ plot: exposition="剧情推进到清晨，……"
 
             // 获取扩展配置
             const extensionSettings = this.context.extensionSettings['Information bar integration tool'] || {};
-            const configs = extensionSettings.configs || {};
 
-            // 检查基础面板
+            // 检查基础面板和自定义面板
             const memoryPanels = [];
             
-            // 遍历基础面板，检查memoryInject配置
-            for (const [panelId, panelConfig] of Object.entries(configs)) {
-                if (panelConfig && panelConfig.enabled && panelConfig.memoryInject === true) {
+            // 🔧 修复：基础面板配置直接存储在扩展设置根级别
+            // 遍历可能的基础面板ID，并放宽启用判断（未显式关闭则视为启用）
+            const basicPanelIds = ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+
+            for (const panelId of basicPanelIds) {
+                const panelConfig = extensionSettings[panelId];
+                if (!panelConfig || typeof panelConfig !== 'object') continue;
+
+                const isEnabled = panelConfig.enabled !== false; // 默认启用
+                const injectEnabled = panelConfig.memoryInject === true || panelConfig.basicSettings?.memoryInject === true;
+
+                if (isEnabled && injectEnabled) {
                     console.log(`[SmartPromptSystem] 🧠 发现启用记忆注入的基础面板: ${panelId}`);
-                    memoryPanels.push({
-                        id: panelId,
-                        type: 'basic',
-                        config: panelConfig
-                    });
+                    memoryPanels.push({ id: panelId, type: 'basic', config: panelConfig });
                 }
             }
 
-            // 检查自定义面板
-            if (configs.customPanels) {
-                for (const [panelId, panelConfig] of Object.entries(configs.customPanels)) {
-                    if (panelConfig && panelConfig.enabled && panelConfig.memoryInject === true) {
+            // 🔧 修复：自定义面板配置存储在 customPanels 属性下
+            if (extensionSettings.customPanels) {
+                for (const [panelId, panelConfig] of Object.entries(extensionSettings.customPanels)) {
+                    if (!panelConfig || typeof panelConfig !== 'object') continue;
+                    const isEnabled = panelConfig.enabled !== false; // 默认启用
+                    const injectEnabled = panelConfig.memoryInject === true || panelConfig.basicSettings?.memoryInject === true;
+                    if (isEnabled && injectEnabled) {
                         console.log(`[SmartPromptSystem] 🧠 发现启用记忆注入的自定义面板: ${panelId}`);
-                        memoryPanels.push({
-                            id: panelId,
-                            type: 'custom',
-                            config: panelConfig
-                        });
+                        memoryPanels.push({ id: panelId, type: 'custom', config: panelConfig });
+                    }
+                }
+            }
+
+            // 兼容旧路径：如果存在 configs.customPanels 或 configs.* 结构，补充检查一次
+            const legacyConfigs = extensionSettings.configs || {};
+            if (legacyConfigs && typeof legacyConfigs === 'object') {
+                // 基础面板（legacy）
+                for (const panelId of basicPanelIds) {
+                    const panelConfig = legacyConfigs[panelId];
+                    if (!panelConfig) continue;
+                    const isEnabled = panelConfig.enabled !== false;
+                    const injectEnabled = panelConfig.memoryInject === true || panelConfig.basicSettings?.memoryInject === true;
+                    if (isEnabled && injectEnabled && !memoryPanels.find(p => p.id === panelId)) {
+                        console.log(`[SmartPromptSystem] 🧠 兼容路径发现启用记忆注入的基础面板: ${panelId}`);
+                        memoryPanels.push({ id: panelId, type: 'basic', config: panelConfig });
+                    }
+                }
+                if (legacyConfigs.customPanels) {
+                    for (const [panelId, panelConfig] of Object.entries(legacyConfigs.customPanels)) {
+                        const isEnabled = (panelConfig?.enabled) !== false;
+                        const injectEnabled = panelConfig?.memoryInject === true || panelConfig?.basicSettings?.memoryInject === true;
+                        if (isEnabled && injectEnabled && !memoryPanels.find(p => p.id === panelId)) {
+                            console.log(`[SmartPromptSystem] 🧠 兼容路径发现启用记忆注入的自定义面板: ${panelId}`);
+                            memoryPanels.push({ id: panelId, type: 'custom', config: panelConfig });
+                        }
                     }
                 }
             }
@@ -1630,13 +1659,29 @@ plot: exposition="剧情推进到清晨，……"
             // 获取当前聊天数据
             const currentChatId = this.dataCore.getCurrentChatId();
             if (!currentChatId) {
-        console.warn('[SmartPromptSystem] ⚠️ 没有当前聊天ID，跳过记忆注入');
+                console.warn('[SmartPromptSystem] ⚠️ 没有当前聊天ID，跳过记忆注入');
                 return;
             }
 
-            const chatData = this.dataCore.getChatData(currentChatId);
+            // 🔧 修复：getChatData是异步函数，需要await
+            const chatData = await this.dataCore.getChatData(currentChatId);
+            console.log('[SmartPromptSystem] 🔍 获取聊天数据:', {
+                chatId: currentChatId,
+                hasChatData: !!chatData,
+                hasInfobarData: !!(chatData?.infobar_data),
+                hasPanels: !!(chatData?.infobar_data?.panels),
+                panelCount: Object.keys(chatData?.infobar_data?.panels || {}).length,
+                panelKeys: Object.keys(chatData?.infobar_data?.panels || {})
+            });
+
             if (!chatData || !chatData.infobar_data || !chatData.infobar_data.panels) {
                 console.log('[SmartPromptSystem] ℹ️ 没有面板数据，跳过记忆注入');
+                console.log('[SmartPromptSystem] 🔍 详细诊断:', {
+                    chatData: !!chatData,
+                    infobarData: !!chatData?.infobar_data,
+                    panels: !!chatData?.infobar_data?.panels,
+                    chatDataStructure: chatData ? Object.keys(chatData) : 'null'
+                });
                 return;
             }
 
