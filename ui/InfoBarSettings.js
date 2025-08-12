@@ -514,7 +514,7 @@ export class InfoBarSettings {
 
                             <!-- 底部操作按钮 -->
                             <div class="nav-bottom">
-                                <button class="btn-reset">恢复所有设置</button>
+                                <button class="btn-reset" data-action="reset">恢复所有设置</button>
                             </div>
                         </div>
 
@@ -1161,8 +1161,35 @@ export class InfoBarSettings {
             // 创建模拟的面板弹窗
             const popup = document.createElement('div');
             popup.className = 'demo-panel-popup';
+            popup.style.setProperty('position', 'fixed', 'important');
+            popup.style.setProperty('top', '0', 'important');
+            popup.style.setProperty('left', '0', 'important');
+            popup.style.setProperty('right', '0', 'important');
+            popup.style.setProperty('bottom', '0', 'important');
+            popup.style.setProperty('width', '100vw', 'important');
+            popup.style.setProperty('height', '100vh', 'important');
+            popup.style.setProperty('display', 'flex', 'important');
+            popup.style.setProperty('align-items', 'center', 'important');
+            popup.style.setProperty('justify-content', 'center', 'important');
+            popup.style.setProperty('z-index', '10000', 'important');
+            popup.style.setProperty('background', 'rgba(0,0,0,0.5)', 'important');
+            
             popup.innerHTML = `
-                <div class="demo-popup-content">
+                <div class="demo-popup-content" style="
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    color: var(--theme-text-primary, #ffffff);
+                    border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                    border-radius: 12px;
+                    padding: 0;
+                    min-width: 300px;
+                    max-width: 90vw;
+                    min-height: 200px;
+                    max-height: 90vh;
+                    overflow-y: auto;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                    position: relative;
+                    margin: 0;
+                ">
                     <div class="demo-popup-header">
                         <h3>👤 个人信息</h3>
                         <button class="demo-close-btn">×</button>
@@ -3022,6 +3049,12 @@ export class InfoBarSettings {
                     break;
                 case 'reset':
                     this.resetSettings();
+                    break;
+                case 'clear-cache':
+                    this.clearAllCaches();
+                    break;
+                case 'reset-all':
+                    this.resetAllSettings();
                     break;
                 case 'export':
                     this.exportSettings();
@@ -5071,6 +5104,54 @@ export class InfoBarSettings {
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 重置设置失败:', error);
             this.showMessage('重置设置失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 清除所有缓存（全局与聊天范围）
+     */
+    async clearAllCaches() {
+        try {
+            if (!confirm('确定要清除所有缓存数据吗？此操作不可撤销，将删除全局与聊天范围的缓存。')) {
+                return;
+            }
+
+            const configManager = this.configManager || window.SillyTavernInfobar?.modules?.configManager;
+            if (configManager && configManager.dataCore) {
+                // 清空全局与聊天数据
+                await configManager.dataCore.clearAllData('all');
+                // 重新加载配置缓存
+                await configManager.loadAllConfigs?.();
+            }
+
+            this.showMessage('所有缓存已清除', 'success');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 清除缓存失败:', error);
+            this.showMessage('清除缓存失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 重置所有设置（按规则默认值）并清除缓存
+     */
+    async resetAllSettings() {
+        try {
+            if (!confirm('确定要重置所有设置并清除缓存吗？此操作不可撤销。')) {
+                return;
+            }
+
+            const configManager = this.configManager || window.SillyTavernInfobar?.modules?.configManager;
+            if (configManager) {
+                await configManager.resetConfig();
+                await configManager.clearAllData?.();
+                await configManager.loadAllConfigs?.();
+            }
+
+            await this.loadSettings?.();
+            this.showMessage('已重置所有设置并清除缓存', 'success');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 重置所有设置失败:', error);
+            this.showMessage('重置所有设置失败: ' + error.message, 'error');
         }
     }
 
@@ -13850,11 +13931,18 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             // 创建弹窗
             const popup = document.createElement('div');
             popup.className = 'demo-panel-popup';
-            popup.style.position = 'fixed';
-            popup.style.left = '50%';
-            popup.style.top = '50%';
-            popup.style.transform = 'translate(-50%, -50%)';
-            popup.style.zIndex = '10000';
+            popup.style.setProperty('position', 'fixed', 'important');
+            popup.style.setProperty('top', '0', 'important');
+            popup.style.setProperty('left', '0', 'important');
+            popup.style.setProperty('right', '0', 'important');
+            popup.style.setProperty('bottom', '0', 'important');
+            popup.style.setProperty('width', '100vw', 'important');
+            popup.style.setProperty('height', '100vh', 'important');
+            popup.style.setProperty('display', 'flex', 'important');
+            popup.style.setProperty('align-items', 'center', 'important');
+            popup.style.setProperty('justify-content', 'center', 'important');
+            popup.style.setProperty('z-index', '10000', 'important');
+            popup.style.setProperty('background', 'rgba(0,0,0,0.5)', 'important');
             
             const dataHtml = Object.entries(data)
                 .map(([key, value]) => `
@@ -13865,7 +13953,21 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                 `).join('');
 
             popup.innerHTML = `
-                <div class="demo-popup-content">
+                <div class="demo-popup-content" style="
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    color: var(--theme-text-primary, #ffffff);
+                    border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                    border-radius: 12px;
+                    padding: 0;
+                    min-width: 300px;
+                    max-width: 90vw;
+                    min-height: 200px;
+                    max-height: 90vh;
+                    overflow-y: auto;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                    position: relative;
+                    margin: 0;
+                ">
                     <div class="popup-header">
                         <h3>${panelType === 'personal' ? '👤 个人信息' : 
                              panelType === 'inventory' ? '🎒 背包信息' : '📊 面板信息'}</h3>

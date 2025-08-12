@@ -1222,7 +1222,8 @@ export class FrontendDisplayManager {
 
             // 按字段逐一补全默认值，避免覆盖已保存的数组
             const beforeJson = JSON.stringify(fd);
-            if (typeof fd.enabled !== 'boolean') fd.enabled = true;
+            // 默认关闭前端显示（首次安装）
+            if (typeof fd.enabled !== 'boolean') fd.enabled = false;
             if (!fd.position) fd.position = 'both';
             if (!fd.style) fd.style = 'compact';
             if (typeof fd.showAddButtons !== 'boolean') fd.showAddButtons = true;
@@ -1582,66 +1583,52 @@ export class FrontendDisplayManager {
                 </div>
             `;
 
-            // 设置样式
-            popup.style.position = 'fixed';
-            popup.style.left = '50%';
-            popup.style.top = '50%';
-            popup.style.transform = 'translate(-50%, -50%)';
-            popup.style.zIndex = '10000';
-            popup.style.background = 'var(--theme-bg-primary, #2a2a2a)';
-            popup.style.color = 'var(--theme-text-primary, #ffffff)';
-            popup.style.border = '1px solid var(--theme-border-color, rgba(255,255,255,0.1))';
-            popup.style.borderRadius = '12px';
-            popup.style.padding = '0';
-            popup.style.minWidth = '400px';
-            popup.style.maxWidth = '600px';
-            popup.style.maxHeight = '80vh';
-            popup.style.overflowY = 'auto';
-            popup.style.boxShadow = '0 8px 32px rgba(0,0,0,0.5)';
+            // 使用全屏遮罩容器 + 居中内容，确保完美居中
+            popup.style.setProperty('position', 'fixed', 'important');
+            popup.style.setProperty('top', '0', 'important');
+            popup.style.setProperty('left', '0', 'important');
+            popup.style.setProperty('right', '0', 'important');
+            popup.style.setProperty('bottom', '0', 'important');
+            popup.style.setProperty('width', '100vw', 'important');
+            popup.style.setProperty('height', '100vh', 'important');
+            popup.style.setProperty('display', 'flex', 'important');
+            popup.style.setProperty('align-items', 'center', 'important');
+            popup.style.setProperty('justify-content', 'center', 'important');
+            popup.style.setProperty('z-index', '10000', 'important');
+            popup.style.setProperty('background', 'rgba(0,0,0,0.5)', 'important');
+            popup.style.setProperty('margin', '0', 'important');
+            popup.style.setProperty('padding', '20px', 'important');
+            popup.style.setProperty('box-sizing', 'border-box', 'important');
+
+            const content = popup.querySelector('.popup-content');
+            if (content) {
+                content.style.setProperty('background', 'var(--theme-bg-primary, #2a2a2a)', 'important');
+                content.style.setProperty('color', 'var(--theme-text-primary, #ffffff)', 'important');
+                content.style.setProperty('border', '1px solid var(--theme-border-color, rgba(255,255,255,0.1))', 'important');
+                content.style.setProperty('border-radius', '12px', 'important');
+                content.style.setProperty('padding', '0', 'important');
+                content.style.setProperty('min-width', '300px', 'important');
+                content.style.setProperty('max-width', '90vw', 'important');
+                content.style.setProperty('min-height', '200px', 'important');
+                content.style.setProperty('max-height', '90vh', 'important');
+                content.style.setProperty('overflow-y', 'auto', 'important');
+                content.style.setProperty('box-shadow', '0 8px 32px rgba(0,0,0,0.5)', 'important');
+                content.style.setProperty('position', 'relative', 'important');
+                content.style.setProperty('margin', '0', 'important');
+                content.style.setProperty('flex-shrink', '0', 'important');
+            }
             
-            // 手机端适配 - 优化尺寸和居中
+            // 移动端适配 - 简化尺寸适配，保持居中
             const isMobile = window.innerWidth <= 768;
-            if (isMobile) {
+            if (isMobile && content) {
                 console.log('[FrontendDisplayManager] 📱 应用移动端弹窗适配');
                 
-                // 计算理想尺寸
-                const viewport = {
-                    width: window.innerWidth,
-                    height: window.innerHeight
-                };
+                // 移动端优化宽度，保持居中
+                content.style.setProperty('width', '95vw', 'important');
+                content.style.setProperty('max-width', '380px', 'important');
+                content.style.setProperty('max-height', '85vh', 'important');
                 
-                // 优化宽度计算，确保更好的适配
-                const idealWidth = Math.min(360, viewport.width * 0.9);
-                const idealLeft = (viewport.width - idealWidth) / 2;
-                
-                // 设置宽度和位置
-                popup.style.setProperty('width', idealWidth + 'px', 'important');
-                popup.style.setProperty('min-width', '280px', 'important');
-                popup.style.setProperty('max-width', `${viewport.width - 40}px`, 'important');
-                
-                // 设置高度
-                popup.style.setProperty('height', 'auto', 'important');
-                popup.style.setProperty('min-height', '200px', 'important');
-                popup.style.setProperty('max-height', `${viewport.height * 0.85}px`, 'important');
-                
-                // 重置transform并使用固定定位确保完全居中
-                popup.style.setProperty('position', 'fixed', 'important');
-                popup.style.setProperty('left', '50%', 'important');
-                popup.style.setProperty('top', '50%', 'important');
-                popup.style.setProperty('transform', 'translate(-50%, -50%)', 'important');
-                popup.style.setProperty('margin', '0', 'important');
-                
-                // 其他移动端优化样式
-                popup.style.setProperty('border-radius', '12px', 'important');
-                popup.style.setProperty('box-sizing', 'border-box', 'important');
-                popup.style.setProperty('overflow-y', 'auto', 'important');
-                popup.style.setProperty('padding', '0', 'important');
-                
-                // 确保弹窗在视口内
-                popup.style.setProperty('max-width', `${viewport.width - 20}px`, 'important');
-                popup.style.setProperty('max-height', `${viewport.height - 40}px`, 'important');
-                
-                console.log(`[FrontendDisplayManager] ✅ 移动端弹窗适配完成: ${idealWidth}px x auto, 视口: ${viewport.width}x${viewport.height}`);
+                console.log('[FrontendDisplayManager] ✅ 移动端弹窗适配完成');
             }
 
             // 添加到页面
@@ -1655,10 +1642,11 @@ export class FrontendDisplayManager {
                 });
             }
 
-            // 点击外部关闭
+            // 点击外部关闭（点击遮罩层）
             setTimeout(() => {
                 const clickOutside = (e) => {
-                    if (!popup.contains(e.target)) {
+                    // 只有点击遮罩层（popup本身）时才关闭，避免误关闭
+                    if (e.target === popup) {
                         popup.remove();
                         document.removeEventListener('click', clickOutside);
                     }
