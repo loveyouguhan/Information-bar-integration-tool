@@ -364,13 +364,25 @@ export class DataTable {
                         if (panel.subItems && Array.isArray(panel.subItems)) {
                             const enabledCustomSubItems = panel.subItems.filter(subItem => subItem.enabled !== false);
                             enabledCustomSubItems.forEach(subItem => {
-                                allSubItems.push({
-                                    name: subItem.displayName || subItem.name,
-                                    key: subItem.key || subItem.name.toLowerCase().replace(/\s+/g, '_'),
-                                    enabled: true,
-                                    value: subItem.value || '',
-                                    source: 'panelManagement' // 标记来源
-                                });
+                                const subItemKey = subItem.key || subItem.name.toLowerCase().replace(/\s+/g, '_');
+                                
+                                // 🔧 修复：检查是否已经存在相同的子项，避免重复添加
+                                const existingItem = allSubItems.find(item => 
+                                    item.key === subItemKey || 
+                                    item.name === (subItem.displayName || subItem.name)
+                                );
+                                
+                                if (!existingItem) {
+                                    allSubItems.push({
+                                        name: subItem.displayName || subItem.name,
+                                        key: subItemKey,
+                                        enabled: true,
+                                        value: subItem.value || '',
+                                        source: 'panelManagement' // 标记来源
+                                    });
+                                } else {
+                                    console.log(`[DataTable] ⚠️ 跳过重复的子项: ${subItem.name} (已存在: ${existingItem.name})`);
+                                }
                             });
                         }
 
