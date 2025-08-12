@@ -1,0 +1,153 @@
+{
+    "extension_name": "信息栏集成工具",
+    "extension_description": "SillyTavern第三方扩展插件，提供信息栏设置和数据表格功能",
+    
+    "settings_title": "信息栏设置",
+    "data_table_title": "数据表格",
+    
+    "basic_settings": "基础设置",
+    "api_config": "API配置",
+    "theme_settings": "主题设置",
+    "panel_management": "面板管理",
+    "advanced_settings": "高级设置",
+    
+    "enable_extension": "启用信息栏扩展",
+    "render_in_chat": "在聊天界面显示信息栏",
+    "enable_table_record": "启用数据表格记录",
+    "enable_memory_assist": "启用记忆辅助功能",
+    "default_collapsed": "默认折叠信息栏",
+    
+    "position": "信息栏位置",
+    "position_left": "左侧",
+    "position_right": "右侧",
+    "position_top": "顶部",
+    "position_bottom": "底部",
+    
+    "default_width": "默认宽度 (px)",
+    "refresh_interval": "刷新间隔 (秒)",
+    
+    "api_enabled": "启用API功能",
+    "api_provider": "API提供商",
+    "api_format": "API格式",
+    "api_endpoint": "API端点",
+    "api_key": "API密钥",
+    "model_name": "模型名称",
+    "temperature": "温度 (0-2)",
+    "max_tokens": "最大令牌数",
+    "retry_count": "重试次数",
+    "extra_prompt": "额外提示词",
+    
+    "test_connection": "测试连接",
+    "load_models": "加载模型",
+    "connection_status": "连接状态",
+    "request_stats": "请求统计",
+    
+    "current_theme": "当前主题",
+    "theme_default": "默认主题",
+    "theme_dark": "深色主题",
+    "theme_light": "浅色主题",
+    "theme_custom": "自定义主题",
+    
+    "primary_color": "主色调",
+    "background_color": "背景色",
+    "text_color": "文字色",
+    "border_color": "边框色",
+    "theme_preview": "主题预览",
+    
+    "font_size": "字体大小",
+    "font_size_small": "小",
+    "font_size_medium": "中",
+    "font_size_large": "大",
+    
+    "font_family": "字体族",
+    "font_system": "系统默认",
+    "font_serif": "衬线字体",
+    "font_sans_serif": "无衬线字体",
+    "font_monospace": "等宽字体",
+    
+    "panel_layout": "面板排列方式",
+    "layout_vertical": "垂直排列",
+    "layout_horizontal": "水平排列",
+    "layout_grid": "网格布局",
+    
+    "panel_spacing": "面板间距 (px)",
+    "resizable_panels": "允许调整面板大小",
+    
+    "auto_backup": "自动备份数据",
+    "sync_interval": "同步间隔 (秒)",
+    "max_backups": "最大备份数量",
+    
+    "enable_cache": "启用缓存",
+    "cache_limit": "缓存大小限制 (MB)",
+    "lazy_load": "启用懒加载",
+    
+    "debug_enabled": "启用调试模式",
+    "log_level": "日志级别",
+    "log_error": "错误",
+    "log_warn": "警告",
+    "log_info": "信息",
+    "log_debug": "调试",
+    
+    "clear_cache": "清除所有缓存",
+    "reset_all": "重置所有设置",
+    
+    "save_settings": "保存设置",
+    "reset_default": "重置默认",
+    "export_settings": "导出设置",
+    "import_settings": "导入设置",
+    "cancel": "取消",
+    
+    "search_placeholder": "搜索数据...",
+    "all_categories": "所有分类",
+    "category_character": "角色信息",
+    "category_chat": "聊天记录",
+    "category_system": "系统数据",
+    
+    "all_status": "所有状态",
+    "status_active": "活跃",
+    "status_inactive": "非活跃",
+    "status_archived": "已归档",
+    
+    "clear_filters": "清除筛选",
+    "table_view": "表格视图",
+    "card_view": "卡片视图",
+    "select_all": "全选",
+    "delete_selected": "删除选中",
+    "export_selected": "导出选中",
+    
+    "refresh": "刷新",
+    "export": "导出",
+    "import": "导入",
+    "search": "搜索",
+    "view": "查看",
+    "edit": "编辑",
+    "delete": "删除",
+    
+    "first_page": "首页",
+    "prev_page": "上一页",
+    "next_page": "下一页",
+    "last_page": "末页",
+    
+    "loading": "加载中...",
+    "no_data": "暂无数据",
+    "no_data_desc": "还没有任何数据记录",
+    "add_data": "添加数据",
+    
+    "success_save": "设置保存成功",
+    "error_save": "保存设置失败",
+    "success_export": "设置导出成功",
+    "error_export": "导出设置失败",
+    "success_import": "设置导入成功",
+    "error_import": "导入设置失败",
+    "success_reset": "设置已重置到默认值",
+    "error_reset": "重置设置失败",
+    
+    "api_test_success": "API连接测试成功",
+    "api_test_failed": "API连接测试失败",
+    "api_test_error": "API连接测试异常",
+    "models_loaded": "成功加载模型",
+    "models_load_failed": "加载模型失败",
+    
+    "confirm_reset": "确定要重置所有设置到默认值吗？此操作不可撤销。",
+    "confirm_delete": "确定要删除选中的数据吗？此操作不可撤销。"
+}

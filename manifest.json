@@ -1,0 +1,18 @@
+{
+    "display_name": "Information Bar Integration Tool",
+    "loading_order": 10,
+    "requires": [],
+    "optional": [],
+    "dependencies": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Information Bar Integration Tool Developer",
+    "version": "1.0.0",
+    "homePage": "https://github.com/your/information-bar-integration-tool",
+    "auto_update": true,
+    "description": "SillyTavern第三方扩展插件 - 提供强大的信息栏集成功能，包括信息栏设置界面、数据表格管理、自定义API配置等功能。",
+    "i18n": {
+        "zh-cn": "i18n/zh-cn.json",
+        "en-us": "i18n/en-us.json"
+    }
+}

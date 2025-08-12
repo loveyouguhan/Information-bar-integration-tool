@@ -1,0 +1,308 @@
+/**
+ * infobar.css - 消息信息栏样式
+ * 
+ * 包含消息中渲染的信息栏组件样式：
+ * - 信息栏容器样式
+ * - 面板样式和交互效果
+ * - 主题变量和适配
+ * - 响应式设计
+ */
+
+/* ========== 信息栏CSS变量 ========== */
+:root {
+    /* 信息栏主题变量 - 可被动态覆盖 */
+    --infobar-bg: #ffffff;
+    --infobar-text: #333333;
+    --infobar-border: #e0e0e0;
+    --infobar-hover: #f8f9fa;
+    --infobar-primary: #007bff;
+    --infobar-text-muted: #6c757d;
+    --infobar-label-color: #495057;
+    --infobar-gradient-start: #007bff;
+    --infobar-gradient-end: #0056b3;
+    --infobar-header-text: #ffffff;
+    --infobar-shadow: rgba(0, 0, 0, 0.1);
+}
+
+/* ========== 信息栏容器样式 ========== */
+.infobar-container {
+    margin: 15px 0;
+    border: 1px solid var(--infobar-border);
+    border-radius: 10px;
+    background: var(--infobar-bg);
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 0.9em;
+    box-shadow: 0 3px 10px var(--infobar-shadow);
+    transition: all 0.3s ease;
+}
+
+.infobar-container:hover {
+    box-shadow: 0 5px 15px var(--infobar-shadow);
+}
+
+/* ========== 面板样式 ========== */
+.infobar-panel {
+    border-bottom: 1px solid var(--infobar-border);
+    margin-bottom: 4px;
+}
+
+.infobar-panel:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.infobar-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, var(--infobar-gradient-start) 0%, var(--infobar-gradient-end) 100%);
+    color: var(--infobar-header-text);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.infobar-panel-header:before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.infobar-panel-header:hover {
+    background: linear-gradient(135deg, var(--infobar-gradient-end) 0%, var(--infobar-gradient-start) 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.infobar-panel-title {
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.02em;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    color: inherit;
+}
+
+.infobar-panel-arrow {
+    transition: transform 0.3s ease;
+    display: inline-block;
+    margin-right: 8px;
+    color: inherit;
+    font-size: 0.8em;
+}
+
+/* ========== 面板内容样式 ========== */
+.infobar-panel-content {
+    padding: 18px;
+    border-top: 1px solid var(--infobar-border);
+    display: none;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    background: var(--infobar-bg);
+}
+
+.infobar-panel-content.expanded {
+    display: block !important;
+    animation: fadeInContent 0.5s ease;
+}
+
+@keyframes fadeInContent {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ========== 信息项样式 ========== */
+.infobar-item {
+    display: flex;
+    padding: 10px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    background: var(--infobar-hover);
+    border: 1px solid var(--infobar-border);
+    box-shadow: 0 2px 4px var(--infobar-shadow);
+    transition: all 0.3s ease;
+}
+
+.infobar-item:hover {
+    background: var(--infobar-border);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px var(--infobar-shadow);
+}
+
+.infobar-item:last-child {
+    margin-bottom: 0;
+}
+
+.infobar-item-label {
+    font-weight: 600;
+    color: var(--infobar-label-color);
+    min-width: 80px;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.infobar-item-value {
+    color: var(--infobar-text);
+    flex: 1;
+    word-break: break-word;
+}
+
+/* ========== NPC选择器样式 ========== */
+.infobar-npc-selector-wrapper {
+    margin-bottom: 16px;
+    padding: 0 4px;
+}
+
+.infobar-npc-selector {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--infobar-border);
+    border-radius: 6px;
+    background: var(--infobar-bg);
+    color: var(--infobar-text);
+    font-size: 0.9em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.infobar-npc-selector:hover {
+    border-color: var(--infobar-primary);
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.infobar-npc-selector:focus {
+    outline: none;
+    border-color: var(--infobar-primary);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+}
+
+/* ========== NPC详情容器样式 ========== */
+.infobar-npc-details-container {
+    position: relative;
+}
+
+.infobar-npc-details {
+    display: none;
+}
+
+.infobar-npc-details[style*="block"] {
+    display: block !important;
+}
+
+/* ========== 响应式设计 ========== */
+@media (max-width: 768px) {
+    .infobar-container {
+        margin: 10px 0;
+        font-size: 0.85em;
+    }
+
+    .infobar-panel-header {
+        padding: 10px 12px;
+    }
+
+    .infobar-panel-content {
+        padding: 12px;
+    }
+
+    .infobar-item {
+        flex-direction: column;
+        padding: 8px;
+    }
+
+    .infobar-item-label {
+        min-width: auto;
+        margin-right: 0;
+        margin-bottom: 4px;
+    }
+}
+
+/* ========== 深色主题适配 ========== */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --infobar-bg: #1a202c;
+        --infobar-text: #ffffff;
+        --infobar-border: #4a5568;
+        --infobar-hover: #2d3748;
+        --infobar-primary: #4299e1;
+        --infobar-text-muted: #cbd5e0;
+        --infobar-label-color: #90cdf4;
+        --infobar-gradient-start: #4299e1;
+        --infobar-gradient-end: #3182ce;
+        --infobar-shadow: rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* ========== 主题特定样式 ========== */
+[data-theme="modern-dark"] .infobar-container,
+[data-theme="dark"] .infobar-container {
+    --infobar-bg: #1a202c;
+    --infobar-text: #ffffff;
+    --infobar-border: #4a5568;
+    --infobar-hover: #2d3748;
+    --infobar-primary: #4299e1;
+    --infobar-text-muted: #cbd5e0;
+    --infobar-label-color: #90cdf4;
+}
+
+[data-theme="light"] .infobar-container,
+[data-theme="modern-light"] .infobar-container {
+    --infobar-bg: #ffffff;
+    --infobar-text: #1a202c;
+    --infobar-border: #e2e8f0;
+    --infobar-hover: #f7fafc;
+    --infobar-primary: #3182ce;
+    --infobar-text-muted: #4a5568;
+    --infobar-label-color: #2b6cb0;
+}
+
+/* ========== 加载和错误状态 ========== */
+.infobar-container.loading {
+    opacity: 0.6;
+    pointer-events: none;
+    position: relative;
+}
+
+.infobar-container.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid var(--infobar-border);
+    border-top: 2px solid var(--infobar-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.infobar-error {
+    padding: 12px;
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 6px;
+    margin: 8px 0;
+    text-align: center;
+    font-size: 0.9em;
+}

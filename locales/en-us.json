@@ -1,0 +1,153 @@
+{
+    "extension_name": "Information Bar Integration Tool",
+    "extension_description": "SillyTavern third-party extension plugin providing information bar settings and data table functionality",
+    
+    "settings_title": "Information Bar Settings",
+    "data_table_title": "Data Table",
+    
+    "basic_settings": "Basic Settings",
+    "api_config": "API Configuration",
+    "theme_settings": "Theme Settings",
+    "panel_management": "Panel Management",
+    "advanced_settings": "Advanced Settings",
+    
+    "enable_extension": "Enable Information Bar Extension",
+    "render_in_chat": "Show Information Bar in Chat Interface",
+    "enable_table_record": "Enable Data Table Recording",
+    "enable_memory_assist": "Enable Memory Assistance",
+    "default_collapsed": "Default Collapsed Information Bar",
+    
+    "position": "Information Bar Position",
+    "position_left": "Left",
+    "position_right": "Right",
+    "position_top": "Top",
+    "position_bottom": "Bottom",
+    
+    "default_width": "Default Width (px)",
+    "refresh_interval": "Refresh Interval (seconds)",
+    
+    "api_enabled": "Enable API Functionality",
+    "api_provider": "API Provider",
+    "api_format": "API Format",
+    "api_endpoint": "API Endpoint",
+    "api_key": "API Key",
+    "model_name": "Model Name",
+    "temperature": "Temperature (0-2)",
+    "max_tokens": "Max Tokens",
+    "retry_count": "Retry Count",
+    "extra_prompt": "Extra Prompt",
+    
+    "test_connection": "Test Connection",
+    "load_models": "Load Models",
+    "connection_status": "Connection Status",
+    "request_stats": "Request Statistics",
+    
+    "current_theme": "Current Theme",
+    "theme_default": "Default Theme",
+    "theme_dark": "Dark Theme",
+    "theme_light": "Light Theme",
+    "theme_custom": "Custom Theme",
+    
+    "primary_color": "Primary Color",
+    "background_color": "Background Color",
+    "text_color": "Text Color",
+    "border_color": "Border Color",
+    "theme_preview": "Theme Preview",
+    
+    "font_size": "Font Size",
+    "font_size_small": "Small",
+    "font_size_medium": "Medium",
+    "font_size_large": "Large",
+    
+    "font_family": "Font Family",
+    "font_system": "System Default",
+    "font_serif": "Serif",
+    "font_sans_serif": "Sans-serif",
+    "font_monospace": "Monospace",
+    
+    "panel_layout": "Panel Layout",
+    "layout_vertical": "Vertical",
+    "layout_horizontal": "Horizontal",
+    "layout_grid": "Grid",
+    
+    "panel_spacing": "Panel Spacing (px)",
+    "resizable_panels": "Allow Panel Resizing",
+    
+    "auto_backup": "Auto Backup Data",
+    "sync_interval": "Sync Interval (seconds)",
+    "max_backups": "Max Backup Count",
+    
+    "enable_cache": "Enable Cache",
+    "cache_limit": "Cache Size Limit (MB)",
+    "lazy_load": "Enable Lazy Loading",
+    
+    "debug_enabled": "Enable Debug Mode",
+    "log_level": "Log Level",
+    "log_error": "Error",
+    "log_warn": "Warning",
+    "log_info": "Info",
+    "log_debug": "Debug",
+    
+    "clear_cache": "Clear All Cache",
+    "reset_all": "Reset All Settings",
+    
+    "save_settings": "Save Settings",
+    "reset_default": "Reset to Default",
+    "export_settings": "Export Settings",
+    "import_settings": "Import Settings",
+    "cancel": "Cancel",
+    
+    "search_placeholder": "Search data...",
+    "all_categories": "All Categories",
+    "category_character": "Character Info",
+    "category_chat": "Chat Records",
+    "category_system": "System Data",
+    
+    "all_status": "All Status",
+    "status_active": "Active",
+    "status_inactive": "Inactive",
+    "status_archived": "Archived",
+    
+    "clear_filters": "Clear Filters",
+    "table_view": "Table View",
+    "card_view": "Card View",
+    "select_all": "Select All",
+    "delete_selected": "Delete Selected",
+    "export_selected": "Export Selected",
+    
+    "refresh": "Refresh",
+    "export": "Export",
+    "import": "Import",
+    "search": "Search",
+    "view": "View",
+    "edit": "Edit",
+    "delete": "Delete",
+    
+    "first_page": "First",
+    "prev_page": "Previous",
+    "next_page": "Next",
+    "last_page": "Last",
+    
+    "loading": "Loading...",
+    "no_data": "No Data",
+    "no_data_desc": "No data records available",
+    "add_data": "Add Data",
+    
+    "success_save": "Settings saved successfully",
+    "error_save": "Failed to save settings",
+    "success_export": "Settings exported successfully",
+    "error_export": "Failed to export settings",
+    "success_import": "Settings imported successfully",
+    "error_import": "Failed to import settings",
+    "success_reset": "Settings reset to default values",
+    "error_reset": "Failed to reset settings",
+    
+    "api_test_success": "API connection test successful",
+    "api_test_failed": "API connection test failed",
+    "api_test_error": "API connection test error",
+    "models_loaded": "Models loaded successfully",
+    "models_load_failed": "Failed to load models",
+    
+    "confirm_reset": "Are you sure you want to reset all settings to default values? This action cannot be undone.",
+    "confirm_delete": "Are you sure you want to delete the selected data? This action cannot be undone."
+}
