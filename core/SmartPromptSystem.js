@@ -1112,9 +1112,9 @@ ${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段
                 await this.injectMainAPIProhibitionRules();
                 return;
             } else {
-                // 🔧 修复：自定义API未启用时，清理可能存在的技术性禁止规则
-                await this.clearMainAPIProhibitionRules();
-                console.log('[SmartPromptSystem] ✅ 自定义API未启用，已清理技术性禁止规则');
+                // 🆕 自定义API未启用时，向主API注入必须输出标签的规则
+                await this.injectMainAPIRequiredRules();
+                console.log('[SmartPromptSystem] ✅ 自定义API未启用，已注入主API必须输出规则');
             }
 
             // 生成智能提示词
@@ -1835,6 +1835,9 @@ plot: exposition="剧情推进到清晨，……"
 **这些是纯技术性限制，不影响你的正常创作和表达。**
             `.trim();
 
+            // 先清理可能存在的必须输出规则
+            await this.clearMainAPIRequiredRules();
+
             // 使用SillyTavern的扩展提示词机制注入
             if (typeof this.context.setExtensionPrompt === 'function') {
                 await this.context.setExtensionPrompt('Information bar integration tool - Prohibition Rules', prohibitionPrompt, 1, 0, false, '');
@@ -1845,7 +1848,7 @@ plot: exposition="剧情推进到清晨，……"
                 const separator = currentMemory ? '\n\n---\n\n' : '';
                 this.context.memory = currentMemory + separator + `[系统禁止规则]\n${prohibitionPrompt}`;
                 console.log('[SmartPromptSystem] ✅ 主API技术性禁止规则已添加到memory');
-                
+
                 // 保存记忆
                 if (typeof this.context.saveMemory === 'function') {
                     await this.context.saveMemory();
@@ -1860,44 +1863,207 @@ plot: exposition="剧情推进到清晨，……"
     }
 
     /**
-     * 🔧 新增：清理主API技术性禁止规则
-     * 当自定义API未启用时，移除错误注入的技术性禁止规则
+     * 🆕 向主API注入必须输出标签的规则
+     * 当自定义API未启用时，要求主API必须输出 <infobar_data> 和 <aiThinkProcess> 标签
      */
-    async clearMainAPIProhibitionRules() {
+    async injectMainAPIRequiredRules() {
         try {
-            console.log('[SmartPromptSystem] 🧹 开始清理主API技术性禁止规则...');
+            console.log('[SmartPromptSystem] ✅ 开始注入主API必须输出规则...');
+
+            // 构建必须输出规则
+            const requiredPrompt = `
+**🚨【重要要求：必须输出特定标签并遵循格式规范】🚨**
+
+请严格遵守以下输出要求：
+
+1. **必须输出 infobar_data 标签**：
+   - 在每次回复的最后部分，必须包含 <infobar_data> 标签
+   - 标签内容格式：<infobar_data><!--面板数据--></infobar_data>
+   - **必须根据【信息栏数据格式规范】生成具体内容**
+   - 使用XML紧凑格式：面板名: 字段="值", 字段="值"
+   - 示例：personal: name="张三", age="25", occupation="程序员"
+   - **禁止只输出空标签或占位符**
+
+2. **必须输出 aiThinkProcess 标签**：
+   - 在每次回复的最后部分，必须包含 <aiThinkProcess> 标签
+   - 标签内容格式：<aiThinkProcess><!--五步分析思考--></aiThinkProcess>
+   - **必须包含完整的五步分析过程**：
+     * 0. 更新策略：全量/增量更新
+     * 1. 剧情分析：当前发生什么事件？角色在哪里？在做什么？
+     * 2. 数据变化识别：哪些信息发生了变化？哪些是新信息？
+     * 3. 更新策略判断：需要新增哪些字段？需要更新哪些字段？
+     * 4. 数据完整性检查：确保所有启用面板都有完整数据
+     * 5. 质量验证：确认数据逻辑一致性和合理性
+
+3. **格式规范要求**：
+   - **严格遵循【信息栏数据格式规范】**
+   - 使用正确的XML紧凑格式，不要使用JSON或嵌套XML
+   - 生成真实、具体的数据内容，避免"未知"、"N/A"等占位符
+   - 确保数据与当前剧情和角色状态一致
+
+4. **具体格式示例**：
+
+   infobar_data标签示例：
+   <infobar_data>
+   personal: name="艾莉丝", age="23", occupation="魔法师", location="魔法学院图书馆"
+   status: health="良好", mood="专注", energy="80%", magic_power="充足"
+   inventory: gold="150", weapon="法杖", armor="魔法袍", potion="治疗药水x3"
+   </infobar_data>
+
+   aiThinkProcess标签示例：
+   <aiThinkProcess>
+   0. 更新策略：增量更新
+   1. 剧情分析：艾莉丝正在魔法学院图书馆研究古老的魔法书籍，寻找关于传送法术的信息
+   2. 数据变化识别：位置从宿舍变更为图书馆，心情从疲惫变为专注，正在进行魔法研究活动
+   3. 更新策略判断：需要更新location字段为"魔法学院图书馆"，mood字段为"专注"，添加当前活动信息
+   4. 数据完整性检查：个人信息、状态、物品清单都已包含完整数据
+   5. 质量验证：数据与当前剧情一致，艾莉丝作为魔法师在图书馆研究符合角色设定
+   </aiThinkProcess>
+
+5. **🚨 关键输出位置要求 🚨**：
+   - **必须在所有剧情内容和剧情标签之外输出**
+   - **绝对不能在 content、message、response 等剧情标签内部输出**
+   - **必须在回复的最末尾，所有其他内容完成后输出**
+   - **正确位置**：在所有剧情标签结束后，作为独立的标签输出
+   - **错误位置**：在任何剧情标签内部输出（会导致XML解析失败）
+   - **输出顺序**：剧情内容 → 剧情标签结束 → infobar_data标签 → aiThinkProcess标签
+
+**🚨 系统级强制要求 🚨**：
+1. **必须在每次回复中包含这些标签**
+2. **必须生成符合格式规范的具体内容，不能只输出空标签**
+3. **必须参考上述示例格式生成真实数据**
+4. **🔥 关键：标签必须在所有剧情标签外部输出，绝对不能被content等标签包裹 🔥**
+5. **如果标签被剧情标签包裹，会导致XML解析完全失败，数据无法提取**
+
+**正确的输出结构**：
+[角色扮演内容和剧情发展]
+[剧情标签结束]
+
+infobar_data标签（独立输出）
+aiThinkProcess标签（独立输出）
+            `.trim();
+
+            // 先清理可能存在的禁止规则
+            await this.clearMainAPIProhibitionRules();
+
+            // 使用SillyTavern的扩展提示词机制注入
+            if (typeof this.context.setExtensionPrompt === 'function') {
+                await this.context.setExtensionPrompt('Information bar integration tool - Required Rules', requiredPrompt, 1, 0, false, '');
+                console.log('[SmartPromptSystem] ✅ 主API必须输出规则已通过setExtensionPrompt注入');
+            } else if (this.context.memory !== undefined) {
+                // 备用方案：添加到memory
+                const currentMemory = this.context.memory || '';
+                const separator = currentMemory ? '\n\n---\n\n' : '';
+                this.context.memory = currentMemory + separator + `[系统必须输出规则]\n${requiredPrompt}`;
+                console.log('[SmartPromptSystem] ✅ 主API必须输出规则已添加到memory');
+
+                // 保存记忆
+                if (typeof this.context.saveMemory === 'function') {
+                    await this.context.saveMemory();
+                }
+            } else {
+                console.log('[SmartPromptSystem] ⚠️ 无法找到合适的注入机制');
+            }
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 主API必须输出规则注入失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 清理主API必须输出规则
+     * 清理可能存在的必须输出规则
+     */
+    async clearMainAPIRequiredRules() {
+        try {
+            console.log('[SmartPromptSystem] 🧹 开始清理主API必须输出规则...');
 
             // 使用SillyTavern的扩展提示词机制清理
             if (typeof this.context.setExtensionPrompt === 'function') {
-                // 清空禁止规则提示词
-                await this.context.setExtensionPrompt('Information bar integration tool - Prohibition Rules', '', 1, 0, false, '');
-                console.log('[SmartPromptSystem] ✅ 已通过setExtensionPrompt清理主API技术性禁止规则');
+                // 清空必须输出规则提示词
+                await this.context.setExtensionPrompt('Information bar integration tool - Required Rules', '', 1, 0, false, '');
+                console.log('[SmartPromptSystem] ✅ 已通过setExtensionPrompt清理主API必须输出规则');
             } else if (this.context.memory !== undefined) {
-                // 备用方案：从memory中移除禁止规则
+                // 备用方案：从memory中移除必须输出规则
                 const currentMemory = this.context.memory || '';
-                if (currentMemory.includes('[系统禁止规则]')) {
-                    // 移除禁止规则相关内容
+                if (currentMemory.includes('[系统必须输出规则]')) {
+                    // 移除必须输出规则相关内容
                     const cleanMemory = currentMemory
-                        .replace(/\n\n---\n\n\[系统禁止规则\][\s\S]*?(?=\n\n---|\n\n\[|$)/g, '')
-                        .replace(/\[系统禁止规则\][\s\S]*?(?=\n\n---|\n\n\[|$)/g, '')
+                        .replace(/\n\n---\n\n\[系统必须输出规则\][\s\S]*?(?=\n\n---|\n\n\[|$)/g, '')
+                        .replace(/\[系统必须输出规则\][\s\S]*?(?=\n\n---|\n\n\[|$)/g, '')
                         .trim();
-                    
+
                     this.context.memory = cleanMemory;
-                    console.log('[SmartPromptSystem] ✅ 已从memory中清理主API技术性禁止规则');
-                    
+                    console.log('[SmartPromptSystem] ✅ 已从memory中清理主API必须输出规则');
+
                     // 保存记忆
                     if (typeof this.context.saveMemory === 'function') {
                         await this.context.saveMemory();
                     }
                 } else {
-                    console.log('[SmartPromptSystem] ℹ️ memory中未找到禁止规则，无需清理');
+                    console.log('[SmartPromptSystem] ℹ️ memory中未找到必须输出规则，无需清理');
                 }
             } else {
                 console.log('[SmartPromptSystem] ⚠️ 无法找到合适的清理机制');
             }
 
         } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 主API技术性禁止规则清理失败:', error);
+            console.error('[SmartPromptSystem] ❌ 主API必须输出规则清理失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 清理主API规则（包括禁止规则和必须输出规则）
+     * 清理所有可能存在的API注入规则
+     */
+    async clearMainAPIProhibitionRules() {
+        try {
+            console.log('[SmartPromptSystem] 🧹 开始清理主API规则...');
+
+            // 使用SillyTavern的扩展提示词机制清理
+            if (typeof this.context.setExtensionPrompt === 'function') {
+                // 清空禁止规则提示词
+                await this.context.setExtensionPrompt('Information bar integration tool - Prohibition Rules', '', 1, 0, false, '');
+                // 清空必须输出规则提示词
+                await this.context.setExtensionPrompt('Information bar integration tool - Required Rules', '', 1, 0, false, '');
+                console.log('[SmartPromptSystem] ✅ 已通过setExtensionPrompt清理主API所有规则');
+            } else if (this.context.memory !== undefined) {
+                // 备用方案：从memory中移除所有规则
+                const currentMemory = this.context.memory || '';
+                let cleanMemory = currentMemory;
+
+                // 移除禁止规则
+                if (cleanMemory.includes('[系统禁止规则]')) {
+                    cleanMemory = cleanMemory
+                        .replace(/\n\n---\n\n\[系统禁止规则\][\s\S]*?(?=\n\n---|\n\n\[|$)/g, '')
+                        .replace(/\[系统禁止规则\][\s\S]*?(?=\n\n---|\n\n\[|$)/g, '');
+                    console.log('[SmartPromptSystem] ✅ 已从memory中清理禁止规则');
+                }
+
+                // 移除必须输出规则
+                if (cleanMemory.includes('[系统必须输出规则]')) {
+                    cleanMemory = cleanMemory
+                        .replace(/\n\n---\n\n\[系统必须输出规则\][\s\S]*?(?=\n\n---|\n\n\[|$)/g, '')
+                        .replace(/\[系统必须输出规则\][\s\S]*?(?=\n\n---|\n\n\[|$)/g, '');
+                    console.log('[SmartPromptSystem] ✅ 已从memory中清理必须输出规则');
+                }
+
+                this.context.memory = cleanMemory.trim();
+
+                // 保存记忆
+                if (typeof this.context.saveMemory === 'function') {
+                    await this.context.saveMemory();
+                }
+
+                if (currentMemory === cleanMemory) {
+                    console.log('[SmartPromptSystem] ℹ️ memory中未找到需要清理的规则');
+                }
+            } else {
+                console.log('[SmartPromptSystem] ⚠️ 无法找到合适的清理机制');
+            }
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 主API规则清理失败:', error);
         }
     }
 

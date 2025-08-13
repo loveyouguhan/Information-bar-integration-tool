@@ -346,7 +346,12 @@ export class UnifiedDataCore {
                         }
                         // 以合并结果更新对应面板
                         const prevPanel = chatData.infobar_data.panels[panelId] || {};
-                        chatData.infobar_data.panels[panelId] = UnifiedDataCore.deepMerge(prevPanel, mergedPanelData);
+                        const newPanel = UnifiedDataCore.deepMerge(prevPanel, mergedPanelData);
+
+                        // 🆕 记录字段级别的变更历史（AI更新）
+                        await this.recordPanelFieldChanges(panelId, prevPanel, newPanel, 'AI_UPDATE');
+
+                        chatData.infobar_data.panels[panelId] = newPanel;
                         chatData.infobar_data.lastUpdated = Date.now();
                         await this.chatMetadata.set(chatDataKey, chatData);
                         // 刷新当前聊天缓存
@@ -1481,6 +1486,373 @@ export class UnifiedDataCore {
             console.error('[UnifiedDataCore] ❌ 清空数据失败:', error);
             this.handleError(error);
             throw error;
+        }
+    }
+
+    // ========== 🆕 字段更新和历史记录功能 ==========
+
+    /**
+     * 🆕 更新面板字段
+     * @param {string} panelId - 面板ID
+     * @param {string} fieldName - 字段名（可能是中文显示名）
+     * @param {any} newValue - 新值
+     */
+    async updatePanelField(panelId, fieldName, newValue) {
+        try {
+            console.log('[UnifiedDataCore] 📝 更新面板字段:', { panelId, fieldName, newValue });
+
+            // 获取当前聊天ID
+            const chatId = this.getCurrentChatId();
+            if (!chatId) {
+                throw new Error('无法获取当前聊天ID');
+            }
+
+            // 🆕 将中文字段名转换为英文字段名
+            const englishFieldName = this.getEnglishFieldName(fieldName, panelId);
+            const actualFieldName = englishFieldName || fieldName;
+
+            console.log('[UnifiedDataCore] 🔄 字段名映射:', {
+                original: fieldName,
+                english: englishFieldName,
+                actual: actualFieldName
+            });
+
+            // 获取当前面板数据
+            const panelData = await this.getPanelData(panelId) || {};
+            const oldValue = panelData[actualFieldName];
+
+            // 更新字段值
+            panelData[actualFieldName] = newValue;
+
+            // 保存面板数据
+            const panelKey = `panels.${chatId}.${panelId}`;
+            await this.setData(panelKey, panelData, 'chat');
+
+            // 记录历史（使用英文字段名作为键）
+            const historyKey = `panel:${panelId}:${actualFieldName}`;
+            await this.addFieldHistory(historyKey, {
+                timestamp: Date.now(),
+                oldValue,
+                newValue,
+                panelId,
+                fieldName: actualFieldName, // 使用英文字段名
+                displayName: fieldName, // 保存原始显示名
+                chatId,
+                source: 'USER_EDIT',
+                note: '用户手动编辑'
+            });
+
+            // 触发事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('panel_field_updated', {
+                    panelId,
+                    fieldName,
+                    oldValue,
+                    newValue,
+                    chatId
+                });
+            }
+
+            console.log('[UnifiedDataCore] ✅ 面板字段更新完成');
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 更新面板字段失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🆕 更新NPC字段
+     * @param {string} npcId - NPC ID
+     * @param {string} fieldName - 字段名
+     * @param {any} newValue - 新值
+     */
+    async updateNpcField(npcId, fieldName, newValue) {
+        try {
+            console.log('[UnifiedDataCore] 📝 更新NPC字段:', { npcId, fieldName, newValue });
+
+            // 获取当前聊天ID
+            const chatId = this.getCurrentChatId();
+            if (!chatId) {
+                throw new Error('无法获取当前聊天ID');
+            }
+
+            // 获取当前NPC数据
+            const npcData = await this.getNpcData(npcId) || {};
+            const oldValue = npcData[fieldName];
+
+            // 更新字段值
+            npcData[fieldName] = newValue;
+
+            // 保存NPC数据
+            const npcKey = `npcs.${chatId}.${npcId}`;
+            await this.setData(npcKey, npcData, 'chat');
+
+            // 记录历史
+            const historyKey = `npc:${npcId}:${fieldName}`;
+            await this.addFieldHistory(historyKey, {
+                timestamp: Date.now(),
+                oldValue,
+                newValue,
+                npcId,
+                fieldName,
+                chatId,
+                source: 'USER_EDIT',
+                note: '用户手动编辑'
+            });
+
+            // 触发事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('npc_field_updated', {
+                    npcId,
+                    fieldName,
+                    oldValue,
+                    newValue,
+                    chatId
+                });
+            }
+
+            console.log('[UnifiedDataCore] ✅ NPC字段更新完成');
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 更新NPC字段失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🆕 添加字段修改历史记录
+     * @param {string} historyKey - 历史记录键
+     * @param {Object} record - 历史记录
+     */
+    async addFieldHistory(historyKey, record) {
+        try {
+            // 获取现有历史记录
+            const historyData = await this.getData(`field_history.${historyKey}`, 'chat') || [];
+
+            // 添加新记录
+            historyData.push(record);
+
+            // 限制历史记录数量（保留最近50条）
+            if (historyData.length > 50) {
+                historyData.splice(0, historyData.length - 50);
+            }
+
+            // 保存历史记录
+            await this.setData(`field_history.${historyKey}`, historyData, 'chat');
+
+            console.log('[UnifiedDataCore] 📝 字段历史记录已添加:', historyKey);
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 添加字段历史记录失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 获取字段修改历史记录
+     * @param {string} historyKey - 历史记录键
+     * @returns {Array} 历史记录数组
+     */
+    async getFieldHistory(historyKey) {
+        try {
+            const historyData = await this.getData(`field_history.${historyKey}`, 'chat') || [];
+
+            // 按时间倒序排列（最新的在前）
+            return historyData.sort((a, b) => b.timestamp - a.timestamp);
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取字段历史记录失败:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 🆕 获取面板数据
+     * @param {string} panelId - 面板ID
+     * @returns {Object} 面板数据
+     */
+    async getPanelData(panelId) {
+        try {
+            const chatId = this.getCurrentChatId();
+            if (!chatId) return null;
+
+            const panelKey = `panels.${chatId}.${panelId}`;
+            return await this.getData(panelKey, 'chat');
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取面板数据失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🆕 获取NPC数据
+     * @param {string} npcId - NPC ID
+     * @returns {Object} NPC数据
+     */
+    async getNpcData(npcId) {
+        try {
+            const chatId = this.getCurrentChatId();
+            if (!chatId) return null;
+
+            const npcKey = `npcs.${chatId}.${npcId}`;
+            return await this.getData(npcKey, 'chat');
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取NPC数据失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🆕 记录面板字段变更历史（用于AI更新）
+     * @param {string} panelId - 面板ID
+     * @param {Object} oldPanel - 旧面板数据
+     * @param {Object} newPanel - 新面板数据
+     * @param {string} source - 更新源（'AI_UPDATE' | 'USER_EDIT'）
+     */
+    async recordPanelFieldChanges(panelId, oldPanel, newPanel, source = 'AI_UPDATE') {
+        try {
+            const timestamp = Date.now();
+            const chatId = this.getCurrentChatId();
+
+            if (!chatId) {
+                console.warn('[UnifiedDataCore] ⚠️ 无法获取聊天ID，跳过历史记录');
+                return;
+            }
+
+            // 比较新旧数据，找出变更的字段
+            const changes = this.compareObjects(oldPanel, newPanel);
+
+            if (changes.length === 0) {
+                console.log('[UnifiedDataCore] ℹ️ 没有字段变更，跳过历史记录');
+                return;
+            }
+
+            console.log('[UnifiedDataCore] 📝 记录面板字段变更:', {
+                panelId,
+                source,
+                changes: changes.length
+            });
+
+            // 为每个变更的字段记录历史
+            for (const change of changes) {
+                const historyKey = `panel:${panelId}:${change.field}`;
+                const record = {
+                    timestamp,
+                    oldValue: change.oldValue,
+                    newValue: change.newValue,
+                    panelId,
+                    fieldName: change.field,
+                    chatId,
+                    source, // 'AI_UPDATE' 或 'USER_EDIT'
+                    note: source === 'AI_UPDATE' ? 'AI自动更新' : '用户手动编辑'
+                };
+
+                await this.addFieldHistory(historyKey, record);
+            }
+
+            console.log('[UnifiedDataCore] ✅ 面板字段变更历史记录完成');
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 记录面板字段变更失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 比较两个对象，找出变更的字段
+     * @param {Object} oldObj - 旧对象
+     * @param {Object} newObj - 新对象
+     * @returns {Array} 变更列表
+     */
+    compareObjects(oldObj, newObj) {
+        const changes = [];
+        const allKeys = new Set([...Object.keys(oldObj || {}), ...Object.keys(newObj || {})]);
+
+        for (const key of allKeys) {
+            const oldValue = oldObj?.[key];
+            const newValue = newObj?.[key];
+
+            // 跳过特殊字段
+            if (key === 'lastUpdated' || key === 'timestamp') {
+                continue;
+            }
+
+            // 比较值是否发生变化
+            if (this.isValueChanged(oldValue, newValue)) {
+                changes.push({
+                    field: key,
+                    oldValue: oldValue || '',
+                    newValue: newValue || ''
+                });
+            }
+        }
+
+        return changes;
+    }
+
+    /**
+     * 🆕 判断值是否发生变化
+     * @param {any} oldValue - 旧值
+     * @param {any} newValue - 新值
+     * @returns {boolean} 是否发生变化
+     */
+    isValueChanged(oldValue, newValue) {
+        // 处理 null/undefined 情况
+        if (oldValue == null && newValue == null) return false;
+        if (oldValue == null || newValue == null) return true;
+
+        // 转换为字符串比较（因为表格中都是字符串）
+        const oldStr = String(oldValue).trim();
+        const newStr = String(newValue).trim();
+
+        return oldStr !== newStr;
+    }
+
+    /**
+     * 🆕 获取英文字段名（中文显示名 -> 英文字段名）
+     * @param {string} chineseDisplayName - 中文显示名
+     * @param {string} panelId - 面板ID
+     * @returns {string|null} 英文字段名
+     */
+    getEnglishFieldName(chineseDisplayName, panelId) {
+        try {
+            // 获取完整的字段映射表
+            if (!window.SillyTavernInfobar?.infoBarSettings) {
+                console.warn('[UnifiedDataCore] ⚠️ InfoBarSettings 不可用');
+                return null;
+            }
+
+            const completeMapping = window.SillyTavernInfobar.infoBarSettings.getCompleteDisplayNameMapping();
+
+            // 首先在指定面板中查找
+            if (panelId && completeMapping[panelId]) {
+                for (const [englishName, chineseName] of Object.entries(completeMapping[panelId])) {
+                    if (chineseName === chineseDisplayName) {
+                        console.log('[UnifiedDataCore] 🎯 找到字段映射:', chineseDisplayName, '->', englishName);
+                        return englishName;
+                    }
+                }
+            }
+
+            // 如果在指定面板中没找到，在所有面板中查找
+            for (const [panelKey, panelMapping] of Object.entries(completeMapping)) {
+                if (panelMapping && typeof panelMapping === 'object') {
+                    for (const [englishName, chineseName] of Object.entries(panelMapping)) {
+                        if (chineseName === chineseDisplayName) {
+                            console.log('[UnifiedDataCore] 🎯 在面板', panelKey, '中找到字段映射:', chineseDisplayName, '->', englishName);
+                            return englishName;
+                        }
+                    }
+                }
+            }
+
+            console.log('[UnifiedDataCore] ⚠️ 未找到字段映射:', chineseDisplayName);
+            return null;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取英文字段名失败:', error);
+            return null;
         }
     }
 }

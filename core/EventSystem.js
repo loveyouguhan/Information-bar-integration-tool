@@ -533,7 +533,10 @@ export class EventSystem {
             // 监听角色消息渲染事件（AI回复完成后）- 这是最可靠的事件
             this.sillyTavernEventSource.on(this.sillyTavernEventTypes.CHARACTER_MESSAGE_RENDERED, (data) => {
                 console.log('[EventSystem] 📨 收到角色消息渲染事件');
-                this.handleMessageReceived(data);
+                // 🔧 修复：延迟处理，确保消息完全渲染完成
+                setTimeout(() => {
+                    this.handleCharacterMessageRendered(data);
+                }, 100);
             });
 
             // 监听用户消息渲染事件
@@ -658,6 +661,53 @@ export class EventSystem {
 
         } catch (error) {
             console.error('[EventSystem] ❌ 重置轮询机制失败:', error);
+        }
+    }
+
+    /**
+     * 处理角色消息渲染事件（专门处理AI回复）
+     * @param {Object} data - 事件数据
+     */
+    async handleCharacterMessageRendered(data) {
+        try {
+            console.log('[EventSystem] 🎭 处理角色消息渲染事件');
+
+            // 🔧 修复：获取当前聊天的最后一条AI消息
+            const context = SillyTavern.getContext();
+            if (!context || !context.chat || context.chat.length === 0) {
+                console.log('[EventSystem] ℹ️ 没有聊天数据，跳过处理');
+                return;
+            }
+
+            // 找到最后一条非用户消息（AI消息）
+            const lastAIMessage = [...context.chat].reverse().find(msg => !msg.is_user);
+            if (!lastAIMessage) {
+                console.log('[EventSystem] ℹ️ 没有找到AI消息，跳过处理');
+                return;
+            }
+
+            // 检查消息是否包含infobar_data
+            const messageContent = this.extractMessageContent(lastAIMessage);
+            const hasInfobarData = messageContent && /<infobar_data>[\s\S]*<\/infobar_data>/.test(messageContent);
+
+            if (!hasInfobarData) {
+                console.log('[EventSystem] ℹ️ AI消息不包含infobar_data，跳过处理');
+                return;
+            }
+
+            console.log('[EventSystem] 🎯 AI消息包含infobar_data，开始处理...');
+
+            // 提取并解析infobar_data
+            const didStore = await this.extractAndParseInfobarData(lastAIMessage, 'character_rendered');
+
+            if (didStore) {
+                console.log('[EventSystem] 🚀 AI消息infobar_data处理成功');
+                this.emit(this.EVENT_TYPES.MESSAGE_RECEIVED, lastAIMessage);
+            }
+
+        } catch (error) {
+            console.error('[EventSystem] ❌ 处理角色消息渲染事件失败:', error);
+            this.handleError(error);
         }
     }
 
