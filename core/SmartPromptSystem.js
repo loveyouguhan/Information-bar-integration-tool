@@ -1089,12 +1089,16 @@ ${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段
         try {
             console.log('[SmartPromptSystem] 🚀 检测到生成开始，准备注入智能提示词...');
 
-            // 检查是否启用
+            // 🔧 修复：检查扩展是否启用，默认为启用状态
             const extensionSettings = this.context.extensionSettings['Information bar integration tool'] || {};
-            if (!extensionSettings.enabled) {
-                console.log('[SmartPromptSystem] ℹ️ 扩展未启用，跳过提示词注入');
+            const isExtensionEnabled = extensionSettings.enabled !== false; // 默认为true，只有明确设置为false才禁用
+
+            if (!isExtensionEnabled) {
+                console.log('[SmartPromptSystem] ℹ️ 扩展已明确禁用，跳过提示词注入');
                 return;
             }
+
+            console.log('[SmartPromptSystem] ✅ 扩展已启用，继续提示词注入流程');
 
             // 🔧 新增：执行面板记忆注入（独立于API模式，始终执行）
             await this.injectPanelDataToMemory();
