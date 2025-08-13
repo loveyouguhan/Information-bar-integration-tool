@@ -24,6 +24,7 @@ export class MessageInfoBarRenderer {
         this.renderedMessages = new Set(); // 跟踪已渲染的消息ID
         this.currentTheme = null;
         this.frontendDisplayMode = false; // 前端显示模式标志
+        this.interactiveInitialized = false; // 防止重复绑定全局交互事件
 
         // 🎨 字段标签映射
         this.FIELD_LABELS = {
@@ -1232,6 +1233,11 @@ export class MessageInfoBarRenderer {
      */
     initializeInteractiveFeatures() {
         try {
+            if (this.interactiveInitialized) {
+                console.log('[MessageInfoBarRenderer] ℹ️ 交互功能已初始化，跳过重复绑定');
+                return;
+            }
+
             // 初始化拖拽功能
             this.initializeDragging();
 
@@ -1244,6 +1250,7 @@ export class MessageInfoBarRenderer {
             // 初始化浮动小球交互
             this.initializeFloatingOrb();
 
+            this.interactiveInitialized = true;
             console.log('[MessageInfoBarRenderer] ✅ 交互功能初始化完成');
 
         } catch (error) {
@@ -1754,12 +1761,60 @@ export class MessageInfoBarRenderer {
     }
 
     /**
-     * 插入浮动式风格
+     * 插入浮动式风格（改为全局唯一实例，重复渲染仅更新内容）
      */
     insertFloatingStyle(messageElement, infoBarHtml) {
-        // 插入到body中，作为独立的浮动窗口
-        document.body.insertAdjacentHTML('beforeend', infoBarHtml);
-        return document.querySelector(`.infobar-container[data-message-id="${messageElement.getAttribute('mesid')}"]`);
+        try {
+            // 查找全局唯一的浮动信息栏容器
+            const existing = document.querySelector('#global-floating-infobar');
+            if (existing) {
+                // 从新HTML中提取面板内容与主题样式
+                const temp = document.createElement('div');
+                temp.innerHTML = infoBarHtml;
+                const newPanels = temp.querySelector('.infobar-panels');
+                const newContainer = temp.querySelector('.infobar-container');
+
+                // 更新主题样式（若有变化）
+                if (newContainer && newContainer.getAttribute('style')) {
+                    existing.setAttribute('style', newContainer.getAttribute('style'));
+                }
+
+                // 仅更新面板内容，保持小球/窗口现有展开状态
+                const targetPanels = existing.querySelector('.infobar-panels');
+                if (newPanels && targetPanels) {
+                    targetPanels.innerHTML = newPanels.innerHTML;
+                }
+
+                // 更新附加属性（可选，不使用 messageId 以避免被清理）
+                existing.setAttribute('data-last-update', Date.now());
+                return existing;
+            }
+
+            // 首次创建：将容器设为全局唯一
+            const temp = document.createElement('div');
+            temp.innerHTML = infoBarHtml;
+            const container = temp.querySelector('.infobar-container');
+            if (container) {
+                container.id = 'global-floating-infobar';
+                container.setAttribute('data-global', 'true');
+                // 该容器作为全局实例，不绑定到特定消息
+                container.removeAttribute('data-message-id');
+            }
+
+            // 插入到 body
+            if (container) {
+                document.body.insertAdjacentElement('beforeend', container);
+            } else {
+                // 回退：若未能解析到容器，则直接插入原HTML
+                document.body.insertAdjacentHTML('beforeend', infoBarHtml);
+            }
+            return document.querySelector('#global-floating-infobar') || document.querySelector('.infobar-container.infobar-style-floating');
+        } catch (e) {
+            console.error('[MessageInfoBarRenderer] ❌ 插入/更新浮动式信息栏失败:', e);
+            // 回退：保持原行为，避免功能中断
+            document.body.insertAdjacentHTML('beforeend', infoBarHtml);
+            return document.querySelector(`.infobar-container[data-message-id="${messageElement.getAttribute('mesid')}"]`);
+        }
     }
 
     /**

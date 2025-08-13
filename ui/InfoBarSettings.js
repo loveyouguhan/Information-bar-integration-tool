@@ -704,6 +704,60 @@ export class InfoBarSettings {
                 .config-row { display: flex; align-items: center; gap: 8px; }
                 .config-row .setting-select { flex: 1 1 auto; min-width: 0; }
                 .config-row-actions { display: flex; gap: 6px; }
+
+                /* 数据管理功能区域样式 */
+                .data-management-actions {
+                    display: flex !important;
+                    flex-direction: row !important;
+                    gap: 12px !important;
+                    margin-top: 8px !important;
+                    width: 100% !important;
+                }
+                .data-export-btn, .data-import-btn {
+                    flex: 1 !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    gap: 6px !important;
+                    padding: 10px 16px !important;
+                    border: none !important;
+                    border-radius: 6px !important;
+                    font-size: 14px !important;
+                    font-weight: 500 !important;
+                    cursor: pointer !important;
+                    transition: all 0.2s ease !important;
+                    min-height: 40px !important;
+                    white-space: nowrap !important;
+                }
+                .data-export-btn {
+                    background: var(--theme-primary-color, #ff6b35) !important;
+                    color: white !important;
+                }
+                .data-export-btn:hover {
+                    background: var(--theme-primary-hover, #e55a2b) !important;
+                    transform: translateY(-1px) !important;
+                    box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3) !important;
+                }
+                .data-import-btn {
+                    background: var(--theme-bg-secondary, #4a5568) !important;
+                    color: white !important;
+                    border: 1px solid var(--theme-border-color, #666) !important;
+                }
+                .data-import-btn:hover {
+                    background: var(--theme-primary-color, #ff6b35) !important;
+                    transform: translateY(-1px) !important;
+                    box-shadow: 0 4px 12px rgba(255, 107, 53, 0.2) !important;
+                }
+                .data-management-hint {
+                    color: var(--theme-text-secondary, #a0a0a0) !important;
+                    font-size: 13px !important;
+                    line-height: 1.4 !important;
+                    margin-top: 8px !important;
+                    padding: 8px 12px !important;
+                    background: var(--theme-bg-secondary, rgba(107, 114, 128, 0.1)) !important;
+                    border-radius: 4px !important;
+                    border-left: 3px solid var(--theme-primary-color, #ff6b35) !important;
+                }
             `;
             document.head.appendChild(style);
         }
@@ -823,11 +877,10 @@ export class InfoBarSettings {
      */
     handlePanelManagementEvents(e) {
         try {
-            // 面板分类标签切换
+            // 面板分类标签切换（简化：只有全部面板，无需切换）
             const categoryTab = e.target.closest('.category-tab');
             if (categoryTab) {
-                const category = categoryTab.dataset.category;
-                this.switchPanelCategory(category);
+                // 只有全部面板分类，无需切换逻辑
                 return;
             }
 
@@ -1327,21 +1380,12 @@ export class InfoBarSettings {
         }
     }
     /**
-     * 切换面板分类
+     * 切换面板分类（简化版：只有全部面板）
      */
     switchPanelCategory(category) {
         try {
-            // 更新分类标签状态
-            this.modal.querySelectorAll('.category-tab').forEach(tab => {
-                tab.classList.toggle('active', tab.dataset.category === category);
-            });
-
-            // 切换面板列表显示
-            this.modal.querySelectorAll('.panel-list').forEach(list => {
-                list.style.display = list.dataset.category === category ? 'block' : 'none';
-            });
-
-            console.log(`[InfoBarSettings] 📑 切换到面板分类: ${category}`);
+            // 简化：只有全部面板分类，无需切换逻辑
+            console.log(`[InfoBarSettings] 📑 面板分类已简化，只显示全部面板`);
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 切换面板分类失败:', error);
@@ -1503,12 +1547,12 @@ export class InfoBarSettings {
     updatePanelCountsDisplay() {
         try {
             const totalCount = this.getTotalPanelCount();
-            const basicCount = this.getBasicPanelCount();
-            const customCount = this.getCustomPanelCount();
 
-            this.modal.querySelector('[data-category="all"] .category-count').textContent = totalCount;
-            this.modal.querySelector('[data-category="basic"] .category-count').textContent = basicCount;
-            this.modal.querySelector('[data-category="custom"] .category-count').textContent = customCount;
+            // 只更新全部面板的计数
+            const allCategoryCount = this.modal.querySelector('[data-category="all"] .category-count');
+            if (allCategoryCount) {
+                allCategoryCount.textContent = totalCount;
+            }
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 更新面板数量失败:', error);
@@ -1540,24 +1584,37 @@ export class InfoBarSettings {
     }
 
     /**
-     * 更新指定面板的配置计数显示
+     * 更新指定面板的配置计数显示和状态标签
      */
     updatePanelConfigCount(panelName) {
         try {
             const countElement = this.modal.querySelector(`[data-content="${panelName}"] .status-count`);
+            const statusBadge = this.modal.querySelector(`[data-content="${panelName}"] .status-badge`);
             if (!countElement) return;
 
             // 获取该面板的复选框
             const panelContainer = this.modal.querySelector(`[data-content="${panelName}"]`);
             if (!panelContainer) return;
 
-            const allCheckboxes = panelContainer.querySelectorAll('input[type="checkbox"][name]');
-            const enabledCheckboxes = panelContainer.querySelectorAll('input[type="checkbox"][name]:checked');
+            // 🔧 修复：排除面板主启用复选框，只计算子项复选框
+            // 面板主启用复选框的name格式为 "panelName.enabled"
+            const allCheckboxes = panelContainer.querySelectorAll(`input[type="checkbox"][name]:not([name="${panelName}.enabled"])`);
+            const enabledCheckboxes = panelContainer.querySelectorAll(`input[type="checkbox"][name]:checked:not([name="${panelName}.enabled"])`);
 
             const totalCount = allCheckboxes.length;
             const enabledCount = enabledCheckboxes.length;
 
             countElement.textContent = `${enabledCount}/${totalCount} 项已配置`;
+
+            // 🔧 修复：更新状态标签，根据面板主启用复选框状态
+            if (statusBadge) {
+                const panelToggle = panelContainer.querySelector(`input[name="${panelName}.enabled"]`);
+                if (panelToggle) {
+                    const isEnabled = panelToggle.checked;
+                    statusBadge.textContent = isEnabled ? '已启用' : '未启用';
+                    statusBadge.className = `status-badge ${isEnabled ? 'enabled' : 'disabled'}`;
+                }
+            }
 
             console.log(`[InfoBarSettings] 📊 ${panelName}面板配置计数更新: ${enabledCount}/${totalCount}`);
 
@@ -2501,7 +2558,8 @@ export class InfoBarSettings {
             // formData.name = form.querySelector('#panel-name')?.value || '';  // 基础面板名称不可修改
             // formData.key = form.querySelector('#panel-key')?.value || '';    // 基础面板键名不可修改
             formData.description = form.querySelector('#panel-description')?.value || '';
-            formData.icon = form.querySelector('#panel-icon')?.value || '🎨';
+            // 🔧 修复：删除图标字段引用，因为已从表单中移除
+            // formData.icon = form.querySelector('#panel-icon')?.value || '🎨';
 
             // 配置选项
             formData.required = form.querySelector('#panel-required')?.checked || false;
@@ -2540,7 +2598,8 @@ export class InfoBarSettings {
             formData.name = form.querySelector('#panel-name')?.value || '';
             formData.key = form.querySelector('#panel-key')?.value || '';
             formData.description = form.querySelector('#panel-description')?.value || '';
-            formData.icon = form.querySelector('#panel-icon')?.value || '🎨';
+            // 🔧 修复：删除图标字段引用，因为已从表单中移除
+            // formData.icon = form.querySelector('#panel-icon')?.value || '🎨';
 
             // 配置选项
             formData.required = form.querySelector('#panel-required')?.checked || false;
@@ -2745,7 +2804,8 @@ export class InfoBarSettings {
         form.querySelector('#panel-name').value = panelData.name || '';
         form.querySelector('#panel-key').value = panelData.key || '';
         form.querySelector('#panel-description').value = panelData.description || '';
-        form.querySelector('#panel-icon').value = panelData.icon || '🎨';
+        // 🔧 修复：删除图标字段引用，因为已从表单中移除
+        // form.querySelector('#panel-icon').value = panelData.icon || '🎨';
 
         form.querySelector('#panel-required').checked = !!panelData.required;
         form.querySelector('#panel-memory-inject').checked = !!panelData.memoryInject;
@@ -2760,7 +2820,8 @@ export class InfoBarSettings {
 
             // 其他字段可以编辑
             form.querySelector('#panel-description').readOnly = false;
-            form.querySelector('#panel-icon').readOnly = false;
+            // 🔧 修复：删除图标字段引用，因为已从表单中移除
+            // form.querySelector('#panel-icon').readOnly = false;
             form.querySelector('#panel-required').disabled = false;
             form.querySelector('#panel-memory-inject').disabled = false;
 
@@ -2770,13 +2831,15 @@ export class InfoBarSettings {
 
             // 移除其他字段的只读样式
             form.querySelector('#panel-description').classList.remove('readonly-input');
-            form.querySelector('#panel-icon').classList.remove('readonly-input');
+            // 🔧 修复：删除图标字段引用，因为已从表单中移除
+            // form.querySelector('#panel-icon').classList.remove('readonly-input');
         } else {
             // 自定义面板移除只读状态
             form.querySelector('#panel-name').readOnly = false;
             form.querySelector('#panel-key').readOnly = false;
             form.querySelector('#panel-description').readOnly = false;
-            form.querySelector('#panel-icon').readOnly = false;
+            // 🔧 修复：删除图标字段引用，因为已从表单中移除
+            // form.querySelector('#panel-icon').readOnly = false;
             form.querySelector('#panel-required').disabled = false;
             form.querySelector('#panel-memory-inject').disabled = false;
 
@@ -2784,7 +2847,8 @@ export class InfoBarSettings {
             form.querySelector('#panel-name').classList.remove('readonly-input');
             form.querySelector('#panel-key').classList.remove('readonly-input');
             form.querySelector('#panel-description').classList.remove('readonly-input');
-            form.querySelector('#panel-icon').classList.remove('readonly-input');
+            // 🔧 修复：删除图标字段引用，因为已从表单中移除
+            // form.querySelector('#panel-icon').classList.remove('readonly-input');
         }
     }
 
@@ -3099,6 +3163,20 @@ export class InfoBarSettings {
                 case 'delete-profile':
                     this.deleteSettingsProfile();
                     break;
+                case 'export-data':
+                    console.log('[InfoBarSettings] 🚀 开始执行导出数据...');
+                    this.exportData().catch(error => {
+                        console.error('[InfoBarSettings] ❌ 导出数据事件处理失败:', error);
+                        this.showMessage('导出数据失败: ' + error.message, 'error');
+                    });
+                    break;
+                case 'import-data':
+                    console.log('[InfoBarSettings] 🚀 开始执行导入数据...');
+                    this.importData().catch(error => {
+                        console.error('[InfoBarSettings] ❌ 导入数据事件处理失败:', error);
+                        this.showMessage('导入数据失败: ' + error.message, 'error');
+                    });
+                    break;
                 default:
                     console.log(`[InfoBarSettings] 🔘 处理操作: ${action}`);
             }
@@ -3397,19 +3475,8 @@ export class InfoBarSettings {
                         <!-- 面板分类标签 -->
                         <div class="panel-categories">
                             <div class="category-tab active" data-category="all">
-
                                 <span class="category-text">全部面板</span>
                                 <span class="category-count">${this.getTotalPanelCount()}</span>
-                            </div>
-                            <div class="category-tab" data-category="basic">
-
-                                <span class="category-text">基础面板</span>
-                                <span class="category-count">${this.getBasicPanelCount()}</span>
-                            </div>
-                            <div class="category-tab" data-category="custom">
-        
-                                <span class="category-text">自定义面板</span>
-                                <span class="category-count">${this.getCustomPanelCount()}</span>
                             </div>
                         </div>
 
@@ -3417,12 +3484,6 @@ export class InfoBarSettings {
                         <div class="panel-list-container">
                             <div class="panel-list" data-category="all">
                                 ${this.createPanelListItems('all')}
-                            </div>
-                            <div class="panel-list" data-category="basic" style="display: none;">
-                                ${this.createPanelListItems('basic')}
-                            </div>
-                            <div class="panel-list" data-category="custom" style="display: none;">
-                                ${this.createPanelListItems('custom')}
                             </div>
                         </div>
                     </div>
@@ -3934,10 +3995,6 @@ export class InfoBarSettings {
                         <label for="panel-description">面板说明</label>
                         <textarea id="panel-description" name="panel.description" rows="3" placeholder="请输入面板说明"></textarea>
                     </div>
-                    <div class="form-group">
-                        <label for="panel-icon">图标</label>
-                        <input type="text" id="panel-icon" name="panel.icon" placeholder="请输入图标（emoji）" maxlength="2" />
-                    </div>
                 </div>
 
                 <!-- 配置选项 -->
@@ -4154,7 +4211,43 @@ export class InfoBarSettings {
                     </div>
                 </div>
             </div>
-            
+
+            <div class="settings-group">
+                <h3>数据管理</h3>
+                <div class="form-group">
+                    <label>数据范围</label>
+                    <select id="data-scope-select" name="dataManagement.scope">
+                        <option value="current">当前聊天</option>
+                        <option value="all">所有聊天</option>
+                    </select>
+                    <small>选择要导出或导入的数据范围</small>
+                </div>
+                <div class="form-group">
+                    <label>数据格式</label>
+                    <select id="data-format-select" name="dataManagement.format">
+                        <option value="json">JSON格式</option>
+                        <option value="csv">CSV格式</option>
+                        <option value="xml">XML格式</option>
+                    </select>
+                    <small>选择导出或导入的数据格式</small>
+                </div>
+                <div class="form-group">
+                    <div class="data-management-actions">
+                        <button class="btn btn-primary data-export-btn" data-action="export-data">
+                            📤 导出数据
+                        </button>
+                        <button class="btn btn-secondary data-import-btn" data-action="import-data">
+                            📥 导入数据
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <small class="data-management-hint">
+                        💡 导出功能将包含聊天信息、消息记录和信息栏数据。导入前请确保数据格式正确。
+                    </small>
+                </div>
+            </div>
+
             <div class="settings-group danger-zone">
                 <h3>危险操作</h3>
                 <div class="form-group">
@@ -4174,7 +4267,12 @@ export class InfoBarSettings {
             this.modal.addEventListener('click', (e) => {
                 const actionEl = e.target.closest('[data-action]');
                 const action = actionEl?.dataset?.action;
-                
+
+                if (action) {
+                    console.log('[InfoBarSettings] 🔘 处理操作:', action, '元素:', actionEl);
+                    console.log('[InfoBarSettings] 🔍 Switch语句即将处理action:', action);
+                }
+
                 switch (action) {
                     case 'close':
                     case 'cancel':
@@ -4212,6 +4310,25 @@ export class InfoBarSettings {
                         break;
                     case 'delete-profile':
                         this.deleteSettingsProfile();
+                        break;
+                    case 'export-data':
+                        console.log('[InfoBarSettings] 🚀 开始执行导出数据...');
+                        this.exportData().catch(error => {
+                            console.error('[InfoBarSettings] ❌ 导出数据事件处理失败:', error);
+                            this.showMessage('导出数据失败: ' + error.message, 'error');
+                        });
+                        break;
+                    case 'import-data':
+                        console.log('[InfoBarSettings] 🚀 开始执行导入数据...');
+                        this.importData().catch(error => {
+                            console.error('[InfoBarSettings] ❌ 导入数据事件处理失败:', error);
+                            this.showMessage('导入数据失败: ' + error.message, 'error');
+                        });
+                        break;
+                    default:
+                        if (action) {
+                            console.log('[InfoBarSettings] ⚠️ 未处理的操作:', action);
+                        }
                         break;
                 }
             });
@@ -4284,6 +4401,9 @@ export class InfoBarSettings {
             } else {
                 console.log('[InfoBarSettings] 📋 使用已缓存的设置');
             }
+
+            // 确保数据管理样式已加载
+            this.ensureDataManagementStyles();
 
             // 显示模态框
             this.modal.style.display = 'flex';
@@ -4613,22 +4733,29 @@ export class InfoBarSettings {
                 const currentConfig = extensionSettings['Information bar integration tool'][panelId];
                 const preservedConfig = preservedBasicPanelConfigs[panelId];
                 
-                // 合并配置：保留新的子项启用状态，恢复其他属性
+                // 合并配置：保留新的子项启用状态和面板启用状态，恢复其他属性
                 if (currentConfig && preservedConfig) {
-                    // 备份当前的子项启用状态（来自formData）
+                    // 备份当前的子项启用状态和面板启用状态（来自formData）
                     const currentSubItemStates = {};
+                    const currentPanelEnabled = currentConfig.enabled; // 保留面板的enabled状态
+
                     if (currentConfig && typeof currentConfig === 'object') {
                         Object.keys(currentConfig).forEach(key => {
-                            if (key !== 'enabled' && typeof currentConfig[key] === 'object' && 
+                            if (key !== 'enabled' && typeof currentConfig[key] === 'object' &&
                                 currentConfig[key] && typeof currentConfig[key].enabled === 'boolean') {
                                 currentSubItemStates[key] = currentConfig[key];
                             }
                         });
                     }
-                    
+
                     // 恢复基础面板属性配置
                     extensionSettings['Information bar integration tool'][panelId] = { ...preservedConfig };
-                    
+
+                    // 🔧 修复：重新应用面板的enabled状态
+                    if (typeof currentPanelEnabled === 'boolean') {
+                        extensionSettings['Information bar integration tool'][panelId].enabled = currentPanelEnabled;
+                    }
+
                     // 重新应用子项启用状态
                     Object.keys(currentSubItemStates).forEach(subItemKey => {
                         const existingSubItem = extensionSettings['Information bar integration tool'][panelId][subItemKey];
@@ -4637,8 +4764,8 @@ export class InfoBarSettings {
                         }
                         extensionSettings['Information bar integration tool'][panelId][subItemKey].enabled = currentSubItemStates[subItemKey].enabled;
                     });
-                    
-                    console.log(`[InfoBarSettings] 🔄 智能恢复基础面板 ${panelId} 的属性配置，保留 ${Object.keys(currentSubItemStates).length} 个子项状态`);
+
+                    console.log(`[InfoBarSettings] 🔄 智能恢复基础面板 ${panelId} 的属性配置，保留面板启用状态: ${currentPanelEnabled}，保留 ${Object.keys(currentSubItemStates).length} 个子项状态`);
                 } else {
                     // 如果没有当前配置，直接恢复旧配置
                     extensionSettings['Information bar integration tool'][panelId] = preservedBasicPanelConfigs[panelId];
@@ -4853,69 +4980,32 @@ export class InfoBarSettings {
                 formData.basicPanels = {};
             }
 
-            // 处理个人信息面板
-            if (formData.personal) {
-                formData.basicPanels.personal = {
-                    enabled: formData.personal.enabled !== false,
-                    subItems: []
-                };
+            // 定义所有基础面板ID列表
+            const basicPanelIds = ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
 
-                // 转换子项配置
-                Object.keys(formData.personal).forEach(key => {
-                    if (key !== 'enabled' && typeof formData.personal[key] === 'object' && formData.personal[key].enabled !== undefined) {
-                        formData.basicPanels.personal.subItems.push({
-                            name: this.getSubItemDisplayName('personal', key),
-                            key: key,
-                            enabled: formData.personal[key].enabled,
-                            value: this.getDefaultSubItemValue('personal', key)
-                        });
-                    }
-                });
+            // 循环处理所有基础面板
+            basicPanelIds.forEach(panelId => {
+                if (formData[panelId]) {
+                    formData.basicPanels[panelId] = {
+                        enabled: formData[panelId].enabled !== false,
+                        subItems: []
+                    };
 
-                console.log('[InfoBarSettings] 📊 处理个人信息面板配置:', formData.basicPanels.personal.subItems.length, '个子项');
-            }
+                    // 转换子项配置
+                    Object.keys(formData[panelId]).forEach(key => {
+                        if (key !== 'enabled' && typeof formData[panelId][key] === 'object' && formData[panelId][key].enabled !== undefined) {
+                            formData.basicPanels[panelId].subItems.push({
+                                name: this.getSubItemDisplayName(panelId, key),
+                                key: key,
+                                enabled: formData[panelId][key].enabled,
+                                value: this.getDefaultSubItemValue(panelId, key)
+                            });
+                        }
+                    });
 
-            // 处理世界信息面板
-            if (formData.world) {
-                formData.basicPanels.world = {
-                    enabled: formData.world.enabled !== false,
-                    subItems: []
-                };
-
-                Object.keys(formData.world).forEach(key => {
-                    if (key !== 'enabled' && typeof formData.world[key] === 'object' && formData.world[key].enabled !== undefined) {
-                        formData.basicPanels.world.subItems.push({
-                            name: this.getSubItemDisplayName('world', key),
-                            key: key,
-                            enabled: formData.world[key].enabled,
-                            value: this.getDefaultSubItemValue('world', key)
-                        });
-                    }
-                });
-
-                console.log('[InfoBarSettings] 📊 处理世界信息面板配置:', formData.basicPanels.world.subItems.length, '个子项');
-            }
-
-            // 处理交互对象面板
-            if (formData.interaction) {
-                formData.basicPanels.interaction = {
-                    enabled: formData.interaction.enabled !== false,
-                    subItems: []
-                };
-
-                Object.keys(formData.interaction).forEach(key => {
-                    if (key !== 'enabled' && typeof formData.interaction[key] === 'object' && formData.interaction[key].enabled !== undefined) {
-                        formData.basicPanels.interaction.subItems.push({
-                            name: this.getSubItemDisplayName('interaction', key),
-                            key: key,
-                            enabled: formData.interaction[key].enabled,
-                            value: this.getDefaultSubItemValue('interaction', key)
-                        });
-                    }
-                });
-
-                console.log('[InfoBarSettings] 📊 处理交互对象面板配置:', formData.basicPanels.interaction.subItems.length, '个子项');
-            }
+                    console.log(`[InfoBarSettings] 📊 处理${panelId}面板配置:`, formData.basicPanels[panelId].subItems.length, '个子项');
+                }
+            });
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理基础面板配置失败:', error);
@@ -4952,6 +5042,66 @@ export class InfoBarSettings {
                 name: '对象名称', type: '对象类型', status: '当前状态',
                 location: '所在位置', activity: '当前活动', relationship: '关系类型',
                 intimacy: '亲密度', history: '历史记录', autoRecord: '自动记录'
+            },
+            tasks: {
+                title: '任务标题', description: '任务描述', priority: '优先级',
+                status: '任务状态', deadline: '截止日期', assignee: '负责人',
+                progress: '完成进度', category: '任务分类'
+            },
+            organization: {
+                name: '组织名称', type: '组织类型', leader: '领导者',
+                members: '成员数量', purpose: '组织目标', location: '总部位置',
+                influence: '影响力', resources: '资源状况'
+            },
+            news: {
+                title: '新闻标题', content: '新闻内容', source: '消息来源',
+                date: '发布日期', importance: '重要程度', category: '新闻分类',
+                impact: '影响范围'
+            },
+            inventory: {
+                name: '物品名称', type: '物品类型', quantity: '数量',
+                condition: '物品状态', value: '价值', location: '存放位置',
+                description: '物品描述'
+            },
+            abilities: {
+                name: '能力名称', type: '能力类型', level: '能力等级',
+                description: '能力描述', cooldown: '冷却时间', cost: '消耗',
+                effect: '效果描述'
+            },
+            plot: {
+                title: '剧情标题', description: '剧情描述', stage: '当前阶段',
+                characters: '相关角色', location: '发生地点', importance: '重要程度',
+                outcome: '结果影响'
+            },
+            cultivation: {
+                realm: '修炼境界', technique: '修炼功法', progress: '修炼进度',
+                qi: '灵气值', foundation: '根基', breakthrough: '突破条件',
+                resources: '修炼资源'
+            },
+            fantasy: {
+                race: '种族', class: '职业', level: '等级',
+                hp: '生命值', mp: '魔法值', strength: '力量',
+                agility: '敏捷', intelligence: '智力', equipment: '装备'
+            },
+            modern: {
+                job: '工作', income: '收入', education: '学历',
+                skills: '技能', social: '社交圈', lifestyle: '生活方式',
+                goals: '人生目标'
+            },
+            historical: {
+                era: '历史时期', position: '社会地位', family: '家族背景',
+                achievements: '成就', reputation: '声望', allies: '盟友',
+                enemies: '敌人'
+            },
+            magic: {
+                school: '魔法学派', spells: '法术列表', mana: '魔力值',
+                focus: '施法焦点', components: '法术材料', familiar: '魔宠',
+                research: '研究项目'
+            },
+            training: {
+                skill: '训练技能', instructor: '指导者', progress: '训练进度',
+                schedule: '训练计划', equipment: '训练器材', goals: '训练目标',
+                achievements: '训练成果'
             }
         };
 
@@ -5420,7 +5570,7 @@ export class InfoBarSettings {
                         </div>
                         <div class="card-toggle">
                             <div class="toggle-switch">
-                                <input type="checkbox" id="personal-info-toggle" checked />
+                                <input type="checkbox" id="personal-info-toggle" name="personal.enabled" checked />
                                 <label for="personal-info-toggle" class="switch-slider"></label>
                             </div>
                         </div>
@@ -12801,9 +12951,13 @@ export class InfoBarSettings {
         try {
             console.log('[InfoBarSettings] 🚀 开始使用自定义API处理剧情内容...');
 
+            // 🔧 新增：显示自定义API生成中提示
+            this.showCustomAPIStatus('generating');
+
             // 验证剧情内容
             if (!plotContent || typeof plotContent !== 'string') {
                 console.warn('[InfoBarSettings] ⚠️ 剧情内容无效:', typeof plotContent);
+                this.showCustomAPIStatus('error', '剧情内容无效');
                 return;
             }
 
@@ -12869,13 +13023,15 @@ export class InfoBarSettings {
                 if (result && result.success && typeof result.text === 'string' && result.text.trim().length > 0) {
                     console.log('[InfoBarSettings] ✅ 自定义API返回结果，长度:', result.text.length, ' 尝试次数:', attempt);
                     await this.processAPIResult(result.text);
+                    // 🔧 新增：显示自定义API生成完成提示
+                    this.showCustomAPIStatus('success');
                     break;
                 } else {
                     lastError = result?.error || '空响应或格式无效';
                     console.warn(`[InfoBarSettings] ⚠️ API结果为空或无效，准备重试 (${attempt}/${maxRetry}) ...`);
                     if (attempt > maxRetry) {
                         console.error('[InfoBarSettings] ❌ 重试达上限，放弃。本次错误:', lastError);
-                        this.showNotification('❌ 自定义API结果为空，重试失败', 'error');
+                        this.showCustomAPIStatus('error', '重试失败: ' + lastError);
                         break;
                     }
                     await new Promise(r=>setTimeout(r, retryDelayMs));
@@ -12884,6 +13040,936 @@ export class InfoBarSettings {
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 使用自定义API处理失败:', error);
+            // 🔧 新增：显示自定义API错误提示
+            this.showCustomAPIStatus('error', error.message);
+        }
+    }
+
+    /**
+     * 显示自定义API状态提示
+     */
+    showCustomAPIStatus(status, message = '') {
+        try {
+            // 移除现有的状态提示
+            const existingToast = document.querySelector('.custom-api-status-toast');
+            if (existingToast) {
+                existingToast.remove();
+            }
+
+            let toastContent = '';
+            let toastClass = 'custom-api-status-toast';
+            let autoHide = false;
+
+            switch (status) {
+                case 'generating':
+                    toastContent = '🤖 自定义API生成中...';
+                    toastClass += ' generating';
+                    break;
+                case 'success':
+                    toastContent = '✅ 自定义API已生成';
+                    toastClass += ' success';
+                    autoHide = true;
+                    break;
+                case 'error':
+                    toastContent = `❌ 自定义API生成失败${message ? ': ' + message : ''}`;
+                    toastClass += ' error';
+                    autoHide = true;
+                    break;
+            }
+
+            // 创建提示元素
+            const toast = document.createElement('div');
+            toast.className = toastClass;
+            toast.innerHTML = `
+                <div class="toast-content">
+                    <span class="toast-text">${toastContent}</span>
+                    <button class="toast-close" onclick="this.parentElement.parentElement.remove()">×</button>
+                </div>
+            `;
+
+            // 添加样式
+            if (!document.getElementById('custom-api-status-styles')) {
+                const style = document.createElement('style');
+                style.id = 'custom-api-status-styles';
+                style.textContent = `
+                    .custom-api-status-toast {
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        z-index: 10000;
+                        min-width: 300px;
+                        max-width: 500px;
+                        padding: 0;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        animation: slideInRight 0.3s ease-out;
+                    }
+                    .custom-api-status-toast.generating {
+                        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+                        color: white;
+                    }
+                    .custom-api-status-toast.success {
+                        background: linear-gradient(135deg, #10b981, #059669);
+                        color: white;
+                    }
+                    .custom-api-status-toast.error {
+                        background: linear-gradient(135deg, #ef4444, #dc2626);
+                        color: white;
+                    }
+                    .toast-content {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        padding: 12px 16px;
+                    }
+                    .toast-text {
+                        flex: 1;
+                        font-size: 14px;
+                        font-weight: 500;
+                    }
+                    .toast-close {
+                        background: none;
+                        border: none;
+                        color: inherit;
+                        font-size: 18px;
+                        font-weight: bold;
+                        cursor: pointer;
+                        padding: 0;
+                        margin-left: 12px;
+                        opacity: 0.8;
+                        transition: opacity 0.2s;
+                    }
+                    .toast-close:hover {
+                        opacity: 1;
+                    }
+                    @keyframes slideInRight {
+                        from {
+                            transform: translateX(100%);
+                            opacity: 0;
+                        }
+                        to {
+                            transform: translateX(0);
+                            opacity: 1;
+                        }
+                    }
+                    @keyframes slideOutRight {
+                        from {
+                            transform: translateX(0);
+                            opacity: 1;
+                        }
+                        to {
+                            transform: translateX(100%);
+                            opacity: 0;
+                        }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            // 添加到页面
+            document.body.appendChild(toast);
+
+            // 自动隐藏
+            if (autoHide) {
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.style.animation = 'slideOutRight 0.3s ease-in';
+                        setTimeout(() => {
+                            if (toast.parentNode) {
+                                toast.remove();
+                            }
+                        }, 300);
+                    }
+                }, 3000);
+            }
+
+            console.log('[InfoBarSettings] 📢 自定义API状态提示已显示:', status, message);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示自定义API状态提示失败:', error);
+        }
+    }
+
+    /**
+     * 导出数据功能
+     */
+    async exportData() {
+        try {
+            console.log('[InfoBarSettings] 📤 开始导出数据...');
+
+            // 获取用户选择的范围和格式
+            const scopeSelect = this.modal.querySelector('#data-scope-select');
+            const formatSelect = this.modal.querySelector('#data-format-select');
+
+            if (!scopeSelect || !formatSelect) {
+                this.showMessage('❌ 无法获取导出设置', 'error');
+                return;
+            }
+
+            const scope = scopeSelect.value; // 'current' 或 'all'
+            const format = formatSelect.value; // 'json', 'csv', 或 'xml'
+
+            console.log('[InfoBarSettings] 📊 导出设置:', { scope, format });
+
+            // 显示导出进度提示
+            this.showMessage('🔄 正在收集数据...', 'info');
+
+            // 收集数据
+            const exportData = await this.collectExportData(scope);
+
+            if (!exportData || Object.keys(exportData).length === 0) {
+                this.showMessage('⚠️ 没有找到可导出的数据', 'warning');
+                return;
+            }
+
+            console.log('[InfoBarSettings] 📊 收集到的数据:', {
+                chats: exportData.chats?.length || 0,
+                totalMessages: exportData.chats?.reduce((sum, chat) => sum + (chat.messages?.length || 0), 0) || 0,
+                infobarDataEntries: Object.keys(exportData.infobarData || {}).length
+            });
+
+            // 转换为指定格式
+            let exportContent;
+            let fileName;
+            let mimeType;
+
+            switch (format) {
+                case 'json':
+                    exportContent = JSON.stringify(exportData, null, 2);
+                    fileName = `infobar_data_${this.getTimestamp()}.json`;
+                    mimeType = 'application/json';
+                    break;
+                case 'csv':
+                    exportContent = this.convertToCSV(exportData);
+                    fileName = `infobar_data_${this.getTimestamp()}.csv`;
+                    mimeType = 'text/csv';
+                    break;
+                case 'xml':
+                    exportContent = this.convertToXML(exportData);
+                    fileName = `infobar_data_${this.getTimestamp()}.xml`;
+                    mimeType = 'application/xml';
+                    break;
+                default:
+                    throw new Error('不支持的导出格式: ' + format);
+            }
+
+            // 触发下载
+            this.downloadFile(exportContent, fileName, mimeType);
+
+            this.showMessage(`✅ 数据已导出为 ${fileName}`, 'success');
+            console.log('[InfoBarSettings] ✅ 数据导出完成:', fileName);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 导出数据失败:', error);
+            this.showMessage('❌ 导出数据失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 收集导出数据
+     */
+    async collectExportData(scope) {
+        try {
+            const exportData = {
+                metadata: {
+                    exportTime: new Date().toISOString(),
+                    scope: scope,
+                    version: '1.0.0',
+                    source: 'Information bar integration tool'
+                },
+                chats: [],
+                infobarData: {},
+                settings: {}
+            };
+
+            // 获取SillyTavern上下文
+            const context = SillyTavern.getContext();
+            if (!context) {
+                throw new Error('无法获取SillyTavern上下文');
+            }
+
+            // 收集聊天数据
+            if (scope === 'current') {
+                // 当前聊天
+                const currentChatId = context.chatId;
+                if (currentChatId && context.chat) {
+                    const chatData = {
+                        chatId: currentChatId,
+                        chatName: context.name2 || 'Unknown',
+                        character: context.name2 || 'Unknown',
+                        messages: context.chat || [],
+                        timestamp: new Date().toISOString()
+                    };
+                    exportData.chats.push(chatData);
+
+                    // 收集当前聊天的信息栏数据
+                    if (this.unifiedDataCore) {
+                        const chatInfobarData = this.unifiedDataCore.getChatData(currentChatId);
+                        if (chatInfobarData) {
+                            exportData.infobarData[currentChatId] = chatInfobarData;
+                        }
+                    }
+                }
+            } else {
+                // 所有聊天
+                const allChats = context.characters || [];
+                for (const character of allChats) {
+                    if (character.chat) {
+                        const chatData = {
+                            chatId: character.filename || character.name,
+                            chatName: character.name,
+                            character: character.name,
+                            messages: character.chat,
+                            timestamp: new Date().toISOString()
+                        };
+                        exportData.chats.push(chatData);
+
+                        // 收集该聊天的信息栏数据
+                        if (this.unifiedDataCore) {
+                            const chatInfobarData = this.unifiedDataCore.getChatData(character.filename || character.name);
+                            if (chatInfobarData) {
+                                exportData.infobarData[character.filename || character.name] = chatInfobarData;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 收集扩展设置
+            const extensionSettings = context.extensionSettings;
+            if (extensionSettings && extensionSettings['Information bar integration tool']) {
+                exportData.settings = extensionSettings['Information bar integration tool'];
+            }
+
+            console.log('[InfoBarSettings] 📊 数据收集完成:', {
+                chats: exportData.chats.length,
+                infobarDataKeys: Object.keys(exportData.infobarData).length,
+                hasSettings: !!exportData.settings
+            });
+
+            return exportData;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 收集导出数据失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 转换数据为CSV格式
+     */
+    convertToCSV(data) {
+        try {
+            let csvContent = '';
+
+            // CSV头部信息
+            csvContent += '# Information Bar Integration Tool Data Export\n';
+            csvContent += `# Export Time: ${data.metadata.exportTime}\n`;
+            csvContent += `# Scope: ${data.metadata.scope}\n`;
+            csvContent += '\n';
+
+            // 聊天数据表
+            if (data.chats && data.chats.length > 0) {
+                csvContent += 'Chat Data\n';
+                csvContent += 'Chat ID,Chat Name,Character,Message Count,Last Message Time\n';
+
+                data.chats.forEach(chat => {
+                    const messageCount = chat.messages ? chat.messages.length : 0;
+                    const lastMessageTime = chat.messages && chat.messages.length > 0
+                        ? (chat.messages[chat.messages.length - 1].send_date || 'Unknown')
+                        : 'No messages';
+
+                    csvContent += `"${chat.chatId}","${chat.chatName}","${chat.character}",${messageCount},"${lastMessageTime}"\n`;
+                });
+                csvContent += '\n';
+            }
+
+            // 信息栏数据表
+            if (data.infobarData && Object.keys(data.infobarData).length > 0) {
+                csvContent += 'InfoBar Data\n';
+                csvContent += 'Chat ID,Message ID,Panel Type,Data Key,Data Value\n';
+
+                Object.entries(data.infobarData).forEach(([chatId, chatData]) => {
+                    Object.entries(chatData).forEach(([messageId, messageData]) => {
+                        Object.entries(messageData).forEach(([panelType, panelData]) => {
+                            if (typeof panelData === 'object') {
+                                Object.entries(panelData).forEach(([key, value]) => {
+                                    const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                                    csvContent += `"${chatId}","${messageId}","${panelType}","${key}","${valueStr}"\n`;
+                                });
+                            }
+                        });
+                    });
+                });
+            }
+
+            return csvContent;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 转换CSV格式失败:', error);
+            throw new Error('CSV格式转换失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 转换数据为XML格式
+     */
+    convertToXML(data) {
+        try {
+            let xmlContent = '<?xml version="1.0" encoding="UTF-8"?>\n';
+            xmlContent += '<InfoBarExport>\n';
+
+            // 元数据
+            xmlContent += '  <Metadata>\n';
+            xmlContent += `    <ExportTime>${this.escapeXML(data.metadata.exportTime)}</ExportTime>\n`;
+            xmlContent += `    <Scope>${this.escapeXML(data.metadata.scope)}</Scope>\n`;
+            xmlContent += `    <Version>${this.escapeXML(data.metadata.version)}</Version>\n`;
+            xmlContent += `    <Source>${this.escapeXML(data.metadata.source)}</Source>\n`;
+            xmlContent += '  </Metadata>\n';
+
+            // 聊天数据
+            if (data.chats && data.chats.length > 0) {
+                xmlContent += '  <Chats>\n';
+                data.chats.forEach(chat => {
+                    xmlContent += '    <Chat>\n';
+                    xmlContent += `      <ChatId>${this.escapeXML(chat.chatId)}</ChatId>\n`;
+                    xmlContent += `      <ChatName>${this.escapeXML(chat.chatName)}</ChatName>\n`;
+                    xmlContent += `      <Character>${this.escapeXML(chat.character)}</Character>\n`;
+                    xmlContent += `      <MessageCount>${chat.messages ? chat.messages.length : 0}</MessageCount>\n`;
+                    xmlContent += `      <Timestamp>${this.escapeXML(chat.timestamp)}</Timestamp>\n`;
+                    xmlContent += '    </Chat>\n';
+                });
+                xmlContent += '  </Chats>\n';
+            }
+
+            // 信息栏数据
+            if (data.infobarData && Object.keys(data.infobarData).length > 0) {
+                xmlContent += '  <InfoBarData>\n';
+                Object.entries(data.infobarData).forEach(([chatId, chatData]) => {
+                    xmlContent += `    <ChatData chatId="${this.escapeXML(chatId)}">\n`;
+                    Object.entries(chatData).forEach(([messageId, messageData]) => {
+                        xmlContent += `      <MessageData messageId="${this.escapeXML(messageId)}">\n`;
+                        Object.entries(messageData).forEach(([panelType, panelData]) => {
+                            xmlContent += `        <Panel type="${this.escapeXML(panelType)}">\n`;
+                            if (typeof panelData === 'object') {
+                                Object.entries(panelData).forEach(([key, value]) => {
+                                    const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                                    xmlContent += `          <Data key="${this.escapeXML(key)}">${this.escapeXML(valueStr)}</Data>\n`;
+                                });
+                            }
+                            xmlContent += '        </Panel>\n';
+                        });
+                        xmlContent += '      </MessageData>\n';
+                    });
+                    xmlContent += '    </ChatData>\n';
+                });
+                xmlContent += '  </InfoBarData>\n';
+            }
+
+            xmlContent += '</InfoBarExport>';
+            return xmlContent;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 转换XML格式失败:', error);
+            throw new Error('XML格式转换失败: ' + error.message);
+        }
+    }
+
+    /**
+     * XML转义函数
+     */
+    escapeXML(str) {
+        if (typeof str !== 'string') {
+            str = String(str);
+        }
+        return str.replace(/[<>&'"]/g, (char) => {
+            switch (char) {
+                case '<': return '&lt;';
+                case '>': return '&gt;';
+                case '&': return '&amp;';
+                case "'": return '&apos;';
+                case '"': return '&quot;';
+                default: return char;
+            }
+        });
+    }
+
+    /**
+     * 获取时间戳字符串
+     */
+    getTimestamp() {
+        const now = new Date();
+        return now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    }
+
+    /**
+     * 下载文件
+     */
+    downloadFile(content, fileName, mimeType) {
+        try {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            link.style.display = 'none';
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // 清理URL对象
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+            console.log('[InfoBarSettings] 📁 文件下载触发:', fileName);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 下载文件失败:', error);
+            throw new Error('文件下载失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 导入数据功能
+     */
+    async importData() {
+        try {
+            console.log('[InfoBarSettings] 📥 开始导入数据...');
+
+            // 创建文件选择器
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.json,.csv,.xml';
+            fileInput.style.display = 'none';
+
+            // 监听文件选择
+            fileInput.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) {
+                    return;
+                }
+
+                try {
+                    this.showMessage('🔄 正在读取文件...', 'info');
+
+                    // 读取文件内容
+                    const content = await this.readFileContent(file);
+
+                    // 解析数据
+                    const importData = await this.parseImportData(content, file.name);
+
+                    // 显示确认对话框
+                    const confirmed = await this.showImportConfirmDialog(importData);
+
+                    if (confirmed) {
+                        // 执行导入
+                        await this.executeImport(importData);
+                        this.showMessage('✅ 数据导入成功', 'success');
+                    } else {
+                        this.showMessage('ℹ️ 导入已取消', 'info');
+                    }
+
+                } catch (error) {
+                    console.error('[InfoBarSettings] ❌ 导入数据失败:', error);
+                    this.showMessage('❌ 导入数据失败: ' + error.message, 'error');
+                } finally {
+                    // 清理文件输入
+                    if (fileInput.parentNode) {
+                        fileInput.parentNode.removeChild(fileInput);
+                    }
+                }
+            });
+
+            // 触发文件选择
+            document.body.appendChild(fileInput);
+            fileInput.click();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 导入数据失败:', error);
+            this.showMessage('❌ 导入数据失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 读取文件内容
+     */
+    readFileContent(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(new Error('文件读取失败'));
+            reader.readAsText(file, 'UTF-8');
+        });
+    }
+
+    /**
+     * 解析导入数据
+     */
+    async parseImportData(content, fileName) {
+        try {
+            const fileExtension = fileName.split('.').pop().toLowerCase();
+            let parsedData;
+
+            switch (fileExtension) {
+                case 'json':
+                    parsedData = JSON.parse(content);
+                    break;
+                case 'csv':
+                    parsedData = this.parseCSVData(content);
+                    break;
+                case 'xml':
+                    parsedData = this.parseXMLData(content);
+                    break;
+                default:
+                    throw new Error('不支持的文件格式: ' + fileExtension);
+            }
+
+            // 验证数据结构
+            this.validateImportData(parsedData);
+
+            return parsedData;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 解析导入数据失败:', error);
+            throw new Error('数据解析失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 解析CSV数据（简化版本）
+     */
+    parseCSVData(content) {
+        // 这里实现一个简化的CSV解析
+        // 实际项目中可能需要更复杂的CSV解析逻辑
+        throw new Error('CSV导入功能暂未实现，请使用JSON格式');
+    }
+
+    /**
+     * 解析XML数据（简化版本）
+     */
+    parseXMLData(content) {
+        // 这里实现一个简化的XML解析
+        // 实际项目中可能需要更复杂的XML解析逻辑
+        throw new Error('XML导入功能暂未实现，请使用JSON格式');
+    }
+
+    /**
+     * 验证导入数据结构
+     */
+    validateImportData(data) {
+        if (!data || typeof data !== 'object') {
+            throw new Error('数据格式无效');
+        }
+
+        if (!data.metadata) {
+            throw new Error('缺少元数据信息');
+        }
+
+        if (!data.metadata.source || data.metadata.source !== 'Information bar integration tool') {
+            throw new Error('数据来源不匹配，请确保是本工具导出的数据');
+        }
+
+        console.log('[InfoBarSettings] ✅ 数据验证通过');
+    }
+
+    /**
+     * 显示导入确认对话框
+     */
+    showImportConfirmDialog(importData) {
+        return new Promise((resolve) => {
+            try {
+                // 统计导入数据
+                const stats = {
+                    chats: importData.chats ? importData.chats.length : 0,
+                    totalMessages: importData.chats ? importData.chats.reduce((sum, chat) => sum + (chat.messages?.length || 0), 0) : 0,
+                    infobarDataEntries: importData.infobarData ? Object.keys(importData.infobarData).length : 0,
+                    hasSettings: !!importData.settings
+                };
+
+                // 创建确认对话框
+                const dialog = document.createElement('div');
+                dialog.className = 'import-confirm-dialog';
+                dialog.innerHTML = `
+                    <div class="dialog-overlay">
+                        <div class="dialog-content">
+                            <h3>确认导入数据</h3>
+                            <div class="import-stats">
+                                <p><strong>导入数据统计：</strong></p>
+                                <ul>
+                                    <li>聊天数量: ${stats.chats}</li>
+                                    <li>消息总数: ${stats.totalMessages}</li>
+                                    <li>信息栏数据条目: ${stats.infobarDataEntries}</li>
+                                    <li>包含设置: ${stats.hasSettings ? '是' : '否'}</li>
+                                </ul>
+                                <p><strong>导出时间:</strong> ${importData.metadata.exportTime}</p>
+                                <p><strong>数据范围:</strong> ${importData.metadata.scope === 'current' ? '当前聊天' : '所有聊天'}</p>
+                            </div>
+                            <div class="import-warning">
+                                <p>⚠️ <strong>注意：</strong></p>
+                                <ul>
+                                    <li>导入操作将覆盖现有的信息栏数据</li>
+                                    <li>建议在导入前先导出当前数据作为备份</li>
+                                    <li>此操作无法撤销</li>
+                                </ul>
+                            </div>
+                            <div class="dialog-actions">
+                                <button class="btn btn-danger" data-action="confirm">确认导入</button>
+                                <button class="btn btn-secondary" data-action="cancel">取消</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // 添加样式
+                if (!document.getElementById('import-dialog-styles')) {
+                    const style = document.createElement('style');
+                    style.id = 'import-dialog-styles';
+                    style.textContent = `
+                        .import-confirm-dialog {
+                            position: fixed;
+                            top: 0;
+                            left: 0;
+                            width: 100%;
+                            height: 100%;
+                            z-index: 10001;
+                        }
+                        .dialog-overlay {
+                            width: 100%;
+                            height: 100%;
+                            background: rgba(0, 0, 0, 0.5);
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        }
+                        .dialog-content {
+                            background: white;
+                            border-radius: 8px;
+                            padding: 24px;
+                            max-width: 500px;
+                            max-height: 80vh;
+                            overflow-y: auto;
+                            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                        }
+                        .dialog-content h3 {
+                            margin: 0 0 16px 0;
+                            color: #333;
+                        }
+                        .import-stats {
+                            background: #f8f9fa;
+                            padding: 16px;
+                            border-radius: 6px;
+                            margin: 16px 0;
+                        }
+                        .import-stats ul {
+                            margin: 8px 0;
+                            padding-left: 20px;
+                        }
+                        .import-warning {
+                            background: #fff3cd;
+                            border: 1px solid #ffeaa7;
+                            padding: 16px;
+                            border-radius: 6px;
+                            margin: 16px 0;
+                        }
+                        .import-warning ul {
+                            margin: 8px 0;
+                            padding-left: 20px;
+                        }
+                        .dialog-actions {
+                            display: flex;
+                            gap: 12px;
+                            justify-content: flex-end;
+                            margin-top: 24px;
+                        }
+                        .dialog-actions .btn {
+                            padding: 8px 16px;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        }
+                        .dialog-actions .btn-danger {
+                            background: #dc3545;
+                            color: white;
+                        }
+                        .dialog-actions .btn-secondary {
+                            background: #6c757d;
+                            color: white;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+
+                // 事件处理
+                dialog.addEventListener('click', (e) => {
+                    const action = e.target.dataset.action;
+                    if (action === 'confirm') {
+                        dialog.remove();
+                        resolve(true);
+                    } else if (action === 'cancel' || e.target === dialog.querySelector('.dialog-overlay')) {
+                        dialog.remove();
+                        resolve(false);
+                    }
+                });
+
+                // 显示对话框
+                document.body.appendChild(dialog);
+
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 显示导入确认对话框失败:', error);
+                resolve(false);
+            }
+        });
+    }
+
+    /**
+     * 执行导入操作
+     */
+    async executeImport(importData) {
+        try {
+            console.log('[InfoBarSettings] 🔄 开始执行导入操作...');
+
+            let importedCount = 0;
+
+            // 导入信息栏数据到统一数据核心
+            if (importData.infobarData && this.unifiedDataCore) {
+                Object.entries(importData.infobarData).forEach(([chatId, chatData]) => {
+                    Object.entries(chatData).forEach(([messageId, messageData]) => {
+                        // 将数据写入统一数据核心
+                        this.unifiedDataCore.setMessageData(chatId, messageId, messageData);
+                        importedCount++;
+                    });
+                });
+                console.log('[InfoBarSettings] 📊 已导入信息栏数据条目:', importedCount);
+            }
+
+            // 导入设置（可选）
+            if (importData.settings) {
+                const context = SillyTavern.getContext();
+                if (context && context.extensionSettings) {
+                    // 备份当前设置
+                    const currentSettings = context.extensionSettings['Information bar integration tool'] || {};
+
+                    // 合并设置（保留当前的API配置等敏感信息）
+                    const mergedSettings = {
+                        ...importData.settings,
+                        // 保留当前的API配置
+                        apiConfig: currentSettings.apiConfig || importData.settings.apiConfig
+                    };
+
+                    context.extensionSettings['Information bar integration tool'] = mergedSettings;
+
+                    // 保存设置
+                    await this.saveExtensionSettings();
+                    console.log('[InfoBarSettings] ⚙️ 已导入扩展设置');
+                }
+            }
+
+            // 触发数据更新事件
+            if (this.eventSource) {
+                this.eventSource.emit('dataImported', {
+                    importedCount,
+                    source: importData.metadata.source,
+                    timestamp: new Date().toISOString()
+                });
+            }
+
+            console.log('[InfoBarSettings] ✅ 导入操作完成，共导入', importedCount, '条数据');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 执行导入操作失败:', error);
+            throw new Error('导入执行失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 保存扩展设置到SillyTavern
+     */
+    async saveExtensionSettings() {
+        try {
+            const context = SillyTavern.getContext();
+            if (context && context.saveSettingsDebounced) {
+                await context.saveSettingsDebounced();
+                console.log('[InfoBarSettings] 💾 扩展设置已保存');
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 保存扩展设置失败:', error);
+        }
+    }
+
+    /**
+     * 确保数据管理样式已加载
+     */
+    ensureDataManagementStyles() {
+        try {
+            if (document.getElementById('data-management-styles')) {
+                return; // 样式已存在
+            }
+
+            const style = document.createElement('style');
+            style.id = 'data-management-styles';
+            style.textContent = `
+                /* 数据管理功能区域样式 */
+                .data-management-actions {
+                    display: flex !important;
+                    flex-direction: row !important;
+                    gap: 12px !important;
+                    margin-top: 8px !important;
+                    width: 100% !important;
+                }
+                .data-export-btn, .data-import-btn {
+                    flex: 1 !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    gap: 6px !important;
+                    padding: 10px 16px !important;
+                    border: none !important;
+                    border-radius: 6px !important;
+                    font-size: 14px !important;
+                    font-weight: 500 !important;
+                    cursor: pointer !important;
+                    transition: all 0.2s ease !important;
+                    min-height: 40px !important;
+                    white-space: nowrap !important;
+                }
+                .data-export-btn {
+                    background: var(--theme-primary-color, #ff6b35) !important;
+                    color: white !important;
+                }
+                .data-export-btn:hover {
+                    background: var(--theme-primary-hover, #e55a2b) !important;
+                    transform: translateY(-1px) !important;
+                    box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3) !important;
+                }
+                .data-import-btn {
+                    background: var(--theme-bg-secondary, #4a5568) !important;
+                    color: white !important;
+                    border: 1px solid var(--theme-border-color, #666) !important;
+                }
+                .data-import-btn:hover {
+                    background: var(--theme-primary-color, #ff6b35) !important;
+                    transform: translateY(-1px) !important;
+                    box-shadow: 0 4px 12px rgba(255, 107, 53, 0.2) !important;
+                }
+                .data-management-hint {
+                    color: var(--theme-text-secondary, #a0a0a0) !important;
+                    font-size: 13px !important;
+                    line-height: 1.4 !important;
+                    margin-top: 8px !important;
+                    padding: 8px 12px !important;
+                    background: var(--theme-bg-secondary, rgba(107, 114, 128, 0.1)) !important;
+                    border-radius: 4px !important;
+                    border-left: 3px solid var(--theme-primary-color, #ff6b35) !important;
+                }
+            `;
+            document.head.appendChild(style);
+            console.log('[InfoBarSettings] ✅ 数据管理样式已加载');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载数据管理样式失败:', error);
         }
     }
 
