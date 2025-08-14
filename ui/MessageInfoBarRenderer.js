@@ -561,10 +561,21 @@ export class MessageInfoBarRenderer {
                 return;
             }
 
-            // 检查是否已经渲染过
-            if (this.renderedMessages.has(messageId)) {
-                console.log('[MessageInfoBarRenderer] ℹ️ 消息已渲染过，跳过');
+            // 🔧 修复：获取当前风格，只对浮动式进行重复渲染检查
+            const currentStyle = await this.getCurrentStyle();
+
+            // 只有浮动式风格才检查重复渲染（因为浮动式是全局唯一的）
+            if (currentStyle.id === 'floating' && this.renderedMessages.has(messageId)) {
+                console.log('[MessageInfoBarRenderer] ℹ️ 浮动式消息已渲染过，跳过');
                 return;
+            }
+
+            // 其他风格允许重复渲染（每次AI消息都创建新的信息栏）
+            if (currentStyle.id !== 'floating' && this.renderedMessages.has(messageId)) {
+                console.log('[MessageInfoBarRenderer] 🔄 非浮动式风格，清理旧信息栏并重新渲染');
+                // 清理旧的信息栏
+                this.cleanupInfoBarForMessage(messageId);
+                this.renderedMessages.delete(messageId);
             }
 
             // 获取当前聊天数据
@@ -611,8 +622,7 @@ export class MessageInfoBarRenderer {
                 return;
             }
 
-            // 获取当前风格配置
-            const currentStyle = await this.getCurrentStyle();
+            // 使用之前获取的风格配置（避免重复声明）
 
             // 插入信息栏到消息中
             const success = this.insertInfoBarToMessage(messageId, infoBarHtml, currentStyle);
