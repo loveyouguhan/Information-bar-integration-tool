@@ -20,6 +20,8 @@ import { APIIntegration } from './core/APIIntegration.js';
 import { SmartPromptSystem } from './core/SmartPromptSystem.js';
 import { XMLDataParser } from './core/XMLDataParser.js';
 import { DataSnapshotManager } from './core/DataSnapshotManager.js';
+import { STScriptDataSync } from './core/STScriptDataSync.js';
+import { FieldRuleManager } from './core/FieldRuleManager.js';
 
 // 导入UI组件
 import { InfoBarSettings } from './ui/InfoBarSettings.js';
@@ -88,6 +90,8 @@ class InformationBarIntegrationTool {
         this.smartPromptSystem = null;
         this.xmlDataParser = null;
         this.dataSnapshotManager = null;
+        this.stscriptDataSync = null;
+        this.fieldRuleManager = null;
 
         // UI组件
         this.infoBarSettings = null;
@@ -185,16 +189,32 @@ class InformationBarIntegrationTool {
         this.apiIntegration = new APIIntegration(this.configManager);
         await this.apiIntegration.init();
 
-        // 初始化智能提示词系统
-        this.smartPromptSystem = new SmartPromptSystem(this.configManager, this.eventSystem, this.dataCore);
-        await this.smartPromptSystem.init();
-
         // 初始化XML数据解析器
         this.xmlDataParser = new XMLDataParser(this.eventSystem);
 
         // 初始化数据快照管理器
         this.dataSnapshotManager = new DataSnapshotManager(this.dataCore, this.eventSystem);
         await this.dataSnapshotManager.init();
+
+        // 初始化字段规则管理器
+        this.fieldRuleManager = new FieldRuleManager(this.dataCore, this.eventSystem);
+        await this.fieldRuleManager.init();
+
+        // 初始化智能提示词系统（需要在fieldRuleManager之后）
+        this.smartPromptSystem = new SmartPromptSystem(this.configManager, this.eventSystem, this.dataCore, this.fieldRuleManager);
+        await this.smartPromptSystem.init();
+
+        // 初始化STScript数据同步系统
+        try {
+            // SummaryManager将在UI组件初始化阶段通过setSummaryManager()方法设置
+            this.stscriptDataSync = new STScriptDataSync(this.dataCore, this.eventSystem);
+            await this.stscriptDataSync.initialize();
+            console.log('[InfoBarTool] ✅ STScript数据同步系统初始化完成');
+        } catch (error) {
+            console.warn('[InfoBarTool] ⚠️ STScript数据同步系统初始化失败:', error.message);
+            console.warn('[InfoBarTool] 📝 将继续运行，但STScript功能不可用');
+            this.stscriptDataSync = null;
+        }
 
         // 初始化消息监听器
         this.eventSystem.initMessageListener(this.xmlDataParser, this.dataCore);
@@ -240,6 +260,11 @@ class InformationBarIntegrationTool {
         );
         await this.summaryManager.init();
 
+        // 🆕 将SummaryManager设置到STScript同步系统（延迟初始化）
+        if (this.stscriptDataSync) {
+            this.stscriptDataSync.setSummaryManager(this.summaryManager);
+        }
+
         // 初始化总结面板
         this.summaryPanel = new SummaryPanel(
             this.dataCore,
@@ -274,7 +299,8 @@ class InformationBarIntegrationTool {
             dataSnapshotManager: this.dataSnapshotManager,
             summaryManager: this.summaryManager,
             summaryPanel: this.summaryPanel,
-            frontendDisplayManager: this.frontendDisplayManager
+            frontendDisplayManager: this.frontendDisplayManager,
+            fieldRuleManager: this.fieldRuleManager
         };
 
         console.log('[InfoBarTool] ✅ UI组件初始化完成');

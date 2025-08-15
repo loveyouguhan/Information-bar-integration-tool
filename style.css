@@ -52,24 +52,24 @@
     --theme-primary-color: var(--primary-color);
     --theme-primary-light: var(--primary-light);
     --theme-border-color: var(--border-color);
-    
+
     /* 阴影 */
     --shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
     --shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
     --shadow-lg: 0 1rem 3rem rgba(0, 0, 0, 0.175);
-    
+
     /* 圆角 */
     --border-radius: 0.375rem;
     --border-radius-sm: 0.25rem;
     --border-radius-lg: 0.5rem;
-    
+
     /* 间距 */
     --spacing-xs: 0.25rem;
     --spacing-sm: 0.5rem;
     --spacing: 1rem;
     --spacing-lg: 1.5rem;
     --spacing-xl: 3rem;
-    
+
     /* 字体 */
     --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --font-size-sm: 0.875rem;
@@ -78,7 +78,7 @@
     --font-weight-normal: 400;
     --font-weight-medium: 500;
     --font-weight-bold: 700;
-    
+
     /* 过渡 */
     --transition: all 0.15s ease-in-out;
     --transition-fast: all 0.1s ease-in-out;
@@ -101,7 +101,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 1000; /* 适中的层级，避免遮挡原生UI元素 */
+    z-index: 9999; /* 🔧 提高优先级，确保显示在最前面 */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -152,8 +152,8 @@
     align-items: center;
     justify-content: space-between;
     padding: var(--spacing) var(--spacing-lg);
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--theme-border-color, var(--border-color));
+    background: var(--theme-bg-secondary, var(--bg-secondary));
 }
 
 .modal-header h2 {
@@ -658,37 +658,37 @@
         max-width: none;
         max-height: none;
     }
-    
+
     .modal-header {
         padding: var(--spacing-sm) var(--spacing);
     }
-    
+
     .modal-footer {
         padding: var(--spacing-sm) var(--spacing);
         flex-wrap: wrap;
     }
-    
+
     .settings-tabs {
         flex-wrap: wrap;
     }
-    
+
     .tab-btn {
         flex: 1;
         min-width: 0;
         padding: var(--spacing-xs) var(--spacing-sm);
         font-size: var(--font-size-sm);
     }
-    
+
     .color-picker-group {
         grid-template-columns: 1fr;
     }
-    
+
     .panel-item {
         flex-direction: column;
         align-items: flex-start;
         gap: var(--spacing-sm);
     }
-    
+
     .panel-actions {
         align-self: stretch;
         justify-content: flex-end;
@@ -709,15 +709,11 @@
     gap: var(--spacing);
 }
 
-/* 移动端：工具栏压缩布局 */
+/* 移动端：工具栏压缩布局 - 搜索功能已移除 */
 @media (max-width: 480px) {
     .datatable-modal-new .toolbar-left .tool-text,
     .datatable-modal-new .toolbar-right .tool-text {
         display: none;
-    }
-
-    .datatable-modal-new .search-input {
-        width: 120px;
     }
 }
 
@@ -1343,7 +1339,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 999;
+    z-index: 9999; /* 🔧 提高优先级，确保显示在最前面 */
     backdrop-filter: blur(8px);
 }
 
@@ -1977,31 +1973,31 @@
     .infobar-modal-new .content-panel {
         padding: 8px 16px; /* 减少顶部和底部padding */
     }
-    
+
     /* 移动端卡片头部布局优化 */
     .infobar-modal-new .card-header {
         flex-wrap: wrap;
         gap: 8px;
     }
-    
+
     .infobar-modal-new .card-info-left {
         min-width: 0;
         flex: 1;
     }
-    
+
     .infobar-modal-new .card-toggle {
         margin-left: 0;
         flex-shrink: 0;
     }
-    
+
     .infobar-modal-new .toggle-switch {
         transform: scale(0.9);
     }
-    
+
     .infobar-modal-new .card-title {
         font-size: 16px;
     }
-    
+
     .infobar-modal-new .card-subtitle {
         font-size: 12px;
     }
@@ -2293,7 +2289,7 @@
         font-weight: 600;
     }
     }
-    
+
     .panel-properties-section .form-control {
         width: 100%;
         padding: 12px;
@@ -2303,7 +2299,7 @@
         background: var(--theme-bg-primary, #ffffff);
         color: var(--theme-text-primary, #212529);
     }
-}
+
 
 /* ========== 新的数据表格界面样式 ========== */
 .datatable-modal-new {
@@ -2316,7 +2312,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 999;
+    z-index: 9999; /* 🔧 提高优先级，确保显示在最前面 */
     backdrop-filter: blur(8px);
 }
 
@@ -2463,40 +2459,7 @@
     border-color: var(--theme-primary-light, #63b3ed);
 }
 
-.datatable-modal-new .search-box {
-    display: flex;
-    align-items: center;
-    background: var(--theme-bg-secondary, #2d3748);
-    border: 1px solid var(--theme-border-color, #4a5568);
-    border-radius: 6px;
-    overflow: hidden;
-}
-
-.datatable-modal-new .search-input {
-    background: transparent;
-    border: none;
-    color: var(--theme-text-primary, #ffffff);
-    padding: 8px 12px;
-    outline: none;
-    width: 200px;
-}
-
-.datatable-modal-new .search-input::placeholder {
-    color: var(--theme-text-secondary, #a0aec0);
-}
-
-.datatable-modal-new .btn-search {
-    background: var(--theme-primary-color, #4299e1);
-    border: none;
-    color: var(--theme-text-primary, #ffffff);
-    padding: 8px 12px;
-    cursor: pointer;
-    transition: background 0.3s ease;
-}
-
-.datatable-modal-new .btn-search:hover {
-    background: var(--theme-primary-hover, #3182ce);
-}
+/* 搜索框样式已移除 - 简化界面 */
 
 /* 分组表格 */
 .datatable-modal-new .grouped-tables,
@@ -2742,35 +2705,7 @@
     font-weight: 600;
 }
 
-.datatable-modal-new .btn-pagination {
-    background: var(--theme-bg-secondary, #2d3748);
-    border: 1px solid var(--theme-border-color, #4a5568);
-    color: var(--theme-text-secondary, #cbd5e0);
-    padding: 6px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.datatable-modal-new .btn-pagination:hover {
-    background: var(--theme-bg-hover, #4a5568);
-    color: var(--theme-text-primary, #ffffff);
-}
-
-.datatable-modal-new .btn-pagination:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.datatable-modal-new .page-info {
-    margin: 0 10px;
-}
-
-.datatable-modal-new .current-page,
-.datatable-modal-new .total-pages {
-    color: var(--theme-primary-color, #4299e1);
-    font-weight: 600;
-}
+/* 分页样式已移除 - 简化界面 */
 
 /* ========== 横向布局表格样式 ========== */
 .datatable-modal-new .horizontal-layout {
@@ -2853,7 +2788,7 @@
         align-items: stretch !important;
         justify-content: stretch !important;
     }
-    
+
     .datatable-modal-new .modal-container,
     .data-table-modal .modal-content {
         width: 100vw !important;
@@ -2879,7 +2814,7 @@
         align-items: stretch;
         gap: 10px;
     }
-    
+
     /* 确保关闭按钮在移动端可见 */
     .data-table-modal .modal-header {
         position: sticky !important;
@@ -2887,10 +2822,10 @@
         z-index: 10 !important;
         flex-shrink: 0 !important;
         padding: 16px !important;
-        background: var(--bg-primary) !important;
-        border-bottom: 1px solid var(--border-color) !important;
+        background: var(--theme-bg-secondary, #1a1a1a) !important;
+        border-bottom: 1px solid var(--theme-border-color, #333) !important;
     }
-    
+
     .data-table-modal .modal-close {
         position: relative !important;
         display: block !important;
@@ -2898,7 +2833,7 @@
         width: 32px !important;
         height: 32px !important;
     }
-    
+
     /* 确保主体内容区域铺满剩余空间并可滚动 */
     .data-table-modal .modal-body {
         flex: 1 !important;
@@ -2907,7 +2842,7 @@
         height: auto !important;
         min-height: 0 !important;
     }
-    
+
     .data-table-modal .grouped-tables {
         flex: 1 !important;
         overflow: auto !important;
@@ -2922,10 +2857,7 @@
         justify-content: center;
     }
 
-    .datatable-modal-new .search-input,
-    .data-table-modal .search-input {
-        width: 150px;
-    }
+    /* 搜索框样式已移除 */
 
     .datatable-modal-new .dark-table,
     .data-table-modal .dark-table {
@@ -2947,7 +2879,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 2000;
+    z-index: 10000; /* 🔧 提高优先级，确保显示在模态框之上 */
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.2s ease, visibility 0.2s ease;
@@ -2985,7 +2917,8 @@
 .cell-action-menu .menu-header {
     padding: 12px 16px;
     border-bottom: 1px solid var(--theme-border-color, #333);
-    background: var(--theme-bg-hover, #2a2a2a);
+    background: var(--theme-bg-secondary, #1a1a1a); /* 🔧 使用主题背景色 */
+    color: var(--theme-text-primary, #ffffff); /* 🔧 使用主题文字色 */
 }
 
 .cell-action-menu .menu-title {
@@ -3037,7 +2970,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 2100;
+    z-index: 10001; /* 🔧 提高优先级，确保显示在操作菜单之上 */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -5627,15 +5560,17 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--theme-border-color, #e0e0e0);
+    padding: 12px 16px; /* 🔧 添加内边距 */
+    background: var(--theme-bg-secondary, #1a1a1a); /* 🔧 使用主题背景色 */
+    border-bottom: 1px solid var(--theme-border-color, #333); /* 🔧 使用深色主题边框 */
+    border-radius: 8px 8px 0 0; /* 🔧 添加圆角 */
 }
 
 .demo-add-panel-menu .menu-header h3 {
     margin: 0;
     font-size: 16px;
     font-weight: 600;
-    color: var(--theme-text-primary, #333333);
+    color: var(--theme-text-primary, #ffffff); /* 🔧 使用深色主题文字色 */
 }
 
 .demo-add-panel-menu .menu-close-btn {
@@ -5883,11 +5818,11 @@
 }
 
 @keyframes slideUp {
-    from { 
+    from {
         opacity: 0;
         transform: translateY(30px);
     }
-    to { 
+    to {
         opacity: 1;
         transform: translateY(0);
     }
@@ -6053,8 +5988,8 @@
 }
 
 /* 🔧 修复：确保包装器清除浮动并与后续消息有间距 */
-.frontend-message-wrapper { 
-    clear: both; 
+.frontend-message-wrapper {
+    clear: both;
     margin-bottom: 16px !important; /* 确保与后续消息有足够间距 */
 }
 
@@ -6227,7 +6162,7 @@
         padding: 20px !important;
         box-sizing: border-box !important;
     }
-    
+
     .panel-popup .popup-content {
         position: relative !important;
         width: 90vw !important;
@@ -6243,12 +6178,12 @@
         top: auto !important;
         left: auto !important;
     }
-    
+
     .panel-popup .popup-header {
         padding: 16px 20px 12px !important;
         flex-wrap: wrap;
     }
-    
+
     .panel-popup .popup-header h3 {
         font-size: 16px !important;
         margin-right: 10px;
@@ -6258,19 +6193,19 @@
         text-overflow: ellipsis;
         white-space: nowrap;
     }
-    
+
     .panel-popup .popup-close-btn {
         width: 28px !important;
         height: 28px !important;
         font-size: 20px !important;
         flex-shrink: 0;
     }
-    
+
     .panel-popup .popup-body {
         padding: 16px 20px !important;
         font-size: 14px;
     }
-    
+
     .panel-popup .data-row {
         flex-direction: row !important;
         justify-content: space-between !important;
@@ -6279,7 +6214,7 @@
         margin-bottom: 8px !important;
         padding: 6px 0 !important;
     }
-    
+
     .panel-popup .data-label {
         font-size: 13px !important;
         margin-bottom: 0 !important;
@@ -6288,7 +6223,7 @@
         max-width: 120px !important;
         color: var(--theme-text-secondary, #888) !important;
     }
-    
+
     .panel-popup .data-value {
         font-size: 14px !important;
         word-break: break-word;
@@ -6419,7 +6354,7 @@
         margin: 2px !important;
         border-radius: 6px !important;
     }
-    
+
     .panel-button.small {
         padding: 3px 6px !important;
         font-size: 10px !important;
@@ -6440,7 +6375,7 @@
         min-height: 32px;
         max-width: 90px;
     }
-    
+
     /* 容器适配 */
     .embedded-panels-container {
         flex-wrap: wrap !important;
@@ -6448,7 +6383,7 @@
         padding: 8px !important;
         justify-content: flex-start !important;
     }
-    
+
     .top-panels, .bottom-panels {
         flex-wrap: wrap !important;
         gap: 4px !important;
@@ -6511,13 +6446,14 @@
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    background: var(--theme-bg-secondary, #f8f9fa);
-    border-bottom: 1px solid var(--theme-border-color, #dee2e6);
+    background: var(--theme-bg-secondary, #1a1a1a); /* 🔧 使用深色主题背景 */
+    border-bottom: 1px solid var(--theme-border-color, #333); /* 🔧 使用深色主题边框 */
+    color: var(--theme-text-primary, #ffffff); /* 🔧 使用主题文字色 */
 }
 
 .menu-header h4 {
     margin: 0;
-    color: var(--theme-text-primary, #212529);
+    color: var(--theme-text-primary, #ffffff); /* 🔧 使用深色主题文字色 */
     font-size: 16px;
     font-weight: 600;
 }
@@ -6699,20 +6635,20 @@
         flex-wrap: wrap;
         gap: 6px;
     }
-    
+
     .add-slot {
         width: 35px;
         height: 35px;
         font-size: 16px;
     }
-    
+
     .embedded-panels {
         flex-direction: row;
         flex-wrap: wrap;
         gap: 6px;
         justify-content: flex-start;
     }
-    
+
     .panel-button {
         width: auto;
         flex: 0 0 auto;
@@ -6720,39 +6656,39 @@
         min-width: 50px;
         max-width: 120px;
     }
-    
+
     .demo-popup-content {
         margin: 20px;
     }
-    
+
     .preview-actions {
         flex-direction: column;
         gap: 8px;
     }
-    
+
     .menu-content {
         min-width: 280px;
         max-width: 90vw;
     }
-    
+
     .popup-content {
         width: 95%;
         max-height: 85vh;
     }
-    
+
     .popup-header {
         padding: 16px 20px;
     }
-    
+
     .popup-body {
         padding: 20px;
     }
-    
+
     .embedded-panels-container {
         padding: 10px;
         gap: 6px;
     }
-    
+
     /* 移动端子项样式优化 */
     .subitem-display {
         padding: 4px 8px !important;
@@ -6764,21 +6700,21 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    
+
     .subitem-display .field-name {
         font-size: 10px !important;
         max-width: 40px;
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    
+
     .subitem-display .field-value {
         font-size: 11px !important;
         max-width: 60px;
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    
+
     /* 前端预览容器移动端优化 */
     .frontend-preview-container .top-embedded-panels,
     .frontend-preview-container .bottom-embedded-panels {
@@ -6964,20 +6900,20 @@
         gap: 8px !important;
         padding: 12px !important;
     }
-    
+
     .message-avatar-section {
         margin-right: 0 !important;
     }
-    
+
     .message-info-section {
         margin-right: 0 !important;
         width: 100% !important;
     }
-    
+
     .message-actions-section {
         width: 100% !important;
     }
-    
+
     .message-action-buttons {
         max-width: 100% !important;
         justify-content: flex-start !important;
@@ -6990,16 +6926,16 @@
         background: rgba(0, 0, 0, 0.3) !important;
         border-bottom-color: rgba(255, 255, 255, 0.05) !important;
     }
-    
+
     .message-avatar-section .reorganized-avatar {
         border-color: rgba(255, 255, 255, 0.1) !important;
     }
-    
+
     .message-action-buttons .reorganized-action {
         background: rgba(0, 0, 0, 0.2) !important;
         border-color: rgba(255, 255, 255, 0.1) !important;
     }
-    
+
     .message-action-buttons .reorganized-action:hover {
         background: rgba(0, 0, 0, 0.3) !important;
         border-color: rgba(255, 255, 255, 0.2) !important;
@@ -7026,13 +6962,13 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
 }
 
-.message-actions-menu.left { 
-    right: 100%; 
-    left: auto; 
+.message-actions-menu.left {
+    right: 100%;
+    left: auto;
 }
 
-.message-actions-menu.hidden { 
-    display: none !important; 
+.message-actions-menu.hidden {
+    display: none !important;
 }
 
 .message-actions-menu .menu-icon-item {
@@ -7066,3 +7002,511 @@
 /* 🔧 删除：Swipes计数器相关样式 - 用户不需要分页按钮功能 */
 /* 原样式包括：.message-swipes-counter, .swipe-nav-button, .reorganized-counter */
 /* 删除原因：用户明确表示不需要前端交互界面内的分页按钮部分内容 */
+
+/* ========== 字段规则对话框样式 ========== */
+
+.field-rule-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10002; /* 🔧 提高优先级，确保显示在所有对话框之上 */
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.field-rule-dialog.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.field-rule-dialog .dialog-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+}
+
+.field-rule-dialog .dialog-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    background: var(--theme-bg-primary, #000000);
+    border: 1px solid var(--theme-border-color, #333);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.field-rule-dialog .dialog-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--theme-border-color, #333);
+    background: var(--theme-bg-secondary, #1a1a1a);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.field-rule-dialog .dialog-header h3 {
+    margin: 0;
+    color: var(--theme-text-primary, #ffffff);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.field-rule-dialog .dialog-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: var(--theme-text-secondary, #cccccc);
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.field-rule-dialog .dialog-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.field-rule-dialog .dialog-body {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.field-rule-dialog .field-info {
+    background: var(--theme-bg-secondary, #1a1a1a);
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.field-rule-dialog .info-row {
+    display: flex;
+    margin-bottom: 8px;
+}
+
+.field-rule-dialog .info-row:last-child {
+    margin-bottom: 0;
+}
+
+.field-rule-dialog .info-label {
+    font-weight: 600;
+    color: var(--theme-text-secondary, #cccccc);
+    min-width: 80px;
+}
+
+.field-rule-dialog .info-value {
+    color: var(--theme-text-primary, #ffffff);
+    font-family: monospace;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.field-rule-dialog .template-section {
+    margin-bottom: 25px;
+}
+
+.field-rule-dialog .template-section h4 {
+    margin: 0 0 15px 0;
+    color: var(--theme-text-primary, #ffffff);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.field-rule-dialog .template-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.field-rule-dialog .template-btn {
+    padding: 8px 16px;
+    background: var(--theme-bg-secondary, #1a1a1a);
+    border: 1px solid var(--theme-border-color, #333);
+    border-radius: 6px;
+    color: var(--theme-text-primary, #ffffff);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 14px;
+}
+
+.field-rule-dialog .template-btn:hover {
+    background: var(--theme-bg-hover, #2a2a2a);
+    transform: translateY(-1px);
+}
+
+.field-rule-dialog .template-btn.custom-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-color: transparent;
+}
+
+.field-rule-dialog .form-section {
+    margin-bottom: 25px;
+    padding: 20px;
+    background: var(--theme-bg-secondary, #1a1a1a);
+    border-radius: 8px;
+    border: 1px solid var(--theme-border-color, #333);
+}
+
+.field-rule-dialog .form-section h4 {
+    margin: 0 0 15px 0;
+    color: var(--theme-text-primary, #ffffff);
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.field-rule-dialog .form-group {
+    margin-bottom: 15px;
+}
+
+.field-rule-dialog .form-group:last-child {
+    margin-bottom: 0;
+}
+
+.field-rule-dialog .form-group label {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--theme-text-secondary, #cccccc);
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.field-rule-dialog .form-control {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--theme-bg-primary, #000000);
+    border: 1px solid var(--theme-border-color, #333);
+    border-radius: 6px;
+    color: var(--theme-text-primary, #ffffff);
+    font-size: 14px;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+.field-rule-dialog .form-control:focus {
+    outline: none;
+    border-color: var(--theme-accent-color, #007acc);
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+.field-rule-dialog .form-control::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.field-rule-dialog textarea.form-control {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.field-rule-dialog .example-row,
+.field-rule-dialog .constraint-row,
+.field-rule-dialog .dynamic-rule-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: flex-start;
+}
+
+.field-rule-dialog .dynamic-rule-row {
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.field-rule-dialog .rule-inputs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.field-rule-dialog .rule-examples {
+    width: 100%;
+}
+
+.field-rule-dialog .empty-message {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.6);
+    font-style: italic;
+    padding: 20px;
+}
+
+.field-rule-dialog .dialog-footer {
+    padding: 20px;
+    border-top: 1px solid var(--theme-border-color, #333);
+    background: var(--theme-bg-secondary, #1a1a1a);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.field-rule-dialog .btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.field-rule-dialog .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.field-rule-dialog .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.field-rule-dialog .btn-secondary {
+    background: var(--theme-bg-primary, #000000);
+    color: var(--theme-text-primary, #ffffff);
+    border: 1px solid var(--theme-border-color, #333);
+}
+
+.field-rule-dialog .btn-secondary:hover {
+    background: var(--theme-bg-hover, #2a2a2a);
+}
+
+.field-rule-dialog .btn-danger {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+    color: white;
+}
+
+.field-rule-dialog .btn-danger:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+}
+
+.field-rule-dialog .btn-small {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    /* 🔧 字段规则对话框移动端优化 - 参考表格编辑对话框 */
+    .field-rule-dialog {
+        align-items: flex-start !important;
+        padding-top: 10vh !important; /* 向下移动10%，为顶部留出空间 */
+        justify-content: center !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    .field-rule-dialog .dialog-content {
+        width: 100% !important;
+        max-width: none !important;
+        max-height: 85vh !important; /* 限制最大高度，确保不超出屏幕 */
+        margin: 0 !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+    }
+
+    .field-rule-dialog .template-buttons {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .field-rule-dialog .example-row,
+    .field-rule-dialog .constraint-row {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .field-rule-dialog .rule-inputs {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    /* 🔧 移动端字段规则对话框内容优化 */
+    .field-rule-dialog .dialog-header {
+        padding: 16px !important;
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 10 !important;
+        background: var(--theme-bg-secondary, #1a1a1a) !important;
+        border-bottom: 1px solid var(--theme-border-color, #333) !important;
+    }
+
+    .field-rule-dialog .dialog-body {
+        padding: 16px !important;
+        overflow-y: auto !important;
+        max-height: calc(85vh - 120px) !important; /* 减去头部和底部的高度 */
+    }
+
+    .field-rule-dialog .dialog-footer {
+        padding: 16px !important;
+        position: sticky !important;
+        bottom: 0 !important;
+        z-index: 10 !important;
+        background: var(--theme-bg-secondary, #1a1a1a) !important;
+        border-top: 1px solid var(--theme-border-color, #333) !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+
+    .field-rule-dialog .dialog-footer button {
+        width: 100% !important;
+        margin: 0 !important;
+    }
+
+    /* 🔧 字段规则表单元素移动端优化 */
+    .field-rule-dialog input,
+    .field-rule-dialog textarea,
+    .field-rule-dialog select {
+        font-size: 16px !important; /* 防止iOS缩放 */
+        padding: 12px !important;
+        border-radius: 8px !important;
+    }
+
+    .field-rule-dialog textarea {
+        min-height: 100px !important;
+        resize: vertical !important;
+    }
+}
+
+/* 追加：字段规则对话框移动端更强适配（覆盖前面的基础适配） */
+@media (max-width: 768px) {
+    /* 让内容容器改为正常流布局，避免50%居中导致“只显示一半” */
+    .field-rule-dialog .dialog-content {
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        transform: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+        height: auto !important;
+        max-height: 85vh !important; /* 回退值 */
+        max-height: 90dvh !important; /* 支持dvh时更准确 */
+        width: calc(100% - 20px) !important;
+        margin: 0 auto !important;
+    }
+
+    /* 主体滚动区域：按flex分配剩余空间 */
+    .field-rule-dialog .dialog-body {
+        flex: 1 1 auto !important;
+        min-height: 0 !important; /* 修复子元素overflow在flex容器内不收缩的问题 */
+        overflow-y: auto !important;
+        max-height: none !important; /* 由父容器控制最大高度 */
+    }
+
+    /* 页脚按钮行：横排、可换行，更紧凑 */
+    .field-rule-dialog .dialog-footer {
+        position: sticky !important;
+        bottom: 0 !important;
+        display: flex !important;
+        flex-direction: row !important; /* 从列改为行，避免超大按钮 */
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        align-items: center !important;
+        justify-content: flex-end !important;
+    }
+
+    .field-rule-dialog .dialog-footer button,
+    .field-rule-dialog .dialog-footer .btn {
+        width: auto !important;
+        flex: 1 1 calc(50% - 8px) !important; /* 两列并排 */
+        max-width: none !important;
+        padding: 10px 12px !important; /* 更紧凑 */
+        font-size: 14px !important;
+    }
+
+    /* 模板按钮：两列并排，尺寸更小 */
+    .field-rule-dialog .template-buttons {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+    }
+    .field-rule-dialog .template-buttons .template-btn,
+    .field-rule-dialog .template-btn {
+        flex: 1 1 calc(50% - 8px) !important;
+        padding: 8px 12px !important;
+        font-size: 14px !important;
+    }
+
+    /* 通用按钮尺寸收紧 */
+    .field-rule-dialog .btn {
+        padding: 10px 12px !important;
+        font-size: 14px !important;
+        line-height: 1.2 !important;
+    }
+}
+
+
+
+/* 追加：移动端按钮/表单尺寸统一收敛 */
+@media (max-width: 768px) {
+    .field-rule-dialog .btn,
+    .field-rule-dialog button,
+    .field-rule-dialog input[type="button"],
+    .field-rule-dialog input[type="submit"] {
+        padding: 10px 12px !important;
+        font-size: 14px !important;
+        border-radius: 8px !important;
+    }
+
+    .field-rule-dialog .form-control,
+    .field-rule-dialog input,
+    .field-rule-dialog select,
+    .field-rule-dialog textarea {
+        padding: 10px 12px !important;
+        font-size: 14px !important;
+    }
+
+    .field-rule-dialog .btn-primary,
+    .field-rule-dialog .btn-secondary,
+    .field-rule-dialog .btn-danger {
+        min-height: 36px !important;
+    }
+}
+
+
+/* 追加：字段规则内表格在移动端的易读性 */
+@media (max-width: 768px) {
+    .field-rule-dialog table {
+        width: 100% !important;
+        table-layout: fixed !important;
+        border-collapse: collapse !important;
+    }
+    .field-rule-dialog th,
+    .field-rule-dialog td {
+        padding: 8px !important;
+        font-size: 13px !important;
+        word-break: break-word !important;
+        white-space: normal !important;
+    }
+    .field-rule-dialog .rule-inputs > * {
+        min-width: 0 !important;
+    }
+}
