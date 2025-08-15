@@ -548,7 +548,7 @@ ${messageContent}
 
             // 触发总结保存事件
             if (this.eventSystem) {
-                this.eventSystem.emit('summary:saved', {
+                this.eventSystem.emit('summary:created', {
                     summaryId: summaryId,
                     summaryData: summaryRecord,
                     chatId: currentChatId,

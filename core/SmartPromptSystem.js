@@ -11,12 +11,13 @@
  */
 
 export class SmartPromptSystem {
-    constructor(configManager, eventSystem, dataCore) {
+    constructor(configManager, eventSystem, dataCore, fieldRuleManager = null) {
         console.log('[SmartPromptSystem] 🚀 智能提示词系统初始化开始');
-        
+
         this.configManager = configManager;
         this.eventSystem = eventSystem;
         this.dataCore = dataCore;
+        this.fieldRuleManager = fieldRuleManager;
         
         // SillyTavern上下文
         this.context = null;
@@ -417,6 +418,9 @@ tasks: creation="新任务创建", editing="任务编辑中"
             // 生成面板数据模板
             const panelDataTemplate = this.generatePanelDataTemplate(enabledPanels);
 
+            // 🔧 新增：生成字段规则信息
+            const fieldRulesInfo = await this.generateFieldRulesInfo(enabledPanels);
+
             // 🔧 新增：生成当前数据对照信息
             const currentDataInfo = this.generateCurrentDataInfo(currentPanelData, updateStrategy);
 
@@ -428,6 +432,9 @@ tasks: creation="新任务创建", editing="任务编辑中"
 
             // 🔧 新增：添加当前数据对照信息
             prompt = this.addCurrentDataInfo(prompt, currentDataInfo);
+
+            // 🔧 新增：添加字段规则信息
+            prompt = this.addFieldRulesInfo(prompt, fieldRulesInfo);
 
             // 如果有缺失数据，添加增量补充指令
             if (missingDataFields.length > 0) {
@@ -2072,6 +2079,227 @@ aiThinkProcess标签（独立输出）
     }
 
     /**
+     * 🔧 新增：生成字段规则信息
+     */
+    async generateFieldRulesInfo(enabledPanels) {
+        try {
+            if (!this.fieldRuleManager) {
+                console.log('[SmartPromptSystem] ℹ️ 字段规则管理器不可用，跳过字段规则生成');
+                return '';
+            }
+
+            console.log('[SmartPromptSystem] 📋 生成字段规则信息...');
+            console.log('[SmartPromptSystem] 🔍 启用的面板数量:', enabledPanels.length);
+
+            const fieldRulesInfo = [];
+
+            for (const panel of enabledPanels) {
+                console.log(`[SmartPromptSystem] 🔍 处理面板: ${panel.id}, 子项数量: ${panel.items?.length || 0}`);
+                const panelRules = [];
+
+                // 获取面板中所有启用的字段 - 修复：使用subItems而不是items
+                const allFields = panel.items || panel.subItems || [];
+                const enabledFields = allFields.filter(item => item.enabled) || [];
+                console.log(`[SmartPromptSystem] 🔍 面板 ${panel.id} 总字段数量: ${allFields.length}, 启用的字段数量: ${enabledFields.length}`);
+
+                for (const field of enabledFields) {
+                    // 🔧 调试：记录字段信息
+                    console.log(`[SmartPromptSystem] 🔍 检查字段规则: 面板=${panel.id}, 字段ID=${field.id}, 字段名=${field.name}`);
+
+                    // 获取字段规则 - 先尝试用字段ID
+                    let fieldRule = this.fieldRuleManager.getFieldRule(panel.id, field.id);
+                    let actualFieldKey = field.id;
+
+                    // 🔧 如果用字段ID找不到，尝试用字段名
+                    if (!fieldRule && field.name && field.name !== field.id) {
+                        console.log(`[SmartPromptSystem] 🔄 用字段ID未找到规则，尝试用字段名: ${field.name}`);
+                        fieldRule = this.fieldRuleManager.getFieldRule(panel.id, field.name);
+                        if (fieldRule) {
+                            actualFieldKey = field.name;
+                        }
+                    }
+
+                    // 🔧 如果还是找不到，尝试通过字段映射查找中文字段名
+                    if (!fieldRule && window.SillyTavernInfobar?.infoBarSettings) {
+                        try {
+                            const completeMapping = window.SillyTavernInfobar.infoBarSettings.getCompleteDisplayNameMapping();
+                            const panelMapping = completeMapping[panel.id];
+
+                            // 使用字段名而不是字段ID进行映射查找
+                            const fieldKey = field.id || field.name;
+                            if (panelMapping && panelMapping[fieldKey]) {
+                                const chineseFieldName = panelMapping[fieldKey];
+                                console.log(`[SmartPromptSystem] 🔄 尝试用中文字段名查找规则: ${fieldKey} -> ${chineseFieldName}`);
+                                fieldRule = this.fieldRuleManager.getFieldRule(panel.id, chineseFieldName);
+                                if (fieldRule) {
+                                    actualFieldKey = chineseFieldName;
+                                    console.log(`[SmartPromptSystem] ✅ 通过字段映射找到规则: ${panel.id}.${chineseFieldName}`);
+                                }
+                            } else {
+                                console.log(`[SmartPromptSystem] 🔍 字段映射中没有找到: ${panel.id}.${fieldKey}`);
+                            }
+                        } catch (error) {
+                            console.warn(`[SmartPromptSystem] ⚠️ 字段映射查找失败:`, error);
+                        }
+                    }
+
+                    if (fieldRule) {
+                        console.log(`[SmartPromptSystem] ✅ 找到字段规则: ${panel.id}.${actualFieldKey}`);
+                        const ruleInfo = this.formatFieldRuleInfo(panel.id, actualFieldKey, fieldRule);
+                        if (ruleInfo) {
+                            panelRules.push(ruleInfo);
+                        }
+                    } else {
+                        console.log(`[SmartPromptSystem] ❌ 未找到字段规则: ${panel.id}.${field.id}`);
+                    }
+                }
+
+                if (panelRules.length > 0) {
+                    fieldRulesInfo.push({
+                        panelName: panel.name || panel.id,
+                        panelId: panel.id,
+                        rules: panelRules
+                    });
+                }
+            }
+
+            if (fieldRulesInfo.length === 0) {
+                console.log('[SmartPromptSystem] ℹ️ 没有找到任何字段规则，跳过字段规则生成');
+                return '';
+            }
+
+            // 格式化为提示词文本
+            let rulesText = '\n\n## 字段生成规则\n\n';
+            rulesText += '请严格按照以下字段规则生成内容：\n\n';
+
+            for (const panelInfo of fieldRulesInfo) {
+                rulesText += `### ${panelInfo.panelName} 面板规则\n\n`;
+
+                for (const rule of panelInfo.rules) {
+                    rulesText += `**${rule.fieldName}**：\n`;
+
+                    if (rule.description) {
+                        rulesText += `- 规则描述：${rule.description}\n`;
+                    }
+
+                    if (rule.format) {
+                        rulesText += `- 输出格式：${rule.format}\n`;
+                    }
+
+                    if (rule.examples && rule.examples.length > 0) {
+                        rulesText += `- 参考示例：\n`;
+                        for (const example of rule.examples) {
+                            rulesText += `  * ${example.value}${example.description ? ` - ${example.description}` : ''}\n`;
+                        }
+                    }
+
+                    if (rule.constraints && rule.constraints.length > 0) {
+                        rulesText += `- 约束条件：${rule.constraints.join('、')}\n`;
+                    }
+
+                    if (rule.dynamicRules && rule.dynamicRules.length > 0) {
+                        rulesText += `- 动态规则：\n`;
+                        for (const dynamicRule of rule.dynamicRules) {
+                            rulesText += `  * ${dynamicRule.condition} → ${dynamicRule.action}\n`;
+                            if (dynamicRule.examples && dynamicRule.examples.length > 0) {
+                                rulesText += `    示例：${dynamicRule.examples.join('、')}\n`;
+                            }
+                        }
+                    }
+
+                    rulesText += '\n';
+                }
+            }
+
+            console.log('[SmartPromptSystem] ✅ 字段规则信息生成完成，包含', fieldRulesInfo.length, '个面板的规则');
+            return rulesText;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 生成字段规则信息失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 🔧 新增：格式化字段规则信息
+     */
+    formatFieldRuleInfo(panelId, fieldId, fieldRule) {
+        try {
+            const ruleInfo = {
+                fieldName: fieldId,
+                panelId: panelId
+            };
+
+            // 添加规则描述
+            if (fieldRule.rules?.description) {
+                ruleInfo.description = fieldRule.rules.description;
+            }
+
+            // 添加输出格式
+            if (fieldRule.rules?.format) {
+                ruleInfo.format = fieldRule.rules.format;
+            }
+
+            // 添加示例
+            if (fieldRule.examples && Array.isArray(fieldRule.examples)) {
+                ruleInfo.examples = fieldRule.examples.filter(example =>
+                    example && example.value !== undefined
+                );
+            }
+
+            // 添加约束条件
+            if (fieldRule.rules?.constraints && Array.isArray(fieldRule.rules.constraints)) {
+                ruleInfo.constraints = fieldRule.rules.constraints.filter(constraint =>
+                    constraint && typeof constraint === 'string'
+                );
+            }
+
+            // 添加动态规则
+            if (fieldRule.dynamicRules && Array.isArray(fieldRule.dynamicRules)) {
+                ruleInfo.dynamicRules = fieldRule.dynamicRules.filter(rule =>
+                    rule && rule.condition && rule.action
+                );
+            }
+
+            return ruleInfo;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 格式化字段规则信息失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🔧 新增：添加字段规则信息到提示词
+     */
+    addFieldRulesInfo(prompt, fieldRulesInfo) {
+        try {
+            if (!fieldRulesInfo || fieldRulesInfo.trim() === '') {
+                return prompt;
+            }
+
+            // 在提示词中查找合适的位置插入字段规则
+            // 通常在面板数据模板之后，输出要求之前
+            const insertMarker = '## 输出要求';
+            const insertIndex = prompt.indexOf(insertMarker);
+
+            if (insertIndex !== -1) {
+                // 在输出要求之前插入字段规则
+                const beforeInsert = prompt.substring(0, insertIndex);
+                const afterInsert = prompt.substring(insertIndex);
+                return beforeInsert + fieldRulesInfo + '\n' + afterInsert;
+            } else {
+                // 如果找不到标记，就添加到末尾
+                return prompt + fieldRulesInfo;
+            }
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 添加字段规则信息失败:', error);
+            return prompt;
+        }
+    }
+
+    /**
      * 获取系统状态
      */
     getStatus() {
@@ -2080,7 +2308,8 @@ aiThinkProcess标签（独立输出）
             errorCount: this.errorCount,
             injectionActive: this.injectionActive,
             lastInjectionTime: this.lastInjectionTime,
-            updateStrategy: this.updateStrategy
+            updateStrategy: this.updateStrategy,
+            hasFieldRuleManager: !!this.fieldRuleManager
         };
     }
 }

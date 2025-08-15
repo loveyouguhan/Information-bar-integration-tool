@@ -187,27 +187,47 @@ export class DataSnapshotManager {
 
             console.log('[DataSnapshotManager] 🔄 开始数据回溯:', chatId, '目标楼层:', targetFloor);
 
-            // 查找目标快照
-            const targetSnapshot = await this.findSnapshot(chatId, targetFloor);
-            
+            // 🔧 改进：智能查找目标快照
+            let targetSnapshot = await this.findSnapshot(chatId, targetFloor);
+            let actualTargetFloor = targetFloor;
+
             if (!targetSnapshot) {
                 console.warn('[DataSnapshotManager] ⚠️ 未找到目标楼层的快照:', targetFloor);
-                return false;
+
+                // 🔧 智能回退：查找最近的有效快照
+                const fallbackResult = await this.findFallbackSnapshot(chatId, targetFloor);
+                if (fallbackResult) {
+                    targetSnapshot = fallbackResult.snapshot;
+                    actualTargetFloor = fallbackResult.floor;
+                    console.log('[DataSnapshotManager] 🔄 使用回退快照:', actualTargetFloor);
+                } else {
+                    console.error('[DataSnapshotManager] ❌ 无法找到任何有效快照');
+                    return false;
+                }
             }
 
-            console.log('[DataSnapshotManager] 🎯 找到目标快照:', targetSnapshot.id);
+            console.log('[DataSnapshotManager] 🎯 找到目标快照:', targetSnapshot.id, '楼层:', actualTargetFloor);
 
             // 验证快照数据完整性
             if (!this.validateSnapshotData(targetSnapshot)) {
                 console.error('[DataSnapshotManager] ❌ 快照数据验证失败');
-                return false;
+
+                // 🔧 尝试查找其他有效快照
+                const alternativeResult = await this.findFallbackSnapshot(chatId, actualTargetFloor - 1);
+                if (alternativeResult && this.validateSnapshotData(alternativeResult.snapshot)) {
+                    console.log('[DataSnapshotManager] 🔄 使用备选快照:', alternativeResult.floor);
+                    targetSnapshot = alternativeResult.snapshot;
+                    actualTargetFloor = alternativeResult.floor;
+                } else {
+                    return false;
+                }
             }
 
             // 恢复数据核心状态
             await this.restoreDataCore(chatId, targetSnapshot.data);
 
             // 更新当前楼层跟踪
-            this.currentFloors.set(chatId, targetFloor);
+            this.currentFloors.set(chatId, actualTargetFloor);
 
             console.log('[DataSnapshotManager] ✅ 数据回溯完成');
             console.log('[DataSnapshotManager] 📊 已恢复', Object.keys(targetSnapshot.data.panels || {}).length, '个面板数据');
@@ -216,7 +236,8 @@ export class DataSnapshotManager {
             if (this.eventSystem) {
                 this.eventSystem.emit('snapshot:rollback:completed', {
                     chatId,
-                    targetFloor,
+                    targetFloor: actualTargetFloor,
+                    originalTargetFloor: targetFloor,
                     snapshotId: targetSnapshot.id,
                     timestamp: Date.now()
                 });
@@ -416,6 +437,62 @@ export class DataSnapshotManager {
     }
 
     /**
+     * 🔧 查找回退快照
+     * @param {string} chatId - 聊天ID
+     * @param {number} targetFloor - 目标楼层
+     * @returns {Object|null} 回退快照结果 {snapshot, floor}
+     */
+    async findFallbackSnapshot(chatId, targetFloor) {
+        try {
+            console.log('[DataSnapshotManager] 🔍 查找回退快照，目标楼层:', targetFloor);
+
+            if (!this.snapshots.has(chatId)) {
+                console.log('[DataSnapshotManager] ⚠️ 该聊天没有任何快照');
+                return null;
+            }
+
+            const chatSnapshots = this.snapshots.get(chatId);
+            if (chatSnapshots.length === 0) {
+                console.log('[DataSnapshotManager] ⚠️ 快照列表为空');
+                return null;
+            }
+
+            // 🔧 策略1: 查找小于等于目标楼层的最大楼层快照
+            const validSnapshots = chatSnapshots
+                .filter(snapshot => snapshot.messageFloor <= targetFloor)
+                .sort((a, b) => b.messageFloor - a.messageFloor); // 降序排列
+
+            if (validSnapshots.length > 0) {
+                const bestSnapshot = validSnapshots[0];
+                console.log('[DataSnapshotManager] ✅ 找到最佳回退快照:', bestSnapshot.messageFloor);
+                return {
+                    snapshot: bestSnapshot,
+                    floor: bestSnapshot.messageFloor
+                };
+            }
+
+            // 🔧 策略2: 如果没有找到合适的快照，使用最早的快照
+            const earliestSnapshot = chatSnapshots
+                .sort((a, b) => a.messageFloor - b.messageFloor)[0];
+
+            if (earliestSnapshot) {
+                console.log('[DataSnapshotManager] ⚠️ 使用最早的快照作为回退:', earliestSnapshot.messageFloor);
+                return {
+                    snapshot: earliestSnapshot,
+                    floor: earliestSnapshot.messageFloor
+                };
+            }
+
+            console.log('[DataSnapshotManager] ❌ 无法找到任何回退快照');
+            return null;
+
+        } catch (error) {
+            console.error('[DataSnapshotManager] ❌ 查找回退快照失败:', error);
+            return null;
+        }
+    }
+
+    /**
      * 清理超出限制的快照
      * @param {string} chatId - 聊天ID
      */
@@ -535,15 +612,30 @@ export class DataSnapshotManager {
 
             // 获取当前消息楼层
             const currentFloor = this.getCurrentMessageFloor(chatId);
-            
+
+            // 🔧 改进：确保为用户消息也创建快照
+            console.log('[DataSnapshotManager] 📸 为楼层创建快照:', currentFloor);
+
             // 🔧 避免同楼层重复快照：先移除同楼层历史
             await this.removeSnapshotsForFloor(chatId, currentFloor);
-            
+
             // 创建快照
             await this.createSnapshot(chatId, currentFloor, {
                 source: 'data_stored',
                 trigger: 'auto'
             });
+
+            // 🔧 额外保护：如果当前是楼层0且没有快照，创建一个基础快照
+            if (currentFloor === 0) {
+                const existingSnapshot = await this.findSnapshot(chatId, 0);
+                if (!existingSnapshot) {
+                    console.log('[DataSnapshotManager] 🛡️ 为楼层0创建保护性快照');
+                    await this.createSnapshot(chatId, 0, {
+                        source: 'protection',
+                        trigger: 'auto'
+                    });
+                }
+            }
 
         } catch (error) {
             console.error('[DataSnapshotManager] ❌ 处理数据存储事件失败:', error);
@@ -589,22 +681,28 @@ export class DataSnapshotManager {
                 return;
             }
 
-            // 计算回溯目标楼层
+            // 🔧 改进：获取删除前的楼层信息
             const currentFloor = this.getCurrentMessageFloor(chatId);
-            const targetFloor = Math.max(0, currentFloor - 1); // 回溯到上一层
+            console.log('[DataSnapshotManager] 📊 当前楼层:', currentFloor);
+
+            // 🔧 改进：智能计算回溯目标楼层
+            let targetFloor = await this.findBestRollbackTarget(chatId, currentFloor);
+
+            console.log('[DataSnapshotManager] 🎯 智能回溯目标: 从楼层', currentFloor, '回溯到楼层', targetFloor);
 
             // 🔧 先清理被删消息对应楼层的快照，避免残留
-            await this.removeSnapshotsForFloor(chatId, currentFloor);
-
-            console.log('[DataSnapshotManager] 🎯 回溯目标: 从楼层', currentFloor, '回溯到楼层', targetFloor);
+            await this.removeSnapshotsForFloor(chatId, currentFloor + 1); // 清理可能的下一楼层快照
 
             // 执行回溯
             const success = await this.rollbackToSnapshot(chatId, targetFloor);
-            
+
             if (success) {
                 console.log('[DataSnapshotManager] ✅ 消息删除回溯成功');
             } else {
                 console.warn('[DataSnapshotManager] ⚠️ 消息删除回溯失败');
+
+                // 🔧 回溯失败时的降级处理
+                await this.handleRollbackFailure(chatId, currentFloor);
             }
 
         } catch (error) {
@@ -678,6 +776,114 @@ export class DataSnapshotManager {
         } catch (error) {
             console.error('[DataSnapshotManager] ❌ 获取当前消息楼层失败:', error);
             return 0;
+        }
+    }
+
+    /**
+     * 🔧 智能查找最佳回溯目标楼层
+     * @param {string} chatId - 聊天ID
+     * @param {number} currentFloor - 当前楼层
+     * @returns {number} 最佳回溯目标楼层
+     */
+    async findBestRollbackTarget(chatId, currentFloor) {
+        try {
+            console.log('[DataSnapshotManager] 🔍 查找最佳回溯目标，当前楼层:', currentFloor);
+
+            // 🔧 策略1: 优先尝试回溯到上一层
+            let targetFloor = Math.max(0, currentFloor - 1);
+
+            // 检查目标楼层是否有快照
+            let targetSnapshot = await this.findSnapshot(chatId, targetFloor);
+            if (targetSnapshot) {
+                console.log('[DataSnapshotManager] ✅ 找到上一层快照:', targetFloor);
+                return targetFloor;
+            }
+
+            // 🔧 策略2: 如果上一层没有快照，向前查找最近的有效快照
+            console.log('[DataSnapshotManager] 🔍 上一层无快照，查找最近的有效快照...');
+
+            if (!this.snapshots.has(chatId)) {
+                console.log('[DataSnapshotManager] ⚠️ 该聊天没有任何快照，回溯到楼层0');
+                return 0;
+            }
+
+            const chatSnapshots = this.snapshots.get(chatId);
+            if (chatSnapshots.length === 0) {
+                console.log('[DataSnapshotManager] ⚠️ 快照列表为空，回溯到楼层0');
+                return 0;
+            }
+
+            // 查找小于等于目标楼层的最大楼层快照
+            const validSnapshots = chatSnapshots
+                .filter(snapshot => snapshot.messageFloor <= targetFloor)
+                .sort((a, b) => b.messageFloor - a.messageFloor); // 降序排列
+
+            if (validSnapshots.length > 0) {
+                const bestSnapshot = validSnapshots[0];
+                console.log('[DataSnapshotManager] ✅ 找到最佳回溯目标:', bestSnapshot.messageFloor);
+                return bestSnapshot.messageFloor;
+            }
+
+            // 🔧 策略3: 如果没有找到合适的快照，回溯到最早的快照
+            const earliestSnapshot = chatSnapshots
+                .sort((a, b) => a.messageFloor - b.messageFloor)[0];
+
+            if (earliestSnapshot) {
+                console.log('[DataSnapshotManager] ⚠️ 使用最早的快照作为回溯目标:', earliestSnapshot.messageFloor);
+                return earliestSnapshot.messageFloor;
+            }
+
+            // 🔧 策略4: 最后的降级方案
+            console.log('[DataSnapshotManager] ⚠️ 无法找到任何有效快照，回溯到楼层0');
+            return 0;
+
+        } catch (error) {
+            console.error('[DataSnapshotManager] ❌ 查找最佳回溯目标失败:', error);
+            return Math.max(0, currentFloor - 1);
+        }
+    }
+
+    /**
+     * 🔧 处理回溯失败的降级方案
+     * @param {string} chatId - 聊天ID
+     * @param {number} currentFloor - 当前楼层
+     */
+    async handleRollbackFailure(chatId, currentFloor) {
+        try {
+            console.log('[DataSnapshotManager] 🚨 回溯失败，执行降级处理...');
+
+            // 🔧 降级策略1: 清空当前数据核心状态
+            console.log('[DataSnapshotManager] 🧹 清空数据核心状态');
+            await this.clearDataCore(chatId);
+
+            // 🔧 降级策略2: 创建一个基础快照作为新的起点
+            console.log('[DataSnapshotManager] 📸 创建基础快照作为新起点');
+            await this.createSnapshot(chatId, Math.max(0, currentFloor - 1), {
+                source: 'rollback_failure',
+                trigger: 'fallback'
+            });
+
+            console.log('[DataSnapshotManager] ✅ 降级处理完成');
+
+        } catch (error) {
+            console.error('[DataSnapshotManager] ❌ 降级处理失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 清空数据核心状态
+     * @param {string} chatId - 聊天ID
+     */
+    async clearDataCore(chatId) {
+        try {
+            if (this.dataCore && typeof this.dataCore.clearChatData === 'function') {
+                await this.dataCore.clearChatData(chatId);
+                console.log('[DataSnapshotManager] ✅ 数据核心状态已清空');
+            } else {
+                console.warn('[DataSnapshotManager] ⚠️ 数据核心不支持清空操作');
+            }
+        } catch (error) {
+            console.error('[DataSnapshotManager] ❌ 清空数据核心失败:', error);
         }
     }
 

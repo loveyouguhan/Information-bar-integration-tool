@@ -1686,6 +1686,84 @@ export class UnifiedDataCore {
     }
 
     /**
+     * 🆕 获取所有记忆数据（用于STScript同步）
+     * @returns {Object} 所有面板的记忆数据
+     */
+    async getMemoryData() {
+        try {
+            const chatId = this.getCurrentChatId();
+            if (!chatId) return {};
+
+            // 获取所有聊天数据
+            const allChatData = await this.getAllData('chat');
+            const panelsData = {};
+
+            // 查找所有面板数据 - 支持两种存储格式
+            // 格式1: panels.chatId.panelName (旧格式)
+            // 格式2: panels.characterId.panelName (新格式，从日志中发现)
+
+            const chatPrefix = `panels.${chatId}.`;
+
+            // 尝试获取当前角色ID - 支持多种方式
+            let characterId = null;
+            try {
+                // 方式1: 直接访问全局变量
+                if (typeof window !== 'undefined' && window.this_chid !== undefined) {
+                    characterId = window.this_chid;
+                }
+                // 方式2: 从数据键名中推断角色ID
+                else {
+                    // 查找 panels.数字.xxx 格式的键名来推断角色ID
+                    for (const key of Object.keys(allChatData)) {
+                        const match = key.match(/^panels\.(\d+)\./);
+                        if (match) {
+                            characterId = match[1];
+                            break;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[UnifiedDataCore] 无法获取角色ID:', e.message);
+            }
+
+            const characterPrefix = characterId !== null ? `panels.${characterId}.` : null;
+
+            for (const [key, value] of Object.entries(allChatData)) {
+                let panelName = null;
+
+                // 检查聊天ID格式
+                if (key.startsWith(chatPrefix)) {
+                    panelName = key.substring(chatPrefix.length);
+                }
+                // 检查角色ID格式
+                else if (characterPrefix && key.startsWith(characterPrefix)) {
+                    panelName = key.substring(characterPrefix.length);
+                }
+
+                if (panelName && !panelName.includes('.')) { // 确保是顶级面板，不是子字段
+                    panelsData[panelName] = value;
+                }
+            }
+
+            console.log('[UnifiedDataCore] 📊 获取记忆数据:', Object.keys(panelsData));
+            console.log('[UnifiedDataCore] 🔍 使用的前缀:', { chatPrefix, characterPrefix });
+            return panelsData;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取记忆数据失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 🆕 获取所有面板数据（别名方法，兼容性）
+     * @returns {Object} 所有面板数据
+     */
+    async getAllPanelData() {
+        return await this.getMemoryData();
+    }
+
+    /**
      * 🆕 获取NPC数据
      * @param {string} npcId - NPC ID
      * @returns {Object} NPC数据
