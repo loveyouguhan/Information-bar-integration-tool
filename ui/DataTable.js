@@ -30,11 +30,11 @@ export class DataTable {
         this.filteredData = [];
         this.columns = [];
 
-        // 分页设置
+        // 分页设置 - 已移除分页功能，保留属性以避免错误
         this.pagination = {
             currentPage: 1,
-            pageSize: 20,
-            totalPages: 0,
+            pageSize: 999999, // 设置为大数值，显示所有数据
+            totalPages: 1,
             totalItems: 0
         };
 
@@ -143,19 +143,13 @@ export class DataTable {
                         </div>
                     </div>
 
-                    <!-- 顶部工具栏 -->
+                    <!-- 顶部工具栏 - 简化版本 -->
                     <div class="table-toolbar">
                         <div class="toolbar-left">
-                            <!-- 移除了多余的功能按钮，保持界面简洁 -->
+                            <!-- 保持界面简洁，移除了搜索和刷新功能 -->
                         </div>
                         <div class="toolbar-right">
-                            <div class="search-box">
-                                <input type="text" placeholder="搜索数据..." class="search-input" />
-                                <button class="btn-search">搜索</button>
-                            </div>
-                            <button class="btn-tool" data-action="refresh">
-                                刷新
-                            </button>
+                            <!-- 移除了搜索框和刷新按钮 -->
                         </div>
                     </div>
 
@@ -164,16 +158,14 @@ export class DataTable {
                         ${this.createGroupedTables()}
                     </div>
 
-                    <!-- 底部状态栏 -->
+                    <!-- 底部状态栏 - 简化版本 -->
                     <div class="modal-footer">
                         <div class="footer-left">
                             <span class="status-text">数据加载完成</span>
                             <span class="record-count">共 <span class="count-number">0</span> 条记录</span>
                         </div>
                         <div class="footer-right">
-                            <button class="btn-pagination" data-action="prev-page">上一页</button>
-                            <span class="page-info">第 <span class="current-page">1</span> 页，共 <span class="total-pages">1</span> 页</span>
-                            <button class="btn-pagination" data-action="next-page">下一页</button>
+                            <!-- 移除了分页控件 -->
                         </div>
                     </div>
                 </div>
@@ -1312,6 +1304,10 @@ export class DataTable {
                             <span class="btn-icon">✏️</span>
                             <span class="btn-text">表格编辑</span>
                         </button>
+                        <button class="menu-btn rule-btn" data-action="edit-field-rule">
+                            <span class="btn-icon">⚙️</span>
+                            <span class="btn-text">字段规则</span>
+                        </button>
                         <button class="menu-btn history-btn" data-action="view-history">
                             <span class="btn-icon">📋</span>
                             <span class="btn-text">表格记录</span>
@@ -1393,6 +1389,9 @@ export class DataTable {
             if (action === 'edit-cell') {
                 this.hideCellActionMenu();
                 this.showEditCellDialog(cellInfo);
+            } else if (action === 'edit-field-rule') {
+                this.hideCellActionMenu();
+                this.showFieldRuleDialog(cellInfo);
             } else if (action === 'view-history') {
                 this.hideCellActionMenu();
                 this.showCellHistoryDialog(cellInfo);
@@ -1511,7 +1510,7 @@ export class DataTable {
     // 复选框相关方法已删除 - 不再需要复选框功能
 
     // 工具栏操作方法已移除，保持界面简洁
-    refreshData() { console.log('[DataTable] 刷新数据'); }
+    // refreshData() 方法已被移除
 
     /**
      * 创建表格容器
@@ -1873,14 +1872,8 @@ export class DataTable {
         try {
             let filtered = [...this.data];
             
-            // 搜索筛选
-            if (this.filters.search) {
-                const searchTerm = this.filters.search.toLowerCase();
-                filtered = filtered.filter(item => 
-                    item.title.toLowerCase().includes(searchTerm) ||
-                    String(item.content).toLowerCase().includes(searchTerm)
-                );
-            }
+            // 搜索筛选 - 已移除搜索功能
+            // 搜索功能已被移除以简化界面
             
             // 分类筛选
             if (this.filters.category) {
@@ -2573,15 +2566,9 @@ export class DataTable {
                 this.handleClick(e);
             });
 
-            // 搜索事件
-            const searchInput = this.modal.querySelector('.search-input');
-            searchInput.addEventListener('input', this.debounce((e) => {
-                this.filters.search = e.target.value;
-                this.applyFilters();
-                if (this.modal) {
-                    this.renderTable();
-                }
-            }, 300));
+            // 搜索事件 - 已移除搜索功能
+            // const searchInput = this.modal.querySelector('.search-input');
+            // 搜索功能已被移除以简化界面
 
             // 筛选事件
             this.modal.addEventListener('change', (e) => {
@@ -3068,20 +3055,14 @@ export class DataTable {
             case 'export-selected':
                 this.exportSelected();
                 break;
+            // 分页相关的事件处理已移除
             case 'first-page':
-                this.goToPage(1);
-                break;
             case 'prev-page':
-                this.goToPage(this.pagination.currentPage - 1);
-                break;
             case 'next-page':
-                this.goToPage(this.pagination.currentPage + 1);
-                break;
             case 'last-page':
-                this.goToPage(this.pagination.totalPages);
-                break;
             case 'goto-page':
-                this.goToPage(parseInt(e.target.dataset.page));
+                // 分页功能已被移除
+                console.log('[DataTable] 分页功能已被移除');
                 break;
             case 'view':
                 this.viewItem(e.target.dataset.id);
@@ -3123,14 +3104,10 @@ export class DataTable {
             }
         }
         
-        // 页面大小变更
+        // 页面大小变更 - 已移除分页功能
         if (e.target.classList.contains('page-size-select')) {
-            this.pagination.pageSize = parseInt(e.target.value);
-            this.pagination.currentPage = 1;
-            this.applyFilters();
-            if (this.modal) {
-                this.renderTable();
-            }
+            // 分页功能已被移除
+            console.log('[DataTable] 分页功能已被移除');
         }
         
         // 复选框相关事件已删除 - 不再需要复选框功能
@@ -4088,6 +4065,473 @@ export class DataTable {
 
         } catch (error) {
             console.error('[DataTable] ❌ 显示消息失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 显示字段规则编辑对话框
+     */
+    async showFieldRuleDialog(cellInfo) {
+        try {
+            console.log('[DataTable] 🔧 显示字段规则编辑对话框:', cellInfo);
+
+            // 获取字段规则管理器
+            const fieldRuleManager = window.SillyTavernInfobar?.fieldRuleManager;
+            if (!fieldRuleManager) {
+                console.error('[DataTable] ❌ 字段规则管理器不可用');
+                return;
+            }
+
+            // 获取现有规则
+            const existingRule = fieldRuleManager.getFieldRule(cellInfo.panelId, cellInfo.property);
+
+            // 获取规则模板
+            const templates = fieldRuleManager.getAllRuleTemplates();
+
+            // 创建对话框
+            const dialog = document.createElement('div');
+            dialog.className = 'field-rule-dialog';
+            dialog.innerHTML = `
+                <div class="dialog-overlay"></div>
+                <div class="dialog-content">
+                    <div class="dialog-header">
+                        <h3>字段规则编辑</h3>
+                        <button class="dialog-close" data-action="close">×</button>
+                    </div>
+                    <div class="dialog-body">
+                        <div class="field-info">
+                            <div class="info-row">
+                                <span class="info-label">面板:</span>
+                                <span class="info-value">${this.getPanelDisplayName(cellInfo.panelId)}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">字段:</span>
+                                <span class="info-value">${cellInfo.property}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">当前值:</span>
+                                <span class="info-value">${cellInfo.value || '(空)'}</span>
+                            </div>
+                        </div>
+
+                        <div class="rule-editor">
+                            <div class="template-section">
+                                <h4>规则模板</h4>
+                                <div class="template-buttons">
+                                    ${templates.map(template => `
+                                        <button class="template-btn" data-template="${template.key}">
+                                            ${template.name}
+                                        </button>
+                                    `).join('')}
+                                    <button class="template-btn custom-btn" data-template="custom">
+                                        自定义规则
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="rule-form">
+                                <div class="form-section">
+                                    <h4>字段示例</h4>
+                                    <div class="examples-container">
+                                        <div class="examples-list" id="examples-list">
+                                            ${this.renderExamplesList(existingRule?.examples || [])}
+                                        </div>
+                                        <button class="btn btn-small add-example-btn" data-action="add-example">
+                                            + 添加示例
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="form-section">
+                                    <h4>基础规则</h4>
+                                    <div class="form-group">
+                                        <label>规则描述:</label>
+                                        <textarea class="form-control" id="rule-description" placeholder="描述这个字段的生成规则...">${existingRule?.rules?.description || ''}</textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>输出格式:</label>
+                                        <input type="text" class="form-control" id="rule-format" placeholder="例如: 数字(0-100) + 简短描述" value="${existingRule?.rules?.format || ''}">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>约束条件:</label>
+                                        <div class="constraints-container">
+                                            <div class="constraints-list" id="constraints-list">
+                                                ${this.renderConstraintsList(existingRule?.rules?.constraints || [])}
+                                            </div>
+                                            <button class="btn btn-small add-constraint-btn" data-action="add-constraint">
+                                                + 添加约束
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-section">
+                                    <h4>动态规则</h4>
+                                    <div class="dynamic-rules-container">
+                                        <div class="dynamic-rules-list" id="dynamic-rules-list">
+                                            ${this.renderDynamicRulesList(existingRule?.dynamicRules || [])}
+                                        </div>
+                                        <button class="btn btn-small add-dynamic-rule-btn" data-action="add-dynamic-rule">
+                                            + 添加动态规则
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dialog-footer">
+                        <button class="btn btn-secondary" data-action="cancel">取消</button>
+                        <button class="btn btn-danger" data-action="delete-rule" ${!existingRule ? 'style="display:none"' : ''}>删除规则</button>
+                        <button class="btn btn-primary" data-action="save-rule">保存规则</button>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            document.body.appendChild(dialog);
+
+            // 绑定事件
+            this.bindFieldRuleDialogEvents(dialog, cellInfo, fieldRuleManager);
+
+            // 显示对话框
+            setTimeout(() => dialog.classList.add('show'), 10);
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 显示字段规则对话框失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 绑定字段规则对话框事件
+     */
+    bindFieldRuleDialogEvents(dialog, cellInfo, fieldRuleManager) {
+        // 关闭对话框
+        const closeDialog = () => {
+            dialog.classList.remove('show');
+            setTimeout(() => dialog.remove(), 300);
+        };
+
+        // 点击遮罩层关闭
+        dialog.querySelector('.dialog-overlay').addEventListener('click', closeDialog);
+
+        // 按钮事件
+        dialog.addEventListener('click', async (e) => {
+            const action = e.target.getAttribute('data-action');
+
+            if (action === 'close' || action === 'cancel') {
+                closeDialog();
+            } else if (action === 'save-rule') {
+                await this.saveFieldRule(dialog, cellInfo, fieldRuleManager);
+                closeDialog();
+            } else if (action === 'delete-rule') {
+                if (confirm('确定要删除这个字段规则吗？')) {
+                    await fieldRuleManager.deleteFieldRule(cellInfo.panelId, cellInfo.property);
+                    closeDialog();
+                }
+            } else if (action === 'add-example') {
+                this.addExample(dialog);
+            } else if (action === 'add-constraint') {
+                this.addConstraint(dialog);
+            } else if (action === 'add-dynamic-rule') {
+                this.addDynamicRule(dialog);
+            } else if (action === 'remove-example') {
+                this.removeExample(dialog, e.target);
+            } else if (action === 'remove-constraint') {
+                this.removeConstraint(dialog, e.target);
+            } else if (action === 'remove-dynamic-rule') {
+                this.removeDynamicRule(dialog, e.target);
+            }
+        });
+
+        // 模板按钮事件
+        dialog.addEventListener('click', (e) => {
+            if (e.target.classList.contains('template-btn')) {
+                const templateKey = e.target.getAttribute('data-template');
+                this.applyRuleTemplate(dialog, templateKey, fieldRuleManager);
+            }
+        });
+    }
+
+    /**
+     * 🆕 保存字段规则
+     */
+    async saveFieldRule(dialog, cellInfo, fieldRuleManager) {
+        try {
+            // 收集表单数据
+            const rule = {
+                examples: this.collectExamples(dialog),
+                rules: {
+                    description: dialog.querySelector('#rule-description').value,
+                    format: dialog.querySelector('#rule-format').value,
+                    constraints: this.collectConstraints(dialog)
+                },
+                dynamicRules: this.collectDynamicRules(dialog)
+            };
+
+            // 保存规则
+            const success = await fieldRuleManager.setFieldRule(cellInfo.panelId, cellInfo.property, rule);
+
+            if (success) {
+                console.log('[DataTable] ✅ 字段规则保存成功');
+            } else {
+                console.error('[DataTable] ❌ 字段规则保存失败');
+            }
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 保存字段规则失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 应用规则模板
+     */
+    applyRuleTemplate(dialog, templateKey, fieldRuleManager) {
+        if (templateKey === 'custom') {
+            // 清空表单
+            dialog.querySelector('#rule-description').value = '';
+            dialog.querySelector('#rule-format').value = '';
+
+            // 清空示例列表
+            const examplesList = dialog.querySelector('#examples-list');
+            examplesList.innerHTML = this.renderExamplesList([]);
+
+            // 清空约束列表
+            const constraintsList = dialog.querySelector('#constraints-list');
+            constraintsList.innerHTML = this.renderConstraintsList([]);
+
+            // 清空动态规则列表
+            const dynamicRulesList = dialog.querySelector('#dynamic-rules-list');
+            dynamicRulesList.innerHTML = this.renderDynamicRulesList([]);
+
+            console.log('[DataTable] ✅ 自定义模板已应用，所有字段已清空');
+            return;
+        }
+
+        const template = fieldRuleManager.getRuleTemplate(templateKey);
+        if (!template) return;
+
+        // 填充表单
+        dialog.querySelector('#rule-description').value = template.rules.description || '';
+        dialog.querySelector('#rule-format').value = template.rules.format || '';
+
+        // 更新示例列表
+        const examplesList = dialog.querySelector('#examples-list');
+        examplesList.innerHTML = this.renderExamplesList(template.examples || []);
+
+        // 更新约束列表
+        const constraintsList = dialog.querySelector('#constraints-list');
+        constraintsList.innerHTML = this.renderConstraintsList(template.rules.constraints || []);
+
+        // 更新动态规则列表
+        const dynamicRulesList = dialog.querySelector('#dynamic-rules-list');
+        dynamicRulesList.innerHTML = this.renderDynamicRulesList(template.dynamicRules || []);
+    }
+
+    /**
+     * 🆕 渲染示例列表
+     */
+    renderExamplesList(examples) {
+        if (!examples || examples.length === 0) {
+            return '<div class="empty-message">暂无示例</div>';
+        }
+
+        return examples.map((example, index) => `
+            <div class="example-row" data-index="${index}">
+                <input type="text" class="form-control example-value" placeholder="示例值" value="${example.value || ''}">
+                <input type="text" class="form-control example-description" placeholder="示例描述" value="${example.description || ''}">
+                <button class="btn btn-small btn-danger remove-example" data-action="remove-example" data-index="${index}">删除</button>
+            </div>
+        `).join('');
+    }
+
+    /**
+     * 🆕 渲染约束列表
+     */
+    renderConstraintsList(constraints) {
+        if (!constraints || constraints.length === 0) {
+            return '<div class="empty-message">暂无约束</div>';
+        }
+
+        return constraints.map((constraint, index) => `
+            <div class="constraint-row" data-index="${index}">
+                <input type="text" class="form-control constraint-text" placeholder="约束条件" value="${constraint || ''}">
+                <button class="btn btn-small btn-danger remove-constraint" data-action="remove-constraint" data-index="${index}">删除</button>
+            </div>
+        `).join('');
+    }
+
+    /**
+     * 🆕 渲染动态规则列表
+     */
+    renderDynamicRulesList(dynamicRules) {
+        if (!dynamicRules || dynamicRules.length === 0) {
+            return '<div class="empty-message">暂无动态规则</div>';
+        }
+
+        return dynamicRules.map((rule, index) => `
+            <div class="dynamic-rule-row" data-index="${index}">
+                <div class="rule-inputs">
+                    <input type="text" class="form-control rule-condition" placeholder="触发条件" value="${rule.condition || ''}">
+                    <input type="text" class="form-control rule-action" placeholder="执行动作" value="${rule.action || ''}">
+                    <button class="btn btn-small btn-danger remove-dynamic-rule" data-action="remove-dynamic-rule" data-index="${index}">删除</button>
+                </div>
+                <div class="rule-examples">
+                    <textarea class="form-control rule-examples-text" placeholder="示例（每行一个）">${(rule.examples || []).join('\n')}</textarea>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    /**
+     * 🆕 收集示例数据
+     */
+    collectExamples(dialog) {
+        const examples = [];
+        const exampleRows = dialog.querySelectorAll('.example-row');
+
+        exampleRows.forEach(row => {
+            const value = row.querySelector('.example-value').value.trim();
+            const description = row.querySelector('.example-description').value.trim();
+
+            if (value) {
+                examples.push({ value, description });
+            }
+        });
+
+        return examples;
+    }
+
+    /**
+     * 🆕 收集约束数据
+     */
+    collectConstraints(dialog) {
+        const constraints = [];
+        const constraintRows = dialog.querySelectorAll('.constraint-row');
+
+        constraintRows.forEach(row => {
+            const text = row.querySelector('.constraint-text').value.trim();
+            if (text) {
+                constraints.push(text);
+            }
+        });
+
+        return constraints;
+    }
+
+    /**
+     * 🆕 收集动态规则数据
+     */
+    collectDynamicRules(dialog) {
+        const dynamicRules = [];
+        const ruleRows = dialog.querySelectorAll('.dynamic-rule-row');
+
+        ruleRows.forEach(row => {
+            const condition = row.querySelector('.rule-condition').value.trim();
+            const action = row.querySelector('.rule-action').value.trim();
+            const examplesText = row.querySelector('.rule-examples-text').value.trim();
+
+            if (condition && action) {
+                const examples = examplesText ? examplesText.split('\n').filter(line => line.trim()) : [];
+                dynamicRules.push({ condition, action, examples });
+            }
+        });
+
+        return dynamicRules;
+    }
+
+    /**
+     * 🆕 添加示例
+     */
+    addExample(dialog) {
+        const examplesList = dialog.querySelector('#examples-list');
+        const newIndex = examplesList.children.length;
+
+        const exampleRow = document.createElement('div');
+        exampleRow.className = 'example-row';
+        exampleRow.setAttribute('data-index', newIndex);
+        exampleRow.innerHTML = `
+            <input type="text" class="form-control example-value" placeholder="示例值" value="">
+            <input type="text" class="form-control example-description" placeholder="示例描述" value="">
+            <button class="btn btn-small btn-danger remove-example" data-action="remove-example" data-index="${newIndex}">删除</button>
+        `;
+
+        examplesList.appendChild(exampleRow);
+    }
+
+    /**
+     * 🆕 移除示例
+     */
+    removeExample(dialog, button) {
+        const exampleRow = button.closest('.example-row');
+        if (exampleRow) {
+            exampleRow.remove();
+        }
+    }
+
+    /**
+     * 🆕 添加约束
+     */
+    addConstraint(dialog) {
+        const constraintsList = dialog.querySelector('#constraints-list');
+        const newIndex = constraintsList.children.length;
+
+        const constraintRow = document.createElement('div');
+        constraintRow.className = 'constraint-row';
+        constraintRow.setAttribute('data-index', newIndex);
+        constraintRow.innerHTML = `
+            <input type="text" class="form-control constraint-text" placeholder="约束条件" value="">
+            <button class="btn btn-small btn-danger remove-constraint" data-action="remove-constraint" data-index="${newIndex}">删除</button>
+        `;
+
+        constraintsList.appendChild(constraintRow);
+    }
+
+    /**
+     * 🆕 移除约束
+     */
+    removeConstraint(dialog, button) {
+        const constraintRow = button.closest('.constraint-row');
+        if (constraintRow) {
+            constraintRow.remove();
+        }
+    }
+
+    /**
+     * 🆕 添加动态规则
+     */
+    addDynamicRule(dialog) {
+        const dynamicRulesList = dialog.querySelector('#dynamic-rules-list');
+        const newIndex = dynamicRulesList.children.length;
+
+        const dynamicRuleRow = document.createElement('div');
+        dynamicRuleRow.className = 'dynamic-rule-row';
+        dynamicRuleRow.setAttribute('data-index', newIndex);
+        dynamicRuleRow.innerHTML = `
+            <div class="form-group">
+                <label>触发条件:</label>
+                <input type="text" class="form-control dynamic-condition" placeholder="例如: 当某字段包含特定值时" value="">
+            </div>
+            <div class="form-group">
+                <label>执行动作:</label>
+                <input type="text" class="form-control dynamic-action" placeholder="例如: 生成相关内容" value="">
+            </div>
+            <div class="form-group">
+                <label>示例:</label>
+                <textarea class="form-control dynamic-examples" placeholder="每行一个示例" rows="3"></textarea>
+            </div>
+            <button class="btn btn-small btn-danger remove-dynamic-rule" data-action="remove-dynamic-rule" data-index="${newIndex}">删除规则</button>
+        `;
+
+        dynamicRulesList.appendChild(dynamicRuleRow);
+    }
+
+    /**
+     * 🆕 移除动态规则
+     */
+    removeDynamicRule(dialog, button) {
+        const dynamicRuleRow = button.closest('.dynamic-rule-row');
+        if (dynamicRuleRow) {
+            dynamicRuleRow.remove();
         }
     }
 

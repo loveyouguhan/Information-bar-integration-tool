@@ -12688,6 +12688,7 @@ export class InfoBarSettings {
 
     /**
      * 处理生成结束事件（确保主API完成后才处理）
+     * 🔧 修复：增加AI消息验证，避免处理旧消息
      */
     async handleGenerationEnded() {
         try {
@@ -12709,6 +12710,19 @@ export class InfoBarSettings {
                 console.log('[InfoBarSettings] ℹ️ 没有找到AI消息，跳过处理');
                 return;
             }
+
+            // 🔧 修复：验证AI消息是否为真正新生成的消息
+            const isValidMessage = this.validateAIMessageIsNew(latestAIMessage);
+            if (!isValidMessage) {
+                console.log('[InfoBarSettings] ⚠️ 检测到的AI消息不是新生成的消息，可能是AI生成失败，跳过处理');
+                console.log('[InfoBarSettings] 📝 这避免了使用上一条AI消息的剧情内容调用自定义API的错误');
+                
+                // 调用失败处理函数
+                this.handleAIGenerationFailure('AI消息验证失败：获取到的是旧消息，可能AI生成未成功');
+                return;
+            }
+
+            console.log('[InfoBarSettings] ✅ 验证通过：这是一条新生成的AI消息');
 
             // 在双API协作模式下，主API不应该包含infobar_data
             // 如果包含了，说明主API Hook没有生效，需要清理
@@ -12881,6 +12895,7 @@ export class InfoBarSettings {
 
     /**
      * 处理消息接收事件（自定义API模式）
+     * 🔧 修复：增加AI消息验证，避免处理旧消息
      */
     async handleMessageReceived() {
         try {
@@ -12903,6 +12918,13 @@ export class InfoBarSettings {
                 return;
             }
 
+            // 🔧 修复：验证AI消息是否为真正新生成的消息
+            const isValidMessage = this.validateAIMessageIsNew(latestAIMessage);
+            if (!isValidMessage) {
+                console.log('[InfoBarSettings] ⚠️ 检测到的AI消息不是新生成的消息，跳过处理');
+                return;
+            }
+
             // 检查消息是否已经包含infobar_data
             if (latestAIMessage.mes && latestAIMessage.mes.includes('<infobar_data>')) {
                 console.log('[InfoBarSettings] ℹ️ 消息已包含infobar_data，跳过处理');
@@ -12921,6 +12943,7 @@ export class InfoBarSettings {
 
     /**
      * 获取最新的AI消息
+     * 🔧 修复：增加消息验证，确保获取的是真正新生成的AI消息
      */
     getLatestAIMessage() {
         try {
@@ -12933,6 +12956,13 @@ export class InfoBarSettings {
             for (let i = context.chat.length - 1; i >= 0; i--) {
                 const message = context.chat[i];
                 if (message && !message.is_user) {
+                    console.log('[InfoBarSettings] 🔍 找到AI消息:', {
+                        index: i,
+                        messageId: message.mes_id || 'unknown',
+                        sendDate: message.send_date || 'unknown',
+                        contentLength: message.mes ? message.mes.length : 0,
+                        hasInfobarData: message.mes ? message.mes.includes('<infobar_data>') : false
+                    });
                     return message;
                 }
             }
@@ -12941,6 +12971,115 @@ export class InfoBarSettings {
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 获取最新AI消息失败:', error);
             return null;
+        }
+    }
+
+    /**
+     * 🔧 新增：验证AI消息是否为真正新生成的消息
+     */
+    validateAIMessageIsNew(aiMessage) {
+        try {
+            if (!aiMessage) {
+                console.log('[InfoBarSettings] ⚠️ AI消息为空，验证失败');
+                return false;
+            }
+
+            const context = SillyTavern.getContext();
+            if (!context || !context.chat || context.chat.length === 0) {
+                console.log('[InfoBarSettings] ⚠️ 聊天上下文无效，验证失败');
+                return false;
+            }
+
+            // 获取最后一条用户消息的索引
+            let lastUserMessageIndex = -1;
+            for (let i = context.chat.length - 1; i >= 0; i--) {
+                const message = context.chat[i];
+                if (message && message.is_user) {
+                    lastUserMessageIndex = i;
+                    break;
+                }
+            }
+
+            if (lastUserMessageIndex === -1) {
+                console.log('[InfoBarSettings] ⚠️ 未找到用户消息，跳过验证');
+                return true; // 如果没有用户消息，可能是特殊情况，允许处理
+            }
+
+            // 获取AI消息在聊天记录中的索引
+            let aiMessageIndex = -1;
+            for (let i = 0; i < context.chat.length; i++) {
+                const message = context.chat[i];
+                if (message === aiMessage) {
+                    aiMessageIndex = i;
+                    break;
+                }
+            }
+
+            if (aiMessageIndex === -1) {
+                console.log('[InfoBarSettings] ⚠️ 无法在聊天记录中找到AI消息，验证失败');
+                return false;
+            }
+
+            // AI消息应该在最后一条用户消息之后
+            const isAfterLastUser = aiMessageIndex > lastUserMessageIndex;
+            
+            console.log('[InfoBarSettings] 🔍 AI消息验证结果:', {
+                aiMessageIndex: aiMessageIndex,
+                lastUserMessageIndex: lastUserMessageIndex,
+                isAfterLastUser: isAfterLastUser,
+                aiMessageTime: aiMessage.send_date || 'unknown'
+            });
+
+            return isAfterLastUser;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 验证AI消息失败:', error);
+            return false; // 验证失败时默认不处理，避免错误
+        }
+    }
+
+    /**
+     * 🔧 新增：处理AI生成失败的情况
+     */
+    handleAIGenerationFailure(reason = 'unknown') {
+        try {
+            console.log('[InfoBarSettings] ⚠️ 处理AI生成失败:', reason);
+            
+            // 记录失败统计
+            if (!window.InfoBarGenerationStats) {
+                window.InfoBarGenerationStats = {
+                    failures: 0,
+                    lastFailureTime: null,
+                    lastFailureReason: null
+                };
+            }
+
+            window.InfoBarGenerationStats.failures++;
+            window.InfoBarGenerationStats.lastFailureTime = new Date().toISOString();
+            window.InfoBarGenerationStats.lastFailureReason = reason;
+
+            console.log('[InfoBarSettings] 📊 生成失败统计已更新:', {
+                totalFailures: window.InfoBarGenerationStats.failures,
+                lastFailure: window.InfoBarGenerationStats.lastFailureTime,
+                reason: reason
+            });
+
+            // 通知事件系统AI生成失败
+            if (this.eventSystem) {
+                this.eventSystem.emit('ai:generation:failed', {
+                    reason: reason,
+                    timestamp: Date.now(),
+                    context: 'custom_api_processing'
+                });
+            }
+
+            // 如果设置界面可见，显示状态提示
+            if (this.visible && this.modal) {
+                this.showMessage(`AI生成失败: ${reason}`, 'warning');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理AI生成失败逻辑出错:', error);
         }
     }
 
