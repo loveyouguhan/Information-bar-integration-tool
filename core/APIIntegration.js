@@ -113,7 +113,10 @@ export class APIIntegration {
                     apiConfigFromExtension.retryCount :
                     await this.configManager.getConfig('apiConfig.retryCount'),
                 extraPrompt: apiConfigFromExtension.extraPrompt ||
-                    await this.configManager.getConfig('apiConfig.extraPrompt')
+                    await this.configManager.getConfig('apiConfig.extraPrompt'),
+                mergeMessages: apiConfigFromExtension.mergeMessages !== undefined ?
+                    apiConfigFromExtension.mergeMessages :
+                    await this.configManager.getConfig('apiConfig.mergeMessages', true) // 默认为true
             };
 
             console.log('[APIIntegration] ⚙️ API配置加载完成');
