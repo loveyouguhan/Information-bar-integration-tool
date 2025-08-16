@@ -3343,6 +3343,13 @@ export class InfoBarSettings {
                         <input type="number" name="apiConfig.retryCount" min="0" max="10" step="1" value="3" />
                         <small>请求失败时的重试次数</small>
                     </div>
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="api-merge-messages" name="apiConfig.mergeMessages" checked />
+                            <label for="api-merge-messages" class="checkbox-label">合并消息</label>
+                        </div>
+                        <small>启用时将API返回数据合并到AI消息中再解析，禁用时直接解析API返回数据</small>
+                    </div>
                 </div>
 
                 <!-- 连接状态显示 -->
@@ -12724,6 +12731,19 @@ export class InfoBarSettings {
 
             console.log('[InfoBarSettings] ✅ 验证通过：这是一条新生成的AI消息');
 
+            // 🔧 新增：验证AI消息长度是否足够生成信息栏数据
+            const lengthValidation = this.validateAIMessageLength(latestAIMessage, 100);
+            if (!lengthValidation.isValid) {
+                console.log('[InfoBarSettings] ⚠️ AI消息长度不足，跳过信息栏数据生成');
+                console.log('[InfoBarSettings] 📝 这通常表示AI输出被截断或内容过于简短');
+                
+                // 调用失败处理函数
+                this.handleAIGenerationFailure(`AI消息长度不足：${lengthValidation.reason}`);
+                return;
+            }
+
+            console.log('[InfoBarSettings] ✅ AI消息长度验证通过，内容长度充足');
+
             // 在双API协作模式下，主API不应该包含infobar_data
             // 如果包含了，说明主API Hook没有生效，需要清理
             if (latestAIMessage.mes && latestAIMessage.mes.includes('<infobar_data>')) {
@@ -12925,6 +12945,19 @@ export class InfoBarSettings {
                 return;
             }
 
+            // 🔧 新增：验证AI消息长度是否足够生成信息栏数据
+            const lengthValidation = this.validateAIMessageLength(latestAIMessage, 100);
+            if (!lengthValidation.isValid) {
+                console.log('[InfoBarSettings] ⚠️ AI消息长度不足，跳过信息栏数据生成');
+                console.log('[InfoBarSettings] 📝 这通常表示AI输出被截断或内容过于简短');
+                
+                // 调用失败处理函数
+                this.handleAIGenerationFailure(`AI消息长度不足：${lengthValidation.reason}`);
+                return;
+            }
+
+            console.log('[InfoBarSettings] ✅ AI消息长度验证通过，内容长度充足');
+
             // 检查消息是否已经包含infobar_data
             if (latestAIMessage.mes && latestAIMessage.mes.includes('<infobar_data>')) {
                 console.log('[InfoBarSettings] ℹ️ 消息已包含infobar_data，跳过处理');
@@ -13080,6 +13113,47 @@ export class InfoBarSettings {
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理AI生成失败逻辑出错:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：验证AI消息长度是否足够生成信息栏数据
+     */
+    validateAIMessageLength(aiMessage, minLength = 100) {
+        try {
+            if (!aiMessage || !aiMessage.mes) {
+                console.log('[InfoBarSettings] ⚠️ AI消息内容为空，长度验证失败');
+                return { isValid: false, actualLength: 0, reason: '消息内容为空' };
+            }
+
+            // 获取消息内容并清理可能存在的标签
+            let messageContent = aiMessage.mes;
+            
+            // 移除可能存在的XML标签和多余空白
+            messageContent = messageContent
+                .replace(/<[^>]+>/g, '') // 移除所有XML/HTML标签
+                .replace(/\s+/g, ' ')    // 将多个空白字符替换为单个空格
+                .trim();
+
+            const actualLength = messageContent.length;
+            const isValid = actualLength >= minLength;
+
+            console.log('[InfoBarSettings] 📏 AI消息长度验证:', {
+                minRequired: minLength,
+                actualLength: actualLength,
+                isValid: isValid,
+                contentPreview: messageContent.substring(0, 50) + (messageContent.length > 50 ? '...' : '')
+            });
+
+            return {
+                isValid: isValid,
+                actualLength: actualLength,
+                reason: isValid ? '长度充足' : `内容过短，实际长度${actualLength}字，要求至少${minLength}字`
+            };
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 验证AI消息长度失败:', error);
+            return { isValid: false, actualLength: 0, reason: '长度验证出错: ' + error.message };
         }
     }
 
@@ -14243,27 +14317,99 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             console.log('[InfoBarSettings] 🔍 开始处理API结果...');
             console.log('[InfoBarSettings] 📝 结果前500字符:', resultText.substring(0, 500));
 
-            // 第一步：将infobar_data合并到最新的AI消息中
-            const success = await this.appendInfobarDataToLatestMessage(resultText);
-            if (!success) {
-                console.warn('[InfoBarSettings] ⚠️ 无法将infobar_data合并到消息中');
-                return;
-            }
-
-            // 第二步：触发消息接收事件，让EventSystem处理
+            // 获取API配置，检查是否启用合并消息
             const context = SillyTavern.getContext();
-            if (context && context.eventSource && context.chat && context.chat.length > 0) {
-                const lastMessage = context.chat[context.chat.length - 1];
-                if (lastMessage && !lastMessage.is_user) {
-                    console.log('[InfoBarSettings] 📡 触发消息接收事件进行数据解析...');
-                    context.eventSource.emit('message_received', lastMessage);
+            const extensionSettings = context.extensionSettings;
+            const apiConfig = extensionSettings['Information bar integration tool']?.apiConfig || {};
+            const mergeMessages = apiConfig.mergeMessages !== undefined ? apiConfig.mergeMessages : true; // 默认为true
+
+            if (mergeMessages) {
+                console.log('[InfoBarSettings] 🔄 合并消息模式：将API数据合并到AI消息中');
+
+                // 第一步：将infobar_data合并到最新的AI消息中
+                const success = await this.appendInfobarDataToLatestMessage(resultText);
+                if (!success) {
+                    console.warn('[InfoBarSettings] ⚠️ 无法将infobar_data合并到消息中');
+                    return;
                 }
+
+                // 第二步：触发消息接收事件，让EventSystem处理
+                if (context && context.eventSource && context.chat && context.chat.length > 0) {
+                    const lastMessage = context.chat[context.chat.length - 1];
+                    if (lastMessage && !lastMessage.is_user) {
+                        console.log('[InfoBarSettings] 📡 触发消息接收事件进行数据解析...');
+                        context.eventSource.emit('message_received', lastMessage);
+                    }
+                }
+            } else {
+                console.log('[InfoBarSettings] 🚀 直接解析模式：直接处理API返回数据');
+
+                // 直接解析API返回的数据，不合并到AI消息
+                await this.directParseAPIResult(resultText);
             }
 
             console.log('[InfoBarSettings] ✅ API结果处理完成');
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理API结果失败:', error);
+        }
+    }
+
+    /**
+     * 直接解析API结果（不合并到AI消息）
+     */
+    async directParseAPIResult(resultText) {
+        try {
+            console.log('[InfoBarSettings] 🔍 直接解析API结果...');
+
+            // 获取智能提示词系统
+            const infoBarTool = window.SillyTavernInfobar;
+            const smartPromptSystem = infoBarTool?.modules?.smartPromptSystem;
+
+            if (!smartPromptSystem || !smartPromptSystem.dataParser) {
+                console.error('[InfoBarSettings] ❌ 智能提示词系统或数据解析器未找到');
+                return;
+            }
+
+            // 直接使用数据解析器解析API返回的数据
+            const parsedData = smartPromptSystem.dataParser.parseAIResponse(resultText);
+
+            if (parsedData) {
+                console.log('[InfoBarSettings] ✅ 直接解析成功，数据项数量:', Object.keys(parsedData).length);
+
+                // 更新数据到数据核心
+                await smartPromptSystem.updateDataCore(parsedData);
+
+                // 触发数据更新事件
+                if (smartPromptSystem.eventSystem) {
+                    console.log('[InfoBarSettings] 📡 触发数据更新事件...');
+
+                    // 触发智能提示词系统的数据更新事件
+                    smartPromptSystem.eventSystem.emit('smart-prompt:data-updated', {
+                        data: parsedData,
+                        timestamp: Date.now(),
+                        source: 'direct-api-parse' // 标记数据来源
+                    });
+
+                    // 触发信息栏渲染器的数据更新事件
+                    smartPromptSystem.eventSystem.emit('data:updated', {
+                        data: parsedData,
+                        timestamp: Date.now(),
+                        source: 'direct-api-parse' // 标记数据来源
+                    });
+
+                    console.log('[InfoBarSettings] ✅ 数据更新事件已触发');
+                } else {
+                    console.warn('[InfoBarSettings] ⚠️ 事件系统不可用，无法触发数据更新事件');
+                }
+
+                console.log('[InfoBarSettings] ✅ 直接解析和数据更新完成');
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ 直接解析未找到有效数据');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 直接解析API结果失败:', error);
         }
     }
 

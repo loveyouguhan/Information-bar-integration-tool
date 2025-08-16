@@ -2405,15 +2405,35 @@ export class MessageInfoBarRenderer {
 
     /**
      * 应用当前主题到信息栏
+     * 🔧 修复：增强主题应用的可靠性和调试信息
      */
     applyCurrentTheme(infoBarElement) {
         try {
-            if (!this.currentTheme || !infoBarElement) {
+            // 🔧 增强调试：详细记录主题状态
+            if (!infoBarElement) {
+                console.warn('[MessageInfoBarRenderer] ⚠️ 信息栏元素为空，无法应用主题');
+                return;
+            }
+
+            if (!this.currentTheme) {
+                console.warn('[MessageInfoBarRenderer] ⚠️ 当前主题未加载，尝试重新加载主题...');
+                // 🔧 修复：主题未加载时主动重新加载
+                this.loadCurrentTheme().then(() => {
+                    if (this.currentTheme) {
+                        console.log('[MessageInfoBarRenderer] ✅ 主题重新加载成功，重新应用主题');
+                        this.applyCurrentTheme(infoBarElement);
+                    } else {
+                        console.error('[MessageInfoBarRenderer] ❌ 主题重新加载失败，使用默认主题');
+                        this.applyFallbackTheme(infoBarElement);
+                    }
+                });
                 return;
             }
 
             const colors = this.currentTheme.colors;
             if (!colors) {
+                console.warn('[MessageInfoBarRenderer] ⚠️ 主题颜色配置缺失，使用默认主题');
+                this.applyFallbackTheme(infoBarElement);
                 return;
             }
 
@@ -2428,10 +2448,42 @@ export class MessageInfoBarRenderer {
             infoBarElement.style.setProperty('--infobar-header-text', '#ffffff');
             infoBarElement.style.setProperty('--infobar-shadow', 'rgba(0, 0, 0, 0.1)');
 
-            console.log('[MessageInfoBarRenderer] 🎨 主题已应用到信息栏');
+            console.log('[MessageInfoBarRenderer] 🎨 主题已应用到信息栏:', this.currentTheme.themeId);
 
         } catch (error) {
             console.error('[MessageInfoBarRenderer] ❌ 应用主题失败:', error);
+            // 🔧 修复：出错时使用默认主题
+            this.applyFallbackTheme(infoBarElement);
+        }
+    }
+
+    /**
+     * 🔧 新增：应用默认回退主题
+     */
+    applyFallbackTheme(infoBarElement) {
+        try {
+            if (!infoBarElement) return;
+
+            const fallbackColors = {
+                bg: '#1a1a1a',
+                text: '#ffffff', 
+                primary: '#007bff',
+                border: '#333'
+            };
+
+            infoBarElement.style.setProperty('--infobar-bg', fallbackColors.bg);
+            infoBarElement.style.setProperty('--infobar-text', fallbackColors.text);
+            infoBarElement.style.setProperty('--infobar-border', fallbackColors.border);
+            infoBarElement.style.setProperty('--infobar-hover', this.adjustColor(fallbackColors.bg, 10));
+            infoBarElement.style.setProperty('--infobar-primary', fallbackColors.primary);
+            infoBarElement.style.setProperty('--infobar-gradient-start', fallbackColors.primary);
+            infoBarElement.style.setProperty('--infobar-gradient-end', this.adjustColor(fallbackColors.primary, -20));
+            infoBarElement.style.setProperty('--infobar-header-text', '#ffffff');
+            infoBarElement.style.setProperty('--infobar-shadow', 'rgba(0, 0, 0, 0.1)');
+
+            console.log('[MessageInfoBarRenderer] 🔧 已应用默认回退主题');
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 应用回退主题失败:', error);
         }
     }
 
@@ -2619,6 +2671,41 @@ export class MessageInfoBarRenderer {
                 id: 'mint-green',
                 name: '薄荷绿',
                 colors: { bg: '#0a1a14', text: '#e6fff0', primary: '#06d6a0', border: '#059669' }
+            },
+            'cherry-blossom': {
+                id: 'cherry-blossom',
+                name: '樱花粉',
+                colors: { bg: '#1a0f14', text: '#ffe6f0', primary: '#ff69b4', border: '#d1477a' }
+            },
+            'purple-night': {
+                id: 'purple-night',
+                name: '紫夜',
+                colors: { bg: '#1a0d1a', text: '#f0e6ff', primary: '#9d4edd', border: '#6a1b9a' }
+            },
+            'golden-sand': {
+                id: 'golden-sand',
+                name: '金沙',
+                colors: { bg: '#1a1a0d', text: '#fffacd', primary: '#ffd700', border: '#b8860b' }
+            },
+            'ice-blue': {
+                id: 'ice-blue',
+                name: '冰蓝',
+                colors: { bg: '#0d1419', text: '#e6f7ff', primary: '#87ceeb', border: '#4682b4' }
+            },
+            'rose-red': {
+                id: 'rose-red',
+                name: '玫瑰红',
+                colors: { bg: '#1a0d0f', text: '#ffe6ea', primary: '#dc143c', border: '#b91c3c' }
+            },
+            'lavender': {
+                id: 'lavender',
+                name: '薰衣草',
+                colors: { bg: '#14101a', text: '#f0e6ff', primary: '#9370db', border: '#7b68ee' }
+            },
+            'coffee-brown': {
+                id: 'coffee-brown',
+                name: '咖啡棕',
+                colors: { bg: '#1a140d', text: '#f5f0e6', primary: '#8b4513', border: '#a0522d' }
             }
         };
 
