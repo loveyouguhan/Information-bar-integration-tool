@@ -110,8 +110,7 @@
     color: var(--text-primary);
 }
 
-/* 🔧 修复：添加扩展命名空间，避免影响SillyTavern原生模态框 */
-.infobar-extension .modal-backdrop {
+.modal-backdrop {
     position: absolute;
     top: 0;
     left: 0;
@@ -121,7 +120,7 @@
     backdrop-filter: blur(2px);
 }
 
-.infobar-extension .modal-content {
+.modal-content {
     position: relative;
     background: var(--bg-primary);
     border-radius: var(--border-radius-lg);
@@ -148,7 +147,7 @@
 }
 
 /* ========== 模态框头部 ========== */
-.infobar-extension .modal-header {
+.modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -157,7 +156,7 @@
     background: var(--theme-bg-secondary, var(--bg-secondary));
 }
 
-.infobar-extension .modal-header h2 {
+.modal-header h2 {
     font-size: var(--font-size-lg);
     font-weight: var(--font-weight-bold);
     color: var(--text-primary);
@@ -186,7 +185,7 @@
 }
 
 /* ========== 模态框主体 ========== */
-.infobar-extension .modal-body {
+.modal-body {
     flex: 1;
     overflow: hidden;
     display: flex;
@@ -194,7 +193,7 @@
 }
 
 /* ========== 模态框底部 ========== */
-.infobar-extension .modal-footer {
+.modal-footer {
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -205,8 +204,7 @@
 }
 
 /* ========== 按钮样式 ========== */
-/* 🔧 修复：添加扩展命名空间，避免影响SillyTavern原生按钮 */
-.infobar-extension .btn {
+.btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -225,7 +223,7 @@
     white-space: nowrap;
 }
 
-.infobar-extension .btn:disabled {
+.btn:disabled {
     opacity: 0.65;
     cursor: not-allowed;
 }
@@ -348,12 +346,11 @@
 }
 
 /* ========== 表单组样式 ========== */
-/* 🔧 修复：添加扩展命名空间，避免影响SillyTavern原生表单 */
-.infobar-extension .form-group {
+.form-group {
     margin-bottom: var(--spacing);
 }
 
-.infobar-extension .form-group label {
+.form-group label {
     display: block;
     font-weight: var(--font-weight-medium);
     color: var(--text-primary);
@@ -717,11 +714,11 @@
         max-height: none;
     }
 
-    .infobar-extension .modal-header {
+    .modal-header {
         padding: var(--spacing-sm) var(--spacing);
     }
 
-    .infobar-extension .modal-footer {
+    .modal-footer {
         padding: var(--spacing-sm) var(--spacing);
         flex-wrap: wrap;
     }
@@ -6412,9 +6409,8 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
 }
 
-/* 🔧 修复：添加特定上下文，避免影响SillyTavern原生聊天界面 */
 /* 顶部交互区域 - 完全自适应高度 */
-.infobar-enabled .frontend-top-interaction {
+.frontend-top-interaction {
     display: block !important;
     height: auto !important;
     min-height: auto !important; /* 🔧 移除最小高度限制 */
@@ -6423,7 +6419,7 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 }
 
 /* AI消息容器 - 修复高度计算 */
-.infobar-enabled .ai-message-container {
+.ai-message-container {
     position: relative !important;
     background: var(--theme-bg-secondary, rgba(255, 255, 255, 0.05)) !important;
     color: var(--theme-text-primary, #ffffff) !important;
@@ -6437,7 +6433,7 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 }
 
 /* AI消息本身 - 修复高度计算 */
-.infobar-enabled .ai-message-container .mes {
+.ai-message-container .mes {
     display: block !important;
     height: auto !important;
     min-height: auto !important; /* 🔧 改为auto，确保正确计算高度 */
@@ -6449,7 +6445,7 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 }
 
 /* 底部交互区域 - 完全自适应高度 */
-.infobar-enabled .frontend-bottom-interaction {
+.frontend-bottom-interaction {
     display: block !important;
     height: auto !important;
     min-height: auto !important; /* 🔧 移除最小高度限制 */
@@ -6458,7 +6454,7 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 }
 
 /* 嵌入面板容器 */
-.infobar-enabled .embedded-panels-container {
+.embedded-panels-container {
     display: flex !important;
     flex-wrap: wrap !important;
     gap: 12px !important;
