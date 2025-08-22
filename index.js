@@ -22,6 +22,12 @@ import { XMLDataParser } from './core/XMLDataParser.js';
 import { DataSnapshotManager } from './core/DataSnapshotManager.js';
 import { STScriptDataSync } from './core/STScriptDataSync.js';
 import { FieldRuleManager } from './core/FieldRuleManager.js';
+import { PanelRuleManager } from './core/PanelRuleManager.js';
+import { AIDataExposure } from './core/AIDataExposure.js';
+import { HTMLTemplateParser } from './core/HTMLTemplateParser.js';
+import { AITemplateAssistant } from './core/AITemplateAssistant.js';
+import { TemplateManager } from './core/TemplateManager.js';
+import { VariableSystemPrompt } from './core/VariableSystemPrompt.js';
 
 // 导入UI组件
 import { InfoBarSettings } from './ui/InfoBarSettings.js';
@@ -92,6 +98,11 @@ class InformationBarIntegrationTool {
         this.dataSnapshotManager = null;
         this.stscriptDataSync = null;
         this.fieldRuleManager = null;
+        this.panelRuleManager = null;
+        this.htmlTemplateParser = null;
+        this.aiTemplateAssistant = null;
+        this.templateManager = null;
+        this.variableSystemPrompt = null;
 
         // UI组件
         this.infoBarSettings = null;
@@ -155,7 +166,10 @@ class InformationBarIntegrationTool {
 
             this.initialized = true;
             console.log('[InfoBarTool] ✅ Information Bar Integration Tool 初始化完成');
-            
+
+            // 🔧 修复：更新全局modules对象，确保所有模块都能被访问
+            this.updateGlobalModules();
+
             // 触发初始化完成事件
             this.eventSystem.emit('tool:initialized', {
                 version: this.VERSION,
@@ -180,6 +194,9 @@ class InformationBarIntegrationTool {
         // 初始化数据核心
         this.dataCore = new UnifiedDataCore(this.eventSystem);
         await this.dataCore.init();
+
+        // 🔧 修复：设置全局InfoBarData引用
+        window.InfoBarData = this.dataCore;
         
         // 初始化配置管理器
         this.configManager = new ConfigManager(this.dataCore);
@@ -200,9 +217,43 @@ class InformationBarIntegrationTool {
         this.fieldRuleManager = new FieldRuleManager(this.dataCore, this.eventSystem);
         await this.fieldRuleManager.init();
 
-        // 初始化智能提示词系统（需要在fieldRuleManager之后）
-        this.smartPromptSystem = new SmartPromptSystem(this.configManager, this.eventSystem, this.dataCore, this.fieldRuleManager);
+        // 初始化面板规则管理器
+        this.panelRuleManager = new PanelRuleManager(this.dataCore, this.eventSystem);
+        await this.panelRuleManager.init();
+
+        // 初始化HTML模板解析器
+        this.htmlTemplateParser = new HTMLTemplateParser({
+            unifiedDataCore: this.dataCore,
+            eventSystem: this.eventSystem,
+            configManager: this.configManager
+        });
+        await this.htmlTemplateParser.init();
+
+        // 初始化AI模板助手
+        this.aiTemplateAssistant = new AITemplateAssistant({
+            unifiedDataCore: this.dataCore,
+            eventSystem: this.eventSystem,
+            configManager: this.configManager,
+            apiIntegration: this.apiIntegration,
+            htmlTemplateParser: this.htmlTemplateParser
+        });
+        await this.aiTemplateAssistant.init();
+
+        // 初始化模板管理器
+        this.templateManager = new TemplateManager({
+            configManager: this.configManager,
+            eventSystem: this.eventSystem,
+            htmlTemplateParser: this.htmlTemplateParser
+        });
+        await this.templateManager.init();
+
+        // 初始化智能提示词系统（需要在fieldRuleManager和panelRuleManager之后）
+        this.smartPromptSystem = new SmartPromptSystem(this.configManager, this.eventSystem, this.dataCore, this.fieldRuleManager, this.panelRuleManager);
         await this.smartPromptSystem.init();
+
+        // 🔧 新增：初始化变量系统读取提示词（独立于智能提示词系统）
+        this.variableSystemPrompt = new VariableSystemPrompt(this.eventSystem);
+        await this.variableSystemPrompt.init();
 
         // 初始化STScript数据同步系统
         try {
@@ -214,6 +265,22 @@ class InformationBarIntegrationTool {
             console.warn('[InfoBarTool] ⚠️ STScript数据同步系统初始化失败:', error.message);
             console.warn('[InfoBarTool] 📝 将继续运行，但STScript功能不可用');
             this.stscriptDataSync = null;
+        }
+
+        // 初始化AI数据暴露模块（需要在STScript数据同步系统之后）
+        try {
+            this.aiDataExposure = new AIDataExposure({
+                unifiedDataCore: this.dataCore,
+                eventSystem: this.eventSystem,
+                fieldRuleManager: this.fieldRuleManager,
+                panelRuleManager: this.panelRuleManager,
+                stScriptDataSync: this.stscriptDataSync
+            });
+            await this.aiDataExposure.init();
+            console.log('[InfoBarTool] ✅ AI数据暴露模块初始化完成');
+        } catch (error) {
+            console.warn('[InfoBarTool] ⚠️ AI数据暴露模块初始化失败:', error.message);
+            this.aiDataExposure = null;
         }
 
         // 初始化消息监听器
@@ -249,7 +316,8 @@ class InformationBarIntegrationTool {
         this.messageInfoBarRenderer = new MessageInfoBarRenderer({
             unifiedDataCore: this.dataCore,
             eventSystem: this.eventSystem,
-            configManager: this.configManager
+            configManager: this.configManager,
+            htmlTemplateParser: this.htmlTemplateParser
         });
 
         // 初始化总结管理器
@@ -297,11 +365,23 @@ class InformationBarIntegrationTool {
             messageInfoBarRenderer: this.messageInfoBarRenderer,
             xmlDataParser: this.xmlDataParser,
             dataSnapshotManager: this.dataSnapshotManager,
+            aiDataExposure: this.aiDataExposure,
+            stScriptDataSync: this.stscriptDataSync,
             summaryManager: this.summaryManager,
             summaryPanel: this.summaryPanel,
             frontendDisplayManager: this.frontendDisplayManager,
-            fieldRuleManager: this.fieldRuleManager
+            fieldRuleManager: this.fieldRuleManager,
+            panelRuleManager: this.panelRuleManager,
+            htmlTemplateParser: this.htmlTemplateParser,
+            aiTemplateAssistant: this.aiTemplateAssistant,
+            templateManager: this.templateManager
         };
+
+        // 🔧 修复：更新全局对象以使用正确初始化的模块
+        if (window.SillyTavernInfobar) {
+            window.SillyTavernInfobar.modules = this.modules;
+            console.log('[InfoBarTool] 🔧 已更新全局 modules 对象');
+        }
 
         console.log('[InfoBarTool] ✅ UI组件初始化完成');
     }
@@ -560,6 +640,51 @@ class InformationBarIntegrationTool {
     }
 
     /**
+     * 🔧 修复：更新全局modules对象
+     */
+    updateGlobalModules() {
+        try {
+            if (!window.SillyTavernInfobar) {
+                window.SillyTavernInfobar = {};
+            }
+
+                    // 更新modules对象，包含所有初始化完成的模块
+        window.SillyTavernInfobar.modules = {
+            // 核心模块
+            settings: this.infoBarSettings,
+            dataTable: this.dataTable,
+            dataCore: this.dataCore,
+            eventSystem: this.eventSystem,
+            configManager: this.configManager,
+            apiIntegration: this.apiIntegration,
+            smartPromptSystem: this.smartPromptSystem,
+            messageInfoBarRenderer: this.messageInfoBarRenderer,
+            xmlDataParser: this.xmlDataParser,
+            aiDataExposure: this.aiDataExposure, // 🔧 添加：AI数据暴露模块
+                dataSnapshotManager: this.dataSnapshotManager,
+                stScriptDataSync: this.stscriptDataSync,
+                summaryManager: this.summaryManager,
+                summaryPanel: this.summaryPanel,
+                frontendDisplayManager: this.frontendDisplayManager,
+                fieldRuleManager: this.fieldRuleManager,
+                panelRuleManager: this.panelRuleManager,
+                htmlTemplateParser: this.htmlTemplateParser,
+                aiTemplateAssistant: this.aiTemplateAssistant,
+                templateManager: this.templateManager,
+                variableSystemPrompt: this.variableSystemPrompt
+            };
+
+            // 确保eventSource也被设置
+            window.SillyTavernInfobar.eventSource = this.eventSystem;
+
+            console.log('[InfoBarTool] 🔧 全局modules对象已更新');
+
+        } catch (error) {
+            console.error('[InfoBarTool] ❌ 更新全局modules对象失败:', error);
+        }
+    }
+
+    /**
      * 获取扩展状态
      */
     getStatus() {
@@ -591,7 +716,31 @@ if (document.readyState === 'loading') {
     informationBarTool.init();
 }
 
-// 导出到全局作用域
-window.SillyTavernInfobar = informationBarTool;
+// 🔧 修复：先创建基本的全局对象结构，modules 将在初始化完成后更新
+window.SillyTavernInfobar = {
+    modules: {
+        infoBarTool: informationBarTool,
+        // 其他模块将在初始化完成后动态添加
+        dataCore: informationBarTool.dataCore,
+        eventSystem: informationBarTool.eventSystem,
+        fieldRuleManager: informationBarTool.fieldRuleManager,
+        panelRuleManager: informationBarTool.panelRuleManager
+    },
+    eventSource: informationBarTool.eventSystem
+};
+window.STScriptDataSync = STScriptDataSync;
+
+// 🔧 修复：确保规则管理器在运行时始终可用的备用机制
+setTimeout(() => {
+    if (!window.SillyTavernInfobar.modules.fieldRuleManager && informationBarTool.fieldRuleManager) {
+        window.SillyTavernInfobar.modules.fieldRuleManager = informationBarTool.fieldRuleManager;
+        console.log('[InfoBarTool] 🔧 备用机制：fieldRuleManager 已添加到全局 modules');
+    }
+
+    if (!window.SillyTavernInfobar.modules.panelRuleManager && informationBarTool.panelRuleManager) {
+        window.SillyTavernInfobar.modules.panelRuleManager = informationBarTool.panelRuleManager;
+        console.log('[InfoBarTool] 🔧 备用机制：panelRuleManager 已添加到全局 modules');
+    }
+}, 1000);
 
 console.log('[InfoBarTool] 📦 Information Bar Integration Tool 加载完成');
