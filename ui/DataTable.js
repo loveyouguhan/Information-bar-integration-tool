@@ -124,7 +124,7 @@ export class DataTable {
             // 创建新的深色主题数据表格界面
             this.modal = document.createElement('div');
             this.modal.id = 'data-table-modal';
-            this.modal.className = 'data-table-modal datatable-modal-new infobar-extension';
+            this.modal.className = 'data-table-modal datatable-modal-new';
             this.modal.style.display = 'none';
 
             this.modal.innerHTML = `
@@ -383,15 +383,19 @@ export class DataTable {
                 Object.keys(configs.customPanels).forEach(panelId => {
                     const panel = configs.customPanels[panelId];
                     if (panel.enabled) {
-                        const subItems = panel.subItems || [];
-                        if (subItems.length > 0) {
+                        const allSubItems = panel.subItems || [];
+                        // 🔧 修复：只显示启用的子项，与基础面板逻辑保持一致
+                        const enabledSubItems = allSubItems.filter(subItem => subItem.enabled !== false);
+                        console.log(`[DataTable] 📊 自定义面板 ${panelId}: 所有子项 ${allSubItems.length}, 启用子项 ${enabledSubItems.length}`);
+                        
+                        if (enabledSubItems.length > 0) {
                             enabledPanels.push({
                                 id: panelId,
                                 type: 'custom',
                                 name: panel.name || '未命名面板',
                                 icon: '🔧',
-                                subItems: subItems,
-                                count: subItems.length
+                                subItems: enabledSubItems, // 🔧 修复：使用过滤后的启用子项
+                                count: enabledSubItems.length // 🔧 修复：统计启用子项数量
                             });
                         }
                     }

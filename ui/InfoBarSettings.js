@@ -181,7 +181,7 @@ export class InfoBarSettings {
     openErrorLogModal() {
         try {
             const modal = document.createElement('div');
-            modal.className = 'error-log-modal infobar-extension';
+            modal.className = 'error-log-modal';
             modal.style.cssText = `
                 position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
                 width: 600px; max-height: 500px; background: #1a1a1a; border: 2px solid #333;
@@ -425,7 +425,7 @@ export class InfoBarSettings {
             // 创建模态框容器
             this.modal = document.createElement('div');
             this.modal.id = 'info-bar-settings-modal';
-            this.modal.className = 'info-bar-settings-modal infobar-modal-new infobar-extension';
+            this.modal.className = 'info-bar-settings-modal infobar-modal-new';
             this.modal.style.display = 'none';
 
             this.modal.innerHTML = `
@@ -3426,14 +3426,14 @@ export class InfoBarSettings {
                     </div>
                     <div class="card-content">
                         <div class="card-status">
-                            <span class="status-badge enabled">已启用</span>
+                            <span class="status-badge ${panel.enabled ? 'enabled' : 'disabled'}">${panel.enabled ? '已启用' : '未启用'}</span>
                             <span class="status-count" id="${panel.id}-panel-count">${statusText}</span>
                         </div>
                     </div>
                 </div>
 
                 <!-- 子项配置 -->
-                <div class="sub-items" style="${(panel.enabled === undefined || panel.enabled) ? '' : 'display: none;'}">
+                <div class="sub-items">
                     ${this.createCustomPanelSubItems(panel.subItems || [])}
                 </div>
             </div>
@@ -3587,14 +3587,24 @@ export class InfoBarSettings {
             subItemElements.forEach(element => {
                 const name = element.querySelector('.sub-item-name')?.value || '';
                 if (name.trim()) { // 只有名称不为空才添加
-                                    const subItem = {
-                    id: element.dataset.subItemId,
-                    name: name.trim(),
-                    key: name.trim().toLowerCase().replace(/\s+/g, '_'), // 名称转换为键名
-                    displayName: name.trim(), // 🔧 修复：添加displayName字段，保存用户输入的显示名称
-                    enabled: true, // 🔧 修复：默认启用，确保子项在SmartPromptSystem中被识别
-                    value: '' // 🔧 修复：添加默认值字段
-                };
+                    const subItemId = element.dataset.subItemId;
+                    const subItemName = name.trim();
+                    
+                    // 🔧 修复：正确获取自定义面板子项的启用状态
+                    // 自定义面板子项的复选框name就是子项名称本身
+                    const checkbox = this.modal.querySelector(`input[name="${subItemName}"]`);
+                    const isEnabled = checkbox ? checkbox.checked : true; // 如果找不到复选框，默认启用
+                    
+                    const subItem = {
+                        id: subItemId,
+                        name: subItemName,
+                        key: subItemName.toLowerCase().replace(/\s+/g, '_'), // 名称转换为键名
+                        displayName: subItemName, // 保存用户输入的显示名称
+                        enabled: isEnabled, // 🔧 修复：使用复选框的真实状态
+                        value: '' // 添加默认值字段
+                    };
+                    
+                    console.log(`[InfoBarSettings] 📊 收集子项: ${subItemName} enabled=${isEnabled}`);
                     subItems.push(subItem);
                 }
             });
@@ -4153,6 +4163,41 @@ export class InfoBarSettings {
             const checked = e.target.checked;
 
             console.log(`[InfoBarSettings] ☑️ 复选框变更: ${name} = ${checked}`);
+
+            // 🔧 修复：处理自定义面板启用/禁用状态
+            if (name && name.endsWith('.enabled')) {
+                const panelId = name.replace('.enabled', '');
+                
+                // 检查是否是自定义面板
+                const customPanels = this.getCustomPanels();
+                if (customPanels[panelId]) {
+                    console.log(`[InfoBarSettings] 🔧 更新自定义面板状态: ${panelId}.enabled = ${checked}`);
+                    customPanels[panelId].enabled = checked;
+                    customPanels[panelId].updatedAt = Date.now();
+                    
+                    // 立即保存到配置
+                    this.saveCustomPanel(customPanels[panelId]);
+                    console.log(`[InfoBarSettings] ✅ 自定义面板 ${panelId} 状态已保存: ${checked ? '启用' : '禁用'}`);
+                    
+                    // 🔧 修复：正确更新状态徽章（使用当前面板的状态徽章）
+                    const activeContentPanel = this.modal.querySelector(`.content-panel[data-content="${panelId}"]`);
+                    if (activeContentPanel) {
+                        const statusBadge = activeContentPanel.querySelector('.status-badge');
+                        if (statusBadge) {
+                            statusBadge.textContent = checked ? '已启用' : '未启用';
+                            statusBadge.className = `status-badge ${checked ? 'enabled' : 'disabled'}`;
+                            console.log(`[InfoBarSettings] 🎨 更新状态徽章: ${panelId} -> ${checked ? '已启用' : '未启用'}`);
+                        } else {
+                            console.log(`[InfoBarSettings] ⚠️ 未找到状态徽章: ${panelId}`);
+                        }
+                        
+                        // 子项区域始终保持可见，不根据启用状态隐藏
+                        console.log(`[InfoBarSettings] 📋 子项区域保持可见，用户可以查看所有可配置项`);
+                    } else {
+                        console.log(`[InfoBarSettings] ⚠️ 未找到当前面板容器: ${panelId}`);
+                    }
+                }
+            }
 
             // 特殊处理API配置开关
             if (name === 'apiConfig.enabled') {
@@ -19070,7 +19115,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
      */
     createVariableManagerModal() {
         const modal = document.createElement('div');
-        modal.className = 'variable-manager-modal infobar-extension';
+        modal.className = 'variable-manager-modal';
         modal.id = 'variable-manager-modal';
 
         modal.innerHTML = `
@@ -23330,43 +23375,10 @@ ${userTemplate}
     }
 
     /**
-     * 获取当前启用的面板
+     * 🔧 删除：重复的getEnabledPanels方法已删除
+     * 原因：该方法与第一个getEnabledPanels方法重复，且返回错误的面板ID
+     * 修复：使用第一个正确的getEnabledPanels方法，该方法使用标准面板ID
      */
-    getEnabledPanels() {
-        try {
-            // 从配置管理器获取启用的面板
-            const panelConfigs = this.configManager?.getConfig('panels') || {};
-            const enabledPanels = {};
-
-            Object.entries(panelConfigs).forEach(([panelId, config]) => {
-                if (config && config.enabled) {
-                    enabledPanels[panelId] = {
-                        enabled: true,
-                        name: config.name || panelId,
-                        description: config.description || ''
-                    };
-                }
-            });
-
-            // 如果没有配置，返回默认启用的面板
-            if (Object.keys(enabledPanels).length === 0) {
-                return {
-                    character: { enabled: true, name: '角色信息', description: '角色基本信息和状态' },
-                    status: { enabled: true, name: '状态信息', description: '当前状态和环境信息' },
-                    inventory: { enabled: true, name: '物品信息', description: '背包和物品状态' }
-                };
-            }
-
-            return enabledPanels;
-
-        } catch (error) {
-            console.error('[InfoBarSettings] ❌ 获取启用面板失败:', error);
-            return {
-                character: { enabled: true, name: '角色信息', description: '角色基本信息和状态' },
-                status: { enabled: true, name: '状态信息', description: '当前状态和环境信息' }
-            };
-        }
-    }
 
     /**
      * 获取当前数据字段
