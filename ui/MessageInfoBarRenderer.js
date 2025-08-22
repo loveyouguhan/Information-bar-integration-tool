@@ -26,6 +26,15 @@ export class MessageInfoBarRenderer {
         this.frontendDisplayMode = false; // 前端显示模式标志
         this.interactiveInitialized = false; // 防止重复绑定全局交互事件
 
+        // 🎨 HTML模板相关
+        this.htmlTemplateParser = dependencies.htmlTemplateParser || window.SillyTavernInfobar?.modules?.htmlTemplateParser;
+        this.customTemplates = new Map(); // 自定义模板缓存
+        this.templateSettings = {
+            enabled: false,
+            defaultTemplate: null,
+            templates: {}
+        };
+
         // 🎨 字段标签映射
         this.FIELD_LABELS = {
             // 个人信息
@@ -717,6 +726,8 @@ export class MessageInfoBarRenderer {
                     return await this.generateEmbeddedStyle(infobarData, messageId, enabledPanels, defaultCollapsed);
                 case 'interactive':
                     return await this.generateInteractiveStyle(infobarData, messageId, enabledPanels, defaultCollapsed);
+                case 'custom-html':
+                    return await this.generateCustomHTMLStyle(infobarData, messageId, enabledPanels, defaultCollapsed);
                 default:
                     // 默认使用结尾生成式
                     return await this.generateEndGeneratedStyle(infobarData, messageId, enabledPanels, defaultCollapsed);
@@ -824,6 +835,13 @@ export class MessageInfoBarRenderer {
      */
     getAllStyles() {
         return [
+            {
+                id: 'custom-html',
+                name: '自定义HTML模板',
+                description: '使用自定义HTML模板渲染信息栏',
+                icon: 'fa-solid fa-code',
+                preview: 'custom-html-preview.png'
+            },
             {
                 id: 'end-generated',
                 name: '结尾生成式',
@@ -1080,6 +1098,302 @@ export class MessageInfoBarRenderer {
         } catch (error) {
             console.error('[MessageInfoBarRenderer] ❌ 生成前端交互式风格失败:', error);
             return '';
+        }
+    }
+
+    /**
+     * 生成自定义HTML模板风格
+     */
+    async generateCustomHTMLStyle(infobarData, messageId, enabledPanels, defaultCollapsed) {
+        try {
+            console.log('[MessageInfoBarRenderer] 🎨 生成自定义HTML模板风格...');
+
+            // 获取自定义模板
+            const customTemplate = await this.getCustomTemplate();
+
+            if (!customTemplate) {
+                console.warn('[MessageInfoBarRenderer] ⚠️ 未找到自定义模板，使用默认模板');
+                return await this.generateEndGeneratedStyle(infobarData, messageId, enabledPanels, defaultCollapsed);
+            }
+
+            // 准备模板数据
+            const templateData = this.prepareTemplateData(infobarData, enabledPanels);
+
+            // 使用HTML模板解析器渲染
+            let renderedHTML = '';
+            if (this.htmlTemplateParser) {
+                renderedHTML = this.htmlTemplateParser.parseTemplate(customTemplate, templateData);
+            } else {
+                console.warn('[MessageInfoBarRenderer] ⚠️ HTML模板解析器未初始化，使用简单渲染');
+                renderedHTML = this.simpleTemplateRender(customTemplate, templateData);
+            }
+
+            // 包装在容器中
+            return `
+                <div class="infobar-container infobar-style-custom-html" data-message-id="${messageId}" ${this.getThemeStyles()}>
+                    <div class="custom-html-wrapper">
+                        ${renderedHTML}
+                    </div>
+                </div>
+            `;
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 生成自定义HTML模板风格失败:', error);
+            // 回退到默认风格
+            return await this.generateEndGeneratedStyle(infobarData, messageId, enabledPanels, defaultCollapsed);
+        }
+    }
+
+    /**
+     * 获取自定义模板
+     */
+    async getCustomTemplate() {
+        try {
+            console.log('[MessageInfoBarRenderer] 📂 获取自定义模板...');
+
+            // 首先从SillyTavern扩展设置中获取保存的自定义HTML模板
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings || {};
+            const configs = extensionSettings['Information bar integration tool'] || {};
+            const customHTMLTemplate = configs.customHTMLTemplate;
+
+            if (customHTMLTemplate && customHTMLTemplate.trim()) {
+                console.log('[MessageInfoBarRenderer] ✅ 找到保存的自定义HTML模板');
+                return customHTMLTemplate;
+            }
+
+            console.log('[MessageInfoBarRenderer] 📝 未找到自定义HTML模板，尝试其他来源...');
+
+            // 从配置中获取当前使用的模板
+            const templateSettings = await this.getTemplateSettings();
+
+            if (templateSettings.enabled && templateSettings.defaultTemplate) {
+                console.log('[MessageInfoBarRenderer] ✅ 使用模板设置中的默认模板');
+                return templateSettings.defaultTemplate;
+            }
+
+            // 从模板管理器获取默认模板
+            const infoBarTool = window.SillyTavernInfobar?.modules?.infoBarTool;
+            if (infoBarTool && infoBarTool.templateManager) {
+                const defaultTemplate = infoBarTool.templateManager.getTemplate('character-card');
+                if (defaultTemplate) {
+                    console.log('[MessageInfoBarRenderer] ✅ 使用模板管理器中的默认模板');
+                    return defaultTemplate.template;
+                }
+            }
+
+            // 如果没有设置，返回一个基本模板
+            console.log('[MessageInfoBarRenderer] 📝 使用内置默认模板');
+            return this.getDefaultCustomTemplate();
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 获取自定义模板失败:', error);
+            return this.getDefaultCustomTemplate();
+        }
+    }
+
+    /**
+     * 获取模板设置
+     */
+    async getTemplateSettings() {
+        try {
+            // 从SillyTavern扩展设置中读取
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings['Information bar integration tool'] || {};
+
+            return configs.htmlTemplateSettings || this.templateSettings;
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 获取模板设置失败:', error);
+            return this.templateSettings;
+        }
+    }
+
+    /**
+     * 获取默认自定义模板
+     */
+    getDefaultCustomTemplate() {
+        return `
+            <div class="character-status-card" style="
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 12px;
+                padding: 20px;
+                color: white;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                margin: 10px 0;
+            ">
+                <div class="character-header" style="
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 15px;
+                ">
+                    <div class="character-avatar" style="
+                        width: 50px;
+                        height: 50px;
+                        border-radius: 50%;
+                        background: rgba(255, 255, 255, 0.2);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        margin-right: 15px;
+                        font-size: 20px;
+                    ">
+                        👤
+                    </div>
+                    <div class="character-info">
+                        <h3 style="margin: 0; font-size: 18px;">{{data.name}}</h3>
+                        <p style="margin: 5px 0 0 0; opacity: 0.8; font-size: 14px;">
+                            {{data.class}} - Lv.{{data.level}}
+                        </p>
+                    </div>
+                </div>
+
+                {{#if data.health}}
+                <div class="health-bar" style="margin: 10px 0;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px;">
+                        <span>生命值</span>
+                        <span>{{data.health}}/{{data.maxHealth}}</span>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.2); height: 8px; border-radius: 4px; overflow: hidden;">
+                        <div style="
+                            background: #4CAF50;
+                            height: 100%;
+                            width: {{computed.healthPercentage}}%;
+                            transition: width 0.3s ease;
+                        "></div>
+                    </div>
+                </div>
+                {{/if}}
+
+                {{#if data.energy}}
+                <div class="energy-bar" style="margin: 10px 0;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px;">
+                        <span>能量值</span>
+                        <span>{{data.energy}}/{{data.maxEnergy}}</span>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.2); height: 8px; border-radius: 4px; overflow: hidden;">
+                        <div style="
+                            background: #2196F3;
+                            height: 100%;
+                            width: {{computed.energyPercentage}}%;
+                            transition: width 0.3s ease;
+                        "></div>
+                    </div>
+                </div>
+                {{/if}}
+
+                <div class="character-details" style="
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                    gap: 10px;
+                    margin-top: 15px;
+                    font-size: 13px;
+                ">
+                    {{#if data.location}}
+                    <div style="text-align: center;">
+                        <div style="opacity: 0.8;">位置</div>
+                        <div style="font-weight: bold;">{{data.location}}</div>
+                    </div>
+                    {{/if}}
+
+                    {{#if data.mood}}
+                    <div style="text-align: center;">
+                        <div style="opacity: 0.8;">心情</div>
+                        <div style="font-weight: bold;">{{data.mood}}</div>
+                    </div>
+                    {{/if}}
+
+                    {{#if data.time}}
+                    <div style="text-align: center;">
+                        <div style="opacity: 0.8;">时间</div>
+                        <div style="font-weight: bold;">{{data.time}}</div>
+                    </div>
+                    {{/if}}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 准备模板数据
+     */
+    prepareTemplateData(infobarData, enabledPanels) {
+        try {
+            // 保持嵌套数据结构，支持 {{data.character.name}} 这样的模板语法
+            const nestedData = {};
+
+            // 扁平化数据结构，便于向后兼容
+            const flatData = {};
+
+            if (infobarData && infobarData.panels) {
+                Object.entries(infobarData.panels).forEach(([panelId, panelData]) => {
+                    if (enabledPanels[panelId] && panelData) {
+                        // 保持嵌套结构
+                        nestedData[panelId] = panelData;
+
+                        // 同时创建扁平结构用于向后兼容
+                        Object.entries(panelData).forEach(([key, value]) => {
+                            flatData[key] = value;
+                        });
+                    }
+                });
+            }
+
+            // 计算字段
+            const computed = {
+                healthPercentage: flatData.health && flatData.maxHealth ?
+                    Math.round((flatData.health / flatData.maxHealth) * 100) : 0,
+                energyPercentage: flatData.energy && flatData.maxEnergy ?
+                    Math.round((flatData.energy / flatData.maxEnergy) * 100) : 0,
+                timestamp: new Date().toLocaleString()
+            };
+
+            return {
+                // 使用嵌套数据作为主要数据源，支持 {{data.character.name}} 语法
+                data: nestedData,
+                // 保留扁平数据用于向后兼容
+                flatData,
+                computed,
+                panels: infobarData.panels || {},
+                enabledPanels
+            };
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 准备模板数据失败:', error);
+            return { data: {}, computed: {}, panels: {}, enabledPanels: {} };
+        }
+    }
+
+    /**
+     * 简单模板渲染（备用方案）
+     */
+    simpleTemplateRender(template, data) {
+        try {
+            let result = template;
+
+            // 简单的数据绑定替换
+            result = result.replace(/\{\{data\.(\w+)\}\}/g, (match, field) => {
+                return data.data[field] || '';
+            });
+
+            result = result.replace(/\{\{computed\.(\w+)\}\}/g, (match, field) => {
+                return data.computed[field] || '';
+            });
+
+            // 简单的条件渲染处理
+            result = result.replace(/\{\{#if\s+([^}]+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, condition, content) => {
+                // 简单的存在性检查
+                const value = condition.startsWith('data.') ?
+                    data.data[condition.substring(5)] :
+                    data.computed[condition.substring(9)];
+                return value ? content : '';
+            });
+
+            return result;
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 简单模板渲染失败:', error);
+            return `<div style="color: red;">模板渲染错误: ${error.message}</div>`;
         }
     }
 
@@ -1538,11 +1852,17 @@ export class MessageInfoBarRenderer {
             // 渲染面板项目
             Object.entries(filteredData).forEach(([fieldName, value]) => {
                 if (this.isValidDataValue(value)) {
-                    // 优先从面板配置中获取displayName，然后使用FIELD_LABELS映射表
+                    // 🔧 修复：使用统一的完整映射表获取字段显示名称
                     let displayLabel = this.getFieldDisplayNameFromConfig(panelKey, fieldName, panelConfig);
                     if (!displayLabel) {
-                        displayLabel = this.FIELD_LABELS[fieldName] || fieldName;
+                        // 优先使用InfoBarSettings的完整映射表
+                        displayLabel = this.getUnifiedFieldDisplayName(fieldName, panelKey);
+                        if (!displayLabel) {
+                            // 备用：使用本地FIELD_LABELS映射表
+                            displayLabel = this.FIELD_LABELS[fieldName] || fieldName;
+                        }
                     }
+                    console.log(`[MessageInfoBarRenderer] 🔍 字段映射: ${fieldName} -> ${displayLabel} (面板: ${panelKey})`);
 
                     html += `
                         <div class="infobar-item">
@@ -1705,6 +2025,9 @@ export class MessageInfoBarRenderer {
                 case 'interactive':
                     infoBarElement = this.insertInteractiveStyle(messageElement, infoBarHtml);
                     break;
+                case 'custom-html':
+                    infoBarElement = this.insertCustomHTMLStyle(messageElement, infoBarHtml);
+                    break;
                 default:
                     infoBarElement = this.insertEndGeneratedStyle(messageElement, infoBarHtml);
             }
@@ -1851,6 +2174,191 @@ export class MessageInfoBarRenderer {
         // 插入到body中，作为独立的交互式窗口
         document.body.insertAdjacentHTML('beforeend', infoBarHtml);
         return document.querySelector(`.infobar-container[data-message-id="${messageElement.getAttribute('mesid')}"]`);
+    }
+
+    /**
+     * 插入自定义HTML模板风格
+     */
+    insertCustomHTMLStyle(messageElement, infoBarHtml) {
+        try {
+            const chatTextElement = messageElement.querySelector('.mes_text');
+            if (!chatTextElement) return null;
+
+            // 在消息末尾插入自定义HTML模板
+            chatTextElement.insertAdjacentHTML('beforeend', infoBarHtml);
+            // 作用域隔离与尺寸约束：将自定义HTML放入Shadow DOM并按容器约束缩放
+            const container = messageElement.querySelector('.infobar-container.infobar-style-custom-html');
+            try {
+                if (container) {
+                    this.setupCustomHTMLContainer(container);
+                }
+            } catch (e) {
+                console.warn('[MessageInfoBarRenderer] ⚠️ 自定义HTML Shadow封装失败，继续以普通模式渲染:', e);
+            }
+
+            // 返回插入的容器元素
+            return container || messageElement.querySelector('.infobar-container');
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 插入自定义HTML模板失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 将自定义HTML封装到Shadow DOM中并应用比例缩放，避免样式外溢与布局溢出
+     */
+    setupCustomHTMLContainer(container) {
+        const wrapper = container.querySelector('.custom-html-wrapper');
+        if (!wrapper || wrapper.getAttribute('data-shadow') === 'true') return;
+
+        // 读取原有HTML并清空
+        const originalHTML = wrapper.innerHTML;
+        wrapper.innerHTML = '';
+
+        // 附加Shadow Root
+        const shadowRoot = wrapper.attachShadow({ mode: 'open' });
+
+        // 注入安全样式（仅作用于Shadow范围内）
+        const style = document.createElement('style');
+        style.textContent = `
+            :host { display: block; max-width: 100%; }
+            .custom-root { position: relative; display: block; max-width: 100%; overflow: hidden; }
+            .scale-inner { transform-origin: top left; will-change: transform; }
+            /* 限制影子内部滚动，尽量由外层容器管理高度 */
+            .custom-root * { box-sizing: border-box; }
+        `;
+        shadowRoot.appendChild(style);
+
+        // 内容根节点，用于测量与缩放
+        const root = document.createElement('div');
+        root.className = 'custom-root';
+        const scaleInner = document.createElement('div');
+        scaleInner.className = 'scale-inner';
+        scaleInner.innerHTML = originalHTML;
+        root.appendChild(scaleInner);
+        shadowRoot.appendChild(root);
+
+        // 标记已封装
+        wrapper.setAttribute('data-shadow', 'true');
+
+        // 应用首次缩放并注册窗口缩放监听
+        const apply = () => {
+            try {
+                this.applyCustomHTMLScaling(container, wrapper, root, scaleInner);
+            } catch (e) {
+                console.warn('[MessageInfoBarRenderer] ⚠️ 自定义HTML比例适配失败（可忽略）:', e);
+            }
+        };
+
+        // 初次渲染后多次尝试，适配字体与外链样式加载延迟
+        requestAnimationFrame(() => {
+            apply();
+            setTimeout(apply, 50);
+            setTimeout(apply, 200);
+            setTimeout(apply, 600);
+        });
+        window.addEventListener('resize', apply, { passive: true });
+    }
+
+    /**
+     * 按容器宽度与最大高度对自定义HTML进行比例缩放，防止溢出
+     */
+    applyCustomHTMLScaling(container, wrapper, root, inner) {
+        if (!container || !wrapper || !root || !inner) return;
+
+        // 目标宽度与最大高度（CSS变量可配置）
+        const containerWidth = container.clientWidth || 0;
+        const computed = getComputedStyle(container);
+        const maxHeightStr = computed.getPropertyValue('--infobar-custom-max-height');
+        const maxHeight = Math.max(120, parseInt(maxHeightStr, 10) || 420);
+        const scaleMode = (computed.getPropertyValue('--infobar-custom-scale-mode') || 'width').trim() || 'width';
+
+        // 重置缩放以获取自然尺寸
+        inner.style.transform = 'scale(1)';
+        inner.style.width = '';
+        inner.style.height = '';
+
+        // 让浏览器完成布局
+        const naturalWidth = inner.scrollWidth || inner.offsetWidth || 0;
+        const naturalHeight = inner.scrollHeight || inner.offsetHeight || 0;
+        if (containerWidth <= 0 || naturalWidth <= 0 || naturalHeight <= 0) return;
+
+        // 计算缩放因子
+        const scaleW = containerWidth / naturalWidth;
+        const scaleH = maxHeight / naturalHeight;
+        // 默认优先宽度适配；如出现溢出则回退到contain适配
+        let scale = scaleMode === 'contain' ? Math.min(scaleW, scaleH) : scaleW;
+        // 合理范围约束
+        scale = Math.max(0.1, Math.min(3, scale));
+
+        // 应用缩放及外层尺寸
+        inner.style.transform = `scale(${scale})`;
+        inner.style.width = naturalWidth + 'px';
+        inner.style.height = naturalHeight + 'px';
+
+        // 如按当前scale会造成任一方向超界，则自动回退到contain以确保完整可见
+        let usedContainFallback = false;
+        const scaledWidthRaw = Math.ceil(naturalWidth * scale);
+        const scaledHeightRawPre = Math.ceil(naturalHeight * scale);
+        if (scaledWidthRaw > containerWidth + 1 || scaledHeightRawPre > maxHeight + 1) {
+            const containScale = Math.min(scaleW, scaleH);
+            scale = Math.max(0.1, Math.min(3, containScale));
+            inner.style.transform = `scale(${scale})`;
+            usedContainFallback = true;
+        }
+
+        // 外层wrapper高度设置：若超出最大高度，则在容器内滚动
+        const scaledHeightRaw = Math.ceil(naturalHeight * scale);
+        const exceed = scaledHeightRaw > maxHeight;
+        const scaledHeight = exceed ? maxHeight : scaledHeightRaw;
+        wrapper.style.width = '100%';
+        wrapper.style.height = scaledHeight + 'px';
+        wrapper.style.overflowX = 'hidden';
+        wrapper.style.overflowY = exceed ? 'auto' : 'hidden';
+
+        // 二次校准：仅在模式为width且未触发contain回退时，才将宽度迭代贴合容器
+        const rect = inner.getBoundingClientRect();
+        const currentWidth = rect.width || 0;
+        if (!usedContainFallback && scaleMode !== 'contain' && currentWidth > 0 && Math.abs(currentWidth - containerWidth) > 2) {
+            const fix = containerWidth / currentWidth;
+            let newScale = scale * fix;
+            newScale = Math.max(0.1, Math.min(3, newScale));
+            inner.style.transform = `scale(${newScale})`;
+
+            const newScaledHeight = Math.ceil(naturalHeight * newScale);
+            const newExceed = newScaledHeight > maxHeight;
+            wrapper.style.height = (newExceed ? maxHeight : newScaledHeight) + 'px';
+            wrapper.style.overflowY = newExceed ? 'auto' : 'hidden';
+        }
+
+        // 三次校准：在下一帧再测量一次，确保浏览器完成布局后宽度仍能铺满容器
+        const laterCalibrate = () => {
+            try {
+                const rect2 = inner.getBoundingClientRect();
+                const w2 = rect2.width || 0;
+                if (w2 > 0 && Math.abs(w2 - containerWidth) > 2) {
+                    const adjust = containerWidth / w2;
+                    const prevScale = parseFloat((inner.style.transform.match(/scale\(([^)]+)\)/) || [])[1] || '1');
+                    let finalScale = prevScale * adjust;
+                    finalScale = Math.max(0.1, Math.min(3, finalScale));
+                    inner.style.transform = `scale(${finalScale})`;
+
+                    const finalHeight = Math.ceil(naturalHeight * finalScale);
+                    const finalExceed = finalHeight > maxHeight;
+                    wrapper.style.height = (finalExceed ? maxHeight : finalHeight) + 'px';
+                    wrapper.style.overflowY = finalExceed ? 'auto' : 'hidden';
+                }
+            } catch (e) {
+                // 忽略
+            }
+        };
+        if (!usedContainFallback && scaleMode !== 'contain' && typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => {
+                laterCalibrate();
+                setTimeout(laterCalibrate, 100);
+            });
+        }
     }
 
     /**
@@ -2280,8 +2788,10 @@ export class MessageInfoBarRenderer {
     getDataTableDisplayName(panelType, key) {
         try {
             // 🔧 修复：使用InfoBarSettings的完整映射表，确保所有字段都有正确的中文显示
-            if (window.SillyTavernInfobar?.infoBarSettings) {
-                const completeMapping = window.SillyTavernInfobar.infoBarSettings.getCompleteDisplayNameMapping();
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+            if (infoBarSettings) {
+                const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
                 return completeMapping[panelType]?.[key] || null;
             }
             
@@ -2290,6 +2800,39 @@ export class MessageInfoBarRenderer {
             
         } catch (error) {
             console.warn('[MessageInfoBarRenderer] ⚠️ 获取显示名称失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🔧 新增：获取统一的字段显示名称 - 与DataTable保持一致
+     */
+    getUnifiedFieldDisplayName(fieldKey, panelType = null) {
+        try {
+            // 使用InfoBarSettings的完整映射表，确保所有字段都有正确的中文显示
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+            if (infoBarSettings) {
+                const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
+                
+                // 如果指定了面板类型，优先从对应面板的映射中查找
+                if (panelType && completeMapping[panelType] && completeMapping[panelType][fieldKey]) {
+                    return completeMapping[panelType][fieldKey];
+                }
+                
+                // 否则在所有面板映射中查找
+                for (const [panelId, panelMapping] of Object.entries(completeMapping)) {
+                    if (panelMapping[fieldKey]) {
+                        return panelMapping[fieldKey];
+                    }
+                }
+            }
+            
+            // 如果没有找到映射，返回null（由调用方处理备用逻辑）
+            return null;
+            
+        } catch (error) {
+            console.warn('[MessageInfoBarRenderer] ⚠️ 获取统一字段显示名称失败:', error);
             return null;
         }
     }

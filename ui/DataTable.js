@@ -124,7 +124,7 @@ export class DataTable {
             // 创建新的深色主题数据表格界面
             this.modal = document.createElement('div');
             this.modal.id = 'data-table-modal';
-            this.modal.className = 'data-table-modal datatable-modal-new';
+            this.modal.className = 'data-table-modal datatable-modal-new infobar-extension';
             this.modal.style.display = 'none';
 
             this.modal.innerHTML = `
@@ -461,8 +461,10 @@ export class DataTable {
     getSubItemDisplayName(panelType, key) {
         try {
             // 🔧 修复：使用InfoBarSettings的完整映射表，确保所有字段都有正确的中文显示
-            if (window.SillyTavernInfobar?.infoBarSettings) {
-                const completeMapping = window.SillyTavernInfobar.infoBarSettings.getCompleteDisplayNameMapping();
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+            if (infoBarSettings) {
+                const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
                 return completeMapping[panelType]?.[key] || key;
             }
             
@@ -492,7 +494,7 @@ export class DataTable {
                             <span class="expand-icon">▼</span>
                         </button>
                         <button class="btn-group-action" data-action="edit-group" data-group="${panel.id}">
-                            编辑
+                            面板规则
                         </button>
                     </div>
                 </div>
@@ -584,9 +586,13 @@ export class DataTable {
             // 🔧 智能计算自适应列宽
             const columnAnalysis = this.calculateAdaptiveColumnWidths(panel);
             
-            // 生成表头
+            // 🔧 修复：生成表头时使用中文显示名称
             const headers = columnAnalysis.map((analysis, index) => {
                 const { item, adaptiveWidth } = analysis;
+                // 获取字段的中文显示名称
+                const displayName = this.getFieldDisplayName(item.name, panel.key) || item.name;
+                console.log(`[DataTable] 🔍 字段映射: ${item.name} -> ${displayName} (面板: ${panel.key})`);
+                
                 return `<th class="col-property" style="
                     width: ${adaptiveWidth}px;
                     min-width: ${Math.max(adaptiveWidth, 80)}px;
@@ -595,7 +601,7 @@ export class DataTable {
                     white-space: nowrap;
                     overflow: visible;
                     word-wrap: break-word;
-                ">${item.name}</th>`;
+                ">${displayName}</th>`;
             }).join('');
 
             // 生成数据行 - 根据面板类型获取对应的数据值
@@ -881,6 +887,56 @@ export class DataTable {
      */
     findFieldValue(panelData, item) {
         try {
+            // 🔧 修复：添加英文到中文的字段映射
+            const fieldMapping = {
+                // 个人信息字段映射
+                'name': '姓名',
+                'age': '年龄',
+                'gender': '性别',
+                'occupation': '职业',
+                'height': '身高',
+                'weight': '体重',
+                'bloodType': '血型',
+                'zodiac': '星座',
+                'birthday': '生日',
+                'birthplace': '出生地',
+                'nationality': '国籍',
+                'ethnicity': '民族',
+                'hairColor': '发色',
+                'hairStyle': '发型',
+                'eyeColor': '眼色',
+                'skinColor': '肤色',
+                'appearance': '外貌',
+                'personality': '性格',
+                'hobbies': '爱好',
+
+                // 世界信息字段映射
+                'time': '时间',
+                'weather': '天气',
+                'location': '位置',
+                'geography': '地理环境',
+                'locations': '重要地点',
+
+                // 交互对象字段映射
+                'status': '状态',
+                'mood': '心情',
+                'activity': '活动',
+                'relationship': '关系',
+                'intimacy': '亲密度',
+                'trust': '信任度',
+                'history': '历史记录',
+
+                // 其他常用字段映射
+                'class': '职业',
+                'level': '等级',
+                'health': '生命值',
+                'maxHealth': '最大生命值',
+                'energy': '能量',
+                'maxEnergy': '最大能量',
+                'gold': '金币',
+                'currentLocation': '当前位置'
+            };
+
             // 构建可能的字段名列表
             const possibleFieldNames = [
                 item.key,           // 原始key
@@ -889,6 +945,13 @@ export class DataTable {
                 item.fieldName,     // 字段名
                 item.originalKey    // 原始键名
             ].filter(name => name); // 过滤掉空值
+
+            // 🔧 修复：添加中文映射字段名
+            possibleFieldNames.forEach(fieldName => {
+                if (fieldMapping[fieldName]) {
+                    possibleFieldNames.push(fieldMapping[fieldName]);
+                }
+            });
 
             // 对于自定义面板，需要特殊处理字段名匹配
             if (item.name && typeof item.name === 'string') {
@@ -1499,12 +1562,11 @@ export class DataTable {
     }
 
     /**
-     * 编辑分组
+     * 编辑分组 - 打开面板规则编辑界面
      */
     editGroup(groupName) {
-        console.log(`[DataTable] ✏️ 编辑分组: ${groupName}`);
-        // 这里可以添加编辑分组的逻辑
-        this.showMessage(`编辑分组: ${groupName}`, 'info');
+        console.log(`[DataTable] ✏️ 编辑面板规则: ${groupName}`);
+        this.showPanelRuleDialog(groupName);
     }
 
     // 复选框相关方法已删除 - 不再需要复选框功能
@@ -2175,12 +2237,14 @@ export class DataTable {
     getEnglishFieldName(chineseDisplayName, panelId) {
         try {
             // 获取完整的字段映射表
-            if (!window.SillyTavernInfobar?.infoBarSettings) {
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+            if (!infoBarSettings) {
                 console.warn('[DataTable] ⚠️ InfoBarSettings 不可用');
                 return null;
             }
 
-            const completeMapping = window.SillyTavernInfobar.infoBarSettings.getCompleteDisplayNameMapping();
+            const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
 
             // 首先在指定面板中查找
             if (panelId && completeMapping[panelId]) {
@@ -2219,8 +2283,10 @@ export class DataTable {
     getFieldDisplayName(fieldKey, panelType = null) {
         try {
             // 🔧 修复：使用InfoBarSettings的完整映射表，确保所有字段都有正确的中文显示
-            if (window.SillyTavernInfobar?.infoBarSettings) {
-                const completeMapping = window.SillyTavernInfobar.infoBarSettings.getCompleteDisplayNameMapping();
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+            if (infoBarSettings) {
+                const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
                 
                 // 如果指定了面板类型，优先从对应面板的映射中查找
                 if (panelType && completeMapping[panelType] && completeMapping[panelType][fieldKey]) {
@@ -4075,10 +4141,13 @@ export class DataTable {
         try {
             console.log('[DataTable] 🔧 显示字段规则编辑对话框:', cellInfo);
 
-            // 获取字段规则管理器
-            const fieldRuleManager = window.SillyTavernInfobar?.fieldRuleManager;
+            // 🔧 修复：获取字段规则管理器（正确的路径）
+            const fieldRuleManager = window.SillyTavernInfobar?.modules?.fieldRuleManager;
             if (!fieldRuleManager) {
                 console.error('[DataTable] ❌ 字段规则管理器不可用');
+                console.error('[DataTable] 🔍 调试信息 - SillyTavernInfobar:', !!window.SillyTavernInfobar);
+                console.error('[DataTable] 🔍 调试信息 - modules:', !!window.SillyTavernInfobar?.modules);
+                console.error('[DataTable] 🔍 调试信息 - fieldRuleManager:', !!window.SillyTavernInfobar?.modules?.fieldRuleManager);
                 return;
             }
 
@@ -4115,65 +4184,15 @@ export class DataTable {
                         </div>
 
                         <div class="rule-editor">
-                            <div class="template-section">
-                                <h4>规则模板</h4>
-                                <div class="template-buttons">
-                                    ${templates.map(template => `
-                                        <button class="template-btn" data-template="${template.key}">
-                                            ${template.name}
-                                        </button>
-                                    `).join('')}
-                                    <button class="template-btn custom-btn" data-template="custom">
-                                        自定义规则
-                                    </button>
-                                </div>
-                            </div>
-
                             <div class="rule-form">
                                 <div class="form-section">
-                                    <h4>字段示例</h4>
-                                    <div class="examples-container">
-                                        <div class="examples-list" id="examples-list">
-                                            ${this.renderExamplesList(existingRule?.examples || [])}
-                                        </div>
-                                        <button class="btn btn-small add-example-btn" data-action="add-example">
-                                            + 添加示例
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div class="form-section">
-                                    <h4>基础规则</h4>
+                                    <h4>字段规则</h4>
                                     <div class="form-group">
-                                        <label>规则描述:</label>
-                                        <textarea class="form-control" id="rule-description" placeholder="描述这个字段的生成规则...">${existingRule?.rules?.description || ''}</textarea>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>输出格式:</label>
-                                        <input type="text" class="form-control" id="rule-format" placeholder="例如: 数字(0-100) + 简短描述" value="${existingRule?.rules?.format || ''}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>约束条件:</label>
-                                        <div class="constraints-container">
-                                            <div class="constraints-list" id="constraints-list">
-                                                ${this.renderConstraintsList(existingRule?.rules?.constraints || [])}
-                                            </div>
-                                            <button class="btn btn-small add-constraint-btn" data-action="add-constraint">
-                                                + 添加约束
-                                            </button>
+                                        <label>规则内容:</label>
+                                        <textarea class="form-control" id="field-rule-content" placeholder="输入字段的生成规则..." rows="8">${this.extractExistingRuleContent(existingRule)}</textarea>
+                                        <div class="form-help">
+                                            <small>在此输入字段的生成规则，例如：角色的姓名应该符合古代中国人名特点，包含姓氏和名字。</small>
                                         </div>
-                                    </div>
-                                </div>
-
-                                <div class="form-section">
-                                    <h4>动态规则</h4>
-                                    <div class="dynamic-rules-container">
-                                        <div class="dynamic-rules-list" id="dynamic-rules-list">
-                                            ${this.renderDynamicRulesList(existingRule?.dynamicRules || [])}
-                                        </div>
-                                        <button class="btn btn-small add-dynamic-rule-btn" data-action="add-dynamic-rule">
-                                            + 添加动态规则
-                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -4253,19 +4272,57 @@ export class DataTable {
     }
 
     /**
+     * 🆕 提取现有规则内容
+     */
+    extractExistingRuleContent(existingRule) {
+        if (!existingRule) {
+            return '';
+        }
+
+        // 如果已经是简化格式（字符串）
+        if (typeof existingRule === 'string') {
+            return existingRule;
+        }
+
+        // 如果是对象格式，提取内容
+        const parts = [];
+
+        // 提取基础规则描述
+        if (existingRule.rules && existingRule.rules.description) {
+            parts.push(existingRule.rules.description);
+        }
+
+        // 提取动态规则描述
+        if (existingRule.dynamicRules && Array.isArray(existingRule.dynamicRules)) {
+            existingRule.dynamicRules.forEach(rule => {
+                if (rule.description) {
+                    parts.push(rule.description);
+                }
+            });
+        }
+
+        return parts.join('\n');
+    }
+
+    /**
      * 🆕 保存字段规则
      */
     async saveFieldRule(dialog, cellInfo, fieldRuleManager) {
         try {
-            // 收集表单数据
+            // 获取规则内容
+            const ruleContent = dialog.querySelector('#field-rule-content').value.trim();
+
+            if (!ruleContent) {
+                console.warn('[DataTable] ⚠️ 规则内容为空，跳过保存');
+                return;
+            }
+
+            // 创建简化的规则对象
             const rule = {
-                examples: this.collectExamples(dialog),
-                rules: {
-                    description: dialog.querySelector('#rule-description').value,
-                    format: dialog.querySelector('#rule-format').value,
-                    constraints: this.collectConstraints(dialog)
-                },
-                dynamicRules: this.collectDynamicRules(dialog)
+                content: ruleContent,
+                type: 'simple',
+                createdAt: Date.now(),
+                updatedAt: Date.now()
             };
 
             // 保存规则
@@ -4538,6 +4595,494 @@ export class DataTable {
     /**
      * 销毁组件
      */
+    /**
+     * 🆕 显示面板规则编辑对话框
+     */
+    async showPanelRuleDialog(panelId) {
+        try {
+            console.log('[DataTable] 🔧 显示面板规则编辑对话框:', panelId);
+
+            // 检查是否已存在对话框，如果存在则先关闭
+            const existingDialog = document.querySelector('.panel-rule-dialog');
+            if (existingDialog) {
+                console.log('[DataTable] 🔄 关闭已存在的面板规则对话框');
+                existingDialog.remove();
+            }
+
+            // 获取面板规则管理器
+            const panelRuleManager = window.SillyTavernInfobar?.modules?.panelRuleManager;
+            if (!panelRuleManager) {
+                console.error('[DataTable] ❌ 面板规则管理器不可用');
+                this.showErrorMessage('面板规则管理器不可用，请检查系统配置');
+                return;
+            }
+
+            // 获取现有规则
+            const existingRule = panelRuleManager.getPanelRule(panelId);
+
+            // 获取面板信息
+            const panelInfo = this.getPanelInfo(panelId);
+
+            // 获取适用的规则模板
+            const templates = panelRuleManager.getTemplatesForPanelType(panelInfo.type);
+
+            // 创建面板规则编辑对话框 - 使用与字段规则对话框相同的样式
+            const dialog = document.createElement('div');
+            dialog.className = 'field-rule-dialog panel-rule-dialog';
+            dialog.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                opacity: 0;
+                visibility: visible;
+                transition: opacity 0.3s ease;
+            `;
+
+            dialog.innerHTML = `
+                <div class="dialog-content" style="
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    color: var(--theme-text-primary, #ffffff);
+                    border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                    border-radius: 12px;
+                    padding: 0;
+                    width: 500px;
+                    max-width: 90vw;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                ">
+                    <div class="dialog-header" style="
+                        padding: 20px 24px 16px;
+                        border-bottom: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <h3 style="margin: 0; color: var(--theme-text-primary, #ffffff); font-size: 18px;">面板规则编辑</h3>
+                        <button class="dialog-close" data-action="close" style="
+                            background: none;
+                            border: none;
+                            color: var(--theme-text-secondary, #aaa);
+                            font-size: 24px;
+                            cursor: pointer;
+                            padding: 0;
+                            width: 32px;
+                            height: 32px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            border-radius: 4px;
+                        ">×</button>
+                    </div>
+                    <div class="dialog-body" style="padding: 20px 24px;">
+                        <div class="panel-info" style="
+                            background: var(--theme-bg-secondary, rgba(255,255,255,0.05));
+                            padding: 16px;
+                            border-radius: 8px;
+                            margin-bottom: 20px;
+                        ">
+                            <div class="info-row" style="display: flex; margin-bottom: 8px;">
+                                <span class="info-label" style="
+                                    color: var(--theme-text-secondary, #aaa);
+                                    min-width: 60px;
+                                    font-weight: 500;
+                                ">面板:</span>
+                                <span class="info-value" style="color: var(--theme-text-primary, #fff);">${panelInfo.name}</span>
+                            </div>
+                            <div class="info-row" style="display: flex;">
+                                <span class="info-label" style="
+                                    color: var(--theme-text-secondary, #aaa);
+                                    min-width: 60px;
+                                    font-weight: 500;
+                                ">类型:</span>
+                                <span class="info-value" style="color: var(--theme-text-primary, #fff);">${panelInfo.type}</span>
+                            </div>
+                        </div>
+
+                        <div class="rule-form">
+                            <div class="form-group" style="margin-bottom: 20px;">
+                                <label class="checkbox-label" style="
+                                    display: flex;
+                                    align-items: center;
+                                    cursor: pointer;
+                                    margin-bottom: 8px;
+                                ">
+                                    <input type="checkbox" id="rule-enabled" ${existingRule?.enabled !== false ? 'checked' : ''} style="
+                                        margin-right: 8px;
+                                        accent-color: var(--theme-primary-color, #ff6b35);
+                                    " />
+                                    <span style="color: var(--theme-text-primary, #fff);">启用面板规则</span>
+                                </label>
+                                <div class="form-hint" style="
+                                    color: var(--theme-text-secondary, #aaa);
+                                    font-size: 13px;
+                                    line-height: 1.4;
+                                ">启用后，AI将根据设定的规则智能筛选记录内容</div>
+                            </div>
+
+                            <div class="rule-config" ${existingRule?.enabled === false ? 'style="display: none;"' : ''}>
+                                <div class="form-group" style="margin-bottom: 20px;">
+                                    <label for="rule-template" style="
+                                        display: block;
+                                        color: var(--theme-text-primary, #fff);
+                                        margin-bottom: 8px;
+                                        font-weight: 500;
+                                    ">规则模板</label>
+                                    <select id="rule-template" class="form-select" style="
+                                        width: 100%;
+                                        padding: 8px 12px;
+                                        background: var(--theme-bg-secondary, #333);
+                                        color: var(--theme-text-primary, #fff);
+                                        border: 1px solid var(--theme-border-color, #555);
+                                        border-radius: 4px;
+                                        font-size: 14px;
+                                    ">
+                                        <option value="">选择规则模板</option>
+                                        ${templates.map(template => `
+                                            <option value="${template.key}" ${existingRule?.templateKey === template.key ? 'selected' : ''}>
+                                                ${template.name}
+                                            </option>
+                                        `).join('')}
+                                    </select>
+                                    <div class="form-hint" style="
+                                        color: var(--theme-text-secondary, #aaa);
+                                        font-size: 13px;
+                                        line-height: 1.4;
+                                        margin-top: 4px;
+                                    ">选择预设的规则模板，帮助AI更好地理解记录要求</div>
+                                </div>
+
+                                <div class="form-group" style="margin-bottom: 20px;">
+                                    <label for="rule-description" style="
+                                        display: block;
+                                        color: var(--theme-text-primary, #fff);
+                                        margin-bottom: 8px;
+                                        font-weight: 500;
+                                    ">规则描述</label>
+                                    <textarea id="rule-description" rows="3" placeholder="描述这个面板应该记录什么样的内容..." style="
+                                        width: 100%;
+                                        padding: 8px 12px;
+                                        background: var(--theme-bg-secondary, #333);
+                                        color: var(--theme-text-primary, #fff);
+                                        border: 1px solid var(--theme-border-color, #555);
+                                        border-radius: 4px;
+                                        font-size: 14px;
+                                        resize: vertical;
+                                        box-sizing: border-box;
+                                    ">${existingRule?.description || ''}</textarea>
+                                    <div class="form-hint" style="
+                                        color: var(--theme-text-secondary, #aaa);
+                                        font-size: 13px;
+                                        line-height: 1.4;
+                                        margin-top: 4px;
+                                    ">详细描述面板的记录规则，帮助AI更好地理解记录要求</div>
+                                </div>
+
+                                <div class="template-details" style="display: none;">
+                                    <!-- 模板详情将在选择模板后动态显示 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dialog-footer" style="
+                        padding: 16px 24px 20px;
+                        border-top: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                        display: flex;
+                        justify-content: flex-end;
+                        gap: 12px;
+                    ">
+                        <button class="btn-cancel" data-action="cancel" style="
+                            padding: 8px 16px;
+                            background: var(--theme-bg-secondary, #555);
+                            color: var(--theme-text-primary, #fff);
+                            border: 1px solid var(--theme-border-color, #666);
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        ">取消</button>
+                        <button class="btn-save" data-action="save" style="
+                            padding: 8px 16px;
+                            background: var(--theme-primary-color, #ff6b35);
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                            font-weight: 500;
+                        ">保存规则</button>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            document.body.appendChild(dialog);
+
+            // 绑定事件
+            this.bindPanelRuleDialogEvents(dialog, panelId, panelRuleManager, templates);
+
+            // 显示对话框
+            setTimeout(() => {
+                dialog.style.opacity = '1';
+            }, 10);
+
+            console.log('[DataTable] ✅ 面板规则编辑对话框已显示');
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 显示面板规则编辑对话框失败:', error);
+            this.showErrorMessage('显示面板规则编辑对话框失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 🆕 获取面板信息
+     */
+    getPanelInfo(panelId) {
+        const panelNameMap = {
+            'personal': { name: '个人信息', type: 'personal' },
+            'interaction': { name: '交互对象', type: 'interaction' },
+            'tasks': { name: '任务系统', type: 'tasks' },
+            'world': { name: '世界信息', type: 'world' },
+            'organization': { name: '组织信息', type: 'organization' },
+            'news': { name: '资讯内容', type: 'news' },
+            'inventory': { name: '背包仓库', type: 'inventory' },
+            'abilities': { name: '能力系统', type: 'abilities' },
+            'plot': { name: '剧情面板', type: 'plot' },
+            'cultivation': { name: '修仙世界', type: 'cultivation' },
+            'fantasy': { name: '玄幻世界', type: 'fantasy' },
+            'modern': { name: '都市现代', type: 'modern' },
+            'historical': { name: '历史古代', type: 'historical' },
+            'magic': { name: '魔法能力', type: 'magic' },
+            'training': { name: '调教系统', type: 'training' }
+        };
+
+        return panelNameMap[panelId] || { name: panelId, type: 'custom' };
+    }
+
+    /**
+     * 🆕 绑定面板规则对话框事件
+     */
+    bindPanelRuleDialogEvents(dialog, panelId, panelRuleManager, templates) {
+        // 关闭对话框
+        const closeDialog = () => {
+            dialog.style.opacity = '0';
+            setTimeout(() => dialog.remove(), 300);
+        };
+
+        // 点击对话框外部关闭
+        dialog.addEventListener('click', (e) => {
+            if (e.target === dialog) {
+                closeDialog();
+            }
+        });
+
+        // 关闭按钮
+        dialog.querySelector('[data-action="close"]').addEventListener('click', closeDialog);
+        dialog.querySelector('[data-action="cancel"]').addEventListener('click', closeDialog);
+
+        // 启用规则复选框
+        const enabledCheckbox = dialog.querySelector('#rule-enabled');
+        const ruleConfig = dialog.querySelector('.rule-config');
+        enabledCheckbox.addEventListener('change', (e) => {
+            ruleConfig.style.display = e.target.checked ? 'block' : 'none';
+        });
+
+        // 规则模板选择
+        const templateSelect = dialog.querySelector('#rule-template');
+        const templateDetails = dialog.querySelector('.template-details');
+        templateSelect.addEventListener('change', (e) => {
+            const selectedTemplate = templates.find(t => t.key === e.target.value);
+            if (selectedTemplate) {
+                this.showTemplateDetails(templateDetails, selectedTemplate);
+            } else {
+                templateDetails.style.display = 'none';
+            }
+        });
+
+        // 保存按钮
+        dialog.querySelector('[data-action="save"]').addEventListener('click', async () => {
+            await this.savePanelRule(dialog, panelId, panelRuleManager, closeDialog);
+        });
+
+        // ESC键关闭
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                closeDialog();
+                document.removeEventListener('keydown', handleKeyDown);
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+    }
+
+    /**
+     * 🆕 显示模板详情
+     */
+    showTemplateDetails(container, template) {
+        container.innerHTML = `
+            <div class="template-info" style="
+                background: var(--theme-bg-secondary, rgba(255,255,255,0.05));
+                padding: 16px;
+                border-radius: 8px;
+                margin-top: 16px;
+            ">
+                <h4 style="
+                    margin: 0 0 12px 0;
+                    color: var(--theme-text-primary, #fff);
+                    font-size: 16px;
+                ">${template.name}</h4>
+                <p class="template-description" style="
+                    margin: 0 0 16px 0;
+                    color: var(--theme-text-secondary, #aaa);
+                    font-size: 14px;
+                    line-height: 1.4;
+                ">${template.description}</p>
+
+                ${template.rules?.options ? `
+                    <div class="template-options" style="margin-bottom: 16px;">
+                        <label style="
+                            display: block;
+                            color: var(--theme-text-primary, #fff);
+                            margin-bottom: 12px;
+                            font-weight: 500;
+                        ">过滤选项</label>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            ${template.rules.options.map(option => `
+                                <label class="radio-label" style="
+                                    display: flex;
+                                    align-items: flex-start;
+                                    cursor: pointer;
+                                    padding: 8px;
+                                    background: var(--theme-bg-primary, rgba(0,0,0,0.2));
+                                    border-radius: 4px;
+                                    border: 1px solid transparent;
+                                    transition: border-color 0.2s;
+                                ">
+                                    <input type="radio" name="filter-option" value="${option.value}" ${option.value === 'all' ? 'checked' : ''} style="
+                                        margin-right: 8px;
+                                        margin-top: 2px;
+                                        accent-color: var(--theme-primary-color, #ff6b35);
+                                    " />
+                                    <div style="flex: 1;">
+                                        <span style="
+                                            color: var(--theme-text-primary, #fff);
+                                            font-weight: 500;
+                                            display: block;
+                                            margin-bottom: 4px;
+                                        ">${option.label}</span>
+                                        <div class="option-description" style="
+                                            color: var(--theme-text-secondary, #aaa);
+                                            font-size: 13px;
+                                            line-height: 1.3;
+                                        ">${option.description}</div>
+                                    </div>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+
+                ${template.examples ? `
+                    <div class="template-examples">
+                        <label style="
+                            display: block;
+                            color: var(--theme-text-primary, #fff);
+                            margin-bottom: 12px;
+                            font-weight: 500;
+                        ">规则示例</label>
+                        <div class="examples-list" style="display: flex; flex-direction: column; gap: 8px;">
+                            ${template.examples.map(example => `
+                                <div class="example-item" style="
+                                    display: flex;
+                                    align-items: center;
+                                    padding: 8px 12px;
+                                    background: var(--theme-bg-primary, rgba(0,0,0,0.2));
+                                    border-radius: 4px;
+                                    font-size: 13px;
+                                ">
+                                    <div class="example-condition" style="
+                                        color: var(--theme-text-primary, #fff);
+                                        flex: 1;
+                                    ">${example.condition}</div>
+                                    <div class="example-arrow" style="
+                                        color: var(--theme-primary-color, #ff6b35);
+                                        margin: 0 8px;
+                                        font-weight: bold;
+                                    ">→</div>
+                                    <div class="example-action" style="
+                                        color: var(--theme-text-primary, #fff);
+                                        flex: 1;
+                                    ">${example.action}</div>
+                                    ${example.note ? `<div class="example-note" style="
+                                        color: var(--theme-text-secondary, #aaa);
+                                        font-size: 12px;
+                                        margin-left: 8px;
+                                        font-style: italic;
+                                    ">(${example.note})</div>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+        container.style.display = 'block';
+    }
+
+    /**
+     * 🆕 保存面板规则
+     */
+    async savePanelRule(dialog, panelId, panelRuleManager, closeCallback) {
+        try {
+            const enabled = dialog.querySelector('#rule-enabled').checked;
+            const templateKey = dialog.querySelector('#rule-template').value;
+            const description = dialog.querySelector('#rule-description').value.trim();
+
+            // 获取过滤选项
+            let filterValue = 'all';
+            const selectedOption = dialog.querySelector('input[name="filter-option"]:checked');
+            if (selectedOption) {
+                filterValue = selectedOption.value;
+            }
+
+            // 构建规则对象
+            const rule = {
+                enabled,
+                templateKey,
+                description,
+                filterType: templateKey ? 'template' : 'custom',
+                filterValue,
+                updatedAt: Date.now()
+            };
+
+            console.log('[DataTable] 💾 保存面板规则:', {
+                panelId,
+                rule
+            });
+
+            // 保存到面板规则管理器
+            const success = await panelRuleManager.setPanelRule(panelId, rule);
+
+            if (success) {
+                this.showSuccessMessage(`面板 "${this.getPanelInfo(panelId).name}" 的规则已成功保存`);
+                closeCallback();
+            } else {
+                this.showErrorMessage('保存面板规则失败，请重试');
+            }
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 保存面板规则失败:', error);
+            this.showErrorMessage('保存面板规则失败: ' + error.message);
+        }
+    }
+
     destroy() {
         if (this.modal) {
             this.modal.remove();

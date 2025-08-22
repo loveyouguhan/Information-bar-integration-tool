@@ -1116,7 +1116,7 @@ export class FrontendDisplayManager {
      */
     createMessageWrapper(messageElement) {
         const wrapper = document.createElement('div');
-        wrapper.className = `frontend-message-wrapper ${this.settings.style}`;
+        wrapper.className = `frontend-message-wrapper ${this.settings.style} infobar-enabled`;
         wrapper.dataset.messageId = messageElement.id;
 
         wrapper.innerHTML = `
@@ -1821,8 +1821,10 @@ export class FrontendDisplayManager {
     getFieldDisplayName(fieldKey, panelType = null) {
         try {
             // 🔧 修复：使用InfoBarSettings的完整映射表，确保所有字段都有正确的中文显示
-            if (window.SillyTavernInfobar?.infoBarSettings) {
-                const completeMapping = window.SillyTavernInfobar.infoBarSettings.getCompleteDisplayNameMapping();
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+            if (infoBarSettings) {
+                const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
                 
                 // 如果指定了面板类型，优先从对应面板的映射中查找
                 if (panelType && completeMapping[panelType] && completeMapping[panelType][fieldKey]) {
@@ -2068,21 +2070,21 @@ export class FrontendDisplayManager {
      */
     getBasicPanelDisplayName(panelId) {
         const map = {
-            personal: '个人信息',
-            world: '世界信息',
-            interaction: '交互对象',
-            tasks: '任务信息',
-            organization: '组织信息',
-            news: '新闻事件',
-            inventory: '背包物品',
-            abilities: '能力技能',
-            plot: '剧情信息',
-            cultivation: '修炼信息',
-            fantasy: '奇幻设定',
-            modern: '现代设定',
-            historical: '历史设定',
-            magic: '魔法系统',
-            training: '训练信息'
+            '个人信息': '个人信息',
+            '世界信息': '世界信息',
+            '交互对象': '交互对象',
+            '任务系统': '任务信息',
+            '组织信息': '组织信息',
+            '资讯内容': '新闻事件',
+            '物品清单': '背包物品',
+            '能力系统': '能力技能',
+            '剧情面板': '剧情信息',
+            '修仙世界': '修炼信息',
+            '玄幻世界': '奇幻设定',
+            '都市现代': '现代设定',
+            '历史古代': '历史设定',
+            '魔法能力': '魔法系统',
+            '调教系统': '训练信息'
         };
         return map[panelId] || panelId;
     }
@@ -2218,31 +2220,53 @@ export class FrontendDisplayManager {
         menu.style.zIndex = '10000';
         
         if (isMobile) {
-            console.log('[FrontendDisplayManager] 📱 应用移动端菜单居中定位');
+            console.log('[FrontendDisplayManager] 📱 应用移动端菜单完美居中定位');
             
-            // 移动端使用全屏遮罩加居中内容
-            menu.style.left = '0';
-            menu.style.top = '0';
-            menu.style.width = '100vw';
-            menu.style.height = '100vh';
-            menu.style.background = 'rgba(0, 0, 0, 0.5)';
-            menu.style.backdropFilter = 'blur(4px)';
-            menu.style.display = 'flex';
-            menu.style.alignItems = 'center';
-            menu.style.justifyContent = 'center';
-            menu.style.transform = 'none';
+            // 🔧 参考面板规则编辑界面的完美居中实现
+            menu.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.7);
+                backdrop-filter: blur(4px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                opacity: 0;
+                visibility: visible;
+                transition: opacity 0.3s ease;
+            `;
             
-            // 确保menu-content在移动端正确居中
+            // 🔧 优化menu-content移动端完美居中显示
             const menuContent = menu.querySelector('.menu-content');
             if (menuContent) {
-                menuContent.style.width = '90vw';
-                menuContent.style.maxWidth = '350px';
-                menuContent.style.maxHeight = '80vh';
-                menuContent.style.overflow = 'auto';
-                menuContent.style.margin = '0';
+                menuContent.style.cssText = `
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    color: var(--theme-text-primary, #ffffff);
+                    border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                    border-radius: 16px;
+                    padding: 0;
+                    width: 380px;
+                    max-width: 90vw;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                    margin: 0;
+                    flex-shrink: 0;
+                `;
             }
             
-            console.log('[FrontendDisplayManager] ✅ 移动端菜单定位完成');
+            // 🔧 添加显示动画
+            setTimeout(() => {
+                menu.style.opacity = '1';
+            }, 10);
+            
+            console.log('[FrontendDisplayManager] ✅ 移动端菜单完美居中定位完成');
         } else {
             // 桌面端保持原有定位逻辑
             menu.style.left = `${rect.left}px`;

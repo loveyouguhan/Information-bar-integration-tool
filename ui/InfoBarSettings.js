@@ -1,29 +1,32 @@
 /**
  * 信息栏设置界面
- * 
+ *
  * 负责管理信息栏的设置界面：
  * - 基础设置面板
  * - API配置面板
  * - 主题设置面板
  * - 面板管理界面
  * - 设置导入导出功能
- * 
+ *
  * @class InfoBarSettings
  */
 
 export class InfoBarSettings {
     constructor(configManager, apiIntegration, eventSystem) {
         console.log('[InfoBarSettings] 🔧 信息栏设置界面初始化开始');
-        
+
         this.configManager = configManager;
         this.apiIntegration = apiIntegration;
         this.eventSystem = eventSystem;
-        
+
+        // 🔧 注入数据核心引用，供数据导出/导入使用
+        this.unifiedDataCore = this.configManager?.dataCore || window.SillyTavernInfobar?.modules?.dataCore || null;
+
         // UI元素引用
         this.container = null;
         this.modal = null;
         this.currentTab = 'basic';
-        
+
         // 设置面板
         this.panels = {
             basic: null,
@@ -47,17 +50,17 @@ export class InfoBarSettings {
             magic: null,
             training: null
         };
-        
+
         // 表单数据
         this.formData = {};
-        
+
         // 初始化状态
         this.initialized = false;
         this.visible = false;
         this.errorCount = 0;
         this.settingsLoaded = false;
         this.needsSettingsRefresh = false;
-        
+
         // 绑定方法
         this.init = this.init.bind(this);
         this.show = this.show.bind(this);
@@ -65,10 +68,10 @@ export class InfoBarSettings {
         this.createUI = this.createUI.bind(this);
         this.loadSettings = this.loadSettings.bind(this);
         this.saveSettings = this.saveSettings.bind(this);
-        
+
         // 绑定聊天切换事件监听器
         this.bindChatSwitchListener();
-        
+
         // 🔧 新增：立即应用保存的日志级别设置，无需等待UI界面
         // 异步调用，不阻塞构造函数
         this.applyEarlyLogLevel().catch(error => {
@@ -83,32 +86,32 @@ export class InfoBarSettings {
     async applyEarlyLogLevel() {
         try {
             console.log('[InfoBarSettings] 🔧 开始应用早期日志级别设置...');
-            
+
             // 使用 SillyTavern 标准存储机制读取配置
             const context = SillyTavern.getContext();
             if (!context || !context.extensionSettings) {
                 console.log('[InfoBarSettings] ⚠️ SillyTavern上下文未就绪，跳过早期日志级别设置');
                 return;
             }
-            
+
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings['Information bar integration tool'] || {};
-            
+
             // 读取调试配置
             const debugEnabled = configs.debug?.enabled || false;
             const logLevel = configs.debug?.logLevel || 'info';
-            
-            console.log('[InfoBarSettings] 📊 从配置读取日志设置:', { 
-                enabled: debugEnabled, 
-                level: logLevel 
+
+            console.log('[InfoBarSettings] 📊 从配置读取日志设置:', {
+                enabled: debugEnabled,
+                level: logLevel
             });
-            
+
             // 立即应用日志级别
             const effectiveLevel = debugEnabled ? logLevel : 'none';
             this.applyConsoleLogLevel(effectiveLevel);
-            
+
             console.log('[InfoBarSettings] ✅ 早期日志级别设置完成');
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 应用早期日志级别失败:', error);
         }
@@ -128,7 +131,7 @@ export class InfoBarSettings {
                         this.refreshSummaryHistoryOnChatSwitch();
                     }
                 });
-                
+
                 console.log('[InfoBarSettings] ✅ 聊天切换事件监听器已绑定');
             }
         } catch (error) {
@@ -142,31 +145,31 @@ export class InfoBarSettings {
     async refreshSummaryHistoryOnChatSwitch() {
         try {
             console.log('[InfoBarSettings] 🔄 聊天切换，刷新总结历史列表');
-            
+
             // 检查总结面板是否存在
             const summaryHistorySelect = this.modal?.querySelector('#content-summary-history-select');
             if (!summaryHistorySelect) {
                 console.log('[InfoBarSettings] ℹ️ 总结历史选择框不存在，跳过刷新');
                 return;
             }
-            
+
             // 获取总结管理器
             const infoBarTool = window.SillyTavernInfobar;
             const summaryManager = infoBarTool?.modules?.summaryManager;
-            
+
             if (!summaryManager) {
                 console.warn('[InfoBarSettings] ⚠️ 总结管理器未找到');
                 return;
             }
-            
+
             // 获取当前聊天的总结历史
             const summaryHistory = await summaryManager.getSummaryHistory();
-            
+
             // 重新渲染总结历史选择框
             this.renderSummaryHistory(summaryHistory);
-            
+
             console.log('[InfoBarSettings] ✅ 总结历史列表已刷新，当前聊天总结数量:', summaryHistory.length);
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 刷新总结历史失败:', error);
         }
@@ -178,14 +181,14 @@ export class InfoBarSettings {
     openErrorLogModal() {
         try {
             const modal = document.createElement('div');
-            modal.className = 'error-log-modal';
+            modal.className = 'error-log-modal infobar-extension';
             modal.style.cssText = `
                 position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
                 width: 600px; max-height: 500px; background: #1a1a1a; border: 2px solid #333;
                 border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 20000;
                 color: #e0e0e0; font-family: monospace;
             `;
-            
+
             modal.innerHTML = `
                 <div class="error-log-header" style="padding: 15px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
                     <div>
@@ -269,8 +272,8 @@ export class InfoBarSettings {
             const rt = window.SillyTavernInfobar.runtimeLogs;
             const push = (logLevel, args) => {
                 try {
-                    const message = Array.from(args).map(v => 
-                        typeof v === 'string' ? v : 
+                    const message = Array.from(args).map(v =>
+                        typeof v === 'string' ? v :
                         typeof v === 'object' ? JSON.stringify(v) : String(v)
                     ).join(' ');
                     rt.push({ level: logLevel, time: Date.now(), message });
@@ -288,21 +291,21 @@ export class InfoBarSettings {
             }[level] || { error: true, warn: true, info: true, debug: true };
 
             // 重新绑定console方法：既收集又按级别输出
-            console.log = (...args) => { 
-                push('debug', args); 
-                if (allows.debug) original.log(...args); 
+            console.log = (...args) => {
+                push('debug', args);
+                if (allows.debug) original.log(...args);
             };
-            console.info = (...args) => { 
-                push('info', args); 
-                if (allows.info) original.info(...args); 
+            console.info = (...args) => {
+                push('info', args);
+                if (allows.info) original.info(...args);
             };
-            console.warn = (...args) => { 
-                push('warn', args); 
-                if (allows.warn) original.warn(...args); 
+            console.warn = (...args) => {
+                push('warn', args);
+                if (allows.warn) original.warn(...args);
             };
-            console.error = (...args) => { 
-                push('error', args); 
-                if (allows.error) original.error(...args); 
+            console.error = (...args) => {
+                push('error', args);
+                if (allows.error) original.error(...args);
             };
 
             // 使用原生console输出设置确认
@@ -389,14 +392,14 @@ export class InfoBarSettings {
     async init() {
         try {
             console.log('[InfoBarSettings] 📊 开始初始化设置界面...');
-            
+
             if (!this.configManager) {
                 throw new Error('配置管理器未初始化');
             }
-            
+
             // 创建UI
             this.createUI();
-            
+
             // 🔧 迁移时间戳ID面板到键名ID（确保设计一致性）
             this.migrateTimestampIdPanels();
 
@@ -404,10 +407,10 @@ export class InfoBarSettings {
             await this.loadSettings();
 
             // 注意：事件绑定已在createUI()中的bindNewEvents()完成，避免重复绑定
-            
+
             this.initialized = true;
             console.log('[InfoBarSettings] ✅ 设置界面初始化完成');
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 初始化失败:', error);
             this.handleError(error);
@@ -422,9 +425,9 @@ export class InfoBarSettings {
             // 创建模态框容器
             this.modal = document.createElement('div');
             this.modal.id = 'info-bar-settings-modal';
-            this.modal.className = 'info-bar-settings-modal infobar-modal-new';
+            this.modal.className = 'info-bar-settings-modal infobar-modal-new infobar-extension';
             this.modal.style.display = 'none';
-            
+
             this.modal.innerHTML = `
                 <div class="modal-overlay" onclick="this.closest('.info-bar-settings-modal').style.display='none'"></div>
                 <div class="modal-container">
@@ -514,7 +517,7 @@ export class InfoBarSettings {
 
                             <!-- 底部操作按钮 -->
                             <div class="nav-bottom">
-                                <button class="btn-reset" data-action="reset">恢复所有设置</button>
+                                <!-- 已移除恢复所有设置按钮 -->
                             </div>
                         </div>
 
@@ -601,7 +604,7 @@ export class InfoBarSettings {
                     </div>
                 </div>
             `;
-            
+
             // 添加到页面
             document.body.appendChild(this.modal);
 
@@ -675,6 +678,61 @@ export class InfoBarSettings {
                             <label for="error-logging-checkbox" class="checkbox-label">错误日志</label>
                         </div>
                         <div class="setting-desc">启用详细的错误日志记录</div>
+                    </div>
+
+                    <!-- 提示词插入位置配置 -->
+                    <div class="setting-item">
+                        <div class="setting-group">
+                            <h4>📍 提示词插入位置</h4>
+                            <div class="setting-desc" style="margin-bottom: 12px;">选择信息栏提示词在对话中的插入位置，不同位置对对话的影响程度不同。</div>
+                            
+                            <div class="prompt-position-config">
+                                <div class="form-group">
+                                    <label for="prompt-position-mode" class="control-label">插入位置</label>
+                                    <select id="prompt-position-mode" name="basic.promptPosition.mode" class="form-control">
+                                        <option value="afterCharacter">角色定义之后</option>
+                                        <option value="beforeCharacter">角色定义之前</option>
+                                        <option value="atDepthSystem">@ D⚙️ - 系统角色消息</option>
+                                        <option value="atDepthUser">@ D👤 - 用户角色消息</option>
+                                        <option value="atDepthAssistant">@ D🤖 - 助手角色消息</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group depth-control" style="display: none;">
+                                    <label for="prompt-position-depth" class="control-label">插入深度</label>
+                                    <input type="number" id="prompt-position-depth" name="basic.promptPosition.depth" 
+                                           class="form-control" min="0" max="10" value="0" step="1">
+                                    <div class="setting-desc">深度 0 为提示词底部，数字越大越靠前</div>
+                                </div>
+                                
+                                <div class="position-description">
+                                    <div id="position-desc-afterCharacter" class="desc-item active">
+                                        <span class="desc-impact">🔸 较大影响</span>
+                                        在角色描述和场景之后插入此提示词。对对话有更大影响。
+                                    </div>
+                                    <div id="position-desc-beforeCharacter" class="desc-item">
+                                        <span class="desc-impact">🔹 中等影响</span>
+                                        在角色描述和场景之前插入此提示词。对对话有中等影响。
+                                    </div>
+                                    <div id="position-desc-atDepth" class="desc-item">
+                                        <span class="desc-impact">🔧 精确控制</span>
+                                        将信息栏提示词插入到聊天中的特定深度和角色类型。
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 管理工具区域 -->
+                <div class="settings-group">
+                    <h4>🛠️ 管理工具</h4>
+                    <div class="management-tools">
+                        <button class="btn btn-primary" id="variable-manager-btn" data-action="open-variable-manager">
+                            <i class="fa fa-code"></i>
+                            变量管理器
+                        </button>
+                        <div class="tool-desc">管理全局变量、宏定义和自定义函数</div>
                     </div>
                 </div>
             </div>
@@ -758,8 +816,98 @@ export class InfoBarSettings {
                     border-radius: 4px !important;
                     border-left: 3px solid var(--theme-primary-color, #ff6b35) !important;
                 }
+
+                /* 提示词插入位置配置样式 */
+                .prompt-position-config {
+                    margin-top: 12px;
+                    padding: 16px;
+                    background: var(--theme-bg-secondary, rgba(107, 114, 128, 0.05));
+                    border-radius: 8px;
+                    border: 1px solid var(--theme-border-color, #e2e8f0);
+                }
+                .prompt-position-config .form-group {
+                    margin-bottom: 16px;
+                }
+                .prompt-position-config .control-label {
+                    display: block;
+                    margin-bottom: 6px;
+                    font-weight: 500;
+                    color: var(--theme-text-primary, #333);
+                }
+                .prompt-position-config .form-control {
+                    width: 100%;
+                    padding: 8px 12px;
+                    border: 1px solid var(--theme-border-color, #d1d5db);
+                    border-radius: 4px;
+                    background: var(--theme-bg-primary, #fff);
+                    color: var(--theme-text-primary, #333);
+                }
+                .position-description {
+                    margin-top: 12px;
+                    padding: 12px;
+                    background: var(--theme-bg-primary, #fff);
+                    border-radius: 6px;
+                    border: 1px solid var(--theme-border-color, #e2e8f0);
+                }
+                .position-description .desc-item {
+                    display: none;
+                    line-height: 1.5;
+                    color: var(--theme-text-primary, #333);
+                }
+                .position-description .desc-item.active {
+                    display: block;
+                }
+                .desc-impact {
+                    display: inline-block;
+                    padding: 2px 8px;
+                    margin-right: 8px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    border-radius: 12px;
+                    background: var(--theme-primary-color, #ff6b35);
+                    color: white;
+                }
+                .depth-control {
+                    padding: 12px;
+                    background: var(--theme-bg-accent, #f8fafc);
+                    border-radius: 6px;
+                    border-left: 4px solid var(--theme-primary-color, #ff6b35);
+                }
             `;
             document.head.appendChild(style);
+        }
+    }
+
+    /**
+     * 处理提示词位置模式变更
+     */
+    handlePromptPositionModeChange(mode) {
+        try {
+            const depthControl = this.modal.querySelector('.depth-control');
+            const descriptions = this.modal.querySelectorAll('.position-description .desc-item');
+            
+            // 显示/隐藏深度控制
+            if (mode.startsWith('atDepth')) {
+                depthControl.style.display = 'block';
+            } else {
+                depthControl.style.display = 'none';
+            }
+            
+            // 更新描述文本
+            descriptions.forEach(desc => desc.classList.remove('active'));
+            
+            if (mode === 'beforeCharacter') {
+                this.modal.querySelector('#position-desc-beforeCharacter')?.classList.add('active');
+            } else if (mode === 'afterCharacter') {
+                this.modal.querySelector('#position-desc-afterCharacter')?.classList.add('active');
+            } else if (mode.startsWith('atDepth')) {
+                this.modal.querySelector('#position-desc-atDepth')?.classList.add('active');
+            }
+            
+            console.log(`[InfoBarSettings] 📍 提示词位置模式变更为: ${mode}`);
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理提示词位置模式变更失败:', error);
         }
     }
 
@@ -777,7 +925,14 @@ export class InfoBarSettings {
                 }
             });
 
-            // 按钮点击事件  
+            // 提示词位置配置事件
+            this.modal.addEventListener('change', (e) => {
+                if (e.target.id === 'prompt-position-mode') {
+                    this.handlePromptPositionModeChange(e.target.value);
+                }
+            });
+
+            // 按钮点击事件
             this.modal.addEventListener('click', (e) => {
                 // 🔧 修复：使用closest查找具有data-action属性的父元素，解决按钮内子元素点击问题
                 const actionElement = e.target.closest('[data-action]');
@@ -910,6 +1065,9 @@ export class InfoBarSettings {
                 case 'view-panel':
                     this.viewPanel(panelId);
                     break;
+                case 'open-html-editor':
+                    this.openHTMLTemplateEditor();
+                    break;
                 case 'duplicate-panel':
                     this.duplicatePanel(panelId);
                     break;
@@ -941,7 +1099,7 @@ export class InfoBarSettings {
     handleFrontendDisplayEvents(e) {
         try {
             const action = e.target.dataset.action;
-            
+
             switch (action) {
                 case 'test-panel-popup':
                     this.testPanelPopup();
@@ -996,9 +1154,9 @@ export class InfoBarSettings {
         try {
             const name = e.target.name;
             const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-            
+
             console.log(`[InfoBarSettings] 🖥️ 前端显示设置变更: ${name} = ${value}`);
-            
+
             // 根据设置名称处理不同的变更
             switch (name) {
                 case 'frontendDisplay.enabled':
@@ -1024,7 +1182,7 @@ export class InfoBarSettings {
 
             // 保存设置到配置中
             this.saveFrontendDisplaySetting(name, value);
-            
+
             // 更新前端显示管理器的设置
             this.updateFrontendDisplayManagerSettings();
 
@@ -1046,16 +1204,16 @@ export class InfoBarSettings {
 
             // 读取当前配置
             const currentConfig = await fdm.getSavedFrontendDisplayConfig();
-            
+
             // 更新对应的设置项
             const settingKey = name.replace('frontendDisplay.', '');
             currentConfig[settingKey] = value;
-            
+
             // 保存配置
             await fdm.saveFrontendDisplayConfig(currentConfig);
-            
+
             console.log(`[InfoBarSettings] 💾 已保存前端显示设置: ${settingKey} = ${value}`);
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 保存前端显示设置失败:', error);
         }
@@ -1075,7 +1233,7 @@ export class InfoBarSettings {
             if (frontendDisplayManager) {
                 frontendDisplayManager.setEnabled(enabled);
                 console.log(`[InfoBarSettings] ✅ 前端显示功能${enabled ? '已启用' : '已禁用'}`);
-                
+
                 // 如果禁用，还需要恢复原有信息栏渲染
                 if (!enabled) {
                     this.restoreOriginalInfoBarRendering();
@@ -1116,7 +1274,7 @@ export class InfoBarSettings {
      */
     collectFrontendDisplaySettings() {
         const settings = {};
-        
+
         try {
             const modal = this.modal;
             if (modal) {
@@ -1139,10 +1297,10 @@ export class InfoBarSettings {
     disableOriginalInfoBarRendering() {
         try {
             console.log('[InfoBarSettings] 🚫 禁用原有信息栏渲染');
-            
+
             const infoBarTool = window.SillyTavernInfobar;
             const messageInfoBarRenderer = infoBarTool?.modules?.messageInfoBarRenderer;
-            
+
             if (messageInfoBarRenderer) {
                 // 临时禁用信息栏渲染器
                 messageInfoBarRenderer.frontendDisplayMode = true;
@@ -1160,10 +1318,10 @@ export class InfoBarSettings {
     restoreOriginalInfoBarRendering() {
         try {
             console.log('[InfoBarSettings] 🔄 恢复原有信息栏渲染');
-            
+
             const infoBarTool = window.SillyTavernInfobar;
             const messageInfoBarRenderer = infoBarTool?.modules?.messageInfoBarRenderer;
-            
+
             if (messageInfoBarRenderer) {
                 messageInfoBarRenderer.frontendDisplayMode = false;
                 console.log('[InfoBarSettings] ✅ 原有信息栏渲染已恢复');
@@ -1212,7 +1370,7 @@ export class InfoBarSettings {
     testPanelPopup() {
         try {
             console.log('[InfoBarSettings] 🧪 测试面板弹窗');
-            
+
             // 创建模拟的面板弹窗
             const popup = document.createElement('div');
             popup.className = 'demo-panel-popup';
@@ -1228,7 +1386,7 @@ export class InfoBarSettings {
             popup.style.setProperty('justify-content', 'center', 'important');
             popup.style.setProperty('z-index', '10000', 'important');
             popup.style.setProperty('background', 'rgba(0,0,0,0.5)', 'important');
-            
+
             popup.innerHTML = `
                 <div class="demo-popup-content" style="
                     background: var(--theme-bg-primary, #2a2a2a);
@@ -1265,16 +1423,16 @@ export class InfoBarSettings {
                     </div>
                 </div>
             `;
-            
+
             document.body.appendChild(popup);
-            
+
             // 3秒后自动关闭
             setTimeout(() => {
                 if (popup.parentNode) {
                     popup.parentNode.removeChild(popup);
                 }
             }, 3000);
-            
+
             // 点击关闭按钮
             popup.querySelector('.demo-close-btn').addEventListener('click', () => {
                 if (popup.parentNode) {
@@ -1293,7 +1451,7 @@ export class InfoBarSettings {
     testAddPanel() {
         try {
             console.log('[InfoBarSettings] 🧪 测试添加面板');
-            
+
             // 创建添加面板的选择菜单
             const menu = document.createElement('div');
             menu.className = 'demo-add-panel-menu';
@@ -1312,7 +1470,7 @@ export class InfoBarSettings {
                                     ${panelListHtml}
                                 </div>
                             </div>
-                            
+
                             <!-- 右侧子项列表 -->
                             <div class="subitem-list">
                                 ${subitemListHtml}
@@ -1395,15 +1553,18 @@ export class InfoBarSettings {
     /**
      * 选择面板进行编辑
      */
-    selectPanelForEdit(panelId, panelType) {
+    async selectPanelForEdit(panelId, panelType) {
         try {
-            // 🔧 修复：切换面板前自动保存当前正在编辑的面板，避免勾选状态丢失
+            // 🔧 修复：切换面板前自动保存当前正在编辑的面板，避免勾选状态丢失（静默保存，不弹确认框）
             if (this.currentEditingPanel && this.modal?.querySelector('.panel-properties-form')) {
                 try {
                     // 仅在表单可见时尝试保存，且不打断用户
                     const propertiesForm = this.modal.querySelector('.panel-properties-form');
                     if (propertiesForm && propertiesForm.style.display !== 'none') {
-                        this.savePanelProperties();
+                        // 使用静默保存，不弹确认对话框
+                        const { id, type } = this.currentEditingPanel;
+                        await this.performSavePanelProperties(id, type);
+                        console.log('[InfoBarSettings] 💾 静默保存当前面板:', id);
                     }
                 } catch (e) {
                     console.warn('[InfoBarSettings] ⚠️ 自动保存当前面板失败，将继续切换:', e);
@@ -1461,27 +1622,325 @@ export class InfoBarSettings {
     }
 
     /**
+     * 显示自定义面板添加对话框
+     */
+    showCustomPanelDialog() {
+        try {
+            console.log('[InfoBarSettings] 📋 显示自定义面板添加对话框');
+
+            // 创建对话框背景
+            const dialogOverlay = document.createElement('div');
+            dialogOverlay.className = 'custom-panel-dialog-overlay';
+            
+            // 🔧 设置完美居中样式 - 参考面板规则编辑界面
+            dialogOverlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                opacity: 0;
+                visibility: visible;
+                transition: opacity 0.3s ease;
+            `;
+            
+            dialogOverlay.innerHTML = `
+                <div class="custom-panel-dialog" style="
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    color: var(--theme-text-primary, #ffffff);
+                    border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                    border-radius: 12px;
+                    padding: 0;
+                    width: 500px;
+                    max-width: 90vw;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                ">
+                    <div class="dialog-header" style="
+                        padding: 20px 24px 16px;
+                        border-bottom: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <h3 style="margin: 0; color: var(--theme-text-primary, #ffffff); font-size: 18px;">添加自定义面板</h3>
+                        <button class="dialog-close-btn" style="
+                            background: none;
+                            border: none;
+                            color: var(--theme-text-secondary, #aaa);
+                            font-size: 24px;
+                            cursor: pointer;
+                            padding: 0;
+                            width: 32px;
+                            height: 32px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            border-radius: 4px;
+                        ">×</button>
+                    </div>
+                    <div class="dialog-content" style="padding: 20px 24px;">
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <label for="new-panel-name" style="
+                                display: block;
+                                margin-bottom: 8px;
+                                color: var(--theme-text-primary, #ffffff);
+                                font-weight: 500;
+                            ">面板名称:</label>
+                            <input type="text" id="new-panel-name" placeholder="请输入面板名称" value="新建面板" style="
+                                width: 100%;
+                                padding: 12px;
+                                border: 1px solid var(--theme-border-color, rgba(255,255,255,0.2));
+                                border-radius: 6px;
+                                background: var(--theme-bg-secondary, rgba(255,255,255,0.05));
+                                color: var(--theme-text-primary, #ffffff);
+                                font-size: 14px;
+                                box-sizing: border-box;
+                            ">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <label for="new-panel-key" style="
+                                display: block;
+                                margin-bottom: 8px;
+                                color: var(--theme-text-primary, #ffffff);
+                                font-weight: 500;
+                            ">键名:</label>
+                            <input type="text" id="new-panel-key" placeholder="自动生成，可修改" value="" style="
+                                width: 100%;
+                                padding: 12px;
+                                border: 1px solid var(--theme-border-color, rgba(255,255,255,0.2));
+                                border-radius: 6px;
+                                background: var(--theme-bg-secondary, rgba(255,255,255,0.05));
+                                color: var(--theme-text-primary, #ffffff);
+                                font-size: 14px;
+                                box-sizing: border-box;
+                            ">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="new-panel-description" style="
+                                display: block;
+                                margin-bottom: 8px;
+                                color: var(--theme-text-primary, #ffffff);
+                                font-weight: 500;
+                            ">面板说明:</label>
+                            <textarea id="new-panel-description" placeholder="请输入面板说明" rows="3" style="
+                                width: 100%;
+                                padding: 12px;
+                                border: 1px solid var(--theme-border-color, rgba(255,255,255,0.2));
+                                border-radius: 6px;
+                                background: var(--theme-bg-secondary, rgba(255,255,255,0.05));
+                                color: var(--theme-text-primary, #ffffff);
+                                font-size: 14px;
+                                resize: vertical;
+                                min-height: 80px;
+                                box-sizing: border-box;
+                            ">这是一个自定义面板</textarea>
+                        </div>
+                    </div>
+                    <div class="dialog-footer" style="
+                        padding: 16px 24px 20px;
+                        border-top: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                        display: flex;
+                        justify-content: flex-end;
+                        gap: 12px;
+                    ">
+                        <button class="btn-cancel" style="
+                            padding: 10px 20px;
+                            border: 1px solid var(--theme-border-color, rgba(255,255,255,0.2));
+                            border-radius: 6px;
+                            background: transparent;
+                            color: var(--theme-text-secondary, #aaa);
+                            cursor: pointer;
+                            font-size: 14px;
+                        ">关闭</button>
+                        <button class="btn-confirm" style="
+                            padding: 10px 20px;
+                            border: none;
+                            border-radius: 6px;
+                            background: var(--theme-primary-color, #4299e1);
+                            color: var(--theme-text-primary, #ffffff);
+                            cursor: pointer;
+                            font-size: 14px;
+                            font-weight: 500;
+                        ">确认添加</button>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            document.body.appendChild(dialogOverlay);
+            
+            // 🔧 添加显示动画
+            setTimeout(() => {
+                dialogOverlay.style.opacity = '1';
+            }, 10);
+
+            // 🔧 调试：检查对话框初始值
+            console.log('[InfoBarSettings] 🔍 对话框初始值检查:');
+            console.log('  面板名称默认值:', document.getElementById('new-panel-name').value);
+            console.log('  当前编辑的面板:', this.currentEditingPanel);
+
+            // 生成默认键名
+            const customPanels = this.getCustomPanels();
+            const defaultKey = this.generateKeyFromName('新建面板');
+            const uniqueKey = this.ensureUniqueKey(defaultKey, customPanels);
+            document.getElementById('new-panel-key').value = uniqueKey;
+            
+            console.log('  生成的默认键名:', defaultKey, '->', uniqueKey);
+
+            // 🔧 防护：确保默认值不被覆盖
+            setTimeout(() => {
+                const currentName = document.getElementById('new-panel-name').value;
+                const currentKey = document.getElementById('new-panel-key').value;
+                console.log('[InfoBarSettings] 🔍 对话框延迟检查(500ms后):');
+                console.log('  面板名称当前值:', currentName);
+                console.log('  键名当前值:', currentKey);
+                
+                // 如果值被意外修改，恢复默认值
+                if (currentName !== '新建面板') {
+                    console.warn('[InfoBarSettings] ⚠️ 检测到面板名称被异常修改，恢复默认值');
+                    document.getElementById('new-panel-name').value = '新建面板';
+                    document.getElementById('new-panel-key').value = uniqueKey;
+                }
+            }, 500);
+
+            // 绑定事件
+            const closeBtn = dialogOverlay.querySelector('.dialog-close-btn');
+            const cancelBtn = dialogOverlay.querySelector('.btn-cancel');
+            const confirmBtn = dialogOverlay.querySelector('.btn-confirm');
+
+            // 关闭对话框函数
+            const closeDialog = () => {
+                dialogOverlay.remove();
+            };
+
+            // 关闭按钮事件
+            closeBtn.addEventListener('click', closeDialog);
+            cancelBtn.addEventListener('click', closeDialog);
+
+            // 点击背景关闭
+            dialogOverlay.addEventListener('click', (e) => {
+                if (e.target === dialogOverlay) {
+                    closeDialog();
+                }
+            });
+
+            // 面板名称变化时自动生成键名
+            const nameInput = document.getElementById('new-panel-name');
+            const keyInput = document.getElementById('new-panel-key');
+            
+            nameInput.addEventListener('input', (e) => {
+                const name = e.target.value.trim();
+                console.log('[InfoBarSettings] 🔍 面板名称输入变化:', name);
+                if (name) {
+                    const newKey = this.generateKeyFromName(name);
+                    const uniqueKey = this.ensureUniqueKey(newKey, customPanels);
+                    console.log('  自动生成键名:', newKey, '->', uniqueKey);
+                    keyInput.value = uniqueKey;
+                }
+            });
+
+            // 确认添加事件
+            confirmBtn.addEventListener('click', () => {
+                const name = document.getElementById('new-panel-name').value.trim();
+                const key = document.getElementById('new-panel-key').value.trim();
+                const description = document.getElementById('new-panel-description').value.trim();
+
+                // 🔧 调试：检查用户确认时的值
+                console.log('[InfoBarSettings] 🔍 用户确认添加时的值:');
+                console.log('  面板名称:', name);
+                console.log('  键名:', key);
+                console.log('  面板说明:', description);
+                console.log('  当前编辑的面板:', this.currentEditingPanel);
+
+                // 验证输入
+                if (!name) {
+                    alert('请输入面板名称');
+                    return;
+                }
+
+                if (!key) {
+                    alert('请输入键名');
+                    return;
+                }
+
+                // 验证键名格式
+                if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+                    alert('键名只能包含英文字母、数字和下划线，且不能以数字开头');
+                    return;
+                }
+
+                // 检查键名是否已存在
+                if (customPanels[key]) {
+                    alert('该键名已存在，请使用其他键名');
+                    return;
+                }
+
+                // 创建面板数据
+                const panelData = {
+                    name: name,
+                    key: key,
+                    description: description,
+                    icon: '🎨' // 固定使用默认图标
+                };
+
+                // 关闭对话框
+                closeDialog();
+
+                // 执行添加面板
+                this.addCustomPanel(panelData);
+            });
+
+            // 键名输入验证
+            keyInput.addEventListener('input', (e) => {
+                let value = e.target.value;
+                // 只允许字母、数字、下划线
+                value = value.replace(/[^a-zA-Z0-9_]/g, '');
+                // 不能以数字开头
+                if (/^[0-9]/.test(value)) {
+                    value = '_' + value;
+                }
+                e.target.value = value;
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示自定义面板对话框失败:', error);
+        }
+    }
+
+    /**
      * 添加自定义面板
      */
-    async addCustomPanel() {
+    async addCustomPanel(panelData = null) {
         try {
-            // 获取现有自定义面板，生成唯一的键名
-            const customPanels = this.getCustomPanels();
-            const newKey = this.generateUniqueKey(customPanels);
+            // 如果没有提供面板数据，显示对话框
+            if (!panelData) {
+                this.showCustomPanelDialog();
+                return;
+            }
 
-            console.log('[InfoBarSettings] 📊 当前自定义面板数量:', Object.keys(customPanels).length, '新键名:', newKey);
+            console.log('[InfoBarSettings] 📊 添加自定义面板:', panelData);
 
             // 🔧 修复：创建新的自定义面板，使用键名作为ID
             const newPanel = {
-                id: newKey,  // 🔧 修复：使用键名作为ID，确保与信息栏系统设计一致
-                name: '新建面板',
-                key: newKey,
-                description: '这是一个自定义面板',
-                icon: '🎨',
+                id: panelData.key,  // 🔧 修复：使用键名作为ID，确保与信息栏系统设计一致
+                name: panelData.name,
+                key: panelData.key,
+                description: panelData.description,
+                icon: panelData.icon,
                 type: 'custom',
+                enabled: true,
                 required: false,
                 memoryInject: false,
-    
+
                 prompts: {
                     init: '',
                     insert: '',
@@ -1505,7 +1964,7 @@ export class InfoBarSettings {
             // 自动选择新建的面板
             this.selectPanelForEdit(newPanel.id, 'custom');
 
-            console.log('[InfoBarSettings] ✅ 添加自定义面板:', newPanel.id, '键名:', newPanel.key);
+            console.log('[InfoBarSettings] ✅ 添加自定义面板成功:', newPanel.id, '键名:', newPanel.key);
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 添加自定义面板失败:', error);
@@ -1763,8 +2222,22 @@ export class InfoBarSettings {
                 extensionSettings['Information bar integration tool'] = {};
             }
 
-            // 保存自定义面板数据
+            // 保存自定义面板数据（保持兼容性）
             extensionSettings['Information bar integration tool'].customPanels = customPanels;
+
+            // 🔧 修复：也将自定义面板配置保存到根级别，让mergeWithEnabledFields能够读取
+            // 这样自定义面板的子项配置就能被正确识别为启用字段
+            extensionSettings['Information bar integration tool'][panel.key] = {
+                enabled: panel.enabled !== false, // 默认启用
+                subItems: panel.subItems || [],
+                description: panel.description || '',
+                icon: panel.icon || '',
+                type: 'custom',
+                key: panel.key,
+                name: panel.name
+            };
+
+            console.log(`[InfoBarSettings] 🔧 自定义面板配置已同步到根级别: ${panel.key}, 子项数量: ${panel.subItems?.length || 0}`);
 
             // 触发 SillyTavern 保存设置
             context.saveSettingsDebounced();
@@ -1877,6 +2350,24 @@ export class InfoBarSettings {
             }
 
             const { id, type } = this.currentEditingPanel;
+            const panelName = this.currentEditingPanel.name || id;
+
+            // 显示保存确认对话框
+            this.showSaveConfirmDialog(panelName, async () => {
+                await this.performSavePanelProperties(id, type);
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 保存面板属性失败:', error);
+            this.showMessage('面板保存失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 执行保存面板属性操作
+     */
+    async performSavePanelProperties(id, type) {
+        try {
 
             if (type === 'basic') {
                 // 🔧 修复：基础面板也需要保存功能
@@ -1967,7 +2458,7 @@ export class InfoBarSettings {
             }
 
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 保存面板属性失败:', error);
+            console.error('[InfoBarSettings] ❌ 执行保存面板属性操作失败:', error);
             this.showMessage('面板保存失败: ' + error.message, 'error');
         }
     }
@@ -1989,11 +2480,22 @@ export class InfoBarSettings {
                 return;
             }
 
-            // 确认删除
-            if (!confirm(`确定要删除面板"${id}"吗？此操作不可撤销。`)) {
-                return;
-            }
+            // 显示删除确认对话框
+            this.showDeleteConfirmDialog('面板', id, async () => {
+                await this.performDeletePanel(id);
+            });
 
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除面板失败:', error);
+            this.showMessage('面板删除失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 执行删除面板操作
+     */
+    async performDeletePanel(id) {
+        try {
             // 从自定义面板中删除
             const customPanels = this.getCustomPanels();
             delete customPanels[id];
@@ -2013,6 +2515,10 @@ export class InfoBarSettings {
             // 保存自定义面板数据
             extensionSettings['Information bar integration tool'].customPanels = customPanels;
 
+            // 🔧 修复：也从根级别删除自定义面板配置
+            delete extensionSettings['Information bar integration tool'][id];
+            console.log(`[InfoBarSettings] 🔧 已从根级别删除自定义面板配置: ${id}`);
+
             // 触发 SillyTavern 保存设置
             context.saveSettingsDebounced();
 
@@ -2031,14 +2537,425 @@ export class InfoBarSettings {
             this.showMessage('面板删除成功', 'success');
 
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 删除面板失败:', error);
+            console.error('[InfoBarSettings] ❌ 执行删除面板操作失败:', error);
             this.showMessage('面板删除失败: ' + error.message, 'error');
         }
     }
     /**
+     * 显示子项添加对话框
+     */
+    showSubItemDialog() {
+        try {
+            console.log('[InfoBarSettings] 📋 显示子项添加对话框');
+
+            // 检查是否有正在编辑的面板
+            if (!this.currentEditingPanel) {
+                console.error('[InfoBarSettings] ❌ 没有正在编辑的面板，无法添加子项');
+                alert('请先选择要添加子项的面板');
+                return;
+            }
+
+            // 创建对话框背景
+            const dialogOverlay = document.createElement('div');
+            dialogOverlay.className = 'sub-item-dialog-overlay';
+            
+            // 🔧 设置完美居中样式 - 参考面板规则编辑界面
+            dialogOverlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                opacity: 0;
+                visibility: visible;
+                transition: opacity 0.3s ease;
+            `;
+            
+            dialogOverlay.innerHTML = `
+                <div class="sub-item-dialog" style="
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    color: var(--theme-text-primary, #ffffff);
+                    border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                    border-radius: 12px;
+                    padding: 0;
+                    width: 450px;
+                    max-width: 90vw;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                ">
+                    <div class="dialog-header" style="
+                        padding: 20px 24px 16px;
+                        border-bottom: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <h3 style="margin: 0; color: var(--theme-text-primary, #ffffff); font-size: 18px;">添加子项到面板: ${this.currentEditingPanel.name}</h3>
+                        <button class="dialog-close-btn" style="
+                            background: none;
+                            border: none;
+                            color: var(--theme-text-secondary, #aaa);
+                            font-size: 24px;
+                            cursor: pointer;
+                            padding: 0;
+                            width: 32px;
+                            height: 32px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            border-radius: 4px;
+                        ">×</button>
+                    </div>
+                    <div class="dialog-content" style="padding: 20px 24px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="subitem-name" style="
+                                display: block;
+                                margin-bottom: 8px;
+                                color: var(--theme-text-primary, #ffffff);
+                                font-weight: 500;
+                            ">子项名称:</label>
+                            <input type="text" id="subitem-name" placeholder="请输入子项名称" value="新建子项" style="
+                                width: 100%;
+                                padding: 12px;
+                                border: 1px solid var(--theme-border-color, rgba(255,255,255,0.2));
+                                border-radius: 6px;
+                                background: var(--theme-bg-secondary, rgba(255,255,255,0.05));
+                                color: var(--theme-text-primary, #ffffff);
+                                font-size: 14px;
+                                box-sizing: border-box;
+                                margin-bottom: 8px;
+                            ">
+                            <small class="form-help" style="
+                                color: var(--theme-text-secondary, #aaa);
+                                font-size: 12px;
+                                display: block;
+                            ">注意：子项名称将直接作为键名使用</small>
+                        </div>
+                    </div>
+                    <div class="dialog-footer" style="
+                        padding: 16px 24px 20px;
+                        border-top: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                        display: flex;
+                        justify-content: flex-end;
+                        gap: 12px;
+                    ">
+                        <button class="btn-cancel" style="
+                            padding: 10px 20px;
+                            border: 1px solid var(--theme-border-color, rgba(255,255,255,0.2));
+                            border-radius: 6px;
+                            background: transparent;
+                            color: var(--theme-text-secondary, #aaa);
+                            cursor: pointer;
+                            font-size: 14px;
+                        ">关闭</button>
+                        <button class="btn-confirm" style="
+                            padding: 10px 20px;
+                            border: none;
+                            border-radius: 6px;
+                            background: var(--theme-primary-color, #4299e1);
+                            color: var(--theme-text-primary, #ffffff);
+                            cursor: pointer;
+                            font-size: 14px;
+                            font-weight: 500;
+                        ">确认添加</button>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            document.body.appendChild(dialogOverlay);
+            
+            // 🔧 添加显示动画
+            setTimeout(() => {
+                dialogOverlay.style.opacity = '1';
+            }, 10);
+
+            // 不需要生成键名，名称就是键名
+
+            // 绑定事件
+            const closeBtn = dialogOverlay.querySelector('.dialog-close-btn');
+            const cancelBtn = dialogOverlay.querySelector('.btn-cancel');
+            const confirmBtn = dialogOverlay.querySelector('.btn-confirm');
+
+            // 关闭对话框函数
+            const closeDialog = () => {
+                dialogOverlay.remove();
+            };
+
+            // 关闭按钮事件
+            closeBtn.addEventListener('click', closeDialog);
+            cancelBtn.addEventListener('click', closeDialog);
+
+            // 点击背景关闭
+            dialogOverlay.addEventListener('click', (e) => {
+                if (e.target === dialogOverlay) {
+                    closeDialog();
+                }
+            });
+
+            // 确认添加事件
+            confirmBtn.addEventListener('click', () => {
+                const name = document.getElementById('subitem-name').value.trim();
+
+                // 验证输入
+                if (!name) {
+                    alert('请输入子项名称');
+                    return;
+                }
+
+                // 检查名称是否已存在（在当前面板的子项中）
+                const existingSubItems = this.currentEditingPanel.subItems || [];
+                if (existingSubItems.some(item => item.name === name || item.key === name)) {
+                    alert('该子项名称在当前面板中已存在，请使用其他名称');
+                    return;
+                }
+
+                // 创建子项数据（名称就是键名）
+                const subItemData = {
+                    name: name,
+                    key: name,
+                    description: ''
+                };
+
+                // 关闭对话框
+                closeDialog();
+
+                // 执行添加子项
+                this.addSubItem(subItemData);
+            });
+
+            // 子项名称输入时进行基础验证
+            const nameInput = document.getElementById('subitem-name');
+            nameInput.addEventListener('input', (e) => {
+                // 可以添加一些基础的名称验证逻辑
+                const value = e.target.value;
+                // 这里可以根据需要添加名称格式验证
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示子项对话框失败:', error);
+        }
+    }
+
+    /**
+     * 从面板名称生成英文键名
+     */
+    generateKeyFromName(name) {
+        // 基础的中文到英文映射
+        const chineseToEnglish = {
+            '新建': 'new',
+            '面板': 'panel',
+            '自定义': 'custom',
+            '用户': 'user',
+            '设置': 'settings',
+            '配置': 'config',
+            '管理': 'manage',
+            '系统': 'system',
+            '数据': 'data',
+            '信息': 'info',
+            '交互': 'interaction',
+            '对象': 'object',
+            '个人': 'personal',
+            '任务': 'task',
+            '世界': 'world',
+            '组织': 'organization',
+            '新闻': 'news',
+            '库存': 'inventory',
+            '能力': 'ability',
+            '剧情': 'plot',
+            '修真': 'cultivation',
+            '奇幻': 'fantasy',
+            '现代': 'modern',
+            '历史': 'historical',
+            '魔法': 'magic',
+            '训练': 'training'
+        };
+
+        let key = name.toLowerCase();
+
+        // 替换中文字符为英文（在替换时添加分隔符）
+        for (const [chinese, english] of Object.entries(chineseToEnglish)) {
+            key = key.replace(new RegExp(chinese, 'g'), `_${english}_`);
+        }
+
+        // 移除空格和特殊字符，只保留字母数字下划线
+        key = key.replace(/[^a-zA-Z0-9]/g, '_');
+
+        // 移除连续的下划线
+        key = key.replace(/_+/g, '_');
+
+        // 移除开头和结尾的下划线
+        key = key.replace(/^_+|_+$/g, '');
+
+        // 如果键名为空或以数字开头，添加前缀
+        if (!key || /^[0-9]/.test(key)) {
+            key = 'custom_' + key;
+        }
+
+        return key || 'custom_panel';
+    }
+
+    /**
+     * 确保键名唯一性
+     */
+    ensureUniqueKey(baseKey, existingPanels) {
+        let uniqueKey = baseKey;
+        let counter = 1;
+
+        while (existingPanels[uniqueKey]) {
+            uniqueKey = `${baseKey}_${counter}`;
+            counter++;
+        }
+
+        return uniqueKey;
+    }
+
+    /**
+     * 显示删除确认对话框
+     */
+    showDeleteConfirmDialog(type, name, onConfirm) {
+        try {
+            console.log(`[InfoBarSettings] 📋 显示删除确认对话框: ${type} - ${name}`);
+
+            // 创建对话框背景
+            const dialogOverlay = document.createElement('div');
+            dialogOverlay.className = 'delete-confirm-dialog-overlay';
+            dialogOverlay.innerHTML = `
+                <div class="delete-confirm-dialog">
+                    <div class="dialog-header">
+                        <h3>确认删除</h3>
+                        <button class="dialog-close-btn">×</button>
+                    </div>
+                    <div class="dialog-content">
+                        <div class="warning-icon">⚠️</div>
+                        <div class="warning-message">
+                            <p>您确定要删除${type}"<strong>${name}</strong>"吗？</p>
+                            <p class="warning-text">此操作不可撤销，删除后所有相关数据将丢失。</p>
+                        </div>
+                    </div>
+                    <div class="dialog-footer">
+                        <button class="btn-cancel">取消</button>
+                        <button class="btn-delete">确认删除</button>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            document.body.appendChild(dialogOverlay);
+
+            // 绑定事件
+            const closeBtn = dialogOverlay.querySelector('.dialog-close-btn');
+            const cancelBtn = dialogOverlay.querySelector('.btn-cancel');
+            const deleteBtn = dialogOverlay.querySelector('.btn-delete');
+
+            // 关闭对话框函数
+            const closeDialog = () => {
+                dialogOverlay.remove();
+            };
+
+            // 关闭按钮事件
+            closeBtn.addEventListener('click', closeDialog);
+            cancelBtn.addEventListener('click', closeDialog);
+
+            // 点击背景关闭
+            dialogOverlay.addEventListener('click', (e) => {
+                if (e.target === dialogOverlay) {
+                    closeDialog();
+                }
+            });
+
+            // 确认删除事件
+            deleteBtn.addEventListener('click', () => {
+                closeDialog();
+                if (onConfirm) {
+                    onConfirm();
+                }
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示删除确认对话框失败:', error);
+        }
+    }
+
+    /**
+     * 显示保存确认对话框
+     */
+    showSaveConfirmDialog(panelName, onConfirm) {
+        try {
+            console.log(`[InfoBarSettings] 📋 显示保存确认对话框: ${panelName}`);
+
+            // 创建对话框背景
+            const dialogOverlay = document.createElement('div');
+            dialogOverlay.className = 'save-confirm-dialog-overlay';
+            dialogOverlay.innerHTML = `
+                <div class="save-confirm-dialog">
+                    <div class="dialog-header">
+                        <h3>确认保存</h3>
+                        <button class="dialog-close-btn">×</button>
+                    </div>
+                    <div class="dialog-content">
+                        <div class="info-icon">💾</div>
+                        <div class="info-message">
+                            <p>您确定要保存面板"<strong>${panelName}</strong>"的配置吗？</p>
+                            <p class="info-text">保存后新的配置将生效。</p>
+                        </div>
+                    </div>
+                    <div class="dialog-footer">
+                        <button class="btn-cancel">取消</button>
+                        <button class="btn-save">确认保存</button>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            document.body.appendChild(dialogOverlay);
+
+            // 绑定事件
+            const closeBtn = dialogOverlay.querySelector('.dialog-close-btn');
+            const cancelBtn = dialogOverlay.querySelector('.btn-cancel');
+            const saveBtn = dialogOverlay.querySelector('.btn-save');
+
+            // 关闭对话框函数
+            const closeDialog = () => {
+                dialogOverlay.remove();
+            };
+
+            // 关闭按钮事件
+            closeBtn.addEventListener('click', closeDialog);
+            cancelBtn.addEventListener('click', closeDialog);
+
+            // 点击背景关闭
+            dialogOverlay.addEventListener('click', (e) => {
+                if (e.target === dialogOverlay) {
+                    closeDialog();
+                }
+            });
+
+            // 确认保存事件
+            saveBtn.addEventListener('click', () => {
+                closeDialog();
+                if (onConfirm) {
+                    onConfirm();
+                }
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示保存确认对话框失败:', error);
+        }
+    }
+
+    /**
      * 添加子项
      */
-    addSubItem() {
+    addSubItem(subItemData = null) {
         try {
             // 检查是否有正在编辑的面板
             if (!this.currentEditingPanel) {
@@ -2046,13 +2963,21 @@ export class InfoBarSettings {
                 return;
             }
 
-            console.log('[InfoBarSettings] 📝 当前编辑面板:', this.currentEditingPanel);
+            // 如果没有提供子项数据，显示对话框
+            if (!subItemData) {
+                this.showSubItemDialog();
+                return;
+            }
 
-            // 创建新的子项（简化版本：只需要名称）
+            console.log('[InfoBarSettings] 📝 当前编辑面板:', this.currentEditingPanel);
+            console.log('[InfoBarSettings] 📊 添加子项:', subItemData);
+
+            // 创建新的子项
             const newSubItem = {
                 id: `sub_${Date.now()}`,
-                name: '新建子项',
-                key: `sub_item_${Date.now()}` // 名称就是键名
+                name: subItemData.name,
+                key: subItemData.key,
+                description: subItemData.description || ''
             };
 
             // 添加到子项容器（UI显示）
@@ -2078,7 +3003,23 @@ export class InfoBarSettings {
             }
 
             const subItemId = subItemForm.dataset.subItemId;
+            const subItemName = subItemForm.querySelector('.sub-item-name')?.value || subItemId;
 
+            // 显示删除确认对话框
+            this.showDeleteConfirmDialog('子项', subItemName, () => {
+                this.performRemoveSubItem(subItemForm, subItemId);
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除子项失败:', error);
+        }
+    }
+
+    /**
+     * 执行删除子项操作
+     */
+    performRemoveSubItem(subItemForm, subItemId) {
+        try {
             // 移除子项表单
             subItemForm.remove();
 
@@ -2091,10 +3032,10 @@ export class InfoBarSettings {
                 emptyMessage.style.display = 'block';
             }
 
-            console.log('[InfoBarSettings] 🗑️ 删除子项:', subItemId);
+            console.log('[InfoBarSettings] 🗑️ 删除子项成功:', subItemId);
 
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 删除子项失败:', error);
+            console.error('[InfoBarSettings] ❌ 执行删除子项操作失败:', error);
         }
     }
 
@@ -2140,13 +3081,13 @@ export class InfoBarSettings {
             panelData.subItems.forEach((subItem, index) => {
                 const checkboxId = `${panelId}-custom-${index}`;
                 const fieldName = `${panelId}.${subItem.key || subItem.name.toLowerCase().replace(/\s+/g, '_')}.enabled`;
-                
+
                 customSubItemsHTML += `
                     <div class="sub-item">
                         <div class="checkbox-wrapper">
-                            <input type="checkbox" 
-                                   id="${checkboxId}" 
-                                   name="${fieldName}" 
+                            <input type="checkbox"
+                                   id="${checkboxId}"
+                                   name="${fieldName}"
                                    ${subItem.enabled !== false ? 'checked' : ''} />
                             <label for="${checkboxId}" class="checkbox-label">${subItem.displayName || subItem.name}</label>
                         </div>
@@ -2213,25 +3154,30 @@ export class InfoBarSettings {
                 return;
             }
 
-            // 🔧 修复：移除现有的自定义面板导航项和内容面板（包括新旧格式）
-            const existingCustomNavs = sidebar.querySelectorAll('.nav-item[data-nav^="custom_"], .nav-item[data-nav^="Custom"]');
-            const existingCustomPanels = contentArea.querySelectorAll('.content-panel[data-content^="custom_"], .content-panel[data-content^="Custom"]');
-
-            console.log(`[InfoBarSettings] 🧹 清理现有导航项: ${existingCustomNavs.length} 个`);
-            console.log(`[InfoBarSettings] 🧹 清理现有内容面板: ${existingCustomPanels.length} 个`);
-
-            existingCustomNavs.forEach(nav => {
-                console.log(`[InfoBarSettings] 🗑️ 移除导航项: ${nav.dataset.nav}`);
-                nav.remove();
-            });
-            existingCustomPanels.forEach(panel => {
-                console.log(`[InfoBarSettings] 🗑️ 移除内容面板: ${panel.dataset.content}`);
-                panel.remove();
-            });
-
             // 获取自定义面板
             const customPanels = this.getCustomPanels();
             const customPanelArray = Object.values(customPanels);
+
+            // 🔧 更稳健的去重清理：按ID集合和标记清理，避免重复
+            const customIds = new Set(customPanelArray.map(p => p.id));
+
+            // 1) 清理带标记的数据
+            sidebar.querySelectorAll('.nav-item[data-custom="true"]').forEach(nav => nav.remove());
+            contentArea.querySelectorAll('.content-panel[data-custom="true"]').forEach(panel => panel.remove());
+
+            // 2) 兼容旧元素：按ID匹配清理
+            sidebar.querySelectorAll('.nav-item').forEach(nav => {
+                const id = nav.dataset.nav;
+                if (id && customIds.has(id)) {
+                    nav.remove();
+                }
+            });
+            contentArea.querySelectorAll('.content-panel').forEach(panel => {
+                const id = panel.dataset.content;
+                if (id && customIds.has(id)) {
+                    panel.remove();
+                }
+            });
 
             console.log('[InfoBarSettings] 📊 获取到的自定义面板数据:', customPanels);
             console.log('[InfoBarSettings] 📊 转换后的数组长度:', customPanelArray.length);
@@ -2249,6 +3195,7 @@ export class InfoBarSettings {
                 const navItem = document.createElement('div');
                 navItem.className = 'nav-item';
                 navItem.dataset.nav = panel.id;
+                navItem.dataset.custom = 'true';
                 navItem.innerHTML = `
 
                     <span class="nav-text">${panel.name}</span>
@@ -2265,10 +3212,14 @@ export class InfoBarSettings {
                 const contentPanel = document.createElement('div');
                 contentPanel.className = 'content-panel';
                 contentPanel.dataset.content = panel.id;
+                contentPanel.dataset.custom = 'true';
                 contentPanel.innerHTML = this.createCustomPanelContent(panel);
 
                 // 添加到内容区域
                 contentArea.appendChild(contentPanel);
+
+                // 应用主题并绑定自定义子项交互（确保复选框事件与样式）
+                this.applyThemeToCustomSubItems(contentPanel, panel.id);
 
                 console.log(`[InfoBarSettings] ✅ 第${index + 1}个自定义面板创建完成`);
             });
@@ -2300,12 +3251,12 @@ export class InfoBarSettings {
             const subItemSection = customArea.querySelector('.sub-item-section');
             if (subItemSection) {
                 subItemSection.setAttribute('data-theme', currentTheme);
-                
+
                 // 应用主题到所有复选框
                 const checkboxes = customArea.querySelectorAll('input[type="checkbox"]');
                 checkboxes.forEach(checkbox => {
                     checkbox.setAttribute('data-theme', currentTheme);
-                    
+
                     // 🔧 修复：为每个自定义子项复选框绑定变更事件，同步数据表格
                     checkbox.addEventListener('change', (e) => {
                         this.handleCustomSubItemChange(e, panelId);
@@ -2334,7 +3285,7 @@ export class InfoBarSettings {
             const checkbox = event.target;
             const fieldName = checkbox.name;
             const isEnabled = checkbox.checked;
-            
+
             console.log(`[InfoBarSettings] 🔄 基础面板 ${panelId} 自定义子项变更: ${fieldName} = ${isEnabled}`);
 
             // 触发面板配置变更事件，通知数据表格更新
@@ -2365,26 +3316,26 @@ export class InfoBarSettings {
         try {
             const context = SillyTavern.getContext();
             const extensionSettings = context.extensionSettings;
-            
+
             // 确保扩展设置存在
             if (!extensionSettings['Information bar integration tool']) {
                 extensionSettings['Information bar integration tool'] = {};
             }
-            
+
             // 获取基础面板配置
             const panelConfig = extensionSettings['Information bar integration tool'][panelId];
             if (panelConfig && panelConfig.subItems) {
                 // 查找对应的子项并更新状态
                 const subItemKey = fieldName.split('.')[1]; // 从 'panelId.key.enabled' 中提取 key
-                const subItem = panelConfig.subItems.find(item => 
-                    item.key === subItemKey || 
+                const subItem = panelConfig.subItems.find(item =>
+                    item.key === subItemKey ||
                     item.name.toLowerCase().replace(/\s+/g, '_') === subItemKey
                 );
-                
+
                 if (subItem) {
                     subItem.enabled = isEnabled;
                     console.log(`[InfoBarSettings] 💾 已保存自定义子项状态: ${subItem.name} = ${isEnabled}`);
-                    
+
                     // 保存到 SillyTavern
                     context.saveSettingsDebounced();
                 }
@@ -2482,7 +3433,7 @@ export class InfoBarSettings {
                 </div>
 
                 <!-- 子项配置 -->
-                <div class="sub-items" style="${panel.enabled ? '' : 'display: none;'}">
+                <div class="sub-items" style="${(panel.enabled === undefined || panel.enabled) ? '' : 'display: none;'}">
                     ${this.createCustomPanelSubItems(panel.subItems || [])}
                 </div>
             </div>
@@ -2564,7 +3515,7 @@ export class InfoBarSettings {
             // 配置选项
             formData.required = form.querySelector('#panel-required')?.checked || false;
             formData.memoryInject = form.querySelector('#panel-memory-inject')?.checked || false;
-    
+
 
             // 提示词配置
             formData.prompts = {
@@ -2604,7 +3555,7 @@ export class InfoBarSettings {
             // 配置选项
             formData.required = form.querySelector('#panel-required')?.checked || false;
             formData.memoryInject = form.querySelector('#panel-memory-inject')?.checked || false;
-    
+
 
             // 提示词配置
             formData.prompts = {
@@ -2636,13 +3587,14 @@ export class InfoBarSettings {
             subItemElements.forEach(element => {
                 const name = element.querySelector('.sub-item-name')?.value || '';
                 if (name.trim()) { // 只有名称不为空才添加
-                    const subItem = {
-                        id: element.dataset.subItemId,
-                        name: name.trim(),
-                        key: name.trim().toLowerCase().replace(/\s+/g, '_'), // 名称转换为键名
-                        displayName: name.trim(), // 🔧 修复：添加displayName字段，保存用户输入的显示名称
-        
-                    };
+                                    const subItem = {
+                    id: element.dataset.subItemId,
+                    name: name.trim(),
+                    key: name.trim().toLowerCase().replace(/\s+/g, '_'), // 名称转换为键名
+                    displayName: name.trim(), // 🔧 修复：添加displayName字段，保存用户输入的显示名称
+                    enabled: true, // 🔧 修复：默认启用，确保子项在SmartPromptSystem中被识别
+                    value: '' // 🔧 修复：添加默认值字段
+                };
                     subItems.push(subItem);
                 }
             });
@@ -2769,7 +3721,7 @@ export class InfoBarSettings {
 
             if (savedConfig) {
                 console.log('[InfoBarSettings] 📊 从配置读取基础面板数据:', panelId);
-                
+
                 // 合并默认数据和已保存的配置，确保所有必需字段都存在
                 const mergedData = {
                     ...defaultPanelData, // 默认结构
@@ -2782,7 +3734,7 @@ export class InfoBarSettings {
                         ...savedConfig.prompts // 用户的提示词配置
                     }
                 };
-                
+
                 return mergedData;
             } else {
                 console.log('[InfoBarSettings] 📊 使用默认基础面板数据:', panelId);
@@ -3133,17 +4085,20 @@ export class InfoBarSettings {
                 case 'save':
                     this.saveSettings();
                     break;
-                case 'reset':
-                    this.resetSettings();
-                    break;
                 case 'clear-cache':
                     this.clearAllCaches();
                     break;
-                case 'reset-all':
-                    this.resetAllSettings();
+                case 'initialize-plugin':
+                    this.initializePlugin();
+                    break;
+                case 'clear-panel-data':
+                    this.clearPanelData();
                     break;
                 case 'export':
                     this.exportSettings();
+                    break;
+                case 'export-custom':
+                    this.exportCustomSettings();
                     break;
                 case 'import':
                     this.importSettings();
@@ -3176,6 +4131,10 @@ export class InfoBarSettings {
                         console.error('[InfoBarSettings] ❌ 导入数据事件处理失败:', error);
                         this.showMessage('导入数据失败: ' + error.message, 'error');
                     });
+                    break;
+                case 'open-variable-manager':
+                    console.log('[InfoBarSettings] 🔧 打开变量管理器...');
+                    this.openVariableManager();
                     break;
                 default:
                     console.log(`[InfoBarSettings] 🔘 处理操作: ${action}`);
@@ -3350,6 +4309,13 @@ export class InfoBarSettings {
                         </div>
                         <small>启用时将API返回数据合并到AI消息中再解析，禁用时直接解析API返回数据</small>
                     </div>
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="api-include-worldbook" name="apiConfig.includeWorldBook" />
+                            <label for="api-include-worldbook" class="checkbox-label">读取世界书</label>
+                        </div>
+                        <small>启用时将SillyTavern世界书内容注入到自定义API请求中</small>
+                    </div>
                 </div>
 
                 <!-- 连接状态显示 -->
@@ -3372,8 +4338,27 @@ export class InfoBarSettings {
     createThemePanel() {
         return `
             <div class="settings-group">
-                <h3>🎨 主题预览选择</h3>
-                <p class="theme-description">选择您喜欢的主题风格，点击预览图即可应用</p>
+                <div class="theme-header-controls" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                    <div class="theme-header-left">
+                        <h3>🎨 主题预览选择</h3>
+                        <p class="theme-description">选择您喜欢的主题风格，点击预览图即可应用</p>
+                    </div>
+                    <div class="theme-header-right">
+                        <button class="btn btn-primary html-template-editor-btn" data-action="open-html-editor" style="
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            border: none;
+                            padding: 10px 20px;
+                            border-radius: 8px;
+                            color: white;
+                            font-weight: 600;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+                        " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(102, 126, 234, 0.3)'">
+                            <i class="fas fa-code"></i> HTML模板编辑器
+                        </button>
+                    </div>
+                </div>
 
                 <div class="theme-gallery">
                     ${this.createThemePreviewGrid()}
@@ -4022,26 +5007,7 @@ export class InfoBarSettings {
 
                 </div>
 
-                <!-- 提示词配置 -->
-                <div class="form-section">
-                    <h5>提示词配置</h5>
-                    <div class="form-group">
-                        <label for="panel-prompt-init">初始化提示词</label>
-                        <textarea id="panel-prompt-init" name="panel.prompts.init" rows="3" placeholder="面板初始化时使用的提示词"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label for="panel-prompt-insert">插入提示词</label>
-                        <textarea id="panel-prompt-insert" name="panel.prompts.insert" rows="3" placeholder="插入数据时使用的提示词"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label for="panel-prompt-update">更新提示词</label>
-                        <textarea id="panel-prompt-update" name="panel.prompts.update" rows="3" placeholder="更新数据时使用的提示词"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label for="panel-prompt-delete">删除提示词</label>
-                        <textarea id="panel-prompt-delete" name="panel.prompts.delete" rows="3" placeholder="删除数据时使用的提示词"></textarea>
-                    </div>
-                </div>
+
 
                 <!-- 子项配置 -->
                 <div class="form-section">
@@ -4072,7 +5038,7 @@ export class InfoBarSettings {
             <div class="settings-group">
                 <h3>🖥️ 前端显示设置</h3>
                 <p class="frontend-description">启用前端显示后，AI消息将包裹在信息栏框架中，提供交互式的面板和子项显示</p>
-                
+
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" name="frontendDisplay.enabled" />
@@ -4084,7 +5050,7 @@ export class InfoBarSettings {
 
             <div class="settings-group frontend-display-config" style="display: none;">
                 <h3>📊 显示配置</h3>
-                
+
                 <div class="form-group">
                     <label>显示样式</label>
                     <select name="frontendDisplay.style">
@@ -4113,7 +5079,7 @@ export class InfoBarSettings {
             <div class="settings-group frontend-display-preview" style="display: none;">
                 <h3>🎮 交互预览</h3>
                 <p class="preview-description">预览前端显示的交互效果</p>
-                
+
                 <div class="frontend-preview-container">
                     <!-- 顶部预览区域 -->
                     <div class="preview-section">
@@ -4124,7 +5090,7 @@ export class InfoBarSettings {
                                 <div class="add-slot" data-position="top-2" data-area="top">+</div>
                                 <div class="add-slot" data-position="top-3" data-area="top">+</div>
                             </div>
-                            
+
                             <div class="embedded-panels top-embedded-panels">
                                 <!-- 用户添加的顶部面板和子项将显示在这里 -->
                             </div>
@@ -4145,7 +5111,7 @@ export class InfoBarSettings {
                             <div class="embedded-panels bottom-embedded-panels">
                                 <!-- 用户添加的底部面板和子项将显示在这里 -->
                             </div>
-                            
+
                             <div class="add-panel-slots bottom-slots">
                                 <div class="add-slot" data-position="bottom-1" data-area="bottom">+</div>
                                 <div class="add-slot" data-position="bottom-2" data-area="bottom">+</div>
@@ -4154,7 +5120,7 @@ export class InfoBarSettings {
                         </div>
                     </div>
                 </div>
-                
+
                                     <div class="preview-actions">
                         <button class="btn" data-action="test-panel-popup">测试面板弹窗</button>
                         <button class="btn" data-action="test-add-panel">测试添加面板</button>
@@ -4193,18 +5159,54 @@ export class InfoBarSettings {
                     <button class="btn" data-action="open-project-link">项目地址</button>
                 </div>
             </div>
-            
+
             <div class="settings-group">
                 <h3>配置管理</h3>
+
+                <!-- 导出配置选项 -->
+                <div class="form-group">
+                    <label>导出配置选项</label>
+                    <div class="export-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="export-panel-configs" checked />
+                            <span>面板配置（启用状态、自定义子项、自定义面板）</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="export-panel-rules" checked />
+                            <span>面板规则</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="export-field-rules" checked />
+                            <span>字段规则</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="export-theme-settings" />
+                            <span>主题设置</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="export-api-settings" />
+                            <span>API设置</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="export-all-settings" />
+                            <span>所有设置（包含调试、前端显示等）</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 配置文件操作 -->
                 <div class="form-group">
                     <label>保存为配置名称</label>
                     <input type="text" id="config-profile-name" placeholder="输入配置名称" />
                 </div>
                 <div class="form-group config-primary-actions">
                     <button class="btn" data-action="save-profile">保存配置</button>
-                    <button class="btn" data-action="export">导出配置</button>
+                    <button class="btn btn-primary" data-action="export-custom">📤 导出选定配置</button>
+                    <button class="btn" data-action="export">导出全部配置</button>
                     <button class="btn" data-action="import">导入配置</button>
                 </div>
+
+                <!-- 已保存的配置 -->
                 <div class="form-group">
                     <label>已保存的配置</label>
                     <div class="config-row">
@@ -4259,7 +5261,15 @@ export class InfoBarSettings {
                 <h3>危险操作</h3>
                 <div class="form-group">
                     <button class="btn btn-danger" data-action="clear-cache">清除所有缓存</button>
-                    <button class="btn btn-danger" data-action="reset-all">重置所有设置</button>
+                    <button class="btn btn-danger" data-action="initialize-plugin">初始化插件</button>
+                    <button class="btn btn-danger" data-action="clear-panel-data">清空面板数据</button>
+                </div>
+                <div class="form-group">
+                    <small class="text-muted">
+                        ⚠️ 危险操作说明：<br>
+                        • 初始化插件：将插件恢复到刚安装的状态，清空所有用户数据、自定义内容和规则<br>
+                        • 清空面板数据：清空所有聊天中的面板数据，但保留配置和规则
+                    </small>
                 </div>
             </div>
         `;
@@ -4288,9 +5298,7 @@ export class InfoBarSettings {
                     case 'save':
                         this.saveSettings();
                         break;
-                    case 'reset':
-                        this.resetSettings();
-                        break;
+                    // reset事件已移除
                     case 'export':
                         this.exportSettings();
                         break;
@@ -4339,19 +5347,19 @@ export class InfoBarSettings {
                         break;
                 }
             });
-            
+
             // 标签页切换
             this.modal.addEventListener('click', (e) => {
                 if (e.target.classList.contains('tab-btn')) {
                     this.switchTab(e.target.dataset.tab);
                 }
             });
-            
+
             // 表单变更事件
             this.modal.addEventListener('change', (e) => {
                 this.handleFormChange(e);
             });
-            
+
             // 范围输入实时更新
             this.modal.addEventListener('input', (e) => {
                 if (e.target.type === 'range') {
@@ -4361,9 +5369,9 @@ export class InfoBarSettings {
                     }
                 }
             });
-            
+
             console.log('[InfoBarSettings] 🔗 事件绑定完成');
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 绑定事件失败:', error);
             throw error;
@@ -4376,7 +5384,7 @@ export class InfoBarSettings {
     initAllBasicPanelCustomSubItems() {
         try {
             const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
-            
+
             basicPanelIds.forEach(panelId => {
                 const panelData = this.getBasicPanelData(panelId);
                 if (panelData && panelData.subItems && panelData.subItems.length > 0) {
@@ -4450,7 +5458,7 @@ export class InfoBarSettings {
         try {
             this.modal.style.display = 'none';
             this.visible = false;
-            
+
             // 触发隐藏事件
             if (this.eventSystem) {
                 this.eventSystem.emit('ui:hide', {
@@ -4458,9 +5466,9 @@ export class InfoBarSettings {
                     timestamp: Date.now()
                 });
             }
-            
+
             console.log('[InfoBarSettings] 👁️ 设置界面已隐藏');
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 隐藏界面失败:', error);
             this.handleError(error);
@@ -4476,16 +5484,16 @@ export class InfoBarSettings {
             this.modal.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.tab === tabName);
             });
-            
+
             // 更新面板显示状态
             this.modal.querySelectorAll('.tab-panel').forEach(panel => {
                 panel.classList.toggle('active', panel.dataset.panel === tabName);
             });
-            
+
             this.currentTab = tabName;
-            
+
             console.log(`[InfoBarSettings] 📑 切换到标签页: ${tabName}`);
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 切换标签页失败:', error);
             this.handleError(error);
@@ -4516,7 +5524,7 @@ export class InfoBarSettings {
                 if (frontendDisplayConfig) {
                     configs.frontendDisplay = frontendDisplayConfig;
                     console.log('[InfoBarSettings] 📱 已加载前端显示配置:', frontendDisplayConfig);
-                    
+
                     // 🔧 修复：重新渲染预览内容
                     this.renderFrontendDisplayPreview(frontendDisplayConfig);
                 }
@@ -4616,6 +5624,11 @@ export class InfoBarSettings {
 
             // 更新所有面板的配置计数
             this.updateAllPanelCounts();
+
+            // 🔧 修复：恢复提示词插入位置UI状态
+            const promptPositionMode = configs.basic?.promptPosition?.mode || 'afterCharacter';
+            console.log('[InfoBarSettings] 📍 恢复提示词位置UI状态:', promptPositionMode);
+            this.handlePromptPositionModeChange(promptPositionMode);
 
             console.log('[InfoBarSettings] ✅ 设置加载完成');
 
@@ -4722,7 +5735,7 @@ export class InfoBarSettings {
             // 应该只通过面板管理页面修改，不应该被基础设置页面的表单数据覆盖
             const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
             const preservedBasicPanelConfigs = {};
-            
+
             // 完整备份所有基础面板配置
             basicPanelIds.forEach(panelId => {
                 const existingConfig = extensionSettings['Information bar integration tool'][panelId];
@@ -4734,12 +5747,12 @@ export class InfoBarSettings {
 
             // 保存基础设置表单数据（不包含基础面板属性）
             Object.assign(extensionSettings['Information bar integration tool'], formData);
-            
+
             // 🔧 修复：智能恢复基础面板属性配置，保留子项启用状态
             Object.keys(preservedBasicPanelConfigs).forEach(panelId => {
                 const currentConfig = extensionSettings['Information bar integration tool'][panelId];
                 const preservedConfig = preservedBasicPanelConfigs[panelId];
-                
+
                 // 合并配置：保留新的子项启用状态和面板启用状态，恢复其他属性
                 if (currentConfig && preservedConfig) {
                     // 备份当前的子项启用状态和面板启用状态（来自formData）
@@ -4805,7 +5818,7 @@ export class InfoBarSettings {
 
             // 显示成功消息
             this.showMessage('设置保存成功', 'success');
-            
+
             // 🔧 修复：只有在前端显示功能启用时才检查并重新包装AI消息
             setTimeout(() => {
                 // 检查前端显示功能是否启用
@@ -4925,21 +5938,21 @@ export class InfoBarSettings {
     loadBasicPanelSubItemStates(configs) {
         try {
             const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
-            
+
             // 遍历所有基础面板
             basicPanelIds.forEach(panelId => {
                 const panelConfig = configs[panelId];
                 if (panelConfig && typeof panelConfig === 'object') {
                     console.log(`[InfoBarSettings] 📊 加载基础面板 ${panelId} 的子项状态`);
-                    
+
                     // 遍历面板的所有子项
                     Object.keys(panelConfig).forEach(subItemKey => {
-                        if (subItemKey !== 'enabled' && typeof panelConfig[subItemKey] === 'object' && 
+                        if (subItemKey !== 'enabled' && typeof panelConfig[subItemKey] === 'object' &&
                             panelConfig[subItemKey] && typeof panelConfig[subItemKey].enabled === 'boolean') {
-                            
+
                             const fieldName = `${panelId}.${subItemKey}.enabled`;
                             const checkbox = this.modal.querySelector(`input[name="${fieldName}"]`);
-                            
+
                             if (checkbox && checkbox.type === 'checkbox') {
                                 checkbox.checked = panelConfig[subItemKey].enabled;
                                 console.log(`[InfoBarSettings] 📊 设置基础面板子项勾选状态: ${fieldName} = ${checkbox.checked}`);
@@ -5146,14 +6159,14 @@ export class InfoBarSettings {
     setNestedProperty(obj, path, value) {
         const keys = path.split('.');
         let current = obj;
-        
+
         for (let i = 0; i < keys.length - 1; i++) {
             if (!current[keys[i]]) {
                 current[keys[i]] = {};
             }
             current = current[keys[i]];
         }
-        
+
         current[keys[keys.length - 1]] = value;
     }
 
@@ -5170,12 +6183,12 @@ export class InfoBarSettings {
     async testAPIConnection() {
         try {
             console.log('[InfoBarSettings] 🔍 开始测试API连接...');
-            
+
             // 显示测试中状态
             this.updateConnectionStatus('testing', '测试中...');
-            
+
             const result = await this.apiIntegration.testConnection();
-            
+
             if (result.success) {
                 this.updateConnectionStatus('success', '连接成功');
                 this.showMessage('API连接测试成功', 'success');
@@ -5183,7 +6196,7 @@ export class InfoBarSettings {
                 this.updateConnectionStatus('error', '连接失败');
                 this.showMessage('API连接测试失败: ' + result.error, 'error');
             }
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 测试API连接失败:', error);
             this.updateConnectionStatus('error', '测试异常');
@@ -5197,13 +6210,13 @@ export class InfoBarSettings {
     async loadAPIModels() {
         try {
             console.log('[InfoBarSettings] 📋 开始加载API模型...');
-            
+
             const models = await this.apiIntegration.loadModels();
             const modelSelect = this.modal.querySelector('[name="apiConfig.model"]');
-            
+
             // 清空现有选项
             modelSelect.innerHTML = '<option value="">选择模型...</option>';
-            
+
             // 添加模型选项
             models.forEach(model => {
                 const option = document.createElement('option');
@@ -5212,9 +6225,9 @@ export class InfoBarSettings {
                 option.title = model.description;
                 modelSelect.appendChild(option);
             });
-            
+
             this.showMessage(`成功加载 ${models.length} 个模型`, 'success');
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 加载API模型失败:', error);
             this.showMessage('加载模型失败: ' + error.message, 'error');
@@ -5237,10 +6250,10 @@ export class InfoBarSettings {
      */
     updateAPIStatus() {
         if (!this.apiIntegration) return;
-        
+
         const stats = this.apiIntegration.getStats();
         const statsElement = this.modal.querySelector('[data-status="stats"]');
-        
+
         if (statsElement) {
             statsElement.textContent = `${stats.success}/${stats.total} (${stats.successRate})`;
         }
@@ -5338,22 +6351,580 @@ export class InfoBarSettings {
     }
 
     /**
-     * 重置设置
+     * 初始化插件 - 恢复到刚安装的状态
+     * @param {boolean} skipConfirmation - 是否跳过确认对话框（用于程序化调用）
      */
-    async resetSettings() {
+    async initializePlugin(skipConfirmation = false) {
         try {
-            if (!confirm('确定要重置所有设置到默认值吗？此操作不可撤销。')) {
-                return;
+            // 只有在非跳过确认模式下才显示确认对话框
+            if (!skipConfirmation) {
+                const confirmMessage = '⚠️ 危险操作确认\n\n' +
+                    '此操作将：\n' +
+                    '• 完全清空所有用户数据和聊天记录中的面板数据\n' +
+                    '• 删除所有自定义面板和子项\n' +
+                    '• 重置所有配置到默认值\n' +
+                    '• 清除所有字段规则和面板规则\n' +
+                    '• 清空所有缓存数据和扩展设置\n' +
+                    '• 清除所有localStorage数据\n' +
+                    '• 自动刷新页面重新加载插件\n\n' +
+                    '插件将完全恢复到刚安装时的状态，此操作不可撤销！\n\n' +
+                    '确定要继续吗？';
+
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+
+                // 二次确认
+                if (!confirm('最后确认：真的要完全初始化插件吗？所有数据将被永久删除，页面将自动刷新！')) {
+                    return;
+                }
+            }
+
+            console.log('[InfoBarSettings] 🔄 开始完全初始化插件...');
+
+            // === 第1步：获取必要的引用 ===
+            const configManager = this.configManager || window.SillyTavernInfobar?.modules?.configManager;
+            const dataCore = configManager?.dataCore || window.SillyTavernInfobar?.modules?.dataCore;
+            const context = window.SillyTavern?.getContext?.();
+
+            // === 第2步：清空数据核心的所有数据 ===
+            if (dataCore) {
+                console.log('[InfoBarSettings] 🗑️ 清空数据核心所有数据...');
+                await dataCore.clearAllData('all');
+
+                // 清空内存中的数据结构
+                if (dataCore.cache) dataCore.cache.clear();
+                if (dataCore.data) dataCore.data.clear();
+                if (dataCore.recentEntries) dataCore.recentEntries.length = 0;
+                if (dataCore.chatDataCache) dataCore.chatDataCache.clear();
+            }
+
+            // === 第3步：清空配置管理器所有数据 ===
+            if (configManager) {
+                console.log('[InfoBarSettings] 🗑️ 清空配置管理器所有数据...');
+                if (configManager.configCache) configManager.configCache.clear();
+                
+                // 调用配置管理器的清空方法
+                if (typeof configManager.clearAllData === 'function') {
+                    await configManager.clearAllData();
+                }
+            }
+
+            // === 第4步：完全清空 SillyTavern extensionSettings ===
+            if (context && context.extensionSettings) {
+                console.log('[InfoBarSettings] 🗑️ 清空SillyTavern扩展设置...');
+                
+                let clearedConfigs = 0;
+                
+                // 清理所有可能的扩展配置键名变体
+                const configKeysToDelete = [
+                    'Information bar integration tool',
+                    'information_bar_integration_tool',
+                    'Information Integration Tool',
+                    'advanced-infobar-system',
+                    'infobar',
+                    'InfoBar',
+                    'information-bar',
+                    'sillyTavernInfobar'
+                ];
+
+                configKeysToDelete.forEach(key => {
+                    if (context.extensionSettings[key]) {
+                        delete context.extensionSettings[key];
+                        clearedConfigs++;
+                        console.log(`[InfoBarSettings] ✅ 已删除扩展配置: ${key}`);
+                    }
+                });
+
+                // 扫描所有扩展配置，查找可能遗漏的信息栏相关配置
+                const allExtensionKeys = Object.keys(context.extensionSettings);
+                const suspiciousKeys = allExtensionKeys.filter(key => 
+                    key.toLowerCase().includes('infobar') ||
+                    key.toLowerCase().includes('information') ||
+                    key.toLowerCase().includes('bar') ||
+                    key.toLowerCase().includes('integration')
+                );
+
+                suspiciousKeys.forEach(key => {
+                    if (!configKeysToDelete.includes(key)) {
+                        const config = context.extensionSettings[key];
+                        if (config && typeof config === 'object') {
+                            // 检查配置内容是否包含信息栏相关数据
+                            const configStr = JSON.stringify(config).toLowerCase();
+                            if (configStr.includes('infobar') || configStr.includes('panel') || configStr.includes('field')) {
+                                delete context.extensionSettings[key];
+                                clearedConfigs++;
+                                console.log(`[InfoBarSettings] ✅ 已删除可疑扩展配置: ${key}`);
+                            }
+                        }
+                    }
+                });
+                
+                console.log(`[InfoBarSettings] 📊 总共清理了 ${clearedConfigs} 个扩展配置`);
+                
+                // 保存清空的设置
+                if (typeof context.saveSettings === 'function') {
+                    await context.saveSettings();
+                }
+            }
+
+            // === 第5步：清空localStorage中的所有相关数据 ===
+            console.log('[InfoBarSettings] 🗑️ 清空localStorage相关数据...');
+            const keysToRemove = [];
+            
+            // 增强的模式匹配列表
+            const patterns = [
+                'Information bar integration tool',
+                'information_bar_integration_tool',
+                'Information_bar_integration_tool',
+                'infobar',
+                'InfoBar',
+                'SillyTavernInfobar',
+                'information',
+                'panel',
+                'field',
+                'integration',
+                'backup_'
+            ];
+            
+            // 扫描所有localStorage键
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key) {
+                    const keyLower = key.toLowerCase();
+                    
+                    // 检查是否匹配任何模式
+                    const shouldRemove = patterns.some(pattern => {
+                        const patternLower = pattern.toLowerCase();
+                        return keyLower.includes(patternLower);
+                    });
+                    
+                    if (shouldRemove) {
+                        keysToRemove.push(key);
+                    }
+                }
             }
             
-            await this.configManager.resetConfig();
-            await this.loadSettings();
+            console.log(`[InfoBarSettings] 📊 找到 ${keysToRemove.length} 个要删除的localStorage键`);
             
-            this.showMessage('设置已重置到默认值', 'success');
+            // 删除找到的所有相关键
+            keysToRemove.forEach(key => {
+                try {
+                    const value = localStorage.getItem(key);
+                    localStorage.removeItem(key);
+                    console.log(`[InfoBarSettings] 🗑️ 已删除localStorage键: ${key} (值长度: ${value ? value.length : 0})`);
+                } catch (e) {
+                    console.warn(`[InfoBarSettings] ⚠️ 删除localStorage键失败: ${key}`, e);
+                }
+            });
+
+            // === 第6步：重置全局变量和模块状态 ===
+            console.log('[InfoBarSettings] 🔄 重置全局变量和模块状态...');
             
+            let destroyedModules = 0;
+            let clearedGlobals = 0;
+            
+            // 清理全局对象
+            if (window.SillyTavernInfobar) {
+                console.log('[InfoBarSettings] 🔍 发现 window.SillyTavernInfobar，开始深度清理...');
+                
+                // 停止所有定时器和清理模块状态
+                if (window.SillyTavernInfobar.modules) {
+                    const moduleNames = Object.keys(window.SillyTavernInfobar.modules);
+                    console.log('[InfoBarSettings] 📊 发现模块:', moduleNames);
+                    
+                    Object.entries(window.SillyTavernInfobar.modules).forEach(([name, module]) => {
+                        try {
+                            if (module) {
+                                // 清理模块内部状态
+                                if (module.eventSystem && typeof module.eventSystem.removeAllListeners === 'function') {
+                                    module.eventSystem.removeAllListeners();
+                                }
+                                
+                                // 清理定时器
+                                if (module.syncTimer) {
+                                    clearInterval(module.syncTimer);
+                                    module.syncTimer = null;
+                                }
+                                if (module.backupTimer) {
+                                    clearInterval(module.backupTimer);
+                                    module.backupTimer = null;
+                                }
+                                
+                                // 清理缓存
+                                if (module.cache && typeof module.cache.clear === 'function') {
+                                    module.cache.clear();
+                                }
+                                
+                                // 调用模块销毁方法
+                                if (typeof module.destroy === 'function') {
+                                    module.destroy();
+                                }
+                                
+                                destroyedModules++;
+                                console.log(`[InfoBarSettings] ✅ 模块 ${name} 已销毁`);
+                            }
+                        } catch (e) {
+                            console.warn(`[InfoBarSettings] ⚠️ 模块 ${name} 销毁失败:`, e);
+                        }
+                    });
+                }
+                
+                // 清理事件系统
+                if (window.SillyTavernInfobar.eventSource) {
+                    try {
+                        window.SillyTavernInfobar.eventSource.removeAllListeners?.();
+                        delete window.SillyTavernInfobar.eventSource;
+                        console.log('[InfoBarSettings] ✅ 事件系统已清理');
+                    } catch (e) {
+                        console.warn('[InfoBarSettings] ⚠️ 清理事件系统失败:', e);
+                    }
+                }
+                
+                // 完全清空全局对象
+                delete window.SillyTavernInfobar;
+                clearedGlobals++;
+                console.log('[InfoBarSettings] ✅ window.SillyTavernInfobar 已完全删除');
+            }
+            
+            // 清理其他可能的全局引用
+            const globalReferencesToClear = [
+                'InfoBarData',
+                'informationBarTool',
+                'infoBarTool',
+                'InfoBarTool',
+                'SillyTavernInfoBarData',
+                'InfoBarIntegrationTool'
+            ];
+            
+            globalReferencesToClear.forEach(refName => {
+                if (window[refName]) {
+                    delete window[refName];
+                    clearedGlobals++;
+                    console.log(`[InfoBarSettings] ✅ 已清理全局引用: window.${refName}`);
+                }
+            });
+            
+            console.log(`[InfoBarSettings] 📊 全局清理统计: 销毁模块 ${destroyedModules} 个，清理全局引用 ${clearedGlobals} 个`);
+
+            // === 第7步：清理chatMetadata中的残留数据 ===
+            console.log('[InfoBarSettings] 🗑️ 清理chatMetadata中的残留数据...');
+            await this.clearChatMetadataInfobarData();
+
+            // === 第8步：清理STScript变量系统数据 ===
+            console.log('[InfoBarSettings] 🗑️ 清理STScript变量系统数据...');
+            await this.clearSTScriptVariables();
+
+            // === 第9步：清理事件监听器 ===
+            console.log('[InfoBarSettings] 🗑️ 清理所有事件监听器...');
+            
+            // 移除DOM事件监听器
+            document.removeEventListener('input', this.handleInput);
+            document.removeEventListener('change', this.handleChange);
+            document.removeEventListener('click', this.handleClick);
+
+            // === 第10步：关闭设置窗口 ===
+            if (this.modal) {
+                this.modal.style.display = 'none';
+            }
+
+            console.log('[InfoBarSettings] ✅ 插件完全初始化完成，准备刷新页面...');
+
+            // === 第11步：显示成功消息并自动刷新页面 ===
+            const successMessage = '✅ 插件已完全初始化到刚安装的状态！\n\n页面将在3秒后自动刷新以重新加载插件...';
+            
+            // 使用原生alert确保消息显示
+            alert(successMessage);
+            
+            // 延迟刷新给用户时间看到消息
+            setTimeout(() => {
+                console.log('[InfoBarSettings] 🔄 自动刷新页面...');
+                window.location.reload();
+            }, 3000);
+
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 重置设置失败:', error);
-            this.showMessage('重置设置失败: ' + error.message, 'error');
+            console.error('[InfoBarSettings] ❌ 初始化插件失败:', error);
+            
+            // 确保错误消息能显示
+            const errorMessage = '❌ 插件初始化失败: ' + error.message + '\n\n建议手动刷新页面后重试。';
+            alert(errorMessage);
+        }
+    }
+
+    /**
+     * 清理chatMetadata中的信息栏数据
+     */
+    async clearChatMetadataInfobarData() {
+        try {
+            console.log('[InfoBarSettings] 🗑️ 开始清理chatMetadata中的信息栏数据...');
+            
+            const context = SillyTavern?.getContext?.();
+            if (!context) {
+                console.warn('[InfoBarSettings] ⚠️ SillyTavern上下文不可用，跳过chatMetadata清理');
+                return;
+            }
+
+            const chatMetadata = context.chat_metadata || context.chatMetadata;
+            if (!chatMetadata) {
+                console.warn('[InfoBarSettings] ⚠️ chatMetadata不可用，跳过清理');
+                return;
+            }
+
+            let clearedCount = 0;
+
+            // === 1. 清理特定的信息栏键 ===
+            const specificInfobarKeys = [
+                'information_bar_integration_tool',
+                'Information_bar_integration_tool',
+                'infobar_data',
+                'panels',
+                'panel_data',
+                'field_data'
+            ];
+
+            specificInfobarKeys.forEach(key => {
+                if (chatMetadata.hasOwnProperty(key)) {
+                    delete chatMetadata[key];
+                    clearedCount++;
+                    console.log(`[InfoBarSettings] ✅ 已删除chatMetadata键: ${key}`);
+                }
+            });
+
+            // === 2. 扫描并清理所有chat_*格式的数据 ===
+            const allKeys = Object.keys(chatMetadata);
+            const chatKeys = allKeys.filter(key => 
+                key.startsWith('chat_') && 
+                (key.includes('infobar') || key.includes('information') || key.includes('panel'))
+            );
+
+            chatKeys.forEach(key => {
+                delete chatMetadata[key];
+                clearedCount++;
+                console.log(`[InfoBarSettings] ✅ 已删除chatMetadata键: ${key}`);
+            });
+
+            // === 3. 清理panels.*格式的面板数据（核心问题） ===
+            const panelsKeys = allKeys.filter(key => key.startsWith('panels.'));
+            console.log(`[InfoBarSettings] 🔍 发现 ${panelsKeys.length} 个panels.*键:`, panelsKeys);
+            
+            panelsKeys.forEach(key => {
+                delete chatMetadata[key];
+                clearedCount++;
+                console.log(`[InfoBarSettings] ✅ 已删除面板数据键: ${key}`);
+            });
+
+            // === 4. 清理所有包含信息栏相关的键 ===
+            const infobarRelatedKeys = allKeys.filter(key => 
+                !key.startsWith('panels.') && // 排除已处理的panels.*键
+                !specificInfobarKeys.includes(key) && 
+                !chatKeys.includes(key) && (
+                    key.toLowerCase().includes('infobar') ||
+                    key.toLowerCase().includes('information') ||
+                    key.toLowerCase().includes('panel') ||
+                    key.toLowerCase().includes('field')
+                )
+            );
+
+            infobarRelatedKeys.forEach(key => {
+                const value = chatMetadata[key];
+                // 检查值是否包含信息栏相关数据
+                if (value && typeof value === 'object') {
+                    const valueStr = JSON.stringify(value).toLowerCase();
+                    if (valueStr.includes('infobar') || valueStr.includes('panel') || valueStr.includes('field')) {
+                        delete chatMetadata[key];
+                        clearedCount++;
+                        console.log(`[InfoBarSettings] ✅ 已删除包含信息栏数据的chatMetadata键: ${key}`);
+                    }
+                } else {
+                    // 对于非对象值，也检查键名
+                    delete chatMetadata[key];
+                    clearedCount++;
+                    console.log(`[InfoBarSettings] ✅ 已删除信息栏相关键: ${key}`);
+                }
+            });
+
+            // === 5. 保存清理后的chatMetadata ===
+            if (clearedCount > 0) {
+                if (typeof context.saveChatMetadata === 'function') {
+                    await context.saveChatMetadata();
+                    console.log('[InfoBarSettings] 💾 已保存清理后的chatMetadata');
+                } else if (typeof context.saveMetadata === 'function') {
+                    await context.saveMetadata();
+                    console.log('[InfoBarSettings] 💾 已保存清理后的metadata');
+                }
+            }
+
+            console.log(`[InfoBarSettings] ✅ chatMetadata清理完成，共清理了 ${clearedCount} 个键`);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 清理chatMetadata失败:', error);
+            // 不抛出错误，允许初始化过程继续
+        }
+    }
+
+    /**
+     * 清理STScript变量系统中的所有信息栏数据
+     */
+    async clearSTScriptVariables() {
+        try {
+            console.log('[InfoBarSettings] 🗑️ 开始清理STScript变量...');
+            
+            const context = SillyTavern?.getContext?.();
+            if (!context || typeof context.executeSlashCommands !== 'function') {
+                console.warn('[InfoBarSettings] ⚠️ STScript功能不可用，跳过变量清理');
+                return;
+            }
+
+            let clearedCount = 0;
+
+            // === 1. 清理主要的infobar嵌套结构变量 ===
+            try {
+                // 先检查变量是否存在
+                const currentValue = context.substituteParams('{{getvar::infobar}}');
+                if (currentValue && currentValue.trim() && !currentValue.includes('{{getvar::')) {
+                    console.log('[InfoBarSettings] 🔍 发现主infobar变量，内容长度:', currentValue.length);
+                    
+                    // 强制清理主infobar变量 - 使用空值覆盖
+                    await context.executeSlashCommands('/setvar key=infobar value=""');
+                    
+                    // 验证清理结果
+                    const afterClear = context.substituteParams('{{getvar::infobar}}');
+                    if (!afterClear || afterClear.trim() === '' || afterClear.includes('{{getvar::')) {
+                        console.log('[InfoBarSettings] ✅ 主infobar变量已成功清理');
+                        clearedCount++;
+                    } else {
+                        console.warn('[InfoBarSettings] ⚠️ 主infobar变量清理可能不完全，剩余:', afterClear.substring(0, 100));
+                        // 尝试第二次清理
+                        await context.executeSlashCommands('/setvar key=infobar ');
+                        clearedCount++;
+                    }
+                } else {
+                    console.log('[InfoBarSettings] ℹ️ 主infobar变量不存在或已为空');
+                }
+            } catch (e) {
+                console.warn('[InfoBarSettings] ⚠️ 清理主infobar变量失败:', e);
+            }
+
+            // === 2. 清理规则同步控制变量 ===
+            try {
+                await context.executeSlashCommands('/setvar key=infobar_sync_rules ');
+                clearedCount++;
+                console.log('[InfoBarSettings] ✅ 已清理规则同步控制变量');
+            } catch (e) {
+                console.warn('[InfoBarSettings] ⚠️ 清理规则同步控制变量失败:', e);
+            }
+
+            // === 3. 清理所有面板相关的分散变量 ===
+            const panelNames = [
+                'personal', 'world', 'interaction', 'tasks', 'inventory', 'abilities', 
+                'organization', 'news', 'plot', 'cultivation', 'fantasy', 'modern', 
+                'historical', 'magic', 'training'
+            ];
+
+            const commonFieldNames = [
+                'name', 'age', 'gender', 'appearance', 'posture', 'mood', 'location', 'room', 
+                'environment', 'object', 'health', 'energy', 'consciousness', 'type', 'genre',
+                'description', 'status', 'priority', 'deadline', 'progress', 'category',
+                'weapons', 'armor', 'items', 'storage', 'capacity', 'strength', 'agility',
+                'intelligence', 'skills', 'leadership', 'influence', 'reputation', 'lastUpdated'
+            ];
+
+            // 清理面板整体变量
+            for (const panelName of panelNames) {
+                try {
+                    await context.executeSlashCommands(`/setvar key=infobar_${panelName} `);
+                    clearedCount++;
+                } catch (e) {
+                    // 忽略错误，继续清理
+                }
+            }
+
+            // 清理面板字段变量
+            for (const panelName of panelNames) {
+                for (const fieldName of commonFieldNames) {
+                    try {
+                        await context.executeSlashCommands(`/setvar key=infobar_${panelName}_${fieldName} `);
+                        clearedCount++;
+                    } catch (e) {
+                        // 忽略错误，继续清理
+                    }
+                }
+            }
+
+            // === 4. 清理总结相关变量 ===
+            const summaryVars = [
+                'summary_count', 'summary_latest', 'summary_latest_timestamp', 'summary_latest_type',
+                'summary_all', 'summary_timeline',
+                'summary_1', 'summary_1_timestamp', 'summary_1_type',
+                'summary_2', 'summary_2_timestamp', 'summary_2_type',
+                'summary_3', 'summary_3_timestamp', 'summary_3_type'
+            ];
+
+            for (const varName of summaryVars) {
+                try {
+                    await context.executeSlashCommands(`/setvar key=${varName} `);
+                    clearedCount++;
+                } catch (e) {
+                    // 忽略错误，继续清理
+                }
+            }
+
+            // === 5. 清理其他可能的插件相关变量 ===
+            const otherVars = [
+                'infobar_enabled', 'infobar_version', 'infobar_config', 'infobar_theme',
+                'infobar_auto_sync', 'infobar_debug', 'infobar_status'
+            ];
+
+            for (const varName of otherVars) {
+                try {
+                    await context.executeSlashCommands(`/setvar key=${varName} `);
+                    clearedCount++;
+                } catch (e) {
+                    // 忽略错误，继续清理
+                }
+            }
+
+            console.log(`[InfoBarSettings] ✅ STScript变量清理完成，共清理了 ${clearedCount} 个变量`);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 清理STScript变量失败:', error);
+            // 不抛出错误，允许初始化过程继续
+        }
+    }
+
+    /**
+     * 清空面板数据 - 只清空数据，保留配置
+     */
+    async clearPanelData() {
+        try {
+            const confirmMessage = '⚠️ 确认清空面板数据\n\n' +
+                '此操作将：\n' +
+                '• 清空所有聊天中的面板数据\n' +
+                '• 保留面板配置和规则设置\n' +
+                '• 保留自定义面板和子项定义\n\n' +
+                '确定要继续吗？';
+
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+
+            console.log('[InfoBarSettings] 🔄 开始清空面板数据...');
+
+            const dataCore = this.configManager?.dataCore || window.SillyTavernInfobar?.modules?.dataCore;
+
+            if (dataCore) {
+                // 只清空聊天数据，保留配置
+                await dataCore.clearAllData('chat');
+
+                console.log('[InfoBarSettings] ✅ 面板数据清空完成');
+                this.showMessage('所有面板数据已清空', 'success');
+            } else {
+                throw new Error('无法获取数据核心');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 清空面板数据失败:', error);
+            this.showMessage('清空面板数据失败: ' + error.message, 'error');
         }
     }
 
@@ -5381,29 +6952,7 @@ export class InfoBarSettings {
         }
     }
 
-    /**
-     * 重置所有设置（按规则默认值）并清除缓存
-     */
-    async resetAllSettings() {
-        try {
-            if (!confirm('确定要重置所有设置并清除缓存吗？此操作不可撤销。')) {
-                return;
-            }
-
-            const configManager = this.configManager || window.SillyTavernInfobar?.modules?.configManager;
-            if (configManager) {
-                await configManager.resetConfig();
-                await configManager.clearAllData?.();
-                await configManager.loadAllConfigs?.();
-            }
-
-            await this.loadSettings?.();
-            this.showMessage('已重置所有设置并清除缓存', 'success');
-        } catch (error) {
-            console.error('[InfoBarSettings] ❌ 重置所有设置失败:', error);
-            this.showMessage('重置所有设置失败: ' + error.message, 'error');
-        }
-    }
+    // resetAllSettings方法已删除，替换为initializePlugin和clearPanelData方法
 
     /**
      * 导出设置
@@ -5439,24 +6988,119 @@ export class InfoBarSettings {
             } catch (e) {
                 console.warn('[InfoBarSettings] ⚠️ 导出增强合并过程中出现非致命错误:', e);
             }
-            
+
             const blob = new Blob([JSON.stringify(exportData, null, 2)], {
                 type: 'application/json'
             });
-            
+
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = `info-bar-settings-${Date.now()}.json`;
             a.click();
-            
+
             URL.revokeObjectURL(url);
-            
+
             this.showMessage('设置导出成功', 'success');
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 导出设置失败:', error);
             this.showMessage('导出设置失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 导出自定义配置
+     */
+    async exportCustomSettings() {
+        try {
+            console.log('[InfoBarSettings] 📤 开始导出自定义配置...');
+
+            // 获取用户选择的导出选项
+            const exportOptions = this.getExportOptions();
+            console.log('[InfoBarSettings] 📋 导出选项:', exportOptions);
+
+            if (!exportOptions.hasAnySelection) {
+                this.showMessage('请至少选择一个导出选项', 'warning');
+                return;
+            }
+
+            // 构建导出数据
+            const exportData = {
+                metadata: {
+                    version: '1.0.0',
+                    exportTime: new Date().toISOString(),
+                    exportOptions: exportOptions
+                },
+                configs: {}
+            };
+
+            // 导出面板配置
+            if (exportOptions.panelConfigs) {
+                console.log('[InfoBarSettings] 📊 导出面板配置...');
+                await this.addPanelConfigsToExport(exportData);
+            }
+
+            // 导出面板规则
+            if (exportOptions.panelRules) {
+                console.log('[InfoBarSettings] 📋 导出面板规则...');
+                await this.addPanelRulesToExport(exportData);
+            }
+
+            // 导出字段规则
+            if (exportOptions.fieldRules) {
+                console.log('[InfoBarSettings] 🔧 导出字段规则...');
+                await this.addFieldRulesToExport(exportData);
+            }
+
+            // 导出主题设置
+            if (exportOptions.themeSettings) {
+                console.log('[InfoBarSettings] 🎨 导出主题设置...');
+                await this.addThemeSettingsToExport(exportData);
+            }
+
+            // 导出API设置
+            if (exportOptions.apiSettings) {
+                console.log('[InfoBarSettings] 🔌 导出API设置...');
+                await this.addApiSettingsToExport(exportData);
+            }
+
+            // 导出所有设置
+            if (exportOptions.allSettings) {
+                console.log('[InfoBarSettings] 🌐 导出所有设置...');
+                await this.addAllSettingsToExport(exportData);
+            }
+
+            // 生成文件名
+            const selectedTypes = [];
+            if (exportOptions.panelConfigs) selectedTypes.push('panels');
+            if (exportOptions.panelRules) selectedTypes.push('panel-rules');
+            if (exportOptions.fieldRules) selectedTypes.push('field-rules');
+            if (exportOptions.themeSettings) selectedTypes.push('theme');
+            if (exportOptions.apiSettings) selectedTypes.push('api');
+            if (exportOptions.allSettings) selectedTypes.push('all');
+
+            const fileName = `info-bar-${selectedTypes.join('-')}-${Date.now()}.json`;
+
+            // 创建并下载文件
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+                type: 'application/json'
+            });
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+
+            URL.revokeObjectURL(url);
+
+            this.showMessage(`配置导出成功: ${fileName}`, 'success');
+            console.log('[InfoBarSettings] ✅ 自定义配置导出完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 导出自定义配置失败:', error);
+            this.showMessage('导出配置失败: ' + error.message, 'error');
         }
     }
 
@@ -5468,28 +7112,28 @@ export class InfoBarSettings {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.json';
-            
+
             input.onchange = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-                
+
                 try {
                     const text = await file.text();
                     const importData = JSON.parse(text);
-                    
+
                     await this.configManager.importConfigs(importData);
                     await this.loadSettings();
-                    
+
                     this.showMessage('设置导入成功', 'success');
-                    
+
                 } catch (error) {
                     console.error('[InfoBarSettings] ❌ 导入设置失败:', error);
                     this.showMessage('导入设置失败: ' + error.message, 'error');
                 }
             };
-            
+
             input.click();
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 导入设置失败:', error);
             this.showMessage('导入设置失败: ' + error.message, 'error');
@@ -5514,12 +7158,12 @@ export class InfoBarSettings {
                     customGroup.style.display = e.target.value === 'custom' ? 'block' : 'none';
                 }
             }
-            
+
             // 实时预览主题变化
             if (e.target.name && e.target.name.startsWith('theme.custom.')) {
                 this.updateThemePreview();
             }
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理表单变更失败:', error);
         }
@@ -5532,24 +7176,24 @@ export class InfoBarSettings {
         try {
             const previewBox = this.modal.querySelector('.preview-box');
             if (!previewBox) return;
-            
+
             const customColors = {
                 primary: this.modal.querySelector('[name="theme.custom.primary"]')?.value,
                 background: this.modal.querySelector('[name="theme.custom.background"]')?.value,
                 text: this.modal.querySelector('[name="theme.custom.text"]')?.value,
                 border: this.modal.querySelector('[name="theme.custom.border"]')?.value
             };
-            
+
             // 应用预览样式
             previewBox.style.backgroundColor = customColors.background;
             previewBox.style.color = customColors.text;
             previewBox.style.borderColor = customColors.border;
-            
+
             const previewButton = previewBox.querySelector('.preview-button');
             if (previewButton) {
                 previewButton.style.backgroundColor = customColors.primary;
             }
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 更新主题预览失败:', error);
         }
@@ -11443,6 +13087,17 @@ export class InfoBarSettings {
                     position: 'overlay',
                     integration: 'advanced'
                 }
+            },
+            {
+                id: 'custom-html',
+                name: 'HTML式',
+                description: '使用自定义HTML模板渲染信息栏，支持完全自定义的样式和布局',
+                icon: '🎨',
+                preview: {
+                    layout: 'custom',
+                    position: 'template',
+                    integration: 'html'
+                }
             }
         ];
 
@@ -11503,6 +13158,13 @@ export class InfoBarSettings {
                 return `
                     <div class="demo-merged">
                         💬📊
+                    </div>
+                `;
+            case 'custom':
+                return `
+                    <div class="demo-custom">
+                        <div class="demo-chat">💬</div>
+                        <div class="demo-html">🎨</div>
                     </div>
                 `;
             default:
@@ -11689,6 +13351,22 @@ export class InfoBarSettings {
                     resizable: true,
                     tabbed: true,
                     interactive: true
+                }
+            },
+            {
+                id: 'custom-html',
+                name: 'HTML式',
+                description: '使用自定义HTML模板渲染信息栏，支持完全自定义的样式和布局',
+                config: {
+                    position: 'end',
+                    layout: 'custom',
+                    integration: 'template',
+                    animation: 'fadeIn',
+                    autoHide: false,
+                    collapsible: true,
+                    customTemplate: true,
+                    htmlSupport: true,
+                    dataBinding: true
                 }
             }
         ];
@@ -12049,6 +13727,9 @@ export class InfoBarSettings {
             // 🔧 修复：应用主题到总结面板特定元素
             this.applySummaryPanelTheme(theme);
 
+            // 🔧 修复：应用主题到变量管理器特定元素
+            this.applyVariableManagerTheme(theme);
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 应用主题到信息栏设置失败:', error);
         }
@@ -12124,13 +13805,89 @@ export class InfoBarSettings {
     }
 
     /**
+     * 🔧 修复：应用主题到变量管理器
+     */
+    applyVariableManagerTheme(theme) {
+        try {
+            console.log('[InfoBarSettings] 🎨 应用变量管理器主题...');
+
+            // 变量管理器模态框
+            const variableModal = document.querySelector('#variable-manager-modal');
+            if (!variableModal) {
+                console.log('[InfoBarSettings] ℹ️ 变量管理器未打开，跳过主题应用');
+                return;
+            }
+
+            // 应用主题到模态框容器
+            const modalContainer = variableModal.querySelector('.modal-container');
+            if (modalContainer) {
+                modalContainer.style.backgroundColor = theme.colors.bg;
+                modalContainer.style.color = theme.colors.text;
+                modalContainer.style.borderColor = theme.colors.border;
+            }
+
+            // 应用主题到变量项
+            const variableItems = variableModal.querySelectorAll('.variable-item');
+            variableItems.forEach(item => {
+                item.style.setProperty('background-color', this.adjustColor(theme.colors.bg, 3), 'important');
+                item.style.setProperty('color', theme.colors.text, 'important');
+                item.style.setProperty('border-color', theme.colors.border, 'important');
+            });
+
+            // 🔧 修复：强制应用主题到object-property和nested-array元素
+            const objectProperties = variableModal.querySelectorAll('.object-property, .nested-array, .nested-object');
+            objectProperties.forEach(element => {
+                element.style.setProperty('background-color', this.adjustColor(theme.colors.bg, 5), 'important');
+                element.style.setProperty('color', theme.colors.text, 'important');
+                element.style.setProperty('border-color', theme.colors.border, 'important');
+            });
+
+            // 应用主题到嵌套项容器
+            const nestedItems = variableModal.querySelectorAll('.nested-items');
+            nestedItems.forEach(container => {
+                container.style.setProperty('background-color', this.adjustColor(theme.colors.bg, 2), 'important');
+                container.style.setProperty('border-color', theme.colors.border, 'important');
+            });
+
+            // 应用主题到输入框和选择框
+            const inputs = variableModal.querySelectorAll('input, select, textarea');
+            inputs.forEach(input => {
+                input.style.setProperty('background-color', theme.colors.bg, 'important');
+                input.style.setProperty('color', theme.colors.text, 'important');
+                input.style.setProperty('border-color', theme.colors.border, 'important');
+            });
+
+            // 应用主题到按钮
+            const buttons = variableModal.querySelectorAll('.btn, .btn-icon, .btn-icon-small');
+            buttons.forEach(button => {
+                if (button.classList.contains('btn-primary') || button.classList.contains('btn-success')) {
+                    button.style.setProperty('background-color', theme.colors.primary, 'important');
+                    button.style.setProperty('color', theme.colors.bg, 'important');
+                } else if (button.classList.contains('btn-danger')) {
+                    button.style.setProperty('background-color', '#dc3545', 'important');
+                    button.style.setProperty('color', 'white', 'important');
+                } else {
+                    button.style.setProperty('background-color', this.adjustColor(theme.colors.bg, 10), 'important');
+                    button.style.setProperty('color', theme.colors.text, 'important');
+                }
+                button.style.setProperty('border-color', theme.colors.border, 'important');
+            });
+
+            console.log('[InfoBarSettings] ✅ 变量管理器主题应用完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 应用变量管理器主题失败:', error);
+        }
+    }
+
+    /**
      * 应用主题到数据表格界面
      * @param {Object} theme - 主题配置对象
      */
     applyThemeToDataTable(theme) {
         try {
             console.log('[InfoBarSettings] 🎨 应用主题到数据表格:', theme.name || theme.id);
-            
+
             // 通过事件系统通知数据表格更新主题
             if (this.eventSystem) {
                 this.eventSystem.emit('theme:changed', {
@@ -12138,10 +13895,10 @@ export class InfoBarSettings {
                     colors: theme.colors
                 });
             }
-            
+
             // 🔧 新增：直接更新数据表格标题的主题样式
             this.updateDataTableHeaderTheme(theme);
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 应用主题到数据表格失败:', error);
         }
@@ -12158,11 +13915,11 @@ export class InfoBarSettings {
                 console.log('[InfoBarSettings] ℹ️ 数据表格界面未打开，跳过标题主题更新');
                 return;
             }
-            
+
             // 更新模态框标题
             const modalHeader = dataTableModal.querySelector('.modal-header');
             const modalTitle = dataTableModal.querySelector('.modal-title, h2');
-            
+
             if (modalHeader && theme.colors) {
                 // 应用主题背景色
                 if (theme.colors.headerBg) {
@@ -12172,14 +13929,14 @@ export class InfoBarSettings {
                     modalHeader.style.borderBottomColor = theme.colors.headerBorder;
                 }
             }
-            
+
             if (modalTitle && theme.colors) {
                 // 应用主题文字色
                 if (theme.colors.headerText) {
                     modalTitle.style.color = theme.colors.headerText;
                 }
             }
-            
+
             // 更新表格标题行
             const tableHeader = dataTableModal.querySelector('.table-header');
             if (tableHeader && theme.colors) {
@@ -12193,9 +13950,9 @@ export class InfoBarSettings {
                     tableHeader.style.borderBottomColor = theme.colors.tableBorder;
                 }
             }
-            
+
             console.log('[InfoBarSettings] ✅ 数据表格标题主题已更新');
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 更新数据表格标题主题失败:', error);
         }
@@ -12240,7 +13997,7 @@ export class InfoBarSettings {
             this.modal.remove();
             this.modal = null;
         }
-        
+
         this.initialized = false;
         console.log('[InfoBarSettings] 💥 设置界面已销毁');
     }
@@ -12452,6 +14209,27 @@ export class InfoBarSettings {
 
             extensionSettings['Information bar integration tool'].apiConfig.enabled = enabled;
             context.saveSettingsDebounced();
+
+            // 🔧 新增：通知变量系统提示词模块API状态变更
+            const variableSystemPrompt = window.SillyTavernInfobar?.modules?.variableSystemPrompt;
+            if (variableSystemPrompt) {
+                try {
+                    if (enabled) {
+                        // 启用自定义API时，清除变量提示词避免冲突
+                        if (variableSystemPrompt.context?.setExtensionPrompt) {
+                            variableSystemPrompt.context.setExtensionPrompt('information_bar_variable_reader', '', 1, 0);
+                            console.log('[InfoBarSettings] 🧹 已清除主API变量提示词，避免与自定义API冲突');
+                        }
+                    } else {
+                        // 禁用自定义API时，重新启用变量提示词
+                        console.log('[InfoBarSettings] 🔄 重新启用主API变量提示词...');
+                        // 设置标记以便下次生成时重新注入
+                        variableSystemPrompt.injectionActive = false;
+                    }
+                } catch (error) {
+                    console.error('[InfoBarSettings] ❌ 更新变量系统提示词状态失败:', error);
+                }
+            }
 
             console.log('[InfoBarSettings] ✅ API启用状态已更新');
 
@@ -12723,7 +14501,7 @@ export class InfoBarSettings {
             if (!isValidMessage) {
                 console.log('[InfoBarSettings] ⚠️ 检测到的AI消息不是新生成的消息，可能是AI生成失败，跳过处理');
                 console.log('[InfoBarSettings] 📝 这避免了使用上一条AI消息的剧情内容调用自定义API的错误');
-                
+
                 // 调用失败处理函数
                 this.handleAIGenerationFailure('AI消息验证失败：获取到的是旧消息，可能AI生成未成功');
                 return;
@@ -12736,7 +14514,7 @@ export class InfoBarSettings {
             if (!lengthValidation.isValid) {
                 console.log('[InfoBarSettings] ⚠️ AI消息长度不足，跳过信息栏数据生成');
                 console.log('[InfoBarSettings] 📝 这通常表示AI输出被截断或内容过于简短');
-                
+
                 // 调用失败处理函数
                 this.handleAIGenerationFailure(`AI消息长度不足：${lengthValidation.reason}`);
                 return;
@@ -12950,7 +14728,7 @@ export class InfoBarSettings {
             if (!lengthValidation.isValid) {
                 console.log('[InfoBarSettings] ⚠️ AI消息长度不足，跳过信息栏数据生成');
                 console.log('[InfoBarSettings] 📝 这通常表示AI输出被截断或内容过于简短');
-                
+
                 // 调用失败处理函数
                 this.handleAIGenerationFailure(`AI消息长度不足：${lengthValidation.reason}`);
                 return;
@@ -13055,7 +14833,7 @@ export class InfoBarSettings {
 
             // AI消息应该在最后一条用户消息之后
             const isAfterLastUser = aiMessageIndex > lastUserMessageIndex;
-            
+
             console.log('[InfoBarSettings] 🔍 AI消息验证结果:', {
                 aiMessageIndex: aiMessageIndex,
                 lastUserMessageIndex: lastUserMessageIndex,
@@ -13077,7 +14855,7 @@ export class InfoBarSettings {
     handleAIGenerationFailure(reason = 'unknown') {
         try {
             console.log('[InfoBarSettings] ⚠️ 处理AI生成失败:', reason);
-            
+
             // 记录失败统计
             if (!window.InfoBarGenerationStats) {
                 window.InfoBarGenerationStats = {
@@ -13128,7 +14906,7 @@ export class InfoBarSettings {
 
             // 获取消息内容并清理可能存在的标签
             let messageContent = aiMessage.mes;
-            
+
             // 移除可能存在的XML标签和多余空白
             messageContent = messageContent
                 .replace(/<[^>]+>/g, '') // 移除所有XML/HTML标签
@@ -13201,12 +14979,67 @@ export class InfoBarSettings {
                 smartPrompt = this.getBackupSystemPrompt();
             }
 
+            // 🔧 修复：正确调用变量系统提示词生成方法
+            let variablePrompt = '';
+            try {
+                const variableSystemPrompt = window.SillyTavernInfobar?.modules?.variableSystemPrompt;
+                if (variableSystemPrompt && typeof variableSystemPrompt.generatePromptTemplate === 'function') {
+                    variablePrompt = await variableSystemPrompt.generatePromptTemplate();
+                    console.log('[InfoBarSettings] ✅ 获取到变量系统读取提示词，长度:', variablePrompt.length);
+                } else {
+                    console.warn('[InfoBarSettings] ⚠️ 变量系统提示词模块不可用或缺少generatePromptTemplate方法');
+                }
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 获取变量系统读取提示词失败:', error);
+            }
+
+            // 🔧 新增：获取世界书内容
+            let worldBookContent = '';
+            const context = SillyTavern.getContext();
+            const apiConfig = context.extensionSettings['Information bar integration tool']?.apiConfig || {};
+            if (apiConfig.includeWorldBook) {
+                try {
+                    worldBookContent = await this.getWorldBookContent();
+                    if (worldBookContent) {
+                        console.log('[InfoBarSettings] 📚 获取到世界书内容，长度:', worldBookContent.length);
+                    } else {
+                        console.log('[InfoBarSettings] 📚 世界书内容为空或未激活');
+                    }
+                } catch (error) {
+                    console.error('[InfoBarSettings] ❌ 获取世界书内容失败:', error);
+                }
+            }
+
+            // 构建完整的系统提示词
+            let fullSystemPrompt = smartPrompt;
+            
+            // 🔧 修复：手动处理变量替换，然后添加变量系统读取提示词
+            if (variablePrompt) {
+                try {
+                    // 手动调用SillyTavern的变量替换功能
+                    if (typeof context.substituteParams === 'function') {
+                        variablePrompt = context.substituteParams(variablePrompt);
+                        console.log('[InfoBarSettings] ✅ 变量替换完成，处理后长度:', variablePrompt.length);
+                    } else {
+                        console.warn('[InfoBarSettings] ⚠️ SillyTavern变量替换功能不可用，跳过变量处理');
+                    }
+                } catch (error) {
+                    console.error('[InfoBarSettings] ❌ 变量替换失败:', error);
+                }
+                fullSystemPrompt = variablePrompt + '\n\n' + fullSystemPrompt;
+            }
+            
+            // 添加世界书内容
+            if (worldBookContent) {
+                fullSystemPrompt = fullSystemPrompt + '\n\n## 📚 世界书信息\n\n' + worldBookContent;
+            }
+
             // 准备API请求
             console.log('[InfoBarSettings] 📡 准备发送自定义API请求...');
             const messages = [
                 {
                     role: 'system',
-                    content: smartPrompt
+                    content: fullSystemPrompt
                 },
                 {
                     role: 'user',
@@ -13216,14 +15049,17 @@ export class InfoBarSettings {
 
             console.log('[InfoBarSettings] 📊 请求详情:', {
                 messagesCount: messages.length,
-                systemPromptLength: smartPrompt.length,
+                systemPromptLength: fullSystemPrompt.length,
+                smartPromptLength: smartPrompt.length,
+                variablePromptLength: variablePrompt.length,
+                worldBookLength: worldBookContent.length,
                 userPromptLength: plotContent.length,
                 apiProvider: this.getAPIProvider(),
-                apiModel: this.getAPIModel()
+                apiModel: this.getAPIModel(),
+                includeWorldBook: apiConfig.includeWorldBook
             });
 
             // 发送自定义API请求（增加重试逻辑）
-            const context = SillyTavern.getContext();
             const cfg = context.extensionSettings['Information bar integration tool']?.apiConfig || {};
             const maxRetry = Number(cfg.retryCount ?? 3);
             const retryDelayMs = 1500;
@@ -13517,9 +15353,9 @@ export class InfoBarSettings {
                     exportData.chats.push(chatData);
 
                     // 收集当前聊天的信息栏数据
-                    if (this.unifiedDataCore) {
-                        const chatInfobarData = this.unifiedDataCore.getChatData(currentChatId);
-                        if (chatInfobarData) {
+                    if (this.unifiedDataCore?.getChatData) {
+                        const chatInfobarData = await this.unifiedDataCore.getChatData(currentChatId);
+                        if (chatInfobarData && Object.keys(chatInfobarData).length > 0) {
                             exportData.infobarData[currentChatId] = chatInfobarData;
                         }
                     }
@@ -13528,31 +15364,37 @@ export class InfoBarSettings {
                 // 所有聊天
                 const allChats = context.characters || [];
                 for (const character of allChats) {
-                    if (character.chat) {
+                    if (character) {
                         const chatData = {
                             chatId: character.filename || character.name,
                             chatName: character.name,
                             character: character.name,
-                            messages: character.chat,
+                            // 注意：非当前聊天的消息正文通常未预加载，避免导出错误结构
+                            messages: Array.isArray(character.chat) ? character.chat : [],
                             timestamp: new Date().toISOString()
                         };
                         exportData.chats.push(chatData);
 
                         // 收集该聊天的信息栏数据
-                        if (this.unifiedDataCore) {
-                            const chatInfobarData = this.unifiedDataCore.getChatData(character.filename || character.name);
-                            if (chatInfobarData) {
-                                exportData.infobarData[character.filename || character.name] = chatInfobarData;
+                        if (this.unifiedDataCore?.getChatData) {
+                            const cid = character.filename || character.name;
+                            const chatInfobarData = await this.unifiedDataCore.getChatData(cid);
+                            if (chatInfobarData && Object.keys(chatInfobarData).length > 0) {
+                                exportData.infobarData[cid] = chatInfobarData;
                             }
                         }
                     }
                 }
             }
 
-            // 收集扩展设置
+            // 收集扩展设置（脱敏apiKey）
             const extensionSettings = context.extensionSettings;
             if (extensionSettings && extensionSettings['Information bar integration tool']) {
-                exportData.settings = extensionSettings['Information bar integration tool'];
+                const safeSettings = JSON.parse(JSON.stringify(extensionSettings['Information bar integration tool']));
+                if (safeSettings?.apiConfig?.apiKey) {
+                    safeSettings.apiConfig.apiKey = '***REMOVED***';
+                }
+                exportData.settings = safeSettings;
             }
 
             console.log('[InfoBarSettings] 📊 数据收集完成:', {
@@ -14183,6 +16025,107 @@ export class InfoBarSettings {
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 加载数据管理样式失败:', error);
+        }
+    }
+
+    /**
+     * 获取世界书内容
+     */
+    async getWorldBookContent() {
+        try {
+            console.log('[InfoBarSettings] 📚 开始获取世界书内容...');
+
+            const context = SillyTavern.getContext();
+            if (!context) {
+                console.warn('[InfoBarSettings] ⚠️ 无法获取SillyTavern上下文');
+                return '';
+            }
+
+            // 方法1：尝试从 context.worldInfoData 获取
+            if (context.worldInfoData && Array.isArray(context.worldInfoData) && context.worldInfoData.length > 0) {
+                console.log('[InfoBarSettings] 📖 从worldInfoData获取世界书内容');
+                const activeEntries = context.worldInfoData.filter(entry => 
+                    entry && !entry.disable && entry.content && entry.content.trim()
+                );
+                
+                if (activeEntries.length > 0) {
+                    const worldBookText = activeEntries.map(entry => {
+                        const title = entry.key || entry.keys || 'Unknown';
+                        const content = entry.content || '';
+                        return `**${title}**: ${content}`;
+                    }).join('\n\n');
+                    
+                    console.log('[InfoBarSettings] ✅ 获取到世界书条目数量:', activeEntries.length);
+                    return worldBookText;
+                }
+            }
+
+            // 方法2：尝试从 context.world_info 获取
+            if (context.world_info && Array.isArray(context.world_info) && context.world_info.length > 0) {
+                console.log('[InfoBarSettings] 📖 从world_info获取世界书内容');
+                const activeEntries = context.world_info.filter(entry => 
+                    entry && !entry.disable && entry.content && entry.content.trim()
+                );
+                
+                if (activeEntries.length > 0) {
+                    const worldBookText = activeEntries.map(entry => {
+                        const title = entry.key || entry.keys || 'Unknown';
+                        const content = entry.content || '';
+                        return `**${title}**: ${content}`;
+                    }).join('\n\n');
+                    
+                    console.log('[InfoBarSettings] ✅ 获取到世界书条目数量:', activeEntries.length);
+                    return worldBookText;
+                }
+            }
+
+            // 方法3：尝试通过 SillyTavern API 获取
+            if (typeof context.getWorldInfoSettings === 'function') {
+                console.log('[InfoBarSettings] 📖 通过API获取世界书设置');
+                const worldInfo = context.getWorldInfoSettings();
+                if (worldInfo && worldInfo.length > 0) {
+                    const activeEntries = worldInfo.filter(entry => 
+                        entry && !entry.disable && entry.content && entry.content.trim()
+                    );
+                    
+                    if (activeEntries.length > 0) {
+                        const worldBookText = activeEntries.map(entry => {
+                            const title = entry.key || entry.keys || 'Unknown';
+                            const content = entry.content || '';
+                            return `**${title}**: ${content}`;
+                        }).join('\n\n');
+                        
+                        console.log('[InfoBarSettings] ✅ 获取到世界书条目数量:', activeEntries.length);
+                        return worldBookText;
+                    }
+                }
+            }
+
+            // 方法4：尝试直接从全局变量获取
+            if (window.world_info && Array.isArray(window.world_info) && window.world_info.length > 0) {
+                console.log('[InfoBarSettings] 📖 从全局变量获取世界书内容');
+                const activeEntries = window.world_info.filter(entry => 
+                    entry && !entry.disable && entry.content && entry.content.trim()
+                );
+                
+                if (activeEntries.length > 0) {
+                    const worldBookText = activeEntries.map(entry => {
+                        const title = entry.key || entry.keys || 'Unknown';
+                        const content = entry.content || '';
+                        return `**${title}**: ${content}`;
+                    }).join('\n\n');
+                    
+                    console.log('[InfoBarSettings] ✅ 获取到世界书条目数量:', activeEntries.length);
+                    return worldBookText;
+                }
+            }
+
+            console.log('[InfoBarSettings] 📚 没有找到激活的世界书内容');
+            return '';
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取世界书内容失败:', error);
+            return '';
         }
     }
 
@@ -15066,7 +17009,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             console.log('[InfoBarSettings] ⚠️ 设置界面未初始化，跳过隐藏总结内容');
             return;
         }
-        
+
         const contentSection = this.modal.querySelector('#content-summary-content-section');
         if (contentSection) {
             contentSection.style.display = 'none';
@@ -15112,7 +17055,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
         };
 
         const heightValue = heightMap[height] || '32px';
-        
+
         // 应用到CSS变量（如果存在信息栏元素）
         const infobarElements = document.querySelectorAll('.info-bar, .infobar-container');
         infobarElements.forEach(element => {
@@ -15181,7 +17124,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             menu.className = 'demo-add-panel-menu';
             // 生成面板列表HTML
             const panelListHtml = this.generatePanelListHtml(enabledPanels);
-            
+
             // 获取第一个面板用于初始化右侧子项列表
             const firstPanelId = Object.keys(enabledPanels)[0];
             const firstPanelConfig = enabledPanels[firstPanelId];
@@ -15202,7 +17145,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                                     ${panelListHtml}
                                 </div>
                             </div>
-                            
+
                             <!-- 右侧子项列表 -->
                             <div class="subitem-list">
                                 ${subitemListHtml}
@@ -15270,11 +17213,11 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             panelNavItems.forEach(item => {
                 item.addEventListener('click', (e) => {
                     if (e.target.classList.contains('add-panel-btn')) return; // 忽略添加按钮点击
-                    
+
                     // 切换激活状态
                     panelNavItems.forEach(navItem => navItem.classList.remove('active'));
                     item.classList.add('active');
-                    
+
                     // 更新右侧子项列表
                     const panelType = item.dataset.panel;
                     this.updateSubitemList(menu, panelType);
@@ -15371,7 +17314,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             popup.style.setProperty('justify-content', 'center', 'important');
             popup.style.setProperty('z-index', '10000', 'important');
             popup.style.setProperty('background', 'rgba(0,0,0,0.5)', 'important');
-            
+
             const dataHtml = Object.entries(data)
                 .map(([key, value]) => `
                     <div class="data-field">
@@ -15397,7 +17340,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                     margin: 0;
                 ">
                     <div class="popup-header">
-                        <h3>${panelType === 'personal' ? '👤 个人信息' : 
+                        <h3>${panelType === 'personal' ? '👤 个人信息' :
                              panelType === 'inventory' ? '🎒 背包信息' : '📊 面板信息'}</h3>
                         <button class="popup-close-btn">&times;</button>
                     </div>
@@ -15436,7 +17379,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     updatePreviewPosition(position) {
         try {
             console.log(`[InfoBarSettings] 📍 更新预览位置: ${position}`);
-            
+
             const previewContainer = this.modal?.querySelector('.frontend-preview-container');
             if (previewContainer) {
                 previewContainer.setAttribute('data-position', position);
@@ -15454,7 +17397,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     updatePreviewStyle(style) {
         try {
             console.log(`[InfoBarSettings] 🎨 更新预览样式: ${style}`);
-            
+
             const messageWrapper = this.modal?.querySelector('.ai-message-wrapper');
             if (messageWrapper) {
                 // 移除现有样式类
@@ -15475,7 +17418,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     toggleAddButtons(show) {
         try {
             console.log(`[InfoBarSettings] ➕ 切换添加按钮: ${show ? '显示' : '隐藏'}`);
-            
+
             const addSlots = this.modal?.querySelectorAll('.add-panel-slots');
             if (addSlots) {
                 addSlots.forEach(slot => {
@@ -15495,7 +17438,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     toggleAnimations(enabled) {
         try {
             console.log(`[InfoBarSettings] 🎬 切换动画效果: ${enabled ? '启用' : '禁用'}`);
-            
+
             const previewContainer = this.modal?.querySelector('.frontend-preview-container');
             if (previewContainer) {
                 previewContainer.setAttribute('data-animations', enabled);
@@ -15564,14 +17507,14 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             for (const [panelId, panelConfig] of Object.entries(enabledPanels)) {
                 // 获取面板显示信息
                 const panelInfo = this.getPanelDisplayInfo(panelId, panelConfig);
-                
+
                 panelItems.push(`
                     <div class="panel-nav-item ${isFirst ? 'active' : ''}" data-panel="${panelId}">
                         <span class="panel-name">${panelInfo.name}</span>
                         <button class="add-panel-btn" title="添加面板">➕</button>
                     </div>
                 `);
-                
+
                 isFirst = false;
             }
 
@@ -15662,15 +17605,15 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
 
             if (basicPanelIds.includes(panelId)) {
                 // 基础面板：处理基础设置中的复选框配置（panel[key].enabled格式）
-                const subItemKeys = Object.keys(panelConfig).filter(key => 
-                    key !== 'enabled' && 
+                const subItemKeys = Object.keys(panelConfig).filter(key =>
+                    key !== 'enabled' &&
                     key !== 'subItems' &&     // 排除自定义子项数组
                     key !== 'description' &&  // 排除面板属性
-                    key !== 'icon' && 
-                    key !== 'required' && 
-                    key !== 'memoryInject' && 
-                    key !== 'prompts' && 
-                    typeof panelConfig[key] === 'object' && 
+                    key !== 'icon' &&
+                    key !== 'required' &&
+                    key !== 'memoryInject' &&
+                    key !== 'prompts' &&
+                    typeof panelConfig[key] === 'object' &&
                     panelConfig[key].enabled !== undefined
                 );
 
@@ -15738,236 +17681,470 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     }
 
     /**
-     * 获取完整的显示名称映射表 - 与DataTable.js完全一致的完整版本
+     * 获取完整的显示名称映射表 - 🔧 修复：同时支持英文和中文字段名映射
      */
     getCompleteDisplayNameMapping() {
         return {
             personal: {
-                name: '姓名', age: '年龄', gender: '性别', occupation: '职业',
-                height: '身高', weight: '体重', bloodType: '血型', zodiac: '星座',
-                birthday: '生日', birthplace: '出生地', nationality: '国籍', ethnicity: '民族',
-                hairColor: '发色', hairStyle: '发型', eyeColor: '眼色', skinColor: '肤色',
-                bodyType: '体型', facialFeatures: '面部特征', scars: '疤痕', tattoos: '纹身',
-                accessories: '配饰', clothingStyle: '穿着风格', appearance: '外貌', voice: '声音',
-                personality: '性格', temperament: '性情', attitude: '态度', values: '价值观',
-                beliefs: '信念', fears: '恐惧', dreams: '梦想', goals: '人生目标',
-                intelligence: '智力', strength: '力量', charisma: '魅力', luck: '运气',
-                perception: '感知', willpower: '意志力', reactionSpeed: '反应速度', learningAbility: '学习能力',
-                familyBackground: '家庭背景', education: '教育经历', workExperience: '工作经历', income: '收入',
-                socialStatus: '社会地位', relationships: '人际关系', loveStatus: '恋爱状态', maritalStatus: '婚姻状态',
-                hobbies: '爱好', sports: '运动', music: '音乐', art: '艺术',
-                reading: '阅读', gaming: '游戏', travel: '旅行', cooking: '烹饪',
-                skills: '技能特长', languages: '语言能力', habits: '生活习惯', healthStatus: '健康状态',
-                race: '种族', class: '职业'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'name': '姓名', 'age': '年龄', 'gender': '性别', 'occupation': '职业',
+                'height': '身高', 'weight': '体重', 'bloodType': '血型', 'zodiac': '星座',
+                'birthday': '生日', 'birthplace': '出生地', 'nationality': '国籍', 'ethnicity': '民族',
+                'hairColor': '发色', 'hairStyle': '发型', 'eyeColor': '眼色', 'skinColor': '肤色',
+                'bodyType': '体型', 'facialFeatures': '面部特征', 'scars': '疤痕', 'tattoos': '纹身',
+                'accessories': '配饰', 'clothingStyle': '穿着风格', 'appearance': '外貌', 'voice': '声音',
+                'personality': '性格', 'temperament': '性情', 'attitude': '态度', 'values': '价值观',
+                'beliefs': '信念', 'fears': '恐惧', 'dreams': '梦想', 'goals': '人生目标',
+                'intelligence': '智力', 'strength': '力量', 'charisma': '魅力', 'luck': '运气',
+                'perception': '感知', 'willpower': '意志力', 'reactionSpeed': '反应速度', 'learningAbility': '学习能力',
+                'familyBackground': '家庭背景', 'education': '教育经历', 'workExperience': '工作经历', 'income': '收入',
+                'socialStatus': '社会地位', 'relationships': '人际关系', 'loveStatus': '恋爱状态', 'maritalStatus': '婚姻状态',
+                'hobbies': '爱好', 'sports': '运动', 'music': '音乐', 'art': '艺术',
+                'reading': '阅读', 'gaming': '游戏', 'travel': '旅行', 'cooking': '烹饪',
+                'skills': '技能特长', 'languages': '语言能力', 'habits': '生活习惯', 'healthStatus': '健康状态',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '姓名': '姓名', '年龄': '年龄', '性别': '性别', '职业': '职业',
+                '身高': '身高', '体重': '体重', '血型': '血型', '星座': '星座',
+                '生日': '生日', '出生地': '出生地', '国籍': '国籍', '民族': '民族',
+                '发色': '发色', '发型': '发型', '眼色': '眼色', '肤色': '肤色',
+                '体型': '体型', '面部特征': '面部特征', '疤痕': '疤痕', '纹身': '纹身',
+                '配饰': '配饰', '穿着风格': '穿着风格', '外貌': '外貌', '声音': '声音',
+                '性格': '性格', '性情': '性情', '态度': '态度', '价值观': '价值观',
+                '信念': '信念', '恐惧': '恐惧', '梦想': '梦想', '人生目标': '人生目标',
+                '智力': '智力', '力量': '力量', '魅力': '魅力', '运气': '运气',
+                '感知': '感知', '意志力': '意志力', '反应速度': '反应速度', '学习能力': '学习能力',
+                '家庭背景': '家庭背景', '教育经历': '教育经历', '工作经历': '工作经历', '收入': '收入',
+                '社会地位': '社会地位', '人际关系': '人际关系', '恋爱状态': '恋爱状态', '婚姻状态': '婚姻状态',
+                '爱好': '爱好', '运动': '运动', '音乐': '音乐', '艺术': '艺术',
+                '阅读': '阅读', '游戏': '游戏', '旅行': '旅行', '烹饪': '烹饪',
+                '技能特长': '技能特长', '语言能力': '语言能力', '生活习惯': '生活习惯', '健康状态': '健康状态',
+                '种族': '种族', '职业类别': '职业类别'
             },
             world: {
-                name: '世界名称', type: '世界类型', genre: '世界风格', theme: '世界主题',
-                description: '世界描述', history: '世界历史', mythology: '神话传说', lore: '世界设定',
-                geography: '地理环境', climate: '气候条件', terrain: '地形地貌', biomes: '生物群落',
-                locations: '重要地点', landmarks: '地标建筑', cities: '城市设定', dungeons: '地下城',
-                time: '时间设定', calendar: '历法系统', seasons: '季节变化', dayNight: '昼夜循环',
-                weather: '天气系统', events: '世界事件', festivals: '节日庆典', disasters: '自然灾害',
-                cultures: '文化设定', languages: '语言系统', religions: '宗教信仰', customs: '风俗习惯',
-                politics: '政治体系', economy: '经济系统', technology: '科技水平', magic: '魔法系统',
-                races: '种族设定', creatures: '生物设定', monsters: '怪物设定', npcs: 'NPC设定',
-                factions: '势力组织', conflicts: '冲突矛盾', alliances: '联盟关系', wars: '战争历史',
-                resources: '资源分布', materials: '材料设定', artifacts: '神器文物', currency: '货币系统',
-                trade: '贸易体系', markets: '市场设定', guilds: '公会组织', transportation: '交通运输',
-                location: '位置', environment: '环境', atmosphere: '氛围', season: '季节',
-                culture: '文化'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'name': '世界名称', 'type': '世界类型', 'genre': '世界风格', 'theme': '世界主题',
+                'history': '世界历史', 'mythology': '神话传说', 'lore': '世界设定',
+                'geography': '地理环境', 'climate': '气候条件', 'terrain': '地形地貌', 'biomes': '生物群落',
+                'locations': '重要地点', 'landmarks': '地标建筑', 'cities': '城市设定', 'dungeons': '地下城',
+                'time': '时间设定', 'calendar': '历法系统', 'seasons': '季节变化', 'dayNight': '昼夜循环',
+                'weather': '天气系统', 'events': '世界事件', 'festivals': '节日庆典', 'disasters': '自然灾害',
+                'cultures': '文化设定', 'languages': '语言系统', 'religions': '宗教信仰', 'customs': '风俗习惯',
+                'politics': '政治体系', 'economy': '经济系统', 'technology': '科技水平', 'magic': '魔法系统',
+                'races': '种族设定', 'creatures': '生物设定', 'monsters': '怪物设定', 'npcs': 'NPC设定',
+                'factions': '势力组织', 'conflicts': '冲突矛盾', 'alliances': '联盟关系', 'wars': '战争历史',
+                'resources': '资源分布', 'materials': '材料设定', 'artifacts': '神器文物', 'currency': '货币系统',
+                'trade': '贸易体系', 'markets': '市场设定', 'guilds': '公会组织', 'transportation': '交通运输',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '世界名称': '世界名称', '世界类型': '世界类型', '世界风格': '世界风格', '世界主题': '世界主题',
+                '世界描述': '世界描述', '世界历史': '世界历史', '神话传说': '神话传说', '世界设定': '世界设定',
+                '地理环境': '地理环境', '气候条件': '气候条件', '地形地貌': '地形地貌', '生物群落': '生物群落',
+                '重要地点': '重要地点', '地标建筑': '地标建筑', '城市设定': '城市设定', '地下城': '地下城',
+                '时间设定': '时间设定', '历法系统': '历法系统', '季节变化': '季节变化', '昼夜循环': '昼夜循环',
+                '天气系统': '天气系统', '世界事件': '世界事件', '节日庆典': '节日庆典', '自然灾害': '自然灾害',
+                '文化设定': '文化设定', '语言系统': '语言系统', '宗教信仰': '宗教信仰', '风俗习惯': '风俗习惯',
+                '政治体系': '政治体系', '经济系统': '经济系统', '科技水平': '科技水平', '魔法系统': '魔法系统',
+                '种族设定': '种族设定', '生物设定': '生物设定', '怪物设定': '怪物设定', 'NPC设定': 'NPC设定',
+                '势力组织': '势力组织', '冲突矛盾': '冲突矛盾', '联盟关系': '联盟关系', '战争历史': '战争历史',
+                '资源分布': '资源分布', '材料设定': '材料设定', '神器文物': '神器文物', '货币系统': '货币系统',
+                '贸易体系': '贸易体系', '市场设定': '市场设定', '公会组织': '公会组织', '交通运输': '交通运输',
+                '位置': '位置', '环境': '环境', '氛围': '氛围', '季节': '季节',
+                '文化': '文化'
             },
             interaction: {
-                name: '对象名称', type: '对象类型', status: '当前状态', location: '所在位置',
-                mood: '情绪状态', activity: '当前活动', availability: '可用性', priority: '优先级',
-                relationship: '关系类型', intimacy: '亲密度', trust: '信任度', friendship: '友谊度',
-                romance: '浪漫度', respect: '尊重度', dependency: '依赖度', conflict: '冲突度',
-                history: '历史记录', frequency: '互动频率', duration: '互动时长', quality: '互动质量',
-                topics: '话题偏好', emotions: '情感状态', milestones: '重要节点', memories: '共同回忆',
-                autoRecord: '自动记录', notifications: '通知设置', analysis: '关系分析', suggestions: '建议提示',
-                network: '社交网络', groups: '群体关系', influence: '影响力', reputation: '声誉度',
-                alliances: '联盟关系', rivalries: '竞争关系', mentorship: '师徒关系', hierarchy: '等级关系',
-                communicationStyle: '沟通风格', preferredTopics: '偏好话题', avoidedTopics: '回避话题', boundaries: '边界设定',
-                comfortLevel: '舒适度', energyLevel: '活跃度', responseTime: '响应时间', engagement: '参与度',
-                specialEvents: '特殊事件', achievements: '成就记录', challenges: '挑战任务', growth: '成长轨迹',
-                npc_name: 'NPC姓名', npc_personality: 'NPC性格', npc_status: 'NPC状态',
-                attitude: '态度', conversation_topic: '对话主题', interaction_history: '交互历史',
-                favorability: '好感度', social_context: '社交背景'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'name': '对象名称', 'type': '对象类型', 'status': '当前状态', 'location': '所在位置',
+                'mood': '情绪状态', 'activity': '当前活动', 'availability': '可用性', 'priority': '优先级',
+                'relationship': '关系类型', 'intimacy': '亲密度', 'trust': '信任度', 'friendship': '友谊度',
+                'romance': '浪漫度', 'respect': '尊重度', 'dependency': '依赖度', 'conflict': '冲突度',
+                'history': '历史记录', 'frequency': '互动频率', 'duration': '互动时长', 'quality': '互动质量',
+                'topics': '话题偏好', 'emotions': '情感状态', 'milestones': '重要节点', 'memories': '共同回忆',
+                'autoRecord': '自动记录', 'notifications': '通知设置', 'analysis': '关系分析', 'suggestions': '建议提示',
+                'network': '社交网络', 'groups': '群体关系', 'influence': '影响力', 'reputation': '声誉度',
+                'alliances': '联盟关系', 'rivalries': '竞争关系', 'mentorship': '师徒关系', 'hierarchy': '等级关系',
+                'communicationStyle': '沟通风格', 'preferredTopics': '偏好话题', 'avoidedTopics': '回避话题', 'boundaries': '边界设定',
+                'comfortLevel': '舒适度', 'energyLevel': '活跃度', 'responseTime': '响应时间', 'engagement': '参与度',
+                'specialEvents': '特殊事件', 'achievements': '成就记录', 'challenges': '挑战任务', 'growth': '成长轨迹',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '对象名称': '对象名称', '对象类型': '对象类型', '当前状态': '当前状态', '所在位置': '所在位置',
+                '情绪状态': '情绪状态', '当前活动': '当前活动', '可用性': '可用性', '优先级': '优先级',
+                '关系类型': '关系类型', '亲密度': '亲密度', '信任度': '信任度', '友谊度': '友谊度',
+                '浪漫度': '浪漫度', '尊重度': '尊重度', '依赖度': '依赖度', '冲突度': '冲突度',
+                '历史记录': '历史记录', '互动频率': '互动频率', '互动时长': '互动时长', '互动质量': '互动质量',
+                '话题偏好': '话题偏好', '情感状态': '情感状态', '重要节点': '重要节点', '共同回忆': '共同回忆',
+                '自动记录': '自动记录', '通知设置': '通知设置', '关系分析': '关系分析', '建议提示': '建议提示',
+                '社交网络': '社交网络', '群体关系': '群体关系', '影响力': '影响力', '声誉度': '声誉度',
+                '联盟关系': '联盟关系', '竞争关系': '竞争关系', '师徒关系': '师徒关系', '等级关系': '等级关系',
+                '沟通风格': '沟通风格', '偏好话题': '偏好话题', '回避话题': '回避话题', '边界设定': '边界设定',
+                '舒适度': '舒适度', '活跃度': '活跃度', '响应时间': '响应时间', '参与度': '参与度',
+                '特殊事件': '特殊事件', '成就记录': '成就记录', '挑战任务': '挑战任务', '成长轨迹': '成长轨迹',
+                'NPC姓名': 'NPC姓名', 'NPC性格': 'NPC性格', 'NPC状态': 'NPC状态',
+                '态度': '态度', '对话主题': '对话主题', '交互历史': '交互历史',
+                '好感度': '好感度', '社交背景': '社交背景'
             },
             tasks: {
-                creation: '任务创建', editing: '任务编辑', deletion: '任务删除', completion: '任务完成',
-                priority: '优先级', deadline: '截止日期', progress: '进度跟踪', status: '状态管理',
-                categories: '分类管理', tags: '标签系统', projects: '项目管理', milestones: '里程碑',
-                subtasks: '子任务', dependencies: '依赖关系', templates: '任务模板', recurring: '重复任务',
-                notifications: '通知提醒', reminders: '提醒设置', alerts: '警报通知', dailySummary: '每日总结',
-                weeklyReview: '周报回顾', achievementBadges: '成就徽章', productivityStats: '生产力统计', timeTracking: '时间跟踪',
-                assignment: '任务分配', collaboration: '协作功能', comments: '评论系统', attachments: '附件管理',
-                sharing: '共享功能', permissions: '权限管理', approval: '审批流程', delegation: '任务委派',
-                listView: '列表视图', kanbanView: '看板视图', calendarView: '日历视图', ganttView: '甘特图',
-                sorting: '排序功能', filtering: '筛选功能', search: '搜索功能', grouping: '分组功能',
-                backup: '备份功能', export: '导出功能', import: '导入功能', sync: '同步功能',
-                archive: '归档管理', history: '历史记录', versioning: '版本控制', recovery: '恢复功能'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'creation': '任务创建', 'editing': '任务编辑', 'deletion': '任务删除', 'completion': '任务完成',
+                'priority': '优先级', 'deadline': '截止日期', 'progress': '进度跟踪', 'status': '状态管理',
+                'categories': '分类管理', 'tags': '标签系统', 'projects': '项目管理', 'milestones': '里程碑',
+                'subtasks': '子任务', 'dependencies': '依赖关系', 'templates': '任务模板', 'recurring': '重复任务',
+                'notifications': '通知提醒', 'reminders': '提醒设置', 'alerts': '警报通知', 'dailySummary': '每日总结',
+                'weeklyReview': '周报回顾', 'achievementBadges': '成就徽章', 'productivityStats': '生产力统计', 'timeTracking': '时间跟踪',
+                'assignment': '任务分配', 'collaboration': '协作功能', 'comments': '评论系统', 'attachments': '附件管理',
+                'sharing': '共享功能', 'permissions': '权限管理', 'approval': '审批流程', 'delegation': '任务委派',
+                'listView': '列表视图', 'kanbanView': '看板视图', 'calendarView': '日历视图', 'ganttView': '甘特图',
+                'sorting': '排序功能', 'filtering': '筛选功能', 'search': '搜索功能', 'grouping': '分组功能',
+                'backup': '备份功能', 'export': '导出功能', 'import': '导入功能', 'sync': '同步功能',
+                'archive': '归档管理', 'history': '历史记录', 'versioning': '版本控制', 'recovery': '恢复功能',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '任务创建': '任务创建', '任务编辑': '任务编辑', '任务删除': '任务删除', '任务完成': '任务完成',
+                '优先级': '优先级', '截止日期': '截止日期', '进度跟踪': '进度跟踪', '状态管理': '状态管理',
+                '分类管理': '分类管理', '标签系统': '标签系统', '项目管理': '项目管理', '里程碑': '里程碑',
+                '子任务': '子任务', '依赖关系': '依赖关系', '任务模板': '任务模板', '重复任务': '重复任务',
+                '通知提醒': '通知提醒', '提醒设置': '提醒设置', '警报通知': '警报通知', '每日总结': '每日总结',
+                '周报回顾': '周报回顾', '成就徽章': '成就徽章', '生产力统计': '生产力统计', '时间跟踪': '时间跟踪',
+                '任务分配': '任务分配', '协作功能': '协作功能', '评论系统': '评论系统', '附件管理': '附件管理',
+                '共享功能': '共享功能', '权限管理': '权限管理', '审批流程': '审批流程', '任务委派': '任务委派',
+                '列表视图': '列表视图', '看板视图': '看板视图', '日历视图': '日历视图', '甘特图': '甘特图',
+                '排序功能': '排序功能', '筛选功能': '筛选功能', '搜索功能': '搜索功能', '分组功能': '分组功能',
+                '备份功能': '备份功能', '导出功能': '导出功能', '导入功能': '导入功能', '同步功能': '同步功能',
+                '归档管理': '归档管理', '历史记录': '历史记录', '版本控制': '版本控制', '恢复功能': '恢复功能'
             },
             organization: {
-                name: '组织名称', type: '组织类型', description: '组织描述', purpose: '组织目标',
-                history: '组织历史', founding: '成立背景', motto: '组织格言', values: '核心价值',
-                hierarchy: '层级结构', departments: '部门设置', leadership: '领导层', council: '理事会',
-                positions: '职位设置', ranks: '等级制度', promotion: '晋升机制', authority: '权限分配',
-                members: '成员管理', recruitment: '招募制度', training: '培训体系', evaluation: '考核评估',
-                rewards: '奖励机制', punishment: '惩罚制度', benefits: '福利待遇', retirement: '退休制度',
-                rules: '组织规则', code: '行为准则', ethics: '道德规范', discipline: '纪律制度',
-                procedures: '操作流程', protocols: '协议规范', standards: '标准制度', compliance: '合规管理',
-                allies: '盟友关系', enemies: '敌对关系', neutral: '中立关系', partnerships: '合作伙伴',
-                reputation: '组织声誉', influence: '影响力', diplomacy: '外交关系', treaties: '条约协议',
-                finances: '财务状况', assets: '资产管理', facilities: '设施设备', equipment: '装备器材',
-                technology: '技术资源', knowledge: '知识库', archives: '档案管理', secrets: '机密信息'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'name': '组织名称', 'type': '组织类型', 'purpose': '组织描述', 'history': '组织历史',
+                'founding': '成立背景', 'motto': '组织格言', 'values': '核心价值',
+                'hierarchy': '层级结构', 'departments': '部门设置', 'leadership': '领导层', 'council': '理事会',
+                'positions': '职位设置', 'ranks': '等级制度', 'promotion': '晋升机制', 'authority': '权限分配',
+                'members': '成员管理', 'recruitment': '招募制度', 'training': '培训体系', 'evaluation': '考核评估',
+                'rewards': '奖励机制', 'punishment': '惩罚制度', 'benefits': '福利待遇', 'retirement': '退休制度',
+                'rules': '组织规则', 'code': '行为准则', 'ethics': '道德规范', 'discipline': '纪律制度',
+                'procedures': '操作流程', 'protocols': '协议规范', 'standards': '标准制度', 'compliance': '合规管理',
+                'allies': '盟友关系', 'enemies': '敌对关系', 'neutral': '中立关系', 'partnerships': '合作伙伴',
+                'reputation': '组织声誉', 'influence': '影响力', 'diplomacy': '外交关系', 'treaties': '条约协议',
+                'finances': '财务状况', 'assets': '资产管理', 'facilities': '设施设备', 'equipment': '装备器材',
+                'technology': '技术资源', 'knowledge': '知识库', 'archives': '档案管理', 'secrets': '机密信息',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '组织名称': '组织名称', '组织类型': '组织类型', '组织描述': '组织描述', '组织目标': '组织目标',
+                '组织历史': '组织历史', '成立背景': '成立背景', '组织格言': '组织格言', '核心价值': '核心价值',
+                '层级结构': '层级结构', '部门设置': '部门设置', '领导层': '领导层', '理事会': '理事会',
+                '职位设置': '职位设置', '等级制度': '等级制度', '晋升机制': '晋升机制', '权限分配': '权限分配',
+                '成员管理': '成员管理', '招募制度': '招募制度', '培训体系': '培训体系', '考核评估': '考核评估',
+                '奖励机制': '奖励机制', '惩罚制度': '惩罚制度', '福利待遇': '福利待遇', '退休制度': '退休制度',
+                '组织规则': '组织规则', '行为准则': '行为准则', '道德规范': '道德规范', '纪律制度': '纪律制度',
+                '操作流程': '操作流程', '协议规范': '协议规范', '标准制度': '标准制度', '合规管理': '合规管理',
+                '盟友关系': '盟友关系', '敌对关系': '敌对关系', '中立关系': '中立关系', '合作伙伴': '合作伙伴',
+                '组织声誉': '组织声誉', '影响力': '影响力', '外交关系': '外交关系', '条约协议': '条约协议',
+                '财务状况': '财务状况', '资产管理': '资产管理', '设施设备': '设施设备', '装备器材': '装备器材',
+                '技术资源': '技术资源', '知识库': '知识库', '档案管理': '档案管理', '机密信息': '机密信息'
             },
             news: {
-                breaking: '突发新闻', politics: '政治新闻', economy: '经济新闻', social: '社会新闻',
-                military: '军事新闻', technology: '科技新闻', culture: '文化新闻', sports: '体育新闻',
-                official: '官方公告', media: '媒体报道', rumors: '传言消息', insider: '内幕消息',
-                witness: '目击报告', intelligence: '情报信息', leaked: '泄露消息', anonymous: '匿名爆料',
-                creation: '新闻创建', editing: '新闻编辑', review: '新闻审核', publishing: '新闻发布',
-                archiving: '新闻归档', deletion: '新闻删除', backup: '备份管理', versioning: '版本控制',
-                broadcast: '广播发布', newsletter: '新闻简报', alerts: '新闻警报', digest: '新闻摘要',
-                socialMedia: '社交媒体', forums: '论坛讨论', messaging: '消息推送', email: '邮件通知',
-                comments: '评论系统', likes: '点赞功能', sharing: '分享功能', bookmarks: '收藏功能',
-                ratings: '评分系统', polls: '投票调查', discussions: '讨论区', feedback: '反馈系统',
-                analytics: '数据分析', metrics: '指标统计', trends: '趋势分析', reports: '报告生成',
-                monitoring: '监控系统', alertsSystem: '警报系统', automation: '自动化', aiAnalysis: 'AI分析',
-                events: '事件'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'breaking': '突发新闻', 'politics': '政治新闻', 'economy': '经济新闻', 'social': '社会新闻',
+                'military': '军事新闻', 'technology': '科技新闻', 'culture': '文化新闻', 'sports': '体育新闻',
+                'official': '官方公告', 'media': '媒体报道', 'rumors': '传言消息', 'insider': '内幕消息',
+                'witness': '目击报告', 'intelligence': '情报信息', 'leaked': '泄露消息', 'anonymous': '匿名爆料',
+                'creation': '新闻创建', 'editing': '新闻编辑', 'review': '新闻审核', 'publishing': '新闻发布',
+                'archiving': '新闻归档', 'deletion': '新闻删除', 'backup': '备份管理', 'versioning': '版本控制',
+                'broadcast': '广播发布', 'newsletter': '新闻简报', 'alerts': '新闻警报', 'digest': '新闻摘要',
+                'socialMedia': '社交媒体', 'forums': '论坛讨论', 'messaging': '消息推送', 'email': '邮件通知',
+                'comments': '评论系统', 'likes': '点赞功能', 'sharing': '分享功能', 'bookmarks': '收藏功能',
+                'ratings': '评分系统', 'polls': '投票调查', 'discussions': '讨论区', 'feedback': '反馈系统',
+                'analytics': '数据分析', 'metrics': '指标统计', 'trends': '趋势分析', 'reports': '报告生成',
+                'monitoring': '监控系统', 'alertsSystem': '警报系统', 'automation': '自动化', 'aiAnalysis': 'AI分析',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '突发新闻': '突发新闻', '政治新闻': '政治新闻', '经济新闻': '经济新闻', '社会新闻': '社会新闻',
+                '军事新闻': '军事新闻', '科技新闻': '科技新闻', '文化新闻': '文化新闻', '体育新闻': '体育新闻',
+                '官方公告': '官方公告', '媒体报道': '媒体报道', '传言消息': '传言消息', '内幕消息': '内幕消息',
+                '目击报告': '目击报告', '情报信息': '情报信息', '泄露消息': '泄露消息', '匿名爆料': '匿名爆料',
+                '新闻创建': '新闻创建', '新闻编辑': '新闻编辑', '新闻审核': '新闻审核', '新闻发布': '新闻发布',
+                '新闻归档': '新闻归档', '新闻删除': '新闻删除', '备份管理': '备份管理', '版本控制': '版本控制',
+                '广播发布': '广播发布', '新闻简报': '新闻简报', '新闻警报': '新闻警报', '新闻摘要': '新闻摘要',
+                '社交媒体': '社交媒体', '论坛讨论': '论坛讨论', '消息推送': '消息推送', '邮件通知': '邮件通知',
+                '评论系统': '评论系统', '点赞功能': '点赞功能', '分享功能': '分享功能', '收藏功能': '收藏功能',
+                '评分系统': '评分系统', '投票调查': '投票调查', '讨论区': '讨论区', '反馈系统': '反馈系统',
+                '数据分析': '数据分析', '指标统计': '指标统计', '趋势分析': '趋势分析', '报告生成': '报告生成',
+                '监控系统': '监控系统', '警报系统': '警报系统', '自动化': '自动化', 'AI分析': 'AI分析',
+                '事件': '事件'
             },
             inventory: {
-                storage: '物品存储', retrieval: '物品取出', organization: '物品整理', search: '物品搜索',
-                sorting: '排序功能', filtering: '筛选功能', categories: '分类管理', tags: '标签系统',
-                weapons: '武器装备', armor: '防具装备', accessories: '饰品配件', consumables: '消耗品',
-                materials: '材料物品', tools: '工具器械', books: '书籍文献', treasures: '珍宝收藏',
-                capacity: '容量管理', weight: '重量限制', stacking: '堆叠功能', expansion: '扩容升级',
-                compartments: '分隔管理', protection: '保护功能', durability: '耐久度', repair: '修理维护',
-                trading: '交易功能', selling: '出售功能', buying: '购买功能', auction: '拍卖系统',
-                gifting: '赠送功能', lending: '借用功能', sharing: '共享功能', banking: '银行存储',
-                crafting: '制作功能', recipes: '配方管理', enhancement: '强化功能', enchanting: '附魔功能',
-                upgrading: '升级功能', combining: '合成功能', dismantling: '拆解功能', recycling: '回收功能',
-                automation: '自动化', aiSorting: 'AI整理', recommendations: '推荐系统', analytics: '数据分析',
-                backup: '备份功能', sync: '同步功能', security: '安全保护', history: '历史记录',
-                gold: '金币', weapon: '武器', armor: '护甲', items: '道具'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'storage': '物品存储', 'retrieval': '物品取出', 'organization': '物品整理', 'search': '物品搜索',
+                'sorting': '排序功能', 'filtering': '筛选功能', 'categories': '分类管理', 'tags': '标签系统',
+                'weapons': '武器装备', 'armor': '防具装备', 'accessories': '饰品配件', 'consumables': '消耗品',
+                'materials': '材料物品', 'tools': '工具器械', 'books': '书籍文献', 'treasures': '珍宝收藏',
+                'capacity': '容量管理', 'weight': '重量限制', 'stacking': '堆叠功能', 'expansion': '扩容升级',
+                'compartments': '分隔管理', 'protection': '保护功能', 'durability': '耐久度', 'repair': '修理维护',
+                'trading': '交易功能', 'selling': '出售功能', 'buying': '购买功能', 'auction': '拍卖系统',
+                'gifting': '赠送功能', 'lending': '借用功能', 'sharing': '共享功能', 'banking': '银行存储',
+                'crafting': '制作功能', 'recipes': '配方管理', 'enhancement': '强化功能', 'enchanting': '附魔功能',
+                'upgrading': '升级功能', 'combining': '合成功能', 'dismantling': '拆解功能', 'recycling': '回收功能',
+                'automation': '自动化', 'aiSorting': 'AI整理', 'recommendations': '推荐系统', 'analytics': '数据分析',
+                'backup': '备份功能', 'sync': '同步功能', 'security': '安全保护', 'history': '历史记录',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '物品存储': '物品存储', '物品取出': '物品取出', '物品整理': '物品整理', '物品搜索': '物品搜索',
+                '排序功能': '排序功能', '筛选功能': '筛选功能', '分类管理': '分类管理', '标签系统': '标签系统',
+                '武器装备': '武器装备', '防具装备': '防具装备', '饰品配件': '饰品配件', '消耗品': '消耗品',
+                '材料物品': '材料物品', '工具器械': '工具器械', '书籍文献': '书籍文献', '珍宝收藏': '珍宝收藏',
+                '容量管理': '容量管理', '重量限制': '重量限制', '堆叠功能': '堆叠功能', '扩容升级': '扩容升级',
+                '分隔管理': '分隔管理', '保护功能': '保护功能', '耐久度': '耐久度', '修理维护': '修理维护',
+                '交易功能': '交易功能', '出售功能': '出售功能', '购买功能': '购买功能', '拍卖系统': '拍卖系统',
+                '赠送功能': '赠送功能', '借用功能': '借用功能', '共享功能': '共享功能', '银行存储': '银行存储',
+                '制作功能': '制作功能', '配方管理': '配方管理', '强化功能': '强化功能', '附魔功能': '附魔功能',
+                '升级功能': '升级功能', '合成功能': '合成功能', '拆解功能': '拆解功能', '回收功能': '回收功能',
+                '自动化': '自动化', 'AI整理': 'AI整理', '推荐系统': '推荐系统', '数据分析': '数据分析',
+                '备份功能': '备份功能', '同步功能': '同步功能', '安全保护': '安全保护', '历史记录': '历史记录',
+                '金币': '金币', '武器': '武器', '护甲': '护甲', '道具': '道具'
             },
             abilities: {
-                strength: '力量属性', agility: '敏捷属性', intelligence: '智力属性', constitution: '体质属性',
-                wisdom: '智慧属性', charisma: '魅力属性', luck: '幸运属性', perception: '感知属性',
-                swordsmanship: '剑术技能', archery: '射箭技能', magic: '魔法技能', defense: '防御技能',
-                martialArts: '武术技能', stealth: '潜行技能', tactics: '战术技能', healing: '治疗技能',
-                crafting: '制作技能', cooking: '烹饪技能', farming: '农业技能', mining: '采矿技能',
-                fishing: '钓鱼技能', hunting: '狩猎技能', trading: '贸易技能', negotiation: '谈判技能',
-                research: '研究技能', investigation: '调查技能', languages: '语言技能', history: '历史知识',
-                medicine: '医学知识', alchemy: '炼金术', engineering: '工程学', astronomy: '天文学',
-                persuasion: '说服技能', deception: '欺骗技能', intimidation: '威吓技能', performance: '表演技能',
-                leadership: '领导能力', empathy: '共情能力', insight: '洞察能力', networking: '社交能力',
-                telepathy: '心灵感应', telekinesis: '念动力', precognition: '预知能力', shapeshifting: '变形能力',
-                invisibility: '隐身能力', flight: '飞行能力', regeneration: '再生能力', immortality: '不朽能力'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'strength': '力量属性', 'agility': '敏捷属性', 'intelligence': '智力属性', 'constitution': '体质属性',
+                'wisdom': '智慧属性', 'charisma': '魅力属性', 'luck': '幸运属性', 'perception': '感知属性',
+                'swordsmanship': '剑术技能', 'archery': '射箭技能', 'magic': '魔法技能', 'defense': '防御技能',
+                'martialArts': '武术技能', 'stealth': '潜行技能', 'tactics': '战术技能', 'healing': '治疗技能',
+                'crafting': '制作技能', 'cooking': '烹饪技能', 'farming': '农业技能', 'mining': '采矿技能',
+                'fishing': '钓鱼技能', 'hunting': '狩猎技能', 'trading': '贸易技能', 'negotiation': '谈判技能',
+                'research': '研究技能', 'investigation': '调查技能', 'languages': '语言技能', 'history': '历史知识',
+                'medicine': '医学知识', 'alchemy': '炼金术', 'engineering': '工程学', 'astronomy': '天文学',
+                'persuasion': '说服技能', 'deception': '欺骗技能', 'intimidation': '威吓技能', 'performance': '表演技能',
+                'leadership': '领导能力', 'empathy': '共情能力', 'insight': '洞察能力', 'networking': '社交能力',
+                'telepathy': '心灵感应', 'telekinesis': '念动力', 'precognition': '预知能力', 'shapeshifting': '变形能力',
+                'invisibility': '隐身能力', 'flight': '飞行能力', 'regeneration': '再生能力', 'immortality': '不朽能力',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '力量属性': '力量属性', '敏捷属性': '敏捷属性', '智力属性': '智力属性', '体质属性': '体质属性',
+                '智慧属性': '智慧属性', '魅力属性': '魅力属性', '幸运属性': '幸运属性', '感知属性': '感知属性',
+                '剑术技能': '剑术技能', '射箭技能': '射箭技能', '魔法技能': '魔法技能', '防御技能': '防御技能',
+                '武术技能': '武术技能', '潜行技能': '潜行技能', '战术技能': '战术技能', '治疗技能': '治疗技能',
+                '制作技能': '制作技能', '烹饪技能': '烹饪技能', '农业技能': '农业技能', '采矿技能': '采矿技能',
+                '钓鱼技能': '钓鱼技能', '狩猎技能': '狩猎技能', '贸易技能': '贸易技能', '谈判技能': '谈判技能',
+                '研究技能': '研究技能', '调查技能': '调查技能', '语言技能': '语言技能', '历史知识': '历史知识',
+                '医学知识': '医学知识', '炼金术': '炼金术', '工程学': '工程学', '天文学': '天文学',
+                '说服技能': '说服技能', '欺骗技能': '欺骗技能', '威吓技能': '威吓技能', '表演技能': '表演技能',
+                '领导能力': '领导能力', '共情能力': '共情能力', '洞察能力': '洞察能力', '社交能力': '社交能力',
+                '心灵感应': '心灵感应', '念动力': '念动力', '预知能力': '预知能力', '变形能力': '变形能力',
+                '隐身能力': '隐身能力', '飞行能力': '飞行能力', '再生能力': '再生能力', '不朽能力': '不朽能力'
             },
             plot: {
-                mainStory: '主线剧情', sideQuests: '支线任务', subplots: '子剧情', backstory: '背景故事',
-                prologue: '序章', epilogue: '尾声', flashbacks: '回忆片段', foreshadowing: '伏笔铺垫',
-                exposition: '背景说明', risingAction: '情节发展', climax: '高潮部分', fallingAction: '情节回落',
-                resolution: '问题解决', denouement: '结局收尾', cliffhanger: '悬念结尾', twist: '剧情转折',
-                characterArc: '角色成长', relationships: '人物关系', motivations: '动机驱动', conflicts: '冲突矛盾',
-                internalConflicts: '内心冲突', externalConflicts: '外部冲突', moralDilemmas: '道德困境', sacrifices: '牺牲选择',
-                dialogue: '对话系统', narration: '叙述描写', monologue: '独白表达', symbolism: '象征意义',
-                themes: '主题思想', mood: '情绪氛围', tone: '语调风格', pacing: '节奏控制',
-                choices: '选择分支', consequences: '后果影响', branching: '分支剧情', multipleEndings: '多重结局',
-                playerAgency: '玩家主导', emergentNarrative: '涌现叙事', proceduralGeneration: '程序生成', adaptiveStorytelling: '自适应叙事',
-                timeline: '时间线', notes: '剧情笔记', bookmarks: '书签标记', saveStates: '存档状态',
-                autoSave: '自动保存', export: '导出功能', import: '导入功能', analytics: '数据分析'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'mainStory': '主线剧情', 'sideQuests': '支线任务', 'subplots': '子剧情', 'backstory': '背景故事',
+                'prologue': '序章', 'epilogue': '尾声', 'flashbacks': '回忆片段', 'foreshadowing': '伏笔铺垫',
+                'exposition': '背景说明', 'risingAction': '情节发展', 'climax': '高潮部分', 'fallingAction': '情节回落',
+                'resolution': '问题解决', 'denouement': '结局收尾', 'cliffhanger': '悬念结尾', 'twist': '剧情转折',
+                'characterArc': '角色成长', 'relationships': '人物关系', 'motivations': '动机驱动', 'conflicts': '冲突矛盾',
+                'internalConflicts': '内心冲突', 'externalConflicts': '外部冲突', 'moralDilemmas': '道德困境', 'sacrifices': '牺牲选择',
+                'dialogue': '对话系统', 'narration': '叙述描写', 'monologue': '独白表达', 'symbolism': '象征意义',
+                'themes': '主题思想', 'mood': '情绪氛围', 'tone': '语调风格', 'pacing': '节奏控制',
+                'choices': '选择分支', 'consequences': '后果影响', 'branching': '分支剧情', 'multipleEndings': '多重结局',
+                'playerAgency': '玩家主导', 'emergentNarrative': '涌现叙事', 'proceduralGeneration': '程序生成', 'adaptiveStorytelling': '自适应叙事',
+                'timeline': '时间线', 'notes': '剧情笔记', 'bookmarks': '书签标记', 'saveStates': '存档状态',
+                'autoSave': '自动保存', 'export': '导出功能', 'import': '导入功能', 'analytics': '数据分析',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '主线剧情': '主线剧情', '支线任务': '支线任务', '子剧情': '子剧情', '背景故事': '背景故事',
+                '序章': '序章', '尾声': '尾声', '回忆片段': '回忆片段', '伏笔铺垫': '伏笔铺垫',
+                '背景说明': '背景说明', '情节发展': '情节发展', '高潮部分': '高潮部分', '情节回落': '情节回落',
+                '问题解决': '问题解决', '结局收尾': '结局收尾', '悬念结尾': '悬念结尾', '剧情转折': '剧情转折',
+                '角色成长': '角色成长', '人物关系': '人物关系', '动机驱动': '动机驱动', '冲突矛盾': '冲突矛盾',
+                '内心冲突': '内心冲突', '外部冲突': '外部冲突', '道德困境': '道德困境', '牺牲选择': '牺牲选择',
+                '对话系统': '对话系统', '叙述描写': '叙述描写', '独白表达': '独白表达', '象征意义': '象征意义',
+                '主题思想': '主题思想', '情绪氛围': '情绪氛围', '语调风格': '语调风格', '节奏控制': '节奏控制',
+                '选择分支': '选择分支', '后果影响': '后果影响', '分支剧情': '分支剧情', '多重结局': '多重结局',
+                '玩家主导': '玩家主导', '涌现叙事': '涌现叙事', '程序生成': '程序生成', '自适应叙事': '自适应叙事',
+                '时间线': '时间线', '剧情笔记': '剧情笔记', '书签标记': '书签标记', '存档状态': '存档状态',
+                '自动保存': '自动保存', '导出功能': '导出功能', '导入功能': '导入功能', '数据分析': '数据分析'
             },
             cultivation: {
-                qiRefining: '炼气期', foundation: '筑基期', goldenCore: '金丹期', nascentSoul: '元婴期',
-                soulTransformation: '化神期', voidRefinement: '炼虚期', bodyIntegration: '合体期', mahayana: '大乘期',
-                tribulation: '渡劫期', immortal: '真仙', trueImmortal: '天仙', goldenImmortal: '金仙',
-                breathingTechnique: '呼吸法', bodyRefining: '炼体术', soulCultivation: '神魂修炼', dualCultivation: '双修功法',
-                swordCultivation: '剑修之道', alchemy: '炼丹术', formation: '阵法', talisman: '符箓',
-                spiritualPower: '灵力值', spiritualRoot: '灵根', meridians: '经脉', dantian: '丹田',
-                divineSense: '神识', lifeSpan: '寿命', karma: '因果', heavenlyDao: '天道',
-                flyingSword: '飞剑', magicTreasure: '法宝', spiritualArmor: '灵甲', storageRing: '储物戒',
-                spiritBeast: '灵兽', puppet: '傀儡', avatar: '化身', clone: '分身',
-                spiritStone: '灵石', spiritHerb: '灵草', pill: '丹药', spiritVein: '灵脉',
-                caveMansion: '洞府', secretRealm: '秘境', inheritance: '传承', opportunity: '机缘',
-                meditation: '打坐', tribulationCrossing: '渡劫', enlightenment: '顿悟', breakthrough: '突破',
-                sect: '宗门', masterDisciple: '师徒', daoCompanion: '道侣', immortalAscension: '飞升'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'qiRefining': '炼气期', 'foundation': '筑基期', 'goldenCore': '金丹期', 'nascentSoul': '元婴期',
+                'soulTransformation': '化神期', 'voidRefinement': '炼虚期', 'bodyIntegration': '合体期', 'mahayana': '大乘期',
+                'tribulation': '渡劫期', 'immortal': '真仙', 'trueImmortal': '天仙', 'goldenImmortal': '金仙',
+                'breathingTechnique': '呼吸法', 'bodyRefining': '炼体术', 'soulCultivation': '神魂修炼', 'dualCultivation': '双修功法',
+                'swordCultivation': '剑修之道', 'alchemy': '炼丹术', 'formation': '阵法', 'talisman': '符箓',
+                'spiritualPower': '灵力值', 'spiritualRoot': '灵根', 'meridians': '经脉', 'dantian': '丹田',
+                'divineSense': '神识', 'lifeSpan': '寿命', 'karma': '因果', 'heavenlyDao': '天道',
+                'flyingSword': '飞剑', 'magicTreasure': '法宝', 'spiritualArmor': '灵甲', 'storageRing': '储物戒',
+                'spiritBeast': '灵兽', 'puppet': '傀儡', 'avatar': '化身', 'clone': '分身',
+                'spiritStone': '灵石', 'spiritHerb': '灵草', 'pill': '丹药', 'spiritVein': '灵脉',
+                'caveMansion': '洞府', 'secretRealm': '秘境', 'inheritance': '传承', 'opportunity': '机缘',
+                'meditation': '打坐', 'tribulationCrossing': '渡劫', 'enlightenment': '顿悟', 'breakthrough': '突破',
+                'sect': '宗门', 'masterDisciple': '师徒', 'daoCompanion': '道侣', 'immortalAscension': '飞升',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '炼气期': '炼气期', '筑基期': '筑基期', '金丹期': '金丹期', '元婴期': '元婴期',
+                '化神期': '化神期', '炼虚期': '炼虚期', '合体期': '合体期', '大乘期': '大乘期',
+                '渡劫期': '渡劫期', '真仙': '真仙', '天仙': '天仙', '金仙': '金仙',
+                '呼吸法': '呼吸法', '炼体术': '炼体术', '神魂修炼': '神魂修炼', '双修功法': '双修功法',
+                '剑修之道': '剑修之道', '炼丹术': '炼丹术', '阵法': '阵法', '符箓': '符箓',
+                '灵力值': '灵力值', '灵根': '灵根', '经脉': '经脉', '丹田': '丹田',
+                '神识': '神识', '寿命': '寿命', '因果': '因果', '天道': '天道',
+                '飞剑': '飞剑', '法宝': '法宝', '灵甲': '灵甲', '储物戒': '储物戒',
+                '灵兽': '灵兽', '傀儡': '傀儡', '化身': '化身', '分身': '分身',
+                '灵石': '灵石', '灵草': '灵草', '丹药': '丹药', '灵脉': '灵脉',
+                '洞府': '洞府', '秘境': '秘境', '传承': '传承', '机缘': '机缘',
+                '打坐': '打坐', '渡劫': '渡劫', '顿悟': '顿悟', '突破': '突破',
+                '宗门': '宗门', '师徒': '师徒', '道侣': '道侣', '飞升': '飞升'
             },
             fantasy: {
-                human: '人类种族', elf: '精灵种族', dwarf: '矮人种族', orc: '兽人种族',
-                dragon: '龙族', demon: '恶魔', angel: '天使', undead: '不死族',
-                halfling: '半身人', giant: '巨人族', fairy: '仙灵', vampire: '吸血鬼',
-                fireMagic: '火系魔法', waterMagic: '水系魔法', earthMagic: '土系魔法', airMagic: '风系魔法',
-                lightMagic: '光系魔法', darkMagic: '暗系魔法', natureMagic: '自然魔法', spaceMagic: '空间魔法',
-                timeMagic: '时间魔法', necromancy: '死灵法术', illusionMagic: '幻术魔法', enchantment: '附魔术',
-                warrior: '战士职业', mage: '法师职业', archer: '弓箭手', rogue: '盗贼职业',
-                priest: '牧师职业', paladin: '圣骑士', druid: '德鲁伊', warlock: '术士职业',
-                bard: '吟游诗人', monk: '武僧职业', ranger: '游侠职业', assassin: '刺客职业',
-                phoenix: '凤凰', unicorn: '独角兽', griffin: '狮鹫', pegasus: '飞马',
-                kraken: '海怪', chimera: '奇美拉', basilisk: '蛇怪', hydra: '九头蛇',
-                legendaryWeapon: '传说武器', magicArmor: '魔法护甲', artifact: '神器', relic: '圣物',
-                magicCrystal: '魔法水晶', enchantedItem: '附魔物品', potion: '魔法药水', scroll: '魔法卷轴'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'human': '人类种族', 'elf': '精灵种族', 'dwarf': '矮人种族', 'orc': '兽人种族',
+                'dragon': '龙族', 'demon': '恶魔', 'angel': '天使', 'undead': '不死族',
+                'halfling': '半身人', 'giant': '巨人族', 'fairy': '仙灵', 'vampire': '吸血鬼',
+                'fireMagic': '火系魔法', 'waterMagic': '水系魔法', 'earthMagic': '土系魔法', 'airMagic': '风系魔法',
+                'lightMagic': '光系魔法', 'darkMagic': '暗系魔法', 'natureMagic': '自然魔法', 'spaceMagic': '空间魔法',
+                'timeMagic': '时间魔法', 'necromancy': '死灵法术', 'illusionMagic': '幻术魔法', 'enchantment': '附魔术',
+                'warrior': '战士职业', 'mage': '法师职业', 'archer': '弓箭手', 'rogue': '盗贼职业',
+                'priest': '牧师职业', 'paladin': '圣骑士', 'druid': '德鲁伊', 'warlock': '术士职业',
+                'bard': '吟游诗人', 'monk': '武僧职业', 'ranger': '游侠职业', 'assassin': '刺客职业',
+                'phoenix': '凤凰', 'unicorn': '独角兽', 'griffin': '狮鹫', 'pegasus': '飞马',
+                'kraken': '海怪', 'chimera': '奇美拉', 'basilisk': '蛇怪', 'hydra': '九头蛇',
+                'legendaryWeapon': '传说武器', 'magicArmor': '魔法护甲', 'artifact': '神器', 'relic': '圣物',
+                'magicCrystal': '魔法水晶', 'enchantedItem': '附魔物品', 'potion': '魔法药水', 'scroll': '魔法卷轴',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '人类种族': '人类种族', '精灵种族': '精灵种族', '矮人种族': '矮人种族', '兽人种族': '兽人种族',
+                '龙族': '龙族', '恶魔': '恶魔', '天使': '天使', '不死族': '不死族',
+                '半身人': '半身人', '巨人族': '巨人族', '仙灵': '仙灵', '吸血鬼': '吸血鬼',
+                '火系魔法': '火系魔法', '水系魔法': '水系魔法', '土系魔法': '土系魔法', '风系魔法': '风系魔法',
+                '光系魔法': '光系魔法', '暗系魔法': '暗系魔法', '自然魔法': '自然魔法', '空间魔法': '空间魔法',
+                '时间魔法': '时间魔法', '死灵法术': '死灵法术', '幻术魔法': '幻术魔法', '附魔术': '附魔术',
+                '战士职业': '战士职业', '法师职业': '法师职业', '弓箭手': '弓箭手', '盗贼职业': '盗贼职业',
+                '牧师职业': '牧师职业', '圣骑士': '圣骑士', '德鲁伊': '德鲁伊', '术士职业': '术士职业',
+                '吟游诗人': '吟游诗人', '武僧职业': '武僧职业', '游侠职业': '游侠职业', '刺客职业': '刺客职业',
+                '凤凰': '凤凰', '独角兽': '独角兽', '狮鹫': '狮鹫', '飞马': '飞马',
+                '海怪': '海怪', '奇美拉': '奇美拉', '蛇怪': '蛇怪', '九头蛇': '九头蛇',
+                '传说武器': '传说武器', '魔法护甲': '魔法护甲', '神器': '神器', '圣物': '圣物',
+                '魔法水晶': '魔法水晶', '附魔物品': '附魔物品', '魔法药水': '魔法药水', '魔法卷轴': '魔法卷轴'
             },
             modern: {
-                city: '城市环境', district: '区域设定', housing: '住房情况', transport: '交通工具',
-                neighborhood: '社区环境', facilities: '设施配套', cost: '生活成本', safety: '安全状况',
-                pollution: '环境污染', job: '职业工作', company: '公司企业', position: '职位等级',
-                income: '收入水平', worktime: '工作时间', benefits: '福利待遇', career: '职业发展',
-                skills: '技能要求', education: '教育背景', smartphone: '智能手机', computer: '电脑设备',
-                internet: '网络连接', social: '社交媒体', gaming: '游戏娱乐', streaming: '流媒体',
-                shopping: '购物消费', payment: '支付方式', ai: '人工智能', health: '健康管理',
-                fitness: '健身运动', diet: '饮食习惯', sleep: '睡眠质量', medical: '医疗保健',
-                stress: '压力管理', mental: '心理健康', checkup: '体检检查', budget: '预算管理',
-                brands: '品牌偏好', fashion: '时尚潮流', luxury: '奢侈消费', investment: '投资理财',
-                saving: '储蓄计划', credit: '信用记录', insurance: '保险保障', movies: '电影娱乐',
-                music: '音乐欣赏', books: '阅读习惯', travel: '旅游出行', sports: '体育运动',
-                hobbies: '兴趣爱好', clubs: '俱乐部', events: '活动参与'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'city': '城市环境', 'district': '区域设定', 'housing': '住房情况', 'transport': '交通工具',
+                'neighborhood': '社区环境', 'facilities': '设施配套', 'cost': '生活成本', 'safety': '安全状况',
+                'pollution': '环境污染', 'job': '职业工作', 'company': '公司企业', 'position': '职位等级',
+                'income': '收入水平', 'worktime': '工作时间', 'benefits': '福利待遇', 'career': '职业发展',
+                'skills': '技能要求', 'education': '教育背景', 'smartphone': '智能手机', 'computer': '电脑设备',
+                'internet': '网络连接', 'social': '社交媒体', 'gaming': '游戏娱乐', 'streaming': '流媒体',
+                'shopping': '购物消费', 'payment': '支付方式', 'ai': '人工智能', 'health': '健康管理',
+                'fitness': '健身运动', 'diet': '饮食习惯', 'sleep': '睡眠质量', 'medical': '医疗保健',
+                'stress': '压力管理', 'mental': '心理健康', 'checkup': '体检检查', 'budget': '预算管理',
+                'brands': '品牌偏好', 'fashion': '时尚潮流', 'luxury': '奢侈消费', 'investment': '投资理财',
+                'saving': '储蓄计划', 'credit': '信用记录', 'insurance': '保险保障', 'movies': '电影娱乐',
+                'music': '音乐欣赏', 'books': '阅读习惯', 'travel': '旅游出行', 'sports': '体育运动',
+                'hobbies': '兴趣爱好', 'clubs': '俱乐部', 'events': '活动参与',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '城市环境': '城市环境', '区域设定': '区域设定', '住房情况': '住房情况', '交通工具': '交通工具',
+                '社区环境': '社区环境', '设施配套': '设施配套', '生活成本': '生活成本', '安全状况': '安全状况',
+                '环境污染': '环境污染', '职业工作': '职业工作', '公司企业': '公司企业', '职位等级': '职位等级',
+                '收入水平': '收入水平', '工作时间': '工作时间', '福利待遇': '福利待遇', '职业发展': '职业发展',
+                '技能要求': '技能要求', '教育背景': '教育背景', '智能手机': '智能手机', '电脑设备': '电脑设备',
+                '网络连接': '网络连接', '社交媒体': '社交媒体', '游戏娱乐': '游戏娱乐', '流媒体': '流媒体',
+                '购物消费': '购物消费', '支付方式': '支付方式', '人工智能': '人工智能', '健康管理': '健康管理',
+                '健身运动': '健身运动', '饮食习惯': '饮食习惯', '睡眠质量': '睡眠质量', '医疗保健': '医疗保健',
+                '压力管理': '压力管理', '心理健康': '心理健康', '体检检查': '体检检查', '预算管理': '预算管理',
+                '品牌偏好': '品牌偏好', '时尚潮流': '时尚潮流', '奢侈消费': '奢侈消费', '投资理财': '投资理财',
+                '储蓄计划': '储蓄计划', '信用记录': '信用记录', '保险保障': '保险保障', '电影娱乐': '电影娱乐',
+                '音乐欣赏': '音乐欣赏', '阅读习惯': '阅读习惯', '旅游出行': '旅游出行', '体育运动': '体育运动',
+                '兴趣爱好': '兴趣爱好', '俱乐部': '俱乐部', '活动参与': '活动参与'
             },
             historical: {
-                dynasty: '朝代背景', period: '历史时期', emperor: '皇帝君主', capital: '都城首府',
-                region: '地域分布', events: '历史事件', wars: '战争冲突', politics: '政治制度',
-                economy: '经济状况', class: '社会阶层', title: '爵位头衔', family: '家族背景',
-                wealth: '财富状况', land: '土地财产', servants: '仆从随从', influence: '影响力',
-                reputation: '名声声誉', connections: '人脉关系', education: '教育程度', poetry: '诗词文学',
-                calligraphy: '书法艺术', music: '音乐才艺', chess: '棋艺技巧', classics: '经典学问',
-                philosophy: '哲学思想', etiquette: '礼仪规范', language: '语言文字', martial: '武艺修为',
-                weapons: '兵器使用', archery: '射箭技艺', horsemanship: '骑术技能', strategy: '兵法谋略',
-                bodyguard: '护卫随从', hunting: '狩猎技能', survival: '生存技能', residence: '居住环境',
-                clothing: '服饰风格', food: '饮食习惯', transport: '出行方式', entertainment: '娱乐活动',
-                festivals: '节庆活动', religion: '宗教信仰', medicine: '医学知识', profession: '职业身份',
-                crafts: '手工技艺', trade: '商贸活动', farming: '农业生产', administration: '行政管理',
-                teaching: '教学传授', healing: '医疗救治', construction: '建筑营造'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'dynasty': '朝代背景', 'period': '历史时期', 'emperor': '皇帝君主', 'capital': '都城首府',
+                'region': '地域分布', 'events': '历史事件', 'wars': '战争冲突', 'politics': '政治制度',
+                'economy': '经济状况', 'class': '社会阶层', 'title': '爵位头衔', 'family': '家族背景',
+                'wealth': '财富状况', 'land': '土地财产', 'servants': '仆从随从', 'influence': '影响力',
+                'reputation': '名声声誉', 'connections': '人脉关系', 'education': '教育程度', 'poetry': '诗词文学',
+                'calligraphy': '书法艺术', 'music': '音乐才艺', 'chess': '棋艺技巧', 'classics': '经典学问',
+                'philosophy': '哲学思想', 'etiquette': '礼仪规范', 'language': '语言文字', 'martial': '武艺修为',
+                'weapons': '兵器使用', 'archery': '射箭技艺', 'horsemanship': '骑术技能', 'strategy': '兵法谋略',
+                'bodyguard': '护卫随从', 'hunting': '狩猎技能', 'survival': '生存技能', 'residence': '居住环境',
+                'clothing': '服饰风格', 'food': '饮食习惯', 'transport': '出行方式', 'entertainment': '娱乐活动',
+                'festivals': '节庆活动', 'religion': '宗教信仰', 'medicine': '医学知识', 'profession': '职业身份',
+                'crafts': '手工技艺', 'trade': '商贸活动', 'farming': '农业生产', 'administration': '行政管理',
+                'teaching': '教学传授', 'healing': '医疗救治', 'construction': '建筑营造',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '朝代背景': '朝代背景', '历史时期': '历史时期', '皇帝君主': '皇帝君主', '都城首府': '都城首府',
+                '地域分布': '地域分布', '历史事件': '历史事件', '战争冲突': '战争冲突', '政治制度': '政治制度',
+                '经济状况': '经济状况', '社会阶层': '社会阶层', '爵位头衔': '爵位头衔', '家族背景': '家族背景',
+                '财富状况': '财富状况', '土地财产': '土地财产', '仆从随从': '仆从随从', '影响力': '影响力',
+                '名声声誉': '名声声誉', '人脉关系': '人脉关系', '教育程度': '教育程度', '诗词文学': '诗词文学',
+                '书法艺术': '书法艺术', '音乐才艺': '音乐才艺', '棋艺技巧': '棋艺技巧', '经典学问': '经典学问',
+                '哲学思想': '哲学思想', '礼仪规范': '礼仪规范', '语言文字': '语言文字', '武艺修为': '武艺修为',
+                '兵器使用': '兵器使用', '射箭技艺': '射箭技艺', '骑术技能': '骑术技能', '兵法谋略': '兵法谋略',
+                '护卫随从': '护卫随从', '狩猎技能': '狩猎技能', '生存技能': '生存技能', '居住环境': '居住环境',
+                '服饰风格': '服饰风格', '饮食习惯': '饮食习惯', '出行方式': '出行方式', '娱乐活动': '娱乐活动',
+                '节庆活动': '节庆活动', '宗教信仰': '宗教信仰', '医学知识': '医学知识', '职业身份': '职业身份',
+                '手工技艺': '手工技艺', '商贸活动': '商贸活动', '农业生产': '农业生产', '行政管理': '行政管理',
+                '教学传授': '教学传授', '医疗救治': '医疗救治', '建筑营造': '建筑营造'
             },
             magic: {
-                evocation: '塑能系', illusion: '幻术系', enchantment: '惑控系', necromancy: '死灵系',
-                divination: '预言系', transmutation: '变化系', conjuration: '咒法系', abjuration: '防护系',
-                elemental: '元素法术', cantrip: '戏法法术', level1: '一环法术', level2: '二环法术',
-                level3: '三环法术', level4: '四环法术', level5: '五环法术', level6: '六环法术',
-                level7: '七环法术', level8: '八环法术', level9: '九环法术', level: '法术等级',
-                mana: '法力值', intelligence: '智力属性', wisdom: '感知属性', charisma: '魅力属性',
-                concentration: '专注能力', spellpower: '法术强度', resistance: '魔法抗性', regeneration: '法力回复',
-                spellbook: '法术书', known: '已知法术', prepared: '准备法术', slots: '法术位',
-                components: '施法材料', rituals: '仪式法术', metamagic: '超魔专长', scrolls: '法术卷轴',
-                fire: '火元素', water: '水元素', earth: '土元素', air: '风元素',
-                lightning: '雷电', ice: '冰霜', light: '光明', dark: '黑暗',
-                staff: '法杖', wand: '魔杖', orb: '法球', robe: '法袍',
-                amulet: '护符', ring: '魔法戒指', crystal: '魔法水晶', tome: '魔法典籍'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'evocation': '塑能系', 'illusion': '幻术系', 'enchantment': '惑控系', 'necromancy': '死灵系',
+                'divination': '预言系', 'transmutation': '变化系', 'conjuration': '咒法系', 'abjuration': '防护系',
+                'elemental': '元素法术', 'cantrip': '戏法法术', 'level1': '一环法术', 'level2': '二环法术',
+                'level3': '三环法术', 'level4': '四环法术', 'level5': '五环法术', 'level6': '六环法术',
+                'level7': '七环法术', 'level8': '八环法术', 'level9': '九环法术', 'level': '法术等级',
+                'mana': '法力值', 'intelligence': '智力属性', 'wisdom': '感知属性', 'charisma': '魅力属性',
+                'concentration': '专注能力', 'spellpower': '法术强度', 'resistance': '魔法抗性', 'regeneration': '法力回复',
+                'spellbook': '法术书', 'known': '已知法术', 'prepared': '准备法术', 'slots': '法术位',
+                'components': '施法材料', 'rituals': '仪式法术', 'metamagic': '超魔专长', 'scrolls': '法术卷轴',
+                'fire': '火元素', 'water': '水元素', 'earth': '土元素', 'air': '风元素',
+                'lightning': '雷电', 'ice': '冰霜', 'light': '光明', 'dark': '黑暗',
+                'staff': '法杖', 'wand': '魔杖', 'orb': '法球', 'robe': '法袍',
+                'amulet': '护符', 'ring': '魔法戒指', 'crystal': '魔法水晶', 'tome': '魔法典籍',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '塑能系': '塑能系', '幻术系': '幻术系', '惑控系': '惑控系', '死灵系': '死灵系',
+                '预言系': '预言系', '变化系': '变化系', '咒法系': '咒法系', '防护系': '防护系',
+                '元素法术': '元素法术', '戏法法术': '戏法法术', '一环法术': '一环法术', '二环法术': '二环法术',
+                '三环法术': '三环法术', '四环法术': '四环法术', '五环法术': '五环法术', '六环法术': '六环法术',
+                '七环法术': '七环法术', '八环法术': '八环法术', '九环法术': '九环法术', '法术等级': '法术等级',
+                '法力值': '法力值', '智力属性': '智力属性', '感知属性': '感知属性', '魅力属性': '魅力属性',
+                '专注能力': '专注能力', '法术强度': '法术强度', '魔法抗性': '魔法抗性', '法力回复': '法力回复',
+                '法术书': '法术书', '已知法术': '已知法术', '准备法术': '准备法术', '法术位': '法术位',
+                '施法材料': '施法材料', '仪式法术': '仪式法术', '超魔专长': '超魔专长', '法术卷轴': '法术卷轴',
+                '火元素': '火元素', '水元素': '水元素', '土元素': '土元素', '风元素': '风元素',
+                '雷电': '雷电', '冰霜': '冰霜', '光明': '光明', '黑暗': '黑暗',
+                '法杖': '法杖', '魔杖': '魔杖', '法球': '法球', '法袍': '法袍',
+                '护符': '护符', '魔法戒指': '魔法戒指', '魔法水晶': '魔法水晶', '魔法典籍': '魔法典籍'
             },
             training: {
-                obedience: '服从训练', discipline: '纪律训练', etiquette: '礼仪训练', posture: '姿态训练',
-                speech: '言语训练', behavior: '行为训练', attention: '注意力训练', patience: '耐心训练',
-                focus: '专注训练', service: '服务训练', cooking: '烹饪训练', cleaning: '清洁训练',
-                massage: '按摩训练', entertainment: '娱乐训练', music: '音乐训练', dance: '舞蹈训练',
-                art: '艺术训练', language: '语言训练', strength: '力量训练', endurance: '耐力训练',
-                flexibility: '柔韧训练', balance: '平衡训练', coordination: '协调训练', agility: '敏捷训练',
-                stamina: '体能训练', recovery: '恢复训练', confidence: '自信训练', stress: '抗压训练',
-                emotion: '情绪训练', memory: '记忆训练', logic: '逻辑训练', creativity: '创造训练',
-                meditation: '冥想训练', mindfulness: '正念训练', intensity: '强度设置', duration: '持续时间',
-                frequency: '训练频率', progress: '进度跟踪', rewards: '奖励机制', punishment: '惩罚机制',
-                schedule: '训练计划', evaluation: '评估系统', auto: '自动训练', adaptive: '自适应训练',
-                ai: 'AI辅助', analytics: '数据分析', reports: '训练报告', export: '导出功能',
-                backup: '备份功能', sync: '同步功能'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'obedience': '服从训练', 'discipline': '纪律训练', 'etiquette': '礼仪训练', 'posture': '姿态训练',
+                'speech': '言语训练', 'behavior': '行为训练', 'attention': '注意力训练', 'patience': '耐心训练',
+                'focus': '专注训练', 'service': '服务训练', 'cooking': '烹饪训练', 'cleaning': '清洁训练',
+                'massage': '按摩训练', 'entertainment': '娱乐训练', 'music': '音乐训练', 'dance': '舞蹈训练',
+                'art': '艺术训练', 'language': '语言训练', 'strength': '力量训练', 'endurance': '耐力训练',
+                'flexibility': '柔韧训练', 'balance': '平衡训练', 'coordination': '协调训练', 'agility': '敏捷训练',
+                'stamina': '体能训练', 'recovery': '恢复训练', 'confidence': '自信训练', 'stress': '抗压训练',
+                'emotion': '情绪训练', 'memory': '记忆训练', 'logic': '逻辑训练', 'creativity': '创造训练',
+                'meditation': '冥想训练', 'mindfulness': '正念训练', 'intensity': '强度设置', 'duration': '持续时间',
+                'frequency': '训练频率', 'progress': '进度跟踪', 'rewards': '奖励机制', 'punishment': '惩罚机制',
+                'schedule': '训练计划', 'evaluation': '评估系统', 'auto': '自动训练', 'adaptive': '自适应训练',
+                'ai': 'AI辅助', 'analytics': '数据分析', 'reports': '训练报告', 'export': '导出功能',
+                'backup': '备份功能', 'sync': '同步功能',
+                
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '服从训练': '服从训练', '纪律训练': '纪律训练', '礼仪训练': '礼仪训练', '姿态训练': '姿态训练',
+                '言语训练': '言语训练', '行为训练': '行为训练', '注意力训练': '注意力训练', '耐心训练': '耐心训练',
+                '专注训练': '专注训练', '服务训练': '服务训练', '烹饪训练': '烹饪训练', '清洁训练': '清洁训练',
+                '按摩训练': '按摩训练', '娱乐训练': '娱乐训练', '音乐训练': '音乐训练', '舞蹈训练': '舞蹈训练',
+                '艺术训练': '艺术训练', '语言训练': '语言训练', '力量训练': '力量训练', '耐力训练': '耐力训练',
+                '柔韧训练': '柔韧训练', '平衡训练': '平衡训练', '协调训练': '协调训练', '敏捷训练': '敏捷训练',
+                '体能训练': '体能训练', '恢复训练': '恢复训练', '自信训练': '自信训练', '抗压训练': '抗压训练',
+                '情绪训练': '情绪训练', '记忆训练': '记忆训练', '逻辑训练': '逻辑训练', '创造训练': '创造训练',
+                '冥想训练': '冥想训练', '正念训练': '正念训练', '强度设置': '强度设置', '持续时间': '持续时间',
+                '训练频率': '训练频率', '进度跟踪': '进度跟踪', '奖励机制': '奖励机制', '惩罚机制': '惩罚机制',
+                '训练计划': '训练计划', '评估系统': '评估系统', '自动训练': '自动训练', '自适应训练': '自适应训练',
+                'AI辅助': 'AI辅助', '数据分析': '数据分析', '训练报告': '训练报告', '导出功能': '导出功能',
+                '备份功能': '备份功能', '同步功能': '同步功能'
             }
         };
     }
@@ -15978,14 +18155,14 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     updateSubitemList(menu, panelType) {
         try {
             console.log(`[InfoBarSettings] 🔄 更新子项列表: ${panelType}`);
-            
+
             const subitemList = menu.querySelector('.subitem-list');
             if (!subitemList) return;
 
             // 动态获取面板配置
             const enabledPanels = this.getEnabledPanels();
             const panelConfig = enabledPanels[panelType];
-            
+
             if (!panelConfig) {
                 console.warn(`[InfoBarSettings] ⚠️ 未找到面板配置: ${panelType}`);
                 return;
@@ -16019,7 +18196,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     addPanelToPreview(panelType, area, position) {
         try {
             console.log(`[InfoBarSettings] 🎭 添加面板到预览: ${panelType} (区域: ${area}, 位置: ${position})`);
-            
+
             // 根据区域选择正确的容器
             const containerClass = area === 'top' ? '.top-embedded-panels' : '.bottom-embedded-panels';
             const embeddedPanels = this.modal?.querySelector(containerClass);
@@ -16031,7 +18208,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             // 动态获取面板配置
             const enabledPanels = this.getEnabledPanels();
             const panelConfig = enabledPanels[panelType];
-            
+
             if (!panelConfig) {
                 console.error(`[InfoBarSettings] ❌ 未找到面板配置: ${panelType}`);
                 return;
@@ -16043,7 +18220,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                 console.error(`[InfoBarSettings] ❌ 创建面板预览元素失败: ${panelType}`);
                 return;
             }
-            
+
             // 绑定点击事件（如果需要的话）
             panelButton.addEventListener('click', () => {
                 this.showDemoPanelPopup(panelType);
@@ -16074,7 +18251,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     addSubitemToPreview(fieldType, area, position) {
         try {
             console.log(`[InfoBarSettings] 🔧 添加子项到预览: ${fieldType} (区域: ${area}, 位置: ${position})`);
-            
+
             // 根据区域选择正确的容器
             const containerClass = area === 'top' ? '.top-embedded-panels' : '.bottom-embedded-panels';
             const embeddedPanels = this.modal?.querySelector(containerClass);
@@ -16085,9 +18262,9 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
 
             // 动态获取子项显示名称
             const displayName = this.getSubitemDisplayName(fieldType);
-            const config = { 
-                field: displayName, 
-                value: this.getSubitemDemoValue(fieldType, displayName) 
+            const config = {
+                field: displayName,
+                value: this.getSubitemDemoValue(fieldType, displayName)
             };
 
             // 🔧 修复：使用预览元素创建子项，保持一致性
@@ -16122,22 +18299,22 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             // 🔧 修复：处理完整ID格式（panel.field）和简单字段名
             let targetPanelId = null;
             let targetFieldKey = fieldKey;
-            
+
             if (fieldKey.includes('.')) {
                 [targetPanelId, targetFieldKey] = fieldKey.split('.');
             }
-            
+
             const enabledPanels = this.getEnabledPanels();
-            
+
             // 如果指定了面板ID，只在该面板中查找
             if (targetPanelId && enabledPanels[targetPanelId]) {
                 const subItems = this.getEnabledSubItems(targetPanelId, enabledPanels[targetPanelId]);
                 const foundSubItem = subItems.find(item => item.key === targetFieldKey);
-                
+
                 if (foundSubItem) {
                     return foundSubItem.displayName;
                 }
-                
+
                 // 如果在指定面板中没找到，尝试从完整映射中获取
                 const completeMapping = this.getCompleteDisplayNameMapping();
                 if (completeMapping[targetPanelId] && completeMapping[targetPanelId][targetFieldKey]) {
@@ -16148,7 +18325,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                 for (const [panelId, panelConfig] of Object.entries(enabledPanels)) {
                     const subItems = this.getEnabledSubItems(panelId, panelConfig);
                     const foundSubItem = subItems.find(item => item.key === targetFieldKey);
-                    
+
                     if (foundSubItem) {
                         return foundSubItem.displayName;
                     }
@@ -16172,28 +18349,28 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
         const demoValues = {
             // 个人信息相关
             'name': '张三',
-            'age': '25岁', 
+            'age': '25岁',
             'gender': '男',
             'occupation': '冒险者',
             'level': 'Lv.15',
             'experience': '2847/3000',
             'health': '良好',
             'mood': '愉快',
-            
+
             // 交互对象相关
             'npc_name': '艾莉丝',
             'relationship': '朋友',
             'attitude': '友好',
             'favorability': '70/100',
             'emotion': '高兴',
-            
+
             // 世界信息相关
             'location': '艾尔登城',
             'time': '上午10点',
             'weather': '晴朗',
             'environment': '城市街道',
             'atmosphere': '繁忙',
-            
+
             // 背包相关
             'gold': '1,247枚',
             'weapon': '银剑',
@@ -16227,9 +18404,9 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     clearPreviewContent() {
         try {
             console.log('[InfoBarSettings] 🧹 清空预览内容');
-            
+
             let totalCleared = 0;
-            
+
             // 清空顶部区域
             const topEmbeddedPanels = this.modal?.querySelector('.top-embedded-panels');
             if (topEmbeddedPanels) {
@@ -16261,7 +18438,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     async persistFrontendLayout(item, area) {
         try {
             console.log(`[InfoBarSettings] 💾 持久化前端布局: ${item.type} ${item.id} 到 ${area}`);
-            
+
             // 使用FrontendDisplayManager的标准读取和保存方法，确保配置一致性
             const fdm = window.SillyTavernInfobar?.modules?.frontendDisplayManager;
             if (!fdm) {
@@ -16275,7 +18452,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
 
             // 🔧 修复：清理所有数组中的重复项，然后添加新项
             const cleanArray = (arr) => [...new Set(arr || [])];
-            
+
             // 根据类型添加到相应数组
             if (item.type === 'panel') {
                 const targetKey = area === 'top' ? 'topPanels' : 'bottomPanels';
@@ -16298,7 +18475,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                 }
                 currentConfig[targetKey] = targetArray;
             }
- 
+
             // 🔧 修复：清理所有配置数组中的重复项
             currentConfig.topPanels = cleanArray(currentConfig.topPanels);
             currentConfig.bottomPanels = cleanArray(currentConfig.bottomPanels);
@@ -16310,7 +18487,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
 
             // 保存完整配置
             await fdm.saveFrontendDisplayConfig(currentConfig);
-            
+
             console.log('[InfoBarSettings] 💾 已保存前端显示配置:', {
                 topPanels: currentConfig.topPanels,
                 bottomPanels: currentConfig.bottomPanels,
@@ -16322,10 +18499,10 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             // 立即更新前端显示
             this.updateFrontendDisplayManagerSettings();
             this.refreshFrontendDisplay();
-            
+
             // 🔧 修复：重新渲染预览
             this.renderFrontendDisplayPreview(currentConfig);
-            
+
         } catch (e) {
             console.error('[InfoBarSettings] ❌ 保存前端显示配置失败:', e);
         }
@@ -16370,22 +18547,22 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     resolveFieldQualifiedId(fieldKey) {
         try {
             if (fieldKey.includes('.')) return fieldKey;
-            
+
             // 🔧 修复：智能匹配字段到正确的面板
             const fdm = window.SillyTavernInfobar?.modules?.frontendDisplayManager;
             if (fdm) {
                 const availableSubItems = fdm.getAvailableSubItems();
-                
+
                 // 查找完全匹配的字段
-                const exactMatch = availableSubItems.find(item => 
+                const exactMatch = availableSubItems.find(item =>
                     item.id.endsWith(`.${fieldKey}`)
                 );
-                
+
                 if (exactMatch) {
                     console.log(`[InfoBarSettings] 🎯 字段 ${fieldKey} 匹配到: ${exactMatch.id}`);
                     return exactMatch.id;
                 }
-                
+
                 // 如果没有完全匹配，尝试根据字段名推断面板
                 const fieldToPanelMap = {
                     'time': 'world',
@@ -16398,7 +18575,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                     'location': 'world',
                     'mood': 'interaction'
                 };
-                
+
                 const inferredPanel = fieldToPanelMap[fieldKey];
                 if (inferredPanel) {
                     const inferredId = `${inferredPanel}.${fieldKey}`;
@@ -16406,7 +18583,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                     return inferredId;
                 }
             }
-            
+
             // 兜底：尝试从模态框标题获取面板ID（保持原有逻辑）
             const title = this.modal?.querySelector('.subitem-list h4')?.textContent || '';
             const map = [
@@ -16428,7 +18605,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             ];
             const found = map.find(m => title.includes(m.key));
             const result = found ? `${found.id}.${fieldKey}` : fieldKey;
-            
+
             console.log(`[InfoBarSettings] 🎯 字段 ${fieldKey} 通过标题解析为: ${result}`);
             return result;
         } catch (e) {
@@ -16444,25 +18621,25 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     renderFrontendDisplayPreview(config) {
         try {
             console.log('[InfoBarSettings] 🎨 渲染前端显示预览:', config);
-            
+
             if (!config) {
                 console.warn('[InfoBarSettings] ⚠️ 配置为空，跳过预览渲染');
                 return;
             }
-            
+
             // 获取预览容器
             const topContainer = this.modal?.querySelector('.top-embedded-panels');
             const bottomContainer = this.modal?.querySelector('.bottom-embedded-panels');
-            
+
             if (!topContainer || !bottomContainer) {
                 console.warn('[InfoBarSettings] ⚠️ 未找到预览容器');
                 return;
             }
-            
+
             // 清空现有预览内容
             topContainer.innerHTML = '';
             bottomContainer.innerHTML = '';
-            
+
             // 渲染顶部面板
             if (config.topPanels && Array.isArray(config.topPanels)) {
                 config.topPanels.forEach(panelId => {
@@ -16472,20 +18649,20 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                     }
                 });
             }
-            
+
             // 🔧 修复：限制顶部子项显示数量，避免预览过于拥挤
             if (config.topSubitems && Array.isArray(config.topSubitems)) {
                 // 只显示前3个子项，其余用省略号表示
                 const maxSubitems = 3;
                 const subitems = config.topSubitems.slice(0, maxSubitems);
-                
+
                 subitems.forEach(subitemId => {
                     const subitemElement = this.createPreviewPanelElement(subitemId, 'subitem');
                     if (subitemElement) {
                         topContainer.appendChild(subitemElement);
                     }
                 });
-                
+
                 // 如果有更多子项，显示省略提示
                 if (config.topSubitems.length > maxSubitems) {
                     const moreElement = document.createElement('div');
@@ -16496,7 +18673,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                     topContainer.appendChild(moreElement);
                 }
             }
-            
+
             // 渲染底部面板
             if (config.bottomPanels && Array.isArray(config.bottomPanels)) {
                 config.bottomPanels.forEach(panelId => {
@@ -16506,20 +18683,20 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                     }
                 });
             }
-            
+
             // 🔧 修复：限制底部子项显示数量，避免预览过于拥挤
             if (config.bottomSubitems && Array.isArray(config.bottomSubitems)) {
                 // 只显示前3个子项，其余用省略号表示
                 const maxSubitems = 3;
                 const subitems = config.bottomSubitems.slice(0, maxSubitems);
-                
+
                 subitems.forEach(subitemId => {
                     const subitemElement = this.createPreviewPanelElement(subitemId, 'subitem');
                     if (subitemElement) {
                         bottomContainer.appendChild(subitemElement);
                     }
                 });
-                
+
                 // 如果有更多子项，显示省略提示
                 if (config.bottomSubitems.length > maxSubitems) {
                     const moreElement = document.createElement('div');
@@ -16530,9 +18707,9 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                     bottomContainer.appendChild(moreElement);
                 }
             }
-            
+
             console.log('[InfoBarSettings] ✅ 前端显示预览渲染完成');
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 渲染前端显示预览失败:', error);
         }
@@ -16548,37 +18725,37 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             element.className = type === 'panel' ? 'preview-panel' : 'preview-subitem';
             element.dataset.id = id;
             element.dataset.type = type;
-            
+
             // 获取显示名称（不使用图标，因为前端是按钮UI）
             let displayName = id;
-            
+
             try {
                 if (type === 'panel') {
                     // 🔧 修复：面板使用正确的getPanelDisplayInfo函数获取名称
                     const enabledPanels = this.getEnabledPanels();
                     const panelConfig = enabledPanels[id];
                     const panelInfo = this.getPanelDisplayInfo(id, panelConfig);
-                    
+
                     displayName = panelInfo.name || id;
-                    
+
                     console.log(`[InfoBarSettings] 🎨 面板预览元素: ${id} -> ${displayName}`);
                 } else {
                     // 🔧 修复：子项需要通过面板映射来获取正确的中文名称
                     displayName = this.getSubitemDisplayName(id) || id;
-                    
+
                     console.log(`[InfoBarSettings] 🎨 子项预览元素: ${id} -> ${displayName}`);
                 }
             } catch (error) {
                 console.warn('[InfoBarSettings] ⚠️ 获取显示名称失败，使用原始ID:', error);
                 displayName = id;
             }
-            
+
             // 🔧 修复：使用按钮样式的预览，模拟真实前端显示
             element.innerHTML = `
                 <span class="preview-item-name">${displayName}</span>
                 <button class="remove-preview-item" data-id="${id}" data-type="${type}" title="移除">×</button>
             `;
-            
+
             // 添加移除事件
             const removeButton = element.querySelector('.remove-preview-item');
             if (removeButton) {
@@ -16586,9 +18763,9 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                     this.removePreviewItem(id, type);
                 });
             }
-            
+
             return element;
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 创建预览元素失败:', error);
             return null;
@@ -16602,16 +18779,16 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     async removePreviewItem(id, type) {
         try {
             console.log(`[InfoBarSettings] 🗑️ 移除预览项: ${type} ${id}`);
-            
+
             const fdm = window.SillyTavernInfobar?.modules?.frontendDisplayManager;
             if (!fdm) {
                 console.error('[InfoBarSettings] ❌ 未找到前端显示管理器');
                 return;
             }
-            
+
             // 获取当前配置
             const currentConfig = await fdm.getSavedFrontendDisplayConfig();
-            
+
             // 从相应数组中移除项目
             if (type === 'panel') {
                 if (currentConfig.topPanels) {
@@ -16628,19 +18805,19 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                     currentConfig.bottomSubitems = currentConfig.bottomSubitems.filter(item => item !== id);
                 }
             }
-            
+
             // 保存配置
             await fdm.saveFrontendDisplayConfig(currentConfig);
-            
+
             // 重新渲染预览
             this.renderFrontendDisplayPreview(currentConfig);
-            
+
             // 立即更新前端显示
             this.updateFrontendDisplayManagerSettings();
             this.refreshFrontendDisplay();
-            
+
             console.log(`[InfoBarSettings] ✅ 已移除预览项: ${type} ${id}`);
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 移除预览项失败:', error);
         }
@@ -16653,34 +18830,34 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
     ensureAIMessagesWrapped() {
         try {
             console.log('[InfoBarSettings] 🔍 检查AI消息包装状态...');
-            
+
             const fdm = window.SillyTavernInfobar?.modules?.frontendDisplayManager;
             if (!fdm) {
                 console.warn('[InfoBarSettings] ⚠️ 未找到前端显示管理器');
                 return;
             }
-            
+
             // 检查是否有AI消息
             const aiMessages = document.querySelectorAll('.mes[is_user="false"]');
             console.log(`[InfoBarSettings] 📋 找到 ${aiMessages.length} 条AI消息`);
-            
+
             if (aiMessages.length === 0) {
                 console.log('[InfoBarSettings] ℹ️ 没有AI消息需要包装');
                 return;
             }
-            
+
             // 检查最后一条AI消息是否已包装
             const lastMessage = aiMessages[aiMessages.length - 1];
             const existingWrapper = lastMessage.previousElementSibling;
-            
+
             if (existingWrapper && existingWrapper.classList.contains('frontend-message-wrapper')) {
                 console.log('[InfoBarSettings] ✅ AI消息已正确包装');
                 return;
             }
-            
+
             // 没有包装，触发包装
             console.log('[InfoBarSettings] 🔧 AI消息未包装，触发重新包装...');
-            
+
             if (fdm.wrapExistingMessagesWithRetry) {
                 fdm.wrapExistingMessagesWithRetry(0);
             } else if (fdm.wrapExistingMessages) {
@@ -16688,9 +18865,4561 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             } else {
                 console.warn('[InfoBarSettings] ⚠️ 前端显示管理器缺少包装方法');
             }
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 检查AI消息包装失败:', error);
+        }
+    }
+
+    /**
+     * 获取导出选项
+     */
+    getExportOptions() {
+        try {
+            const panelConfigs = this.modal.querySelector('#export-panel-configs')?.checked || false;
+            const panelRules = this.modal.querySelector('#export-panel-rules')?.checked || false;
+            const fieldRules = this.modal.querySelector('#export-field-rules')?.checked || false;
+            const themeSettings = this.modal.querySelector('#export-theme-settings')?.checked || false;
+            const apiSettings = this.modal.querySelector('#export-api-settings')?.checked || false;
+            const allSettings = this.modal.querySelector('#export-all-settings')?.checked || false;
+
+            const hasAnySelection = panelConfigs || panelRules || fieldRules || themeSettings || apiSettings || allSettings;
+
+            return {
+                panelConfigs,
+                panelRules,
+                fieldRules,
+                themeSettings,
+                apiSettings,
+                allSettings,
+                hasAnySelection
+            };
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取导出选项失败:', error);
+            return { hasAnySelection: false };
+        }
+    }
+
+    /**
+     * 添加面板配置到导出数据
+     */
+    async addPanelConfigsToExport(exportData) {
+        try {
+            // 获取面板配置
+            const panelConfigs = await this.configManager.getConfig('panels') || {};
+
+            // 获取自定义面板
+            const customPanels = await this.configManager.getConfig('customPanels') || {};
+
+            // 获取基础面板配置
+            const basicPanelIds = ['personal','world','interaction','tasks','organization','news','inventory','abilities','plot','cultivation','fantasy','modern','historical','magic','training'];
+            const basicPanelConfigs = {};
+
+            for (const panelId of basicPanelIds) {
+                const config = await this.configManager.getConfig(panelId);
+                if (config) {
+                    basicPanelConfigs[panelId] = config;
+                }
+            }
+
+            exportData.configs.panelConfigs = {
+                panels: panelConfigs,
+                customPanels: customPanels,
+                basicPanels: basicPanelConfigs
+            };
+
+            console.log('[InfoBarSettings] ✅ 面板配置已添加到导出数据');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 添加面板配置失败:', error);
+        }
+    }
+
+    /**
+     * 添加面板规则到导出数据
+     */
+    async addPanelRulesToExport(exportData) {
+        try {
+            const panelRuleManager = window.SillyTavernInfobar?.modules?.panelRuleManager;
+            if (!panelRuleManager) {
+                console.warn('[InfoBarSettings] ⚠️ 面板规则管理器不可用');
+                return;
+            }
+
+            // 获取所有面板规则
+            const panelRulesData = await this.configManager.getData('panel_rules') || {};
+
+            exportData.configs.panelRules = panelRulesData;
+
+            console.log('[InfoBarSettings] ✅ 面板规则已添加到导出数据');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 添加面板规则失败:', error);
+        }
+    }
+
+    /**
+     * 添加字段规则到导出数据
+     */
+    async addFieldRulesToExport(exportData) {
+        try {
+            const fieldRuleManager = window.SillyTavernInfobar?.modules?.fieldRuleManager;
+            if (!fieldRuleManager) {
+                console.warn('[InfoBarSettings] ⚠️ 字段规则管理器不可用');
+                return;
+            }
+
+            // 获取所有字段规则
+            const fieldRulesData = await this.configManager.getData('field_rules') || {};
+
+            exportData.configs.fieldRules = fieldRulesData;
+
+            console.log('[InfoBarSettings] ✅ 字段规则已添加到导出数据');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 添加字段规则失败:', error);
+        }
+    }
+
+    /**
+     * 添加主题设置到导出数据
+     */
+    async addThemeSettingsToExport(exportData) {
+        try {
+            const themeConfig = await this.configManager.getConfig('theme') || {};
+
+            exportData.configs.themeSettings = themeConfig;
+
+            console.log('[InfoBarSettings] ✅ 主题设置已添加到导出数据');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 添加主题设置失败:', error);
+        }
+    }
+
+    /**
+     * 添加API设置到导出数据
+     */
+    async addApiSettingsToExport(exportData) {
+        try {
+            const apiConfig = await this.configManager.getConfig('apiConfig') || {};
+
+            // 移除敏感信息
+            const safeApiConfig = { ...apiConfig };
+            if (safeApiConfig.apiKey) {
+                safeApiConfig.apiKey = '***REMOVED***';
+            }
+
+            exportData.configs.apiSettings = safeApiConfig;
+
+            console.log('[InfoBarSettings] ✅ API设置已添加到导出数据（已移除敏感信息）');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 添加API设置失败:', error);
+        }
+    }
+
+    /**
+     * 添加所有设置到导出数据
+     */
+    async addAllSettingsToExport(exportData) {
+        try {
+            // 使用现有的导出方法
+            const fullExportData = await this.configManager.exportConfigs();
+
+            // 合并到当前导出数据
+            exportData.configs.allSettings = fullExportData.configs;
+
+            console.log('[InfoBarSettings] ✅ 所有设置已添加到导出数据');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 添加所有设置失败:', error);
+        }
+    }
+
+    /**
+     * 打开变量管理器
+     */
+    openVariableManager() {
+        try {
+            console.log('[InfoBarSettings] 🔧 创建变量管理器界面...');
+
+            // 创建变量管理器模态框
+            const variableModal = this.createVariableManagerModal();
+            document.body.appendChild(variableModal);
+
+            // 显示模态框
+            variableModal.style.display = 'flex';
+
+            // 立即应用一次主题（确保初始元素样式正确）
+            try {
+                const activeThemeCard = this.modal?.querySelector('.theme-preview-card.active');
+                const themeId = activeThemeCard?.getAttribute('data-theme');
+                const theme = themeId ? this.getThemeById(themeId) : null;
+                if (theme) this.applyVariableManagerTheme(theme);
+            } catch (e) {
+                console.warn('[InfoBarSettings] ⚠️ 打开变量管理器时应用主题失败:', e);
+            }
+
+            // 加载现有变量
+            this.loadVariables();
+
+            console.log('[InfoBarSettings] ✅ 变量管理器已打开');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 打开变量管理器失败:', error);
+            this.showMessage('打开变量管理器失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 创建变量管理器模态框
+     */
+    createVariableManagerModal() {
+        const modal = document.createElement('div');
+        modal.className = 'variable-manager-modal infobar-extension';
+        modal.id = 'variable-manager-modal';
+
+        modal.innerHTML = `
+            <div class="modal-overlay" onclick="this.closest('.variable-manager-modal').remove()"></div>
+            <div class="modal-container">
+                <!-- 头部 -->
+                <div class="modal-header">
+                    <div class="header-left">
+                        <h2><i class="fa fa-code"></i> 变量管理器</h2>
+                    </div>
+                    <div class="header-right">
+                        <button class="modal-close" onclick="this.closest('.variable-manager-modal').remove()">×</button>
+                    </div>
+                </div>
+
+                <!-- 主体内容 -->
+                <div class="modal-body">
+                    <!-- 变量类型导航栏 -->
+                    <div class="variable-nav">
+                        <div class="nav-tabs">
+                            <button class="nav-tab active" data-scope="global">
+                                <i class="fa fa-globe"></i> 全局变量
+                            </button>
+                            <button class="nav-tab" data-scope="chat">
+                                <i class="fa fa-comments"></i> 聊天变量
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 工具栏 -->
+                    <div class="variable-toolbar">
+                        <div class="toolbar-left">
+                            <button class="btn btn-primary" data-action="add-variable">
+                                <i class="fa fa-plus"></i> 添加变量
+                            </button>
+                            <select class="variable-type-select" id="variable-type-select">
+                                <option value="string">字符串</option>
+                                <option value="number">数字</option>
+                                <option value="boolean">布尔值</option>
+                                <option value="array">数组</option>
+                                <option value="object">对象</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-right">
+                            <div class="view-mode-toggle">
+                                <button class="btn btn-sm view-mode-btn active" data-view="list" title="列表视图">
+                                    <i class="fa fa-list"></i>
+                                </button>
+                                <button class="btn btn-sm view-mode-btn" data-view="tree" title="树状视图">
+                                    <i class="fa fa-sitemap"></i>
+                                </button>
+                            </div>
+                            <input type="text" class="search-input" placeholder="搜索变量..." id="variable-search">
+                            <button class="btn btn-info" data-action="import-variables">
+                                <i class="fa fa-upload"></i> 导入
+                            </button>
+                            <button class="btn btn-info" data-action="export-variables">
+                                <i class="fa fa-download"></i> 导出
+                            </button>
+                            <button class="btn btn-danger" data-action="clear-variables" title="清空当前作用域变量">
+                                <i class="fa fa-trash"></i> 清空
+                            </button>
+                            <button class="btn btn-secondary" data-action="refresh-variables">
+                                <i class="fa fa-refresh"></i> 刷新
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 变量列表 -->
+                    <div class="variable-list-container">
+                        <div class="variable-list" id="variable-list">
+                            <!-- 变量项将在这里动态生成 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 底部操作栏 -->
+                <div class="modal-footer">
+                    <div class="footer-left">
+                        <span class="variable-count">变量数量: <span id="variable-count">0</span></span>
+                        <span class="variable-scope-info" id="variable-scope-info">全局变量</span>
+                    </div>
+                    <div class="footer-right">
+                        <button class="btn-cancel" onclick="this.closest('.variable-manager-modal').remove()">关闭</button>
+                        <button class="btn-save" data-action="save-variables">保存变量</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 绑定事件
+        this.bindVariableManagerEvents(modal);
+
+        return modal;
+    }
+
+    /**
+     * 绑定变量管理器事件
+     */
+    bindVariableManagerEvents(modal) {
+        // 初始化当前作用域和视图模式
+        this.currentVariableScope = 'global';
+        this.currentViewMode = 'list';
+
+        // 使用事件委托处理所有点击事件
+        modal.addEventListener('click', (e) => {
+            // 防止重复处理
+            if (e.defaultPrevented) return;
+
+            const actionElement = e.target.closest('[data-action]');
+            const action = actionElement?.dataset?.action;
+
+            // 处理导航栏切换
+            const navTab = e.target.closest('.nav-tab');
+            if (navTab) {
+                this.switchVariableScope(navTab.dataset.scope);
+                return;
+            }
+
+            // 处理视图模式切换
+            const viewModeBtn = e.target.closest('.view-mode-btn');
+            if (viewModeBtn) {
+                this.switchViewMode(viewModeBtn.dataset.view);
+                return;
+            }
+
+            if (action) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleVariableAction(action, e, actionElement);
+            }
+        });
+
+        // 搜索功能
+        const searchInput = modal.querySelector('#variable-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                this.filterVariables(e.target.value);
+            });
+        }
+
+
+    }
+
+    /**
+     * 切换变量作用域
+     */
+    switchVariableScope(scope) {
+        this.currentVariableScope = scope;
+
+        // 更新导航栏状态
+        const modal = document.querySelector('#variable-manager-modal');
+        if (modal) {
+            const navTabs = modal.querySelectorAll('.nav-tab');
+            navTabs.forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.scope === scope);
+            });
+
+            // 更新底部信息
+            const scopeInfo = modal.querySelector('#variable-scope-info');
+            if (scopeInfo) {
+                scopeInfo.textContent = scope === 'global' ? '全局变量' : '聊天变量';
+            }
+        }
+
+        // 重新加载变量
+        this.loadVariables();
+
+        console.log('[VariableManager] 切换到', scope === 'global' ? '全局变量' : '聊天变量');
+    }
+
+    /**
+     * 切换视图模式
+     */
+    switchViewMode(mode) {
+        this.currentViewMode = mode;
+
+        // 更新按钮状态
+        const modal = document.querySelector('#variable-manager-modal');
+        if (modal) {
+            const viewModeBtns = modal.querySelectorAll('.view-mode-btn');
+            viewModeBtns.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.view === mode);
+            });
+        }
+
+        // 重新渲染变量列表
+        this.renderVariableList();
+
+        console.log('[VariableManager] 切换到', mode === 'list' ? '列表视图' : '树状视图');
+    }
+
+    /**
+     * 处理变量管理器操作
+     */
+    handleVariableAction(action, event, actionElement) {
+        try {
+            switch (action) {
+                case 'add-variable':
+                    this.addNewVariable();
+                    break;
+                case 'add-macro':
+                    this.addNewMacro();
+                    break;
+                case 'save-variables':
+                    this.saveVariables();
+                    break;
+                case 'export-variables':
+                    this.exportVariables();
+                    break;
+                case 'import-variables':
+                    this.importVariables();
+                    break;
+                case 'clear-variables':
+                    this.clearCurrentScopeVariables();
+                    break;
+                case 'refresh-variables':
+                    this.loadVariables();
+                    break;
+                case 'edit-variable':
+                    const variableId = event.target.closest('.variable-item').dataset.variableId;
+                    this.editVariable(variableId);
+                    break;
+                case 'delete-variable':
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const deleteVariableId = event.target.closest('.variable-item').dataset.variableId;
+                    this.deleteVariable(deleteVariableId);
+                    break;
+                case 'save-variable-dialog':
+                    const isEdit = actionElement.dataset.isEdit === 'true';
+                    const variableKey = actionElement.dataset.variableKey || '';
+                    this.saveVariableFromDialog(actionElement, isEdit, variableKey);
+                    break;
+                case 'toggle-view-mode':
+                    this.toggleViewMode();
+                    break;
+                case 'add-array-item':
+                    const arrayVariableId = actionElement.dataset.variableId ||
+                                          event.target.closest('.variable-item')?.dataset?.variableId;
+                    this.addArrayItem(arrayVariableId);
+                    break;
+                case 'remove-array-item':
+                    const arrayItemIndex = actionElement.dataset.index;
+                    const arrayVarId = event.target.closest('.variable-item')?.dataset?.variableId;
+                    this.removeArrayItem(arrayVarId, parseInt(arrayItemIndex));
+                    break;
+                case 'add-object-property':
+                    const objectVariableId = actionElement.dataset.variableId ||
+                                           event.target.closest('.variable-item')?.dataset?.variableId;
+                    this.addObjectProperty(objectVariableId);
+                    break;
+                case 'remove-object-property':
+                    const propertyKey = actionElement.dataset.key;
+                    const objectVarId = event.target.closest('.variable-item')?.dataset?.variableId;
+                    this.removeObjectProperty(objectVarId, propertyKey);
+                    break;
+                case 'add-nested-array-item':
+                    const addNestedArrayVarId = actionElement.dataset.variableId;
+                    const addNestedArrayPath = actionElement.dataset.path;
+                    this.addNestedArrayItem(addNestedArrayVarId, addNestedArrayPath);
+                    break;
+                case 'add-nested-object-property':
+                    const addNestedObjectVarId = actionElement.dataset.variableId;
+                    const addNestedObjectPath = actionElement.dataset.path;
+                    this.addNestedObjectProperty(addNestedObjectVarId, addNestedObjectPath);
+                    break;
+                case 'remove-nested-array-item':
+                    const removeNestedArrayVarId = actionElement.dataset.variableId;
+                    const removeNestedArrayIndex = actionElement.dataset.index;
+                    const removeNestedArrayLevel = parseInt(actionElement.dataset.level);
+                    this.removeNestedArrayItem(removeNestedArrayVarId, removeNestedArrayIndex, removeNestedArrayLevel, event);
+                    break;
+                case 'remove-nested-object-property':
+                    const removeNestedObjVarId = actionElement.dataset.variableId;
+                    const removeNestedObjKey = actionElement.dataset.key;
+                    const removeNestedObjPath = actionElement.dataset.path;
+                    this.removeNestedObjectProperty(removeNestedObjVarId, removeNestedObjKey, removeNestedObjPath);
+                    break;
+                case 'edit-array-item':
+                    const editArrayVarId = actionElement.dataset.variableId;
+                    const editArrayIndex = actionElement.dataset.index;
+                    const editArrayLevel = parseInt(actionElement.dataset.level || '0');
+                    if (editArrayLevel > 0) {
+                        // 嵌套数组项编辑
+                        this.editNestedArrayItem(editArrayVarId, editArrayIndex, editArrayLevel, event);
+                    } else {
+                        // 顶级数组项编辑
+                        this.editArrayItem(editArrayVarId, editArrayIndex);
+                    }
+                    break;
+                case 'edit-object-property':
+                    const editObjVarId = actionElement.dataset.variableId;
+                    const editObjKey = actionElement.dataset.key;
+                    const editObjPath = actionElement.dataset.path;
+                    this.editObjectProperty(editObjVarId, editObjKey, editObjPath);
+                    break;
+                case 'edit-nested-array':
+                    const editNestedArrayVarId = actionElement.dataset.variableId;
+                    const editNestedArrayIndex = actionElement.dataset.index;
+                    const editNestedArrayLevel = parseInt(actionElement.dataset.level);
+                    this.editNestedArrayItem(editNestedArrayVarId, editNestedArrayIndex, editNestedArrayLevel, event);
+                    break;
+                case 'edit-nested-object':
+                    const editNestedObjVarId = actionElement.dataset.variableId;
+                    const editNestedObjIndex = actionElement.dataset.index;
+                    const editNestedObjLevel = parseInt(actionElement.dataset.level);
+                    this.editNestedObjectItem(editNestedObjVarId, editNestedObjIndex, editNestedObjLevel, event);
+                    break;
+                case 'edit-nested-property-array':
+                    const editNestedPropArrayVarId = actionElement.dataset.variableId;
+                    const editNestedPropArrayKey = actionElement.dataset.key;
+                    const editNestedPropArrayPath = actionElement.dataset.path;
+                    const editNestedPropArrayLevel = parseInt(actionElement.dataset.level);
+                    this.editNestedPropertyArray(editNestedPropArrayVarId, editNestedPropArrayKey, editNestedPropArrayPath, editNestedPropArrayLevel);
+                    break;
+                case 'edit-nested-property-object':
+                    const editNestedPropObjVarId = actionElement.dataset.variableId;
+                    const editNestedPropObjKey = actionElement.dataset.key;
+                    const editNestedPropObjPath = actionElement.dataset.path;
+                    const editNestedPropObjLevel = parseInt(actionElement.dataset.level);
+                    this.editNestedPropertyObject(editNestedPropObjVarId, editNestedPropObjKey, editNestedPropObjPath, editNestedPropObjLevel);
+                    break;
+                case 'save-nested-property-edit':
+                    const saveNestedVarId = actionElement.dataset.variableId;
+                    const saveNestedKey = actionElement.dataset.key;
+                    const saveNestedPath = actionElement.dataset.path;
+                    const saveNestedType = actionElement.dataset.type;
+                    this.saveNestedPropertyEditFromDialog(actionElement, saveNestedVarId, saveNestedKey, saveNestedPath, saveNestedType);
+                    break;
+                default:
+                    console.log(`[VariableManager] 🔘 处理操作: ${action}`);
+            }
+        } catch (error) {
+            console.error('[VariableManager] ❌ 处理操作失败:', error);
+        }
+    }
+
+    /**
+     * 加载变量
+     */
+    async loadVariables() {
+        try {
+            let variables = {};
+
+            if (this.currentVariableScope === 'global') {
+                // 加载全局变量
+                variables = await this.loadGlobalVariables();
+            } else {
+                // 加载聊天变量
+                variables = await this.loadChatVariables();
+            }
+
+            this.variables = variables;
+
+            // 渲染变量列表
+            this.renderVariableList();
+
+            console.log('[VariableManager] ✅ 变量加载完成，共', Object.keys(variables).length, '个',
+                this.currentVariableScope === 'global' ? '全局变量' : '聊天变量');
+        } catch (error) {
+            console.error('[VariableManager] ❌ 加载变量失败:', error);
+        }
+    }
+
+    /**
+     * 加载全局变量
+     */
+    async loadGlobalVariables() {
+        try {
+            // 尝试从SillyTavern获取全局变量
+            if (window.SillyTavern && window.SillyTavern.getContext) {
+                const context = window.SillyTavern.getContext();
+                const extensionSettings = context.extensionSettings || {};
+
+                // 从扩展设置中获取全局变量
+                const globalVars = extensionSettings.variables || {};
+
+                // 转换为我们的格式
+                const variables = {};
+                Object.entries(globalVars).forEach(([key, value]) => {
+                    const detectedType = this.detectVariableType(value);
+                    let processedValue = value;
+
+                    // 如果检测到是JSON字符串，解析为对象
+                    if (detectedType === 'object' || detectedType === 'array') {
+                        if (typeof value === 'string' && this.isJsonString(value)) {
+                            try {
+                                processedValue = JSON.parse(value);
+                            } catch (e) {
+                                console.warn(`[VariableManager] JSON解析失败: ${key}`, e);
+                                processedValue = value;
+                            }
+                        }
+                    }
+
+                    variables[key] = {
+                        type: detectedType,
+                        value: processedValue,
+                        scope: 'global',
+                        source: 'sillytavern',
+                        created: new Date().toISOString()
+                    };
+                });
+
+                return variables;
+            } else {
+                // 回退到配置管理器
+                return await this.configManager.getConfig('globalVariables') || {};
+            }
+        } catch (error) {
+            console.error('[VariableManager] ❌ 加载全局变量失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 加载聊天变量
+     */
+    async loadChatVariables() {
+        try {
+            // 尝试从SillyTavern获取聊天变量
+            if (window.SillyTavern && window.SillyTavern.getContext) {
+                const context = window.SillyTavern.getContext();
+                const chatMetadata = context.chatMetadata || {};
+
+                // 从聊天元数据中获取变量
+                const chatVars = chatMetadata.variables || {};
+
+                // 转换为我们的格式
+                const variables = {};
+                Object.entries(chatVars).forEach(([key, value]) => {
+                    const detectedType = this.detectVariableType(value);
+                    let processedValue = value;
+
+                    // 如果检测到是JSON字符串，解析为对象
+                    if (detectedType === 'object' || detectedType === 'array') {
+                        if (typeof value === 'string' && this.isJsonString(value)) {
+                            try {
+                                processedValue = JSON.parse(value);
+                            } catch (e) {
+                                console.warn(`[VariableManager] JSON解析失败: ${key}`, e);
+                                processedValue = value;
+                            }
+                        }
+                    }
+
+                    variables[key] = {
+                        type: detectedType,
+                        value: processedValue,
+                        scope: 'chat',
+                        source: 'sillytavern',
+                        created: new Date().toISOString()
+                    };
+                });
+
+                return variables;
+            } else {
+                // 回退到配置管理器
+                return await this.configManager.getConfig('chatVariables') || {};
+            }
+        } catch (error) {
+            console.error('[VariableManager] ❌ 加载聊天变量失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 检测变量类型
+     */
+    detectVariableType(value) {
+        if (value === null || value === undefined) {
+            return 'null';
+        }
+
+        if (typeof value === 'string') {
+            // 尝试检测JSON字符串
+            if (this.isJsonString(value)) {
+                try {
+                    const parsed = JSON.parse(value);
+                    if (Array.isArray(parsed)) {
+                        return 'array';
+                    } else if (typeof parsed === 'object' && parsed !== null) {
+                        return 'object';
+                    }
+                } catch (e) {
+                    // 解析失败，仍然是字符串
+                }
+            }
+            return 'string';
+        }
+
+        if (typeof value === 'number') {
+            return 'number';
+        }
+
+        if (typeof value === 'boolean') {
+            return 'boolean';
+        }
+
+        if (Array.isArray(value)) {
+            return 'array';
+        }
+
+        if (typeof value === 'object') {
+            return 'object';
+        }
+
+        if (typeof value === 'function') {
+            return 'function';
+        }
+
+        return 'unknown';
+    }
+
+    /**
+     * 检测是否为JSON字符串
+     */
+    isJsonString(str) {
+        if (typeof str !== 'string') {
+            return false;
+        }
+
+        // 简单的JSON格式检测
+        const trimmed = str.trim();
+        return (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+               (trimmed.startsWith('[') && trimmed.endsWith(']'));
+    }
+
+    /**
+     * 渲染变量列表
+     */
+    renderVariableList() {
+        const listContainer = document.querySelector('#variable-list');
+        if (!listContainer) return;
+
+        const variables = this.variables || {};
+        const variableCount = Object.keys(variables).length;
+
+        // 更新变量数量显示
+        const countElement = document.querySelector('#variable-count');
+        if (countElement) {
+            countElement.textContent = variableCount;
+        }
+
+        if (variableCount === 0) {
+            listContainer.innerHTML = `
+                <div class="empty-state">
+                    <i class="fa fa-code fa-3x"></i>
+                    <h3>暂无变量</h3>
+                    <p>点击"添加变量"开始创建您的第一个变量</p>
+                </div>
+            `;
+            return;
+        }
+
+        // 根据视图模式渲染
+        if (this.currentViewMode === 'tree') {
+            this.renderTreeView(listContainer, variables);
+        } else {
+            this.renderListView(listContainer, variables);
+        }
+    }
+
+    /**
+     * 渲染列表视图
+     */
+    renderListView(container, variables) {
+        const variableItems = Object.entries(variables).map(([key, variable]) => {
+            return this.createVariableItem(key, variable);
+        }).join('');
+
+        container.innerHTML = variableItems;
+        container.className = 'variable-list list-view';
+
+        // 渲染后再次应用变量管理器主题，确保动态节点继承
+        try {
+            const activeThemeCard = this.modal?.querySelector('.theme-preview-card.active');
+            const themeId = activeThemeCard?.getAttribute('data-theme');
+            const theme = themeId ? this.getThemeById(themeId) : null;
+            if (theme) this.applyVariableManagerTheme(theme);
+        } catch (e) {
+            console.warn('[InfoBarSettings] ⚠️ 渲染后应用变量管理器主题失败:', e);
+        }
+    }
+
+    /**
+     * 渲染树状视图
+     */
+    renderTreeView(container, variables) {
+        // 按类型分组变量
+        const groupedVariables = this.groupVariablesByType(variables);
+
+        let treeHTML = '';
+        Object.entries(groupedVariables).forEach(([type, vars]) => {
+            if (vars.length === 0) return;
+
+            treeHTML += `
+                <div class="tree-group">
+                    <div class="tree-group-header" data-type="${type}">
+                        <i class="fa fa-chevron-down tree-toggle"></i>
+                        <i class="fa ${this.getTypeIcon(type)} type-icon"></i>
+                        <span class="group-title">${this.getTypeDisplayName(type)}</span>
+                        <span class="group-count">(${vars.length})</span>
+                    </div>
+                    <div class="tree-group-content">
+                        ${vars.map(([key, variable]) => this.createTreeVariableItem(key, variable)).join('')}
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = treeHTML;
+        container.className = 'variable-list tree-view';
+
+        // 绑定折叠/展开事件
+        this.bindTreeEvents(container);
+    }
+
+    /**
+     * 按类型分组变量
+     */
+    groupVariablesByType(variables) {
+        const groups = {
+            string: [],
+            number: [],
+            boolean: [],
+            array: [],
+            object: [],
+            function: [],
+            null: [],
+            unknown: []
+        };
+
+        Object.entries(variables).forEach(([key, variable]) => {
+            const type = variable.type || 'unknown';
+            if (groups[type]) {
+                groups[type].push([key, variable]);
+            } else {
+                groups.unknown.push([key, variable]);
+            }
+        });
+
+        return groups;
+    }
+
+    /**
+     * 获取类型图标
+     */
+    getTypeIcon(type) {
+        const icons = {
+            string: 'fa-quote-left',
+            number: 'fa-calculator',
+            boolean: 'fa-toggle-on',
+            array: 'fa-list-ol',
+            object: 'fa-cube',
+            function: 'fa-code',
+            null: 'fa-circle-o',
+            unknown: 'fa-question'
+        };
+        return icons[type] || 'fa-question';
+    }
+
+    /**
+     * 获取类型显示名称
+     */
+    getTypeDisplayName(type) {
+        const names = {
+            string: '字符串',
+            number: '数字',
+            boolean: '布尔值',
+            array: '数组',
+            object: '对象',
+            function: '函数',
+            null: '空值',
+            unknown: '未知类型'
+        };
+        return names[type] || '未知类型';
+    }
+
+    /**
+     * 创建树状变量项
+     */
+    createTreeVariableItem(key, variable) {
+        const value = variable.value || '';
+        const description = variable.description || '';
+
+        return `
+            <div class="tree-variable-item" data-variable-id="${key}">
+                <div class="tree-variable-header">
+                    <div class="tree-variable-info">
+                        <span class="tree-variable-name">${key}</span>
+                        ${variable.scope ? `<span class="variable-scope ${variable.scope}">${variable.scope === 'global' ? '全局' : '局部'}</span>` : ''}
+                    </div>
+                    <div class="tree-variable-actions">
+                        <button class="btn-icon" data-action="edit-variable" title="编辑">
+                            <i class="fa fa-edit"></i>
+                        </button>
+                        <button class="btn-icon btn-danger" data-action="delete-variable" title="删除">
+                            <i class="fa fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="tree-variable-content">
+                    <div class="tree-variable-value">${this.formatVariableValue(value, variable.type)}</div>
+                    ${description ? `<div class="tree-variable-description">${description}</div>` : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 绑定树状视图事件
+     */
+    bindTreeEvents(container) {
+        container.addEventListener('click', (e) => {
+            const groupHeader = e.target.closest('.tree-group-header');
+            if (groupHeader) {
+                const groupContent = groupHeader.nextElementSibling;
+                const toggle = groupHeader.querySelector('.tree-toggle');
+
+                if (groupContent.style.display === 'none') {
+                    groupContent.style.display = 'block';
+                    toggle.className = 'fa fa-chevron-down tree-toggle';
+                } else {
+                    groupContent.style.display = 'none';
+                    toggle.className = 'fa fa-chevron-right tree-toggle';
+                }
+            }
+        });
+    }
+
+    /**
+     * 创建变量项HTML
+     */
+    createVariableItem(key, variable) {
+        const type = variable.type || 'string';
+        const value = variable.value || '';
+        const description = variable.description || '';
+        const isGlobal = variable.global || false;
+
+        // 为数组和对象类型添加特殊操作按钮
+        let specialActions = '';
+        if (type === 'array') {
+            specialActions = `
+                <button class="btn-icon btn-special" data-action="add-array-item" data-variable-id="${key}" title="添加数组项">
+                    <i class="fa fa-plus"></i>
+                </button>
+            `;
+        } else if (type === 'object') {
+            specialActions = `
+                <button class="btn-icon btn-special" data-action="add-object-property" data-variable-id="${key}" title="添加属性">
+                    <i class="fa fa-plus"></i>
+                </button>
+            `;
+        }
+
+        return `
+            <div class="variable-item" data-variable-id="${key}" data-variable-type="${type}">
+                <div class="variable-header">
+                    <div class="variable-info">
+                        <span class="variable-name">${key}</span>
+                        <span class="variable-type ${type}">${type}</span>
+                        ${isGlobal ? '<span class="variable-scope global">全局</span>' : '<span class="variable-scope local">局部</span>'}
+                        ${specialActions}
+                    </div>
+                    <div class="variable-actions">
+                        <button class="btn-icon" data-action="edit-variable" title="编辑">
+                            <i class="fa fa-edit"></i>
+                        </button>
+                        <button class="btn-icon btn-danger" data-action="delete-variable" title="删除">
+                            <i class="fa fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="variable-content">
+                    <div class="variable-value">${this.formatVariableValue(value, type)}</div>
+                    ${description ? `<div class="variable-description">${description}</div>` : ''}
+                    ${this.createVariableContentActions(key, type, value)}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 创建变量内容操作区域
+     */
+    createVariableContentActions(key, type, value) {
+        if (type === 'array' && Array.isArray(value)) {
+            return `
+                <div class="variable-content-actions">
+                    <div class="array-items">
+                        ${value.map((item, index) => this.createArrayItemElement(key, item, index)).join('')}
+                    </div>
+                    <button class="btn-add-item" data-action="add-array-item" data-variable-id="${key}">
+                        <i class="fa fa-plus"></i> 添加项
+                    </button>
+                </div>
+            `;
+        } else if (type === 'object' && typeof value === 'object' && value !== null) {
+            return `
+                <div class="variable-content-actions">
+                    <div class="object-properties">
+                        ${Object.entries(value).map(([propKey, propValue]) =>
+                            this.createObjectPropertyElement(key, propKey, propValue, 0)
+                        ).join('')}
+                    </div>
+                    <button class="btn-add-item" data-action="add-object-property" data-variable-id="${key}">
+                        <i class="fa fa-plus"></i> 添加属性
+                    </button>
+                </div>
+            `;
+        }
+        return '';
+    }
+
+    /**
+     * 创建数组项元素
+     */
+    createArrayItemElement(variableId, item, index, level = 0) {
+        let content = '';
+
+        if (Array.isArray(item)) {
+            content = `
+                <div class="array-item nested-array" data-index="${index}" style="margin-left: ${level * 20}px;">
+                    <span class="array-index">[${index}]</span>
+                    <span class="array-type-indicator">[数组:${item.length}项]</span>
+                    <button class="btn-icon-small btn-success" data-action="add-nested-array-item" data-variable-id="${variableId}" data-path="${index}" title="添加子项">
+                        <i class="fa fa-plus"></i>
+                    </button>
+                    <button class="btn-icon-small btn-primary" data-action="edit-nested-array" data-variable-id="${variableId}" data-index="${index}" data-level="${level}" title="编辑数组">
+                        <i class="fa fa-edit"></i>
+                    </button>
+                    <button class="btn-icon-small btn-danger" data-action="remove-nested-array-item" data-index="${index}" data-variable-id="${variableId}" data-level="${level}" title="删除项">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+                <div class="nested-items">
+                    ${item.map((subItem, subIndex) =>
+                        this.createArrayItemElement(variableId, subItem, subIndex, level + 1)
+                    ).join('')}
+                </div>
+            `;
+        } else if (typeof item === 'object' && item !== null) {
+            content = `
+                <div class="array-item nested-object" data-index="${index}" style="margin-left: ${level * 20}px;">
+                    <span class="array-index">[${index}]</span>
+                    <span class="array-type-indicator">{对象:${Object.keys(item).length}键}</span>
+                    <button class="btn-icon-small btn-success" data-action="add-nested-object-property" data-variable-id="${variableId}" data-path="${index}" title="添加属性">
+                        <i class="fa fa-plus"></i>
+                    </button>
+                    <button class="btn-icon-small btn-primary" data-action="edit-nested-object" data-variable-id="${variableId}" data-index="${index}" data-level="${level}" title="编辑对象">
+                        <i class="fa fa-edit"></i>
+                    </button>
+                    <button class="btn-icon-small btn-danger" data-action="remove-nested-array-item" data-index="${index}" data-variable-id="${variableId}" data-level="${level}" title="删除项">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+                <div class="nested-items">
+                    ${Object.entries(item).map(([propKey, propValue]) =>
+                        this.createObjectPropertyElement(variableId, propKey, propValue, level + 1, `${index}.${propKey}`)
+                    ).join('')}
+                </div>
+            `;
+        } else {
+            content = `
+                <div class="array-item" data-index="${index}" style="margin-left: ${level * 20}px;">
+                    <span class="array-index">[${index}]</span>
+                    <span class="array-value">${this.formatArrayItemValue(item)}</span>
+                    <button class="btn-icon-small btn-primary" data-action="edit-array-item" data-variable-id="${variableId}" data-index="${index}" data-level="${level}" title="编辑项">
+                        <i class="fa fa-edit"></i>
+                    </button>
+                    <button class="btn-icon-small btn-danger" data-action="${level > 0 ? 'remove-nested-array-item' : 'remove-array-item'}" data-index="${index}" data-variable-id="${variableId}" data-level="${level}" title="删除项">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+            `;
+        }
+
+        return content;
+    }
+
+    /**
+     * 创建对象属性元素
+     */
+    createObjectPropertyElement(variableId, propKey, propValue, level = 0, path = '') {
+        const fullPath = path ? `${path}` : propKey;
+        let content = '';
+
+        if (Array.isArray(propValue)) {
+            content = `
+                <div class="object-property nested-array" data-key="${propKey}" style="margin-left: ${level * 20}px;">
+                    <span class="property-key">${propKey}:</span>
+                    <span class="property-type-indicator">[数组:${propValue.length}项]</span>
+                    <button class="btn-icon-small btn-success" data-action="add-nested-array-item" data-variable-id="${variableId}" data-path="${fullPath}" title="添加子项">
+                        <i class="fa fa-plus"></i>
+                    </button>
+                    <button class="btn-icon-small btn-primary" data-action="edit-nested-property-array" data-variable-id="${variableId}" data-key="${propKey}" data-path="${fullPath}" data-level="${level}" title="编辑数组">
+                        <i class="fa fa-edit"></i>
+                    </button>
+                    <button class="btn-icon-small btn-danger" data-action="remove-nested-object-property" data-key="${propKey}" data-variable-id="${variableId}" data-path="${fullPath}" data-level="${level}" title="删除属性">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+                <div class="nested-items">
+                    ${propValue.map((item, index) =>
+                        this.createArrayItemElement(variableId, item, index, level + 1)
+                    ).join('')}
+                </div>
+            `;
+        } else if (typeof propValue === 'object' && propValue !== null) {
+            content = `
+                <div class="object-property nested-object" data-key="${propKey}" style="margin-left: ${level * 20}px;">
+                    <span class="property-key">${propKey}:</span>
+                    <span class="property-type-indicator">{对象:${Object.keys(propValue).length}键}</span>
+                    <button class="btn-icon-small btn-success" data-action="add-nested-object-property" data-variable-id="${variableId}" data-path="${fullPath}" title="添加属性">
+                        <i class="fa fa-plus"></i>
+                    </button>
+                    <button class="btn-icon-small btn-primary" data-action="edit-nested-property-object" data-variable-id="${variableId}" data-key="${propKey}" data-path="${fullPath}" data-level="${level}" title="编辑对象">
+                        <i class="fa fa-edit"></i>
+                    </button>
+                    <button class="btn-icon-small btn-danger" data-action="remove-nested-object-property" data-key="${propKey}" data-variable-id="${variableId}" data-path="${fullPath}" data-level="${level}" title="删除属性">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+                <div class="nested-items">
+                    ${Object.entries(propValue).map(([subKey, subValue]) =>
+                        this.createObjectPropertyElement(variableId, subKey, subValue, level + 1, `${fullPath}.${subKey}`)
+                    ).join('')}
+                </div>
+            `;
+        } else {
+            content = `
+                <div class="object-property" data-key="${propKey}" style="margin-left: ${level * 20}px;">
+                    <span class="property-key">${propKey}:</span>
+                    <span class="property-value">${this.formatArrayItemValue(propValue)}</span>
+                    <button class="btn-icon-small btn-primary" data-action="edit-object-property" data-variable-id="${variableId}" data-key="${propKey}" data-path="${path}" data-level="${level}" title="编辑属性">
+                        <i class="fa fa-edit"></i>
+                    </button>
+                    <button class="btn-icon-small btn-danger" data-action="${level > 0 ? 'remove-nested-object-property' : 'remove-object-property'}" data-key="${propKey}" data-variable-id="${variableId}" data-path="${path}" data-level="${level}" title="删除属性">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+            `;
+        }
+
+        return content;
+    }
+
+    /**
+     * 格式化数组项值
+     */
+    formatArrayItemValue(value) {
+        if (value === null || value === undefined) {
+            return '<span class="null-value">null</span>';
+        }
+        if (typeof value === 'string') {
+            return `"${value}"`;
+        }
+        if (typeof value === 'object') {
+            return Array.isArray(value) ? `[数组:${value.length}项]` : `{对象:${Object.keys(value).length}键}`;
+        }
+        return String(value);
+    }
+
+    /**
+     * 格式化变量值显示
+     */
+    formatVariableValue(value, type) {
+        if (value === null || value === undefined) {
+            return '<span class="null-value">null</span>';
+        }
+
+        switch (type) {
+            case 'string':
+                return `"${value}"`;
+            case 'number':
+                return value.toString();
+            case 'boolean':
+                return value ? 'true' : 'false';
+            case 'array':
+                return Array.isArray(value) ? `[${value.length} 项]` : '[]';
+            case 'object':
+                return typeof value === 'object' ? `{${Object.keys(value).length} 键}` : '{}';
+            case 'function':
+                return '<span class="function-value">function</span>';
+            default:
+                return value.toString();
+        }
+    }
+
+    /**
+     * 添加新变量
+     */
+    addNewVariable() {
+        this.showVariableEditDialog();
+    }
+
+    /**
+     * 显示变量编辑对话框
+     */
+    showVariableEditDialog(existingVariable = null, variableKey = null) {
+        const isEdit = !!existingVariable;
+        const typeSelect = document.querySelector('#variable-type-select');
+        const selectedType = typeSelect ? typeSelect.value : 'string';
+
+        // 创建编辑对话框
+        const dialog = document.createElement('div');
+        dialog.className = 'variable-edit-dialog';
+        dialog.innerHTML = `
+            <div class="dialog-overlay" onclick="this.closest('.variable-edit-dialog').remove()"></div>
+            <div class="dialog-container">
+                <div class="dialog-header">
+                    <h3>${isEdit ? '编辑变量' : '添加变量'}</h3>
+                    <button class="dialog-close" onclick="this.closest('.variable-edit-dialog').remove()">×</button>
+                </div>
+                <div class="dialog-body">
+                    <div class="form-group">
+                        <label>变量名</label>
+                        <input type="text" id="variable-name" value="${existingVariable?.name || variableKey || ''}" ${isEdit ? 'readonly' : ''}>
+                    </div>
+                    <div class="form-group">
+                        <label>变量类型</label>
+                        <select id="variable-type" ${isEdit ? 'disabled' : ''}>
+                            <option value="string" ${(existingVariable?.type || selectedType) === 'string' ? 'selected' : ''}>字符串</option>
+                            <option value="number" ${(existingVariable?.type || selectedType) === 'number' ? 'selected' : ''}>数字</option>
+                            <option value="boolean" ${(existingVariable?.type || selectedType) === 'boolean' ? 'selected' : ''}>布尔值</option>
+                            <option value="array" ${(existingVariable?.type || selectedType) === 'array' ? 'selected' : ''}>数组</option>
+                            <option value="object" ${(existingVariable?.type || selectedType) === 'object' ? 'selected' : ''}>对象</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>变量值</label>
+                        <textarea id="variable-value" rows="4" placeholder="请输入变量值...">${this.formatValueForEdit(existingVariable?.value, existingVariable?.type)}</textarea>
+                        <div class="value-hint" id="value-hint">
+                            ${this.getValueHint(existingVariable?.type || selectedType)}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>作用域</label>
+                        <div class="scope-info">
+                            <i class="fa ${this.currentVariableScope === 'global' ? 'fa-globe' : 'fa-comments'}"></i>
+                            ${this.currentVariableScope === 'global' ? '全局变量' : '聊天变量'}
+                        </div>
+                    </div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" onclick="this.closest('.variable-edit-dialog').remove()">取消</button>
+                    <button class="btn-save" data-action="save-variable-dialog" data-is-edit="${isEdit}" data-variable-key="${variableKey || ''}">${isEdit ? '保存' : '添加'}</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+
+        // 绑定对话框事件 - 使用箭头函数保持this上下文
+        const self = this;
+        dialog.addEventListener('click', (e) => {
+            const actionElement = e.target.closest('[data-action]');
+            const action = actionElement?.dataset?.action;
+
+            if (action === 'save-variable-dialog') {
+                const isEdit = actionElement.dataset.isEdit === 'true';
+                const variableKey = actionElement.dataset.variableKey || '';
+                console.log('[VariableManager] 🔘 对话框保存按钮被点击');
+                self.saveVariableFromDialog(actionElement, isEdit, variableKey);
+            }
+        });
+
+        // 绑定类型变更事件
+        const typeSelectElement = dialog.querySelector('#variable-type');
+        const valueHint = dialog.querySelector('#value-hint');
+
+        typeSelectElement.addEventListener('change', (e) => {
+            valueHint.textContent = this.getValueHint(e.target.value);
+        });
+
+        // 聚焦到名称输入框
+        setTimeout(() => {
+            const nameInput = dialog.querySelector('#variable-name');
+            if (nameInput && !isEdit) {
+                nameInput.focus();
+            }
+        }, 100);
+    }
+
+    /**
+     * 格式化值用于编辑
+     */
+    formatValueForEdit(value, type) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+
+        if (type === 'array' || type === 'object') {
+            try {
+                return JSON.stringify(value, null, 2);
+            } catch (e) {
+                return String(value);
+            }
+        }
+
+        return String(value);
+    }
+
+    /**
+     * 获取值提示
+     */
+    getValueHint(type) {
+        switch (type) {
+            case 'string':
+                return '输入文本内容，例如：Hello World';
+            case 'number':
+                return '输入数字，例如：42 或 3.14';
+            case 'boolean':
+                return '输入 true 或 false';
+            case 'array':
+                return '输入JSON数组，例如：["item1", "item2", "item3"]';
+            case 'object':
+                return '输入JSON对象，例如：{"key1": "value1", "key2": "value2"}';
+            default:
+                return '';
+        }
+    }
+
+    /**
+     * 从对话框保存变量
+     */
+    async saveVariableFromDialog(button, isEdit, existingKey) {
+        try {
+            const dialog = button.closest('.variable-edit-dialog');
+            const name = dialog.querySelector('#variable-name').value.trim();
+            const type = dialog.querySelector('#variable-type').value;
+            const valueText = dialog.querySelector('#variable-value').value.trim();
+
+            if (!name) {
+                alert('请输入变量名');
+                return;
+            }
+
+            // 解析值
+            let value;
+            try {
+                value = this.parseVariableValue(valueText, type);
+            } catch (e) {
+                alert('变量值格式错误: ' + e.message);
+                return;
+            }
+
+            // 保存变量
+            await this.saveVariableToSillyTavern(name, value, type, isEdit, existingKey);
+
+            // 关闭对话框
+            dialog.remove();
+
+            // 重新加载变量列表
+            this.loadVariables();
+
+            console.log('[VariableManager] ✅', isEdit ? '编辑' : '添加', '变量:', name);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存变量失败:', error);
+            alert('保存变量失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 解析变量值
+     */
+    parseVariableValue(valueText, type) {
+        if (!valueText) {
+            switch (type) {
+                case 'string': return '';
+                case 'number': return 0;
+                case 'boolean': return false;
+                case 'array': return [];
+                case 'object': return {};
+                default: return '';
+            }
+        }
+
+        switch (type) {
+            case 'string':
+                return valueText;
+            case 'number':
+                const num = Number(valueText);
+                if (isNaN(num)) {
+                    throw new Error('无效的数字格式');
+                }
+                return num;
+            case 'boolean':
+                const lower = valueText.toLowerCase();
+                if (lower === 'true') return true;
+                if (lower === 'false') return false;
+                throw new Error('布尔值必须是 true 或 false');
+            case 'array':
+            case 'object':
+                try {
+                    const parsed = JSON.parse(valueText);
+                    if (type === 'array' && !Array.isArray(parsed)) {
+                        throw new Error('必须是有效的JSON数组');
+                    }
+                    if (type === 'object' && (Array.isArray(parsed) || typeof parsed !== 'object')) {
+                        throw new Error('必须是有效的JSON对象');
+                    }
+                    return parsed;
+                } catch (e) {
+                    throw new Error('无效的JSON格式: ' + e.message);
+                }
+            default:
+                return valueText;
+        }
+    }
+
+    /**
+     * 保存变量到SillyTavern
+     */
+    async saveVariableToSillyTavern(name, value, type, isEdit, existingKey) {
+        try {
+            if (window.SillyTavern && window.SillyTavern.getContext) {
+                const context = window.SillyTavern.getContext();
+
+                if (this.currentVariableScope === 'global') {
+                    // 保存全局变量
+                    const extensionSettings = context.extensionSettings || {};
+                    if (!extensionSettings.variables) {
+                        extensionSettings.variables = {};
+                    }
+
+                    // 如果是编辑且键名改变，删除旧键
+                    if (isEdit && existingKey && existingKey !== name) {
+                        delete extensionSettings.variables[existingKey];
+                    }
+
+                    extensionSettings.variables[name] = value;
+
+                    // 保存设置
+                    if (context.saveSettingsDebounced) {
+                        context.saveSettingsDebounced();
+                    }
+                } else {
+                    // 保存聊天变量
+                    const chatMetadata = context.chatMetadata || {};
+                    if (!chatMetadata.variables) {
+                        chatMetadata.variables = {};
+                    }
+
+                    // 如果是编辑且键名改变，删除旧键
+                    if (isEdit && existingKey && existingKey !== name) {
+                        delete chatMetadata.variables[existingKey];
+                    }
+
+                    chatMetadata.variables[name] = value;
+
+                    // 保存元数据
+                    if (context.saveMetadata) {
+                        await context.saveMetadata();
+                    }
+                }
+
+                console.log('[VariableManager] ✅ 变量已保存到SillyTavern:', name);
+            } else {
+                // 回退到配置管理器
+                const configKey = this.currentVariableScope === 'global' ? 'globalVariables' : 'chatVariables';
+                const variables = await this.configManager.getConfig(configKey) || {};
+
+                if (isEdit && existingKey && existingKey !== name) {
+                    delete variables[existingKey];
+                }
+
+                variables[name] = {
+                    type: type,
+                    value: value,
+                    scope: this.currentVariableScope,
+                    created: new Date().toISOString()
+                };
+
+                await this.configManager.setConfig(configKey, variables);
+                console.log('[VariableManager] ✅ 变量已保存到配置管理器:', name);
+            }
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存变量失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 保存变量
+     */
+    async saveVariables() {
+        try {
+            await this.configManager.setConfig('variables', this.variables || {});
+            this.showMessage('变量保存成功', 'success');
+            console.log('[VariableManager] ✅ 变量保存成功');
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存变量失败:', error);
+            this.showMessage('保存变量失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 清空当前作用域变量（全局/聊天）
+     */
+    async clearCurrentScopeVariables() {
+        try {
+            const scope = this.currentVariableScope || 'global';
+            const confirmed = confirm(`确定要清空${scope === 'global' ? '【全局变量】' : '【聊天变量】'}内的所有变量吗？此操作不可撤销。`);
+            if (!confirmed) return;
+
+            if (window.SillyTavern && window.SillyTavern.getContext) {
+                const context = window.SillyTavern.getContext();
+                if (scope === 'global') {
+                    // 清空扩展设置中的全局变量
+                    const extensionSettings = context.extensionSettings || {};
+                    extensionSettings.variables = {};
+                    await context.saveSettingsDebounced?.();
+                    console.log('[VariableManager] 🗑️ 已清空全局变量');
+                } else {
+                    // 清空当前聊天的变量（保存在configManager中）
+                    const configKey = `chat_${context?.chat?.public_id || 'current'}_variables`;
+                    await this.configManager.setConfig(configKey, {});
+                    console.log('[VariableManager] 🗑️ 已清空聊天变量:', configKey);
+                }
+            } else {
+                // 兜底：仅清空内存变量并保存到配置管理器
+                if (scope === 'global') {
+                    await this.configManager.setConfig('variables', {});
+                } else {
+                    const context = (window.SillyTavern && window.SillyTavern.getContext) ? window.SillyTavern.getContext() : null;
+                    const configKey = `chat_${context?.chat?.public_id || 'current'}_variables`;
+                    await this.configManager.setConfig(configKey, {});
+                }
+            }
+
+            // 刷新内存与UI
+            this.variables = {};
+            this.renderVariableList();
+            this.showMessage('变量已清空', 'success');
+        } catch (error) {
+            console.error('[VariableManager] ❌ 清空变量失败:', error);
+            this.showMessage('清空变量失败: ' + error.message, 'error');
+        }
+    }
+    /**
+     * 清空当前作用域变量（全局/聊天）
+     */
+    async clearCurrentScopeVariables() {
+        try {
+            const scope = this.currentVariableScope || 'global';
+            const confirmed = confirm(`确定要清空${scope === 'global' ? '【全局变量】' : '【聊天变量】'}内的所有变量吗？此操作不可撤销。`);
+            if (!confirmed) return;
+
+            if (window.SillyTavern && window.SillyTavern.getContext) {
+                const context = window.SillyTavern.getContext();
+                if (scope === 'global') {
+                    // 清空扩展设置中的全局变量
+                    const extensionSettings = context.extensionSettings || {};
+                    extensionSettings.variables = {};
+                    await context.saveSettingsDebounced?.();
+                    console.log('[VariableManager] 🗑️ 已清空全局变量');
+                } else {
+                    // 清空当前聊天的变量（保存在configManager中）
+                    const configKey = `chat_${context?.chat?.public_id || 'current'}_variables`;
+                    await this.configManager.setConfig(configKey, {});
+                    console.log('[VariableManager] 🗑️ 已清空聊天变量:', configKey);
+                }
+            } else {
+                // 兜底：仅清空内存变量并保存到配置管理器
+                if (scope === 'global') {
+                    await this.configManager.setConfig('variables', {});
+                } else {
+                    const context = (window.SillyTavern && window.SillyTavern.getContext) ? window.SillyTavern.getContext() : null;
+                    const configKey = `chat_${context?.chat?.public_id || 'current'}_variables`;
+                    await this.configManager.setConfig(configKey, {});
+                }
+            }
+
+            // 刷新内存与UI
+            this.variables = {};
+            this.renderVariableList();
+            this.showMessage('变量已清空', 'success');
+        } catch (error) {
+            console.error('[VariableManager] ❌ 清空变量失败:', error);
+            this.showMessage('清空变量失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 过滤变量
+     */
+    filterVariables(searchTerm) {
+        const variableItems = document.querySelectorAll('.variable-item');
+        const term = searchTerm.toLowerCase();
+
+        variableItems.forEach(item => {
+            const name = item.querySelector('.variable-name').textContent.toLowerCase();
+            const description = item.querySelector('.variable-description')?.textContent?.toLowerCase() || '';
+
+            if (name.includes(term) || description.includes(term)) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    /**
+     * 编辑变量
+     */
+    editVariable(variableId) {
+        const variable = this.variables[variableId];
+        if (!variable) return;
+
+        // 显示编辑对话框
+        this.showVariableEditDialog(variable, variableId);
+    }
+
+    /**
+     * 删除变量
+     */
+    async deleteVariable(variableId) {
+        if (!confirm(`确定要删除变量 "${variableId}" 吗？`)) return;
+
+        try {
+            // 从SillyTavern删除变量
+            await this.deleteVariableFromSillyTavern(variableId);
+
+            // 重新加载变量列表
+            this.loadVariables();
+
+            console.log('[VariableManager] ✅ 删除变量:', variableId);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 删除变量失败:', error);
+            alert('删除变量失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 从SillyTavern删除变量
+     */
+    async deleteVariableFromSillyTavern(variableId) {
+        try {
+            if (window.SillyTavern && window.SillyTavern.getContext) {
+                const context = window.SillyTavern.getContext();
+
+                if (this.currentVariableScope === 'global') {
+                    // 删除全局变量
+                    const extensionSettings = context.extensionSettings || {};
+                    if (extensionSettings.variables) {
+                        delete extensionSettings.variables[variableId];
+
+                        // 保存设置
+                        if (context.saveSettingsDebounced) {
+                            context.saveSettingsDebounced();
+                        }
+                    }
+                } else {
+                    // 删除聊天变量
+                    const chatMetadata = context.chatMetadata || {};
+                    if (chatMetadata.variables) {
+                        delete chatMetadata.variables[variableId];
+
+                        // 保存元数据
+                        if (context.saveMetadata) {
+                            await context.saveMetadata();
+                        }
+                    }
+                }
+            } else {
+                // 回退到配置管理器
+                const configKey = this.currentVariableScope === 'global' ? 'globalVariables' : 'chatVariables';
+                const variables = await this.configManager.getConfig(configKey) || {};
+                delete variables[variableId];
+                await this.configManager.setConfig(configKey, variables);
+            }
+        } catch (error) {
+            console.error('[VariableManager] ❌ 从SillyTavern删除变量失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 导出变量
+     */
+    exportVariables() {
+        try {
+            const data = {
+                variables: this.variables || {},
+                exported: new Date().toISOString(),
+                version: '1.0.0'
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `variables_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+
+            URL.revokeObjectURL(url);
+
+            this.showMessage('变量导出成功', 'success');
+            console.log('[VariableManager] ✅ 变量导出成功');
+        } catch (error) {
+            console.error('[VariableManager] ❌ 导出变量失败:', error);
+            this.showMessage('导出变量失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 导入变量
+     */
+    importVariables() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+
+        input.onchange = async (e) => {
+            try {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const text = await file.text();
+                const data = JSON.parse(text);
+
+                if (data.variables) {
+                    // 合并变量（可以选择覆盖或跳过重复）
+                    const shouldOverwrite = confirm('是否覆盖同名变量？点击"确定"覆盖，"取消"跳过。');
+
+                    Object.entries(data.variables).forEach(([key, variable]) => {
+                        if (!this.variables[key] || shouldOverwrite) {
+                            this.variables[key] = variable;
+                        }
+                    });
+
+                    this.renderVariableList();
+                    this.showMessage('变量导入成功', 'success');
+                    console.log('[VariableManager] ✅ 变量导入成功');
+                } else {
+                    throw new Error('无效的变量文件格式');
+                }
+            } catch (error) {
+                console.error('[VariableManager] ❌ 导入变量失败:', error);
+                this.showMessage('导入变量失败: ' + error.message, 'error');
+            }
+        };
+
+        input.click();
+    }
+
+    /**
+     * 添加数组项
+     */
+    async addArrayItem(variableId) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable || variable.type !== 'array') {
+                console.error('[VariableManager] 变量不是数组类型:', variableId);
+                return;
+            }
+
+            // 显示简化的数组项添加对话框
+            this.showArrayItemDialog(variableId);
+
+        } catch (error) {
+            console.error('[VariableManager] ❌ 添加数组项失败:', error);
+            alert('添加数组项失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 显示数组项添加对话框
+     */
+    showArrayItemDialog(variableId, existingIndex = null, existingValue = null) {
+        const isEdit = existingIndex !== null;
+
+        // 创建简化的数组项对话框
+        const dialog = document.createElement('div');
+        dialog.className = 'array-item-dialog';
+        dialog.innerHTML = `
+            <div class="dialog-overlay" onclick="this.closest('.array-item-dialog').remove()"></div>
+            <div class="dialog-container">
+                <div class="dialog-header">
+                    <h3>${isEdit ? '编辑数组项' : '添加数组项'}</h3>
+                    <button class="dialog-close" onclick="this.closest('.array-item-dialog').remove()">×</button>
+                </div>
+                <div class="dialog-body">
+                    <div class="form-group">
+                        <label>数组项值</label>
+                        <textarea id="array-item-value" rows="3" placeholder="请输入数组项值...">${existingValue || ''}</textarea>
+                        <div class="value-hint">
+                            支持文本、数字、JSON对象等格式
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>所属数组</label>
+                        <div class="scope-info">
+                            <i class="fa fa-list"></i>
+                            ${variableId}${isEdit ? ` [${existingIndex}]` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" onclick="this.closest('.array-item-dialog').remove()">取消</button>
+                    <button class="btn-save" data-action="save-array-item" data-variable-id="${variableId}" data-is-edit="${isEdit}" data-index="${existingIndex || ''}">${isEdit ? '保存' : '添加'}</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+
+        // 绑定对话框事件
+        dialog.addEventListener('click', (e) => {
+            const actionElement = e.target.closest('[data-action]');
+            const action = actionElement?.dataset?.action;
+
+            if (action === 'save-array-item') {
+                const variableId = actionElement.dataset.variableId;
+                const isEdit = actionElement.dataset.isEdit === 'true';
+                const index = actionElement.dataset.index || null;
+                this.saveArrayItemFromDialog(actionElement, variableId, isEdit, index);
+            }
+        });
+
+        // 聚焦到值输入框
+        setTimeout(() => {
+            const valueInput = dialog.querySelector('#array-item-value');
+            if (valueInput) {
+                valueInput.focus();
+                valueInput.select();
+            }
+        }, 100);
+    }
+
+    /**
+     * 从对话框保存数组项
+     */
+    async saveArrayItemFromDialog(button, variableId, isEdit, index) {
+        try {
+            const dialog = button.closest('.array-item-dialog');
+            const valueText = dialog.querySelector('#array-item-value').value.trim();
+
+            if (!valueText) {
+                alert('请输入数组项值');
+                return;
+            }
+
+            // 解析值
+            let value;
+            try {
+                // 尝试解析为JSON，如果失败则作为字符串
+                value = JSON.parse(valueText);
+            } catch (e) {
+                value = valueText;
+            }
+
+            // 保存数组项
+            await this.saveArrayItemToVariable(variableId, value, isEdit, index);
+
+            // 关闭对话框
+            dialog.remove();
+
+            // 重新加载变量列表
+            this.renderVariableList();
+
+            console.log('[VariableManager] ✅', isEdit ? '编辑' : '添加', '数组项:', value);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存数组项失败:', error);
+            alert('保存数组项失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 保存数组项到变量
+     */
+    async saveArrayItemToVariable(variableId, value, isEdit, index) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable || variable.type !== 'array') {
+                throw new Error('变量不是数组类型');
+            }
+
+            // 确保变量值是数组
+            if (!Array.isArray(variable.value)) {
+                variable.value = [];
+            }
+
+            if (isEdit && index !== null) {
+                // 编辑现有项
+                variable.value[parseInt(index)] = value;
+            } else {
+                // 添加新项
+                variable.value.push(value);
+            }
+
+            // 保存到SillyTavern
+            await this.saveVariableToSillyTavern(variableId, variable.value, variable.type, true, variableId);
+
+            console.log('[VariableManager] ✅ 数组项已保存:', variableId, value);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存数组项到变量失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 删除数组项
+     */
+    async removeArrayItem(variableId, index) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable || variable.type !== 'array' || !Array.isArray(variable.value)) {
+                console.error('[VariableManager] 变量不是数组类型:', variableId);
+                return;
+            }
+
+            if (!confirm(`确定要删除数组项 [${index}] 吗？`)) return;
+
+            // 删除数组项
+            variable.value.splice(index, 1);
+
+            // 保存到SillyTavern
+            await this.saveVariableToSillyTavern(variableId, variable.value, variable.type, true, variableId);
+
+            // 重新渲染
+            this.renderVariableList();
+
+            console.log('[VariableManager] ✅ 删除数组项:', variableId, index);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 删除数组项失败:', error);
+            alert('删除数组项失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 添加对象属性
+     */
+    async addObjectProperty(variableId) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable || variable.type !== 'object') {
+                console.error('[VariableManager] 变量不是对象类型:', variableId);
+                return;
+            }
+
+            // 显示添加属性对话框
+            this.showObjectPropertyDialog(variableId);
+
+        } catch (error) {
+            console.error('[VariableManager] ❌ 添加对象属性失败:', error);
+            alert('添加对象属性失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 显示对象属性编辑对话框
+     */
+    showObjectPropertyDialog(variableId, existingKey = null, existingProperty = null) {
+        const isEdit = !!existingProperty;
+
+        // 创建属性编辑对话框
+        const dialog = document.createElement('div');
+        dialog.className = 'object-property-dialog';
+        dialog.innerHTML = `
+            <div class="dialog-overlay" onclick="this.closest('.object-property-dialog').remove()"></div>
+            <div class="dialog-container">
+                <div class="dialog-header">
+                    <h3>${isEdit ? '编辑属性' : '添加属性'}</h3>
+                    <button class="dialog-close" onclick="this.closest('.object-property-dialog').remove()">×</button>
+                </div>
+                <div class="dialog-body">
+                    <div class="form-group">
+                        <label>属性名</label>
+                        <input type="text" id="property-name" value="${existingKey || ''}" ${isEdit ? 'readonly' : ''} placeholder="请输入属性名">
+                    </div>
+                    <div class="form-group">
+                        <label>属性类型</label>
+                        <select id="property-type">
+                            <option value="string" ${(existingProperty?.type || 'string') === 'string' ? 'selected' : ''}>字符串</option>
+                            <option value="number" ${(existingProperty?.type || 'string') === 'number' ? 'selected' : ''}>数字</option>
+                            <option value="boolean" ${(existingProperty?.type || 'string') === 'boolean' ? 'selected' : ''}>布尔值</option>
+                            <option value="array" ${(existingProperty?.type || 'string') === 'array' ? 'selected' : ''}>数组</option>
+                            <option value="object" ${(existingProperty?.type || 'string') === 'object' ? 'selected' : ''}>对象</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>属性值</label>
+                        <textarea id="property-value" rows="4" placeholder="请输入属性值...">${this.formatValueForEdit(existingProperty?.value, existingProperty?.type)}</textarea>
+                        <div class="value-hint" id="property-value-hint">
+                            ${this.getValueHint(existingProperty?.type || 'string')}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>所属对象</label>
+                        <div class="scope-info">
+                            <i class="fa fa-cube"></i>
+                            ${variableId}
+                        </div>
+                    </div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" onclick="this.closest('.object-property-dialog').remove()">取消</button>
+                    <button class="btn-save" data-action="save-object-property" data-variable-id="${variableId}" data-is-edit="${isEdit}" data-existing-key="${existingKey || ''}">${isEdit ? '保存' : '添加'}</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+
+        // 绑定对话框事件
+        dialog.addEventListener('click', (e) => {
+            const actionElement = e.target.closest('[data-action]');
+            const action = actionElement?.dataset?.action;
+
+            if (action === 'save-object-property') {
+                const variableId = actionElement.dataset.variableId;
+                const isEdit = actionElement.dataset.isEdit === 'true';
+                const existingKey = actionElement.dataset.existingKey || '';
+                this.saveObjectPropertyFromDialog(actionElement, variableId, isEdit, existingKey);
+            }
+        });
+
+        // 绑定类型变更事件
+        const typeSelectElement = dialog.querySelector('#property-type');
+        const valueHint = dialog.querySelector('#property-value-hint');
+
+        typeSelectElement.addEventListener('change', (e) => {
+            valueHint.textContent = this.getValueHint(e.target.value);
+        });
+
+        // 聚焦到名称输入框
+        setTimeout(() => {
+            const nameInput = dialog.querySelector('#property-name');
+            if (nameInput && !isEdit) {
+                nameInput.focus();
+            }
+        }, 100);
+    }
+
+    /**
+     * 从对话框保存对象属性
+     */
+    async saveObjectPropertyFromDialog(button, variableId, isEdit, existingKey) {
+        try {
+            const dialog = button.closest('.object-property-dialog');
+            const name = dialog.querySelector('#property-name').value.trim();
+            const type = dialog.querySelector('#property-type').value;
+            const valueText = dialog.querySelector('#property-value').value.trim();
+
+            if (!name) {
+                alert('请输入属性名');
+                return;
+            }
+
+            // 解析值
+            let value;
+            try {
+                value = this.parseVariableValue(valueText, type);
+            } catch (e) {
+                alert('属性值格式错误: ' + e.message);
+                return;
+            }
+
+            // 保存属性
+            await this.saveObjectPropertyToVariable(variableId, name, value, isEdit, existingKey);
+
+            // 关闭对话框
+            dialog.remove();
+
+            // 重新加载变量列表
+            this.renderVariableList();
+
+            console.log('[VariableManager] ✅', isEdit ? '编辑' : '添加', '对象属性:', name);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存对象属性失败:', error);
+            alert('保存对象属性失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 保存对象属性到变量
+     */
+    async saveObjectPropertyToVariable(variableId, propertyName, propertyValue, isEdit, existingKey) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable || variable.type !== 'object') {
+                throw new Error('变量不是对象类型');
+            }
+
+            // 确保变量值是对象
+            if (typeof variable.value !== 'object' || variable.value === null) {
+                variable.value = {};
+            }
+
+            // 如果是编辑且键名改变，删除旧键
+            if (isEdit && existingKey && existingKey !== propertyName) {
+                delete variable.value[existingKey];
+            }
+
+            // 设置新值
+            variable.value[propertyName] = propertyValue;
+
+            // 保存到SillyTavern
+            await this.saveVariableToSillyTavern(variableId, variable.value, variable.type, true, variableId);
+
+            console.log('[VariableManager] ✅ 对象属性已保存:', variableId, propertyName, propertyValue);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存对象属性到变量失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 删除对象属性
+     */
+    async removeObjectProperty(variableId, propertyKey) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable || variable.type !== 'object' || typeof variable.value !== 'object') {
+                console.error('[VariableManager] 变量不是对象类型:', variableId);
+                return;
+            }
+
+            if (!confirm(`确定要删除属性 "${propertyKey}" 吗？`)) return;
+
+            // 删除属性
+            delete variable.value[propertyKey];
+
+            // 保存到SillyTavern
+            await this.saveVariableToSillyTavern(variableId, variable.value, variable.type, true, variableId);
+
+            // 重新渲染
+            this.renderVariableList();
+
+            console.log('[VariableManager] ✅ 删除对象属性:', variableId, propertyKey);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 删除对象属性失败:', error);
+            alert('删除对象属性失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 添加嵌套数组项
+     */
+    async addNestedArrayItem(variableId, path) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                console.error('[VariableManager] 变量不存在:', variableId);
+                return;
+            }
+
+            // 显示嵌套数组项添加对话框
+            this.showNestedArrayItemDialog(variableId, path);
+
+        } catch (error) {
+            console.error('[VariableManager] ❌ 添加嵌套数组项失败:', error);
+            alert('添加嵌套数组项失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 显示嵌套数组项添加对话框
+     */
+    showNestedArrayItemDialog(variableId, path, existingIndex = null, existingValue = null) {
+        const isEdit = existingIndex !== null;
+
+        // 创建嵌套数组项对话框
+        const dialog = document.createElement('div');
+        dialog.className = 'array-item-dialog';
+        dialog.innerHTML = `
+            <div class="dialog-overlay" onclick="this.closest('.array-item-dialog').remove()"></div>
+            <div class="dialog-container">
+                <div class="dialog-header">
+                    <h3>${isEdit ? '编辑嵌套数组项' : '添加嵌套数组项'}</h3>
+                    <button class="dialog-close" onclick="this.closest('.array-item-dialog').remove()">×</button>
+                </div>
+                <div class="dialog-body">
+                    <div class="form-group">
+                        <label>数组项值</label>
+                        <textarea id="array-item-value" rows="3" placeholder="请输入数组项值...">${existingValue || ''}</textarea>
+                        <div class="value-hint">
+                            支持文本、数字、JSON对象等格式
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>嵌套路径</label>
+                        <div class="scope-info">
+                            <i class="fa fa-sitemap"></i>
+                            ${variableId} → ${path}${isEdit ? ` [${existingIndex}]` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" onclick="this.closest('.array-item-dialog').remove()">取消</button>
+                    <button class="btn-save" data-action="save-nested-array-item" data-variable-id="${variableId}" data-path="${path}" data-is-edit="${isEdit}" data-index="${existingIndex || ''}">${isEdit ? '保存' : '添加'}</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+
+        // 绑定对话框事件
+        dialog.addEventListener('click', (e) => {
+            const actionElement = e.target.closest('[data-action]');
+            const action = actionElement?.dataset?.action;
+
+            if (action === 'save-nested-array-item') {
+                const variableId = actionElement.dataset.variableId;
+                const path = actionElement.dataset.path;
+                const isEdit = actionElement.dataset.isEdit === 'true';
+                const index = actionElement.dataset.index || null;
+                this.saveNestedArrayItemFromDialog(actionElement, variableId, path, isEdit, index);
+            }
+        });
+
+        // 聚焦到值输入框
+        setTimeout(() => {
+            const valueInput = dialog.querySelector('#array-item-value');
+            if (valueInput) {
+                valueInput.focus();
+                valueInput.select();
+            }
+        }, 100);
+    }
+
+    /**
+     * 从对话框保存嵌套数组项
+     */
+    async saveNestedArrayItemFromDialog(button, variableId, path, isEdit, index) {
+        try {
+            const dialog = button.closest('.array-item-dialog');
+            const valueText = dialog.querySelector('#array-item-value').value.trim();
+
+            if (!valueText) {
+                alert('请输入数组项值');
+                return;
+            }
+
+            // 解析值
+            let value;
+            try {
+                value = JSON.parse(valueText);
+            } catch (e) {
+                value = valueText;
+            }
+
+            // 保存嵌套数组项
+            await this.saveNestedArrayItemToVariable(variableId, path, value, isEdit, index);
+
+            // 关闭对话框
+            dialog.remove();
+
+            // 重新加载变量列表
+            this.renderVariableList();
+
+            console.log('[VariableManager] ✅', isEdit ? '编辑' : '添加', '嵌套数组项:', value);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存嵌套数组项失败:', error);
+            alert('保存嵌套数组项失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 保存嵌套数组项到变量
+     */
+    async saveNestedArrayItemToVariable(variableId, path, value, isEdit, index) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                throw new Error('变量不存在');
+            }
+
+            // 获取嵌套数组的引用
+            const targetArray = this.getNestedValue(variable.value, path);
+            if (!Array.isArray(targetArray)) {
+                throw new Error('目标不是数组');
+            }
+
+            if (isEdit && index !== null) {
+                // 编辑现有项
+                targetArray[parseInt(index)] = value;
+            } else {
+                // 添加新项
+                targetArray.push(value);
+            }
+
+            // 保存到SillyTavern
+            await this.saveVariableToSillyTavern(variableId, variable.value, variable.type, true, variableId);
+
+            console.log('[VariableManager] ✅ 嵌套数组项已保存:', variableId, path, value);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存嵌套数组项到变量失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 添加嵌套对象属性
+     */
+    async addNestedObjectProperty(variableId, path) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                console.error('[VariableManager] 变量不存在:', variableId);
+                return;
+            }
+
+            // 显示嵌套属性对话框
+            this.showNestedObjectPropertyDialog(variableId, path);
+
+        } catch (error) {
+            console.error('[VariableManager] ❌ 添加嵌套对象属性失败:', error);
+            alert('添加嵌套对象属性失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 显示嵌套对象属性编辑对话框
+     */
+    showNestedObjectPropertyDialog(variableId, path) {
+        // 创建嵌套属性编辑对话框
+        const dialog = document.createElement('div');
+        dialog.className = 'object-property-dialog';
+        dialog.innerHTML = `
+            <div class="dialog-overlay" onclick="this.closest('.object-property-dialog').remove()"></div>
+            <div class="dialog-container">
+                <div class="dialog-header">
+                    <h3>添加嵌套属性</h3>
+                    <button class="dialog-close" onclick="this.closest('.object-property-dialog').remove()">×</button>
+                </div>
+                <div class="dialog-body">
+                    <div class="form-group">
+                        <label>属性名</label>
+                        <input type="text" id="property-name" placeholder="请输入属性名">
+                    </div>
+                    <div class="form-group">
+                        <label>属性类型</label>
+                        <select id="property-type">
+                            <option value="string">字符串</option>
+                            <option value="number">数字</option>
+                            <option value="boolean">布尔值</option>
+                            <option value="array">数组</option>
+                            <option value="object">对象</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>属性值</label>
+                        <textarea id="property-value" rows="4" placeholder="请输入属性值..."></textarea>
+                        <div class="value-hint" id="property-value-hint">
+                            ${this.getValueHint('string')}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>嵌套路径</label>
+                        <div class="scope-info">
+                            <i class="fa fa-sitemap"></i>
+                            ${variableId} → ${path}
+                        </div>
+                    </div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" onclick="this.closest('.object-property-dialog').remove()">取消</button>
+                    <button class="btn-save" data-action="save-nested-object-property" data-variable-id="${variableId}" data-path="${path}">添加</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+
+        // 绑定对话框事件
+        dialog.addEventListener('click', (e) => {
+            const actionElement = e.target.closest('[data-action]');
+            const action = actionElement?.dataset?.action;
+
+            if (action === 'save-nested-object-property') {
+                const variableId = actionElement.dataset.variableId;
+                const path = actionElement.dataset.path;
+                this.saveNestedObjectPropertyFromDialog(actionElement, variableId, path);
+            }
+        });
+
+        // 绑定类型变更事件
+        const typeSelectElement = dialog.querySelector('#property-type');
+        const valueHint = dialog.querySelector('#property-value-hint');
+
+        typeSelectElement.addEventListener('change', (e) => {
+            valueHint.textContent = this.getValueHint(e.target.value);
+        });
+
+        // 聚焦到名称输入框
+        setTimeout(() => {
+            const nameInput = dialog.querySelector('#property-name');
+            if (nameInput) {
+                nameInput.focus();
+            }
+        }, 100);
+    }
+
+    /**
+     * 从对话框保存嵌套对象属性
+     */
+    async saveNestedObjectPropertyFromDialog(button, variableId, path) {
+        try {
+            const dialog = button.closest('.object-property-dialog');
+            const name = dialog.querySelector('#property-name').value.trim();
+            const type = dialog.querySelector('#property-type').value;
+            const valueText = dialog.querySelector('#property-value').value.trim();
+
+            if (!name) {
+                alert('请输入属性名');
+                return;
+            }
+
+            // 解析值
+            let value;
+            try {
+                value = this.parseVariableValue(valueText, type);
+            } catch (e) {
+                alert('属性值格式错误: ' + e.message);
+                return;
+            }
+
+            // 保存嵌套属性
+            await this.saveNestedObjectPropertyToVariable(variableId, path, name, value);
+
+            // 关闭对话框
+            dialog.remove();
+
+            // 重新加载变量列表
+            this.renderVariableList();
+
+            console.log('[VariableManager] ✅ 添加嵌套对象属性:', name);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存嵌套对象属性失败:', error);
+            alert('保存嵌套对象属性失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 保存嵌套对象属性到变量
+     */
+    async saveNestedObjectPropertyToVariable(variableId, path, propertyName, propertyValue) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                throw new Error('变量不存在');
+            }
+
+            // 获取嵌套对象的引用
+            const targetObject = this.getNestedValue(variable.value, path);
+            if (typeof targetObject !== 'object' || targetObject === null) {
+                throw new Error('目标不是对象');
+            }
+
+            // 设置新值
+            targetObject[propertyName] = propertyValue;
+
+            // 保存到SillyTavern
+            await this.saveVariableToSillyTavern(variableId, variable.value, variable.type, true, variableId);
+
+            console.log('[VariableManager] ✅ 嵌套对象属性已保存:', variableId, path, propertyName, propertyValue);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存嵌套对象属性到变量失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 获取嵌套值的引用
+     */
+    getNestedValue(obj, path) {
+        if (!path) return obj;
+
+        const keys = path.split('.');
+        let current = obj;
+
+        for (const key of keys) {
+            if (current === null || current === undefined) {
+                return null;
+            }
+
+            // 处理数组索引
+            if (Array.isArray(current) && /^\d+$/.test(key)) {
+                current = current[parseInt(key)];
+            } else if (typeof current === 'object') {
+                current = current[key];
+            } else {
+                return null;
+            }
+        }
+
+        return current;
+    }
+
+    /**
+     * 删除嵌套数组项
+     */
+    async removeNestedArrayItem(variableId, index, level, event) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                console.error('[VariableManager] 变量不存在:', variableId);
+                return;
+            }
+
+            // 构建嵌套路径
+            const path = this.buildNestedPath(event.target, level);
+            console.log('[VariableManager] 🔘 删除嵌套数组项路径:', path, '索引:', index);
+
+            if (!confirm(`确定要删除嵌套数组项 [${index}] 吗？\n路径: ${variableId}${path ? ' → ' + path : ''}`)) return;
+
+            // 获取目标数组
+            const targetArray = this.getNestedValue(variable.value, path);
+            if (!Array.isArray(targetArray)) {
+                console.error('[VariableManager] 目标不是数组:', path);
+                return;
+            }
+
+            // 删除数组项
+            targetArray.splice(parseInt(index), 1);
+
+            // 保存到SillyTavern
+            await this.saveVariableToSillyTavern(variableId, variable.value, variable.type, true, variableId);
+
+            // 重新渲染
+            this.renderVariableList();
+
+            console.log('[VariableManager] ✅ 删除嵌套数组项:', variableId, path, index);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 删除嵌套数组项失败:', error);
+            alert('删除嵌套数组项失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 删除嵌套对象属性
+     */
+    async removeNestedObjectProperty(variableId, key, path) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                console.error('[VariableManager] 变量不存在:', variableId);
+                return;
+            }
+
+            console.log('[VariableManager] 🔘 删除嵌套对象属性路径:', path, '键:', key);
+
+            if (!confirm(`确定要删除嵌套属性 "${key}" 吗？\n路径: ${variableId}${path ? ' → ' + path : ''}`)) return;
+
+            // 获取父对象路径
+            const parentPath = this.getParentPath(path);
+            const targetObject = this.getNestedValue(variable.value, parentPath);
+
+            if (typeof targetObject !== 'object' || targetObject === null) {
+                console.error('[VariableManager] 目标不是对象:', parentPath);
+                return;
+            }
+
+            // 删除属性
+            delete targetObject[key];
+
+            // 保存到SillyTavern
+            await this.saveVariableToSillyTavern(variableId, variable.value, variable.type, true, variableId);
+
+            // 重新渲染
+            this.renderVariableList();
+
+            console.log('[VariableManager] ✅ 删除嵌套对象属性:', variableId, path, key);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 删除嵌套对象属性失败:', error);
+            alert('删除嵌套对象属性失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 构建嵌套路径
+     */
+    buildNestedPath(element, level) {
+        const pathParts = [];
+
+        // 向上遍历找到所有嵌套层级
+        let currentElement = element.closest('.array-item, .object-property');
+        while (currentElement && level > 0) {
+            const parent = currentElement.closest('.nested-items');
+            if (parent) {
+                const parentItem = parent.previousElementSibling;
+                if (parentItem) {
+                    if (parentItem.classList.contains('array-item')) {
+                        const index = parentItem.dataset.index;
+                        if (index !== undefined) {
+                            pathParts.unshift(index);
+                        }
+                    } else if (parentItem.classList.contains('object-property')) {
+                        const key = parentItem.dataset.key;
+                        if (key !== undefined) {
+                            pathParts.unshift(key);
+                        }
+                    }
+                }
+                currentElement = parentItem;
+                level--;
+            } else {
+                break;
+            }
+        }
+
+        return pathParts.join('.');
+    }
+
+    /**
+     * 获取父路径
+     */
+    getParentPath(path) {
+        if (!path) return '';
+        const parts = path.split('.');
+        parts.pop(); // 移除最后一部分
+        return parts.join('.');
+    }
+
+    /**
+     * 编辑数组项
+     */
+    editArrayItem(variableId, index) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable || variable.type !== 'array' || !Array.isArray(variable.value)) {
+                console.error('[VariableManager] 变量不是数组类型:', variableId);
+                return;
+            }
+
+            const currentValue = variable.value[parseInt(index)];
+            const formattedValue = typeof currentValue === 'string' ? currentValue : JSON.stringify(currentValue);
+
+            this.showArrayItemDialog(variableId, index, formattedValue);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 编辑数组项失败:', error);
+            alert('编辑数组项失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 编辑对象属性
+     */
+    editObjectProperty(variableId, key, path) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                console.error('[VariableManager] 变量不存在:', variableId);
+                return;
+            }
+
+            // 获取当前属性值
+            let currentValue;
+            if (path && path !== key) {
+                // 嵌套属性
+                const parentPath = this.getParentPath(path);
+                const parentObject = this.getNestedValue(variable.value, parentPath);
+                currentValue = parentObject[key];
+            } else {
+                // 顶级属性
+                currentValue = variable.value[key];
+            }
+
+            // 确定属性类型
+            let propertyType = 'string';
+            if (typeof currentValue === 'number') {
+                propertyType = 'number';
+            } else if (typeof currentValue === 'boolean') {
+                propertyType = 'boolean';
+            } else if (Array.isArray(currentValue)) {
+                propertyType = 'array';
+            } else if (typeof currentValue === 'object' && currentValue !== null) {
+                propertyType = 'object';
+            }
+
+            const existingProperty = {
+                type: propertyType,
+                value: currentValue
+            };
+
+            this.showObjectPropertyDialog(variableId, key, existingProperty);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 编辑对象属性失败:', error);
+            alert('编辑对象属性失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 编辑嵌套数组项
+     */
+    editNestedArrayItem(variableId, index, level, event) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                console.error('[VariableManager] 变量不存在:', variableId);
+                return;
+            }
+
+            // 构建嵌套路径
+            const path = this.buildNestedPath(event.target, level);
+            console.log('[VariableManager] 🔘 编辑嵌套数组项路径:', path, '索引:', index);
+
+            // 获取目标数组
+            const targetArray = this.getNestedValue(variable.value, path);
+            if (!Array.isArray(targetArray)) {
+                console.error('[VariableManager] 目标不是数组:', path);
+                return;
+            }
+
+            const currentValue = targetArray[parseInt(index)];
+            const formattedValue = typeof currentValue === 'string' ? currentValue : JSON.stringify(currentValue);
+
+            this.showNestedArrayItemDialog(variableId, path, index, formattedValue);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 编辑嵌套数组项失败:', error);
+            alert('编辑嵌套数组项失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 编辑嵌套对象项
+     */
+    editNestedObjectItem(variableId, index, level, event) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                console.error('[VariableManager] 变量不存在:', variableId);
+                return;
+            }
+
+            // 构建嵌套路径
+            const path = this.buildNestedPath(event.target, level);
+            console.log('[VariableManager] 🔘 编辑嵌套对象项路径:', path, '索引:', index);
+
+            // 获取目标数组（对象在数组中）
+            const parentPath = this.getParentPath(path);
+            const targetArray = this.getNestedValue(variable.value, parentPath);
+            if (!Array.isArray(targetArray)) {
+                console.error('[VariableManager] 父级不是数组:', parentPath);
+                return;
+            }
+
+            const currentValue = targetArray[parseInt(index)];
+            if (typeof currentValue !== 'object' || currentValue === null) {
+                console.error('[VariableManager] 目标不是对象:', currentValue);
+                return;
+            }
+
+            // 这里可以显示一个对象编辑对话框，暂时用JSON编辑
+            const formattedValue = JSON.stringify(currentValue, null, 2);
+            this.showNestedArrayItemDialog(variableId, parentPath, index, formattedValue);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 编辑嵌套对象项失败:', error);
+            alert('编辑嵌套对象项失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 编辑嵌套属性数组
+     */
+    editNestedPropertyArray(variableId, key, path, level) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                console.error('[VariableManager] 变量不存在:', variableId);
+                return;
+            }
+
+            console.log('[VariableManager] 🔘 编辑嵌套属性数组:', path, '键:', key);
+
+            // 获取父对象路径
+            const parentPath = this.getParentPath(path);
+            const targetObject = this.getNestedValue(variable.value, parentPath);
+
+            if (typeof targetObject !== 'object' || targetObject === null) {
+                console.error('[VariableManager] 目标不是对象:', parentPath);
+                return;
+            }
+
+            const currentValue = targetObject[key];
+            if (!Array.isArray(currentValue)) {
+                console.error('[VariableManager] 属性不是数组:', currentValue);
+                return;
+            }
+
+            // 显示数组编辑对话框（JSON格式）
+            const formattedValue = JSON.stringify(currentValue, null, 2);
+
+            // 创建临时的属性编辑对话框
+            this.showNestedPropertyEditDialog(variableId, key, path, 'array', formattedValue);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 编辑嵌套属性数组失败:', error);
+            alert('编辑嵌套属性数组失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 编辑嵌套属性对象
+     */
+    editNestedPropertyObject(variableId, key, path, level) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                console.error('[VariableManager] 变量不存在:', variableId);
+                return;
+            }
+
+            console.log('[VariableManager] 🔘 编辑嵌套属性对象:', path, '键:', key);
+
+            // 获取父对象路径
+            const parentPath = this.getParentPath(path);
+            const targetObject = this.getNestedValue(variable.value, parentPath);
+
+            if (typeof targetObject !== 'object' || targetObject === null) {
+                console.error('[VariableManager] 目标不是对象:', parentPath);
+                return;
+            }
+
+            const currentValue = targetObject[key];
+            if (typeof currentValue !== 'object' || currentValue === null) {
+                console.error('[VariableManager] 属性不是对象:', currentValue);
+                return;
+            }
+
+            // 显示对象编辑对话框（JSON格式）
+            const formattedValue = JSON.stringify(currentValue, null, 2);
+
+            // 创建临时的属性编辑对话框
+            this.showNestedPropertyEditDialog(variableId, key, path, 'object', formattedValue);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 编辑嵌套属性对象失败:', error);
+            alert('编辑嵌套属性对象失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 显示嵌套属性编辑对话框
+     */
+    showNestedPropertyEditDialog(variableId, key, path, type, currentValue) {
+        // 创建嵌套属性编辑对话框
+        const dialog = document.createElement('div');
+        dialog.className = 'array-item-dialog';
+        dialog.innerHTML = `
+            <div class="dialog-overlay" onclick="this.closest('.array-item-dialog').remove()"></div>
+            <div class="dialog-container">
+                <div class="dialog-header">
+                    <h3>编辑嵌套${type === 'array' ? '数组' : '对象'}</h3>
+                    <button class="dialog-close" onclick="this.closest('.array-item-dialog').remove()">×</button>
+                </div>
+                <div class="dialog-body">
+                    <div class="form-group">
+                        <label>属性名</label>
+                        <input type="text" id="nested-property-key" value="${key}" placeholder="请输入属性名...">
+                        <div class="value-hint">
+                            修改属性名将重命名该属性
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>${type === 'array' ? '数组' : '对象'}内容 (JSON格式)</label>
+                        <textarea id="nested-property-value" rows="6" placeholder="请输入JSON格式的${type === 'array' ? '数组' : '对象'}...">${currentValue}</textarea>
+                        <div class="value-hint">
+                            请输入有效的JSON格式
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>嵌套路径</label>
+                        <div class="scope-info">
+                            <i class="fa fa-sitemap"></i>
+                            ${variableId} → ${path}
+                        </div>
+                    </div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" onclick="this.closest('.array-item-dialog').remove()">取消</button>
+                    <button class="btn-save" data-action="save-nested-property-edit" data-variable-id="${variableId}" data-key="${key}" data-path="${path}" data-type="${type}">保存</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+
+        // 绑定对话框事件
+        dialog.addEventListener('click', (e) => {
+            const actionElement = e.target.closest('[data-action]');
+            const action = actionElement?.dataset?.action;
+
+            if (action === 'save-nested-property-edit') {
+                const variableId = actionElement.dataset.variableId;
+                const key = actionElement.dataset.key;
+                const path = actionElement.dataset.path;
+                const type = actionElement.dataset.type;
+                this.saveNestedPropertyEditFromDialog(actionElement, variableId, key, path, type);
+            }
+        });
+
+        // 聚焦到值输入框
+        setTimeout(() => {
+            const valueInput = dialog.querySelector('#nested-property-value');
+            if (valueInput) {
+                valueInput.focus();
+                valueInput.select();
+            }
+        }, 100);
+    }
+
+    /**
+     * 从对话框保存嵌套属性编辑
+     */
+    async saveNestedPropertyEditFromDialog(button, variableId, key, path, type) {
+        try {
+            const dialog = button.closest('.array-item-dialog');
+            const newKey = dialog.querySelector('#nested-property-key').value.trim();
+            const valueText = dialog.querySelector('#nested-property-value').value.trim();
+
+            if (!newKey) {
+                alert('请输入属性名');
+                return;
+            }
+
+            if (!valueText) {
+                alert('请输入内容');
+                return;
+            }
+
+            // 解析JSON值
+            let value;
+            try {
+                value = JSON.parse(valueText);
+            } catch (e) {
+                alert('JSON格式错误: ' + e.message);
+                return;
+            }
+
+            // 验证类型
+            if (type === 'array' && !Array.isArray(value)) {
+                alert('输入的内容不是数组格式');
+                return;
+            }
+            if (type === 'object' && (typeof value !== 'object' || value === null || Array.isArray(value))) {
+                alert('输入的内容不是对象格式');
+                return;
+            }
+
+            // 如果属性名发生了变化，需要重命名属性
+            if (newKey !== key) {
+                await this.renameNestedProperty(variableId, key, newKey, path, value);
+            } else {
+                // 保存嵌套属性
+                await this.saveNestedPropertyEditToVariable(variableId, key, path, value);
+            }
+
+            // 关闭对话框
+            dialog.remove();
+
+            // 重新加载变量列表
+            this.renderVariableList();
+
+            console.log('[VariableManager] ✅ 编辑嵌套属性:', newKey, value);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存嵌套属性编辑失败:', error);
+            alert('保存嵌套属性编辑失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 重命名嵌套属性
+     */
+    async renameNestedProperty(variableId, oldKey, newKey, path, newValue) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                throw new Error('变量不存在');
+            }
+
+            // 获取父对象路径
+            const parentPath = this.getParentPath(path);
+            const targetObject = this.getNestedValue(variable.value, parentPath);
+
+            if (typeof targetObject !== 'object' || targetObject === null) {
+                throw new Error('目标不是对象');
+            }
+
+            // 删除旧属性，添加新属性
+            delete targetObject[oldKey];
+            targetObject[newKey] = newValue;
+
+            // 保存到变量
+            await this.saveVariableToSillyTavern(variableId, variable.value);
+
+            console.log('[VariableManager] ✅ 重命名嵌套属性:', oldKey, '→', newKey);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 重命名嵌套属性失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 保存嵌套属性编辑到变量
+     */
+    async saveNestedPropertyEditToVariable(variableId, key, path, value) {
+        try {
+            const variable = this.variables[variableId];
+            if (!variable) {
+                throw new Error('变量不存在');
+            }
+
+            // 获取父对象路径
+            const parentPath = this.getParentPath(path);
+            const targetObject = this.getNestedValue(variable.value, parentPath);
+
+            if (typeof targetObject !== 'object' || targetObject === null) {
+                throw new Error('目标不是对象');
+            }
+
+            // 设置新值
+            targetObject[key] = value;
+
+            // 保存到SillyTavern
+            await this.saveVariableToSillyTavern(variableId, variable.value, variable.type, true, variableId);
+
+            console.log('[VariableManager] ✅ 嵌套属性编辑已保存:', variableId, path, key, value);
+        } catch (error) {
+            console.error('[VariableManager] ❌ 保存嵌套属性编辑到变量失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 打开HTML模板编辑器
+     */
+    openHTMLTemplateEditor() {
+        try {
+            console.log('[InfoBarSettings] 🎨 打开HTML模板编辑器...');
+
+            // 创建HTML模板编辑器模态框
+            this.createHTMLTemplateEditorModal();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 打开HTML模板编辑器失败:', error);
+            this.handleError(error);
+        }
+    }
+
+    /**
+     * 创建HTML模板编辑器模态框
+     */
+    createHTMLTemplateEditorModal() {
+        try {
+            // 移除现有的编辑器模态框
+            const existingModal = document.querySelector('.html-template-editor-modal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            // 创建模态框HTML
+            const modalHTML = this.createHTMLTemplateEditorHTML();
+
+            // 添加到页面
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+            // 绑定事件
+            this.bindHTMLTemplateEditorEvents();
+
+            console.log('[InfoBarSettings] ✅ HTML模板编辑器创建完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 创建HTML模板编辑器失败:', error);
+            this.handleError(error);
+        }
+    }
+
+    /**
+     * 获取信息栏主题颜色
+     */
+    getInfoBarThemeColor(type) {
+        try {
+            // 从SillyTavern扩展设置获取当前主题
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings || {};
+            const configs = extensionSettings['Information bar integration tool'] || {};
+            const themeConfig = configs.theme || {};
+            const currentThemeId = themeConfig.current || 'default';
+
+            console.log('[InfoBarSettings] 🎨 获取主题颜色:', { currentThemeId, type });
+
+            // 信息栏主题颜色配置
+            const themeColors = {
+                default: {
+                    background: '#1a1a1a',
+                    surface: '#2a2a2a',
+                    border: '#333',
+                    text: '#fff',
+                    textSecondary: '#888',
+                    accent: '#007bff'
+                },
+                dark: {
+                    background: '#0f0f0f',
+                    surface: '#1a1a1a',
+                    border: '#2a2a2a',
+                    text: '#e0e0e0',
+                    textSecondary: '#999',
+                    accent: '#4CAF50'
+                },
+                blue: {
+                    background: '#1a1a2e',
+                    surface: '#16213e',
+                    border: '#0f3460',
+                    text: '#e6e6e6',
+                    textSecondary: '#94a3b8',
+                    accent: '#5eead4'
+                },
+                purple: {
+                    background: '#2d1b69',
+                    surface: '#3c2a78',
+                    border: '#4a3586',
+                    text: '#f0f0f0',
+                    textSecondary: '#c4b5fd',
+                    accent: '#8b5cf6'
+                },
+                green: {
+                    background: '#0f2027',
+                    surface: '#203a43',
+                    border: '#2c5530',
+                    text: '#e8f5e8',
+                    textSecondary: '#a8d8a8',
+                    accent: '#4ade80'
+                },
+                red: {
+                    background: '#2d1b1b',
+                    surface: '#3c2a2a',
+                    border: '#4a3535',
+                    text: '#f0e8e8',
+                    textSecondary: '#d8a8a8',
+                    accent: '#f87171'
+                },
+                'purple-night': {
+                    background: '#1a1a1a',
+                    surface: '#2a2a2a',
+                    border: '#333',
+                    text: '#fff',
+                    textSecondary: '#888',
+                    accent: '#007bff'
+                }
+            };
+
+            const theme = themeColors[currentThemeId] || themeColors.default;
+            const color = theme[type] || theme.background;
+
+            console.log('[InfoBarSettings] 🎨 返回颜色:', { type, color });
+            return color;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取主题颜色失败:', error);
+            // 返回默认颜色
+            const defaults = {
+                background: '#1a1a1a',
+                surface: '#2a2a2a',
+                border: '#333',
+                text: '#fff',
+                textSecondary: '#888',
+                accent: '#007bff'
+            };
+            return defaults[type] || defaults.background;
+        }
+    }
+
+    /**
+     * 创建HTML模板编辑器HTML
+     */
+    createHTMLTemplateEditorHTML() {
+        // 预先获取所有主题颜色，避免在模板字符串中重复调用
+        const themeColors = {
+            background: this.getInfoBarThemeColor('background'),
+            surface: this.getInfoBarThemeColor('surface'),
+            border: this.getInfoBarThemeColor('border'),
+            text: this.getInfoBarThemeColor('text'),
+            textSecondary: this.getInfoBarThemeColor('textSecondary'),
+            accent: this.getInfoBarThemeColor('accent')
+        };
+
+        return `
+            <div class="html-template-editor-modal" style="
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.8);
+                z-index: 10000;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            ">
+                <div class="html-template-editor-container" style="
+                    width: 90%;
+                    height: 90%;
+                    background: ${themeColors.background};
+                    border-radius: 10px;
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+                    border: 1px solid ${themeColors.border};
+                ">
+                    <!-- 编辑器头部 -->
+                    <div class="editor-header" style="
+                        padding: 15px 20px;
+                        background: ${themeColors.surface};
+                        border-bottom: 1px solid ${themeColors.border};
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <div class="editor-title">
+                            <h3 style="margin: 0; color: ${themeColors.text};">
+                                <i class="fas fa-code"></i> HTML模板编辑器
+                            </h3>
+                            <p style="margin: 5px 0 0 0; color: ${themeColors.textSecondary}; font-size: 14px;">
+                                创建和编辑自定义HTML状态栏模板
+                            </p>
+                        </div>
+                        <div class="editor-controls">
+                            <button class="btn btn-primary ai-modify-btn" data-action="ai-modify-template" style="margin-right: 10px;">
+                                <i class="fas fa-magic"></i> AI一键修改
+                            </button>
+                            <button class="btn btn-secondary" data-action="close-html-editor">
+                                <i class="fas fa-times"></i> 关闭
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 编辑器主体 -->
+                    <div class="editor-body" style="
+                        flex: 1;
+                        display: flex;
+                        overflow: hidden;
+                    ">
+                        <!-- 左侧编辑区 -->
+                        <div class="editor-left" style="
+                            width: 60%;
+                            display: flex;
+                            flex-direction: column;
+                            border-right: 1px solid ${themeColors.border};
+                        ">
+                            <div class="editor-tabs" style="
+                                display: flex;
+                                background: ${themeColors.surface};
+                                border-bottom: 1px solid ${themeColors.border};
+                            ">
+                                <button class="editor-tab active" data-tab="html" style="
+                                    padding: 10px 20px;
+                                    background: none;
+                                    border: none;
+                                    color: ${themeColors.text};
+                                    cursor: pointer;
+                                    border-bottom: 2px solid ${themeColors.accent};
+                                ">HTML模板</button>
+                                <button class="editor-tab" data-tab="preview" style="
+                                    padding: 10px 20px;
+                                    background: none;
+                                    border: none;
+                                    color: ${themeColors.textSecondary};
+                                    cursor: pointer;
+                                    border-bottom: 2px solid transparent;
+                                ">实时预览</button>
+                            </div>
+                            <div class="editor-content" style="flex: 1; position: relative;">
+                                <textarea class="html-template-textarea" style="
+                                    width: 100%;
+                                    height: 100%;
+                                    background: ${themeColors.background};
+                                    color: ${themeColors.text};
+                                    border: none;
+                                    padding: 20px;
+                                    font-family: 'Courier New', monospace;
+                                    font-size: 14px;
+                                    line-height: 1.5;
+                                    resize: none;
+                                    outline: none;
+                                " placeholder="在此输入您的HTML模板代码...
+
+示例：
+<div class='character-status'>
+    <h3>{{data.name}}</h3>
+    <div class='health-bar'>
+        <div class='health-fill' style='width: {{computed.healthPercentage}}%'></div>
+    </div>
+    <p>生命值: {{data.health}}/{{data.maxHealth}}</p>
+</div>"></textarea>
+                                <div class="preview-container" style="
+                                    width: 100%;
+                                    height: 100%;
+                                    background: ${themeColors.background};
+                                    padding: 20px;
+                                    overflow: auto;
+                                    display: none;
+                                "></div>
+                            </div>
+                        </div>
+
+                        <!-- 右侧信息面板 -->
+                        <div class="editor-right" style="
+                            width: 40%;
+                            background: ${themeColors.surface};
+                            display: flex;
+                            flex-direction: column;
+                        ">
+                            <div class="info-tabs" style="
+                                display: flex;
+                                background: ${themeColors.background};
+                                border-bottom: 1px solid ${themeColors.border};
+                            ">
+                                <button class="info-tab active" data-info-tab="data-source" style="
+                                    flex: 1;
+                                    padding: 10px;
+                                    background: none;
+                                    border: none;
+                                    color: ${themeColors.text};
+                                    cursor: pointer;
+                                    border-bottom: 2px solid ${themeColors.accent};
+                                    font-size: 12px;
+                                ">数据源</button>
+                                <button class="info-tab" data-info-tab="syntax-help" style="
+                                    flex: 1;
+                                    padding: 10px;
+                                    background: none;
+                                    border: none;
+                                    color: ${themeColors.textSecondary};
+                                    cursor: pointer;
+                                    border-bottom: 2px solid transparent;
+                                    font-size: 12px;
+                                ">语法帮助</button>
+                                <button class="info-tab" data-info-tab="templates" style="
+                                    flex: 1;
+                                    padding: 10px;
+                                    background: none;
+                                    border: none;
+                                    color: ${themeColors.textSecondary};
+                                    cursor: pointer;
+                                    border-bottom: 2px solid transparent;
+                                    font-size: 12px;
+                                ">模板库</button>
+                            </div>
+                            <div class="info-content" style="
+                                flex: 1;
+                                padding: 15px;
+                                overflow: auto;
+                                color: var(--SmartThemeBodyColor, #fff);
+                                font-size: 13px;
+                                line-height: 1.4;
+                            ">
+                                ${this.createDataSourceInfo()}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 编辑器底部 -->
+                    <div class="editor-footer" style="
+                        padding: 15px 20px;
+                        background: var(--SmartThemeBlurTintColor, #2a2a2a);
+                        border-top: 1px solid var(--SmartThemeBorderColor, #333);
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <div class="editor-status">
+                            <span style="color: var(--SmartThemeQuoteColor, #888); font-size: 12px;">
+                                就绪 | 行: 1, 列: 1
+                            </span>
+                        </div>
+                        <div class="editor-actions">
+                            <button class="btn btn-secondary" data-action="load-template" style="margin-right: 10px;">
+                                <i class="fas fa-folder-open"></i> 加载模板
+                            </button>
+                            <button class="btn btn-secondary" data-action="save-template" style="margin-right: 10px;">
+                                <i class="fas fa-save"></i> 保存模板
+                            </button>
+                            <button class="btn btn-primary" data-action="apply-template">
+                                <i class="fas fa-check"></i> 应用模板
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 创建数据源信息
+     */
+    createDataSourceInfo() {
+        return `
+            <div class="data-source-info">
+                <h4 style="margin: 0 0 10px 0; color: var(--SmartThemeQuoteColor, #007bff);">
+                    <i class="fas fa-database"></i> 当前启用的数据面板
+                </h4>
+                <div class="enabled-panels-list" id="enabled-panels-list">
+                    <p style="color: var(--SmartThemeQuoteColor, #888);">正在加载...</p>
+                </div>
+
+                <h4 style="margin: 20px 0 10px 0; color: var(--SmartThemeQuoteColor, #007bff);">
+                    <i class="fas fa-tags"></i> 可用数据字段
+                </h4>
+                <div class="available-fields-list" id="available-fields-list">
+                    <p style="color: var(--SmartThemeQuoteColor, #888);">正在加载...</p>
+                </div>
+
+                <h4 style="margin: 20px 0 10px 0; color: var(--SmartThemeQuoteColor, #007bff);">
+                    <i class="fas fa-info-circle"></i> 数据获取途径
+                </h4>
+                <div class="data-source-details">
+                    <p><strong>数据来源:</strong> AI消息解析</p>
+                    <p><strong>数据格式:</strong> XML标签 &lt;infobar_data&gt;</p>
+                    <p><strong>更新频率:</strong> 每条AI消息</p>
+                    <p><strong>数据流程:</strong> 消息接收 → XML解析 → 数据核心 → 模板渲染</p>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 绑定HTML模板编辑器事件
+     */
+    bindHTMLTemplateEditorEvents() {
+        try {
+            const modal = document.querySelector('.html-template-editor-modal');
+            if (!modal) return;
+
+            // 关闭编辑器
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal || e.target.closest('[data-action="close-html-editor"]')) {
+                    modal.remove();
+                }
+            });
+
+            // 标签页切换
+            modal.querySelectorAll('.editor-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    this.switchEditorTab(tab.dataset.tab);
+                });
+            });
+
+            modal.querySelectorAll('.info-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    this.switchInfoTab(tab.dataset.infoTab);
+                });
+            });
+
+            // AI修改按钮
+            modal.querySelector('[data-action="ai-modify-template"]')?.addEventListener('click', () => {
+                this.handleAIModifyTemplate();
+            });
+
+            // 其他按钮事件
+            modal.querySelector('[data-action="load-template"]')?.addEventListener('click', () => {
+                this.loadHTMLTemplate();
+            });
+
+            modal.querySelector('[data-action="save-template"]')?.addEventListener('click', () => {
+                this.saveHTMLTemplate();
+            });
+
+            modal.querySelector('[data-action="apply-template"]')?.addEventListener('click', () => {
+                this.applyHTMLTemplate();
+            });
+
+            // 实时预览
+            const textarea = modal.querySelector('.html-template-textarea');
+            if (textarea) {
+                textarea.addEventListener('input', () => {
+                    this.updateTemplatePreview();
+                });
+            }
+
+            // 加载当前数据信息
+            this.loadCurrentDataInfo();
+
+            // 自动加载HTML模板
+            this.loadHTMLTemplate();
+
+            console.log('[InfoBarSettings] ✅ HTML模板编辑器事件绑定完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 绑定HTML模板编辑器事件失败:', error);
+        }
+    }
+
+    /**
+     * 切换编辑器标签页
+     */
+    switchEditorTab(tabName) {
+        try {
+            const modal = document.querySelector('.html-template-editor-modal');
+            if (!modal) return;
+
+            // 更新标签页状态
+            modal.querySelectorAll('.editor-tab').forEach(tab => {
+                if (tab.dataset.tab === tabName) {
+                    tab.classList.add('active');
+                    tab.style.color = 'var(--SmartThemeBodyColor, #fff)';
+                    tab.style.borderBottomColor = 'var(--SmartThemeQuoteColor, #007bff)';
+                } else {
+                    tab.classList.remove('active');
+                    tab.style.color = 'var(--SmartThemeQuoteColor, #888)';
+                    tab.style.borderBottomColor = 'transparent';
+                }
+            });
+
+            // 切换内容
+            const textarea = modal.querySelector('.html-template-textarea');
+            const preview = modal.querySelector('.preview-container');
+
+            if (tabName === 'html') {
+                textarea.style.display = 'block';
+                preview.style.display = 'none';
+            } else if (tabName === 'preview') {
+                textarea.style.display = 'none';
+                preview.style.display = 'block';
+                this.updateTemplatePreview();
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换编辑器标签页失败:', error);
+        }
+    }
+
+    /**
+     * 切换信息标签页
+     */
+    switchInfoTab(tabName) {
+        try {
+            const modal = document.querySelector('.html-template-editor-modal');
+            if (!modal) return;
+
+            // 更新标签页状态
+            modal.querySelectorAll('.info-tab').forEach(tab => {
+                if (tab.dataset.infoTab === tabName) {
+                    tab.classList.add('active');
+                    tab.style.color = 'var(--SmartThemeBodyColor, #fff)';
+                    tab.style.borderBottomColor = 'var(--SmartThemeQuoteColor, #007bff)';
+                } else {
+                    tab.classList.remove('active');
+                    tab.style.color = 'var(--SmartThemeQuoteColor, #888)';
+                    tab.style.borderBottomColor = 'transparent';
+                }
+            });
+
+            // 更新内容
+            const infoContent = modal.querySelector('.info-content');
+            if (infoContent) {
+                switch (tabName) {
+                    case 'data-source':
+                        infoContent.innerHTML = this.createDataSourceInfo();
+                        this.loadCurrentDataInfo();
+                        break;
+                    case 'syntax-help':
+                        infoContent.innerHTML = this.createSyntaxHelpInfo();
+                        break;
+                    case 'templates':
+                        infoContent.innerHTML = this.createTemplateLibraryInfo();
+                        break;
+                }
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换信息标签页失败:', error);
+        }
+    }
+
+    /**
+     * 创建语法帮助信息
+     */
+    createSyntaxHelpInfo() {
+        return `
+            <div class="syntax-help-info">
+                <h4 style="margin: 0 0 10px 0; color: var(--SmartThemeQuoteColor, #007bff);">
+                    <i class="fas fa-book"></i> 模板语法说明
+                </h4>
+
+                <div class="syntax-section">
+                    <h5 style="color: var(--SmartThemeBodyColor, #fff); margin: 15px 0 5px 0;">数据绑定</h5>
+                    <code style="background: var(--SmartThemeBodyColor, #333); padding: 2px 5px; border-radius: 3px;">{{data.fieldName}}</code>
+                    <p style="margin: 5px 0; font-size: 12px;">绑定数据字段，如 {{data.name}}、{{data.health}}</p>
+                </div>
+
+                <div class="syntax-section">
+                    <h5 style="color: var(--SmartThemeBodyColor, #fff); margin: 15px 0 5px 0;">计算字段</h5>
+                    <code style="background: var(--SmartThemeBodyColor, #333); padding: 2px 5px; border-radius: 3px;">{{computed.fieldName}}</code>
+                    <p style="margin: 5px 0; font-size: 12px;">使用计算字段，如 {{computed.healthPercentage}}</p>
+                </div>
+
+                <div class="syntax-section">
+                    <h5 style="color: var(--SmartThemeBodyColor, #fff); margin: 15px 0 5px 0;">条件渲染</h5>
+                    <code style="background: var(--SmartThemeBodyColor, #333); padding: 2px 5px; border-radius: 3px; display: block; margin: 5px 0;">
+                        {{#if data.health > 50}}<br>
+                        &nbsp;&nbsp;健康状态良好<br>
+                        {{/if}}
+                    </code>
+                </div>
+
+                <div class="syntax-section">
+                    <h5 style="color: var(--SmartThemeBodyColor, #fff); margin: 15px 0 5px 0;">循环渲染</h5>
+                    <code style="background: var(--SmartThemeBodyColor, #333); padding: 2px 5px; border-radius: 3px; display: block; margin: 5px 0;">
+                        {{#each data.items}}<br>
+                        &nbsp;&nbsp;&lt;div&gt;{{this.name}}&lt;/div&gt;<br>
+                        {{/each}}
+                    </code>
+                </div>
+
+                <div class="syntax-section">
+                    <h5 style="color: var(--SmartThemeBodyColor, #fff); margin: 15px 0 5px 0;">常用计算字段</h5>
+                    <ul style="margin: 5px 0; padding-left: 20px; font-size: 12px;">
+                        <li>{{computed.healthPercentage}} - 生命值百分比</li>
+                        <li>{{computed.timestamp}} - 当前时间戳</li>
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 创建模板库信息
+     */
+    createTemplateLibraryInfo() {
+        return `
+            <div class="template-library-info">
+                <h4 style="margin: 0 0 10px 0; color: var(--SmartThemeQuoteColor, #007bff);">
+                    <i class="fas fa-layer-group"></i> 模板库
+                </h4>
+
+                <div class="template-item" style="margin: 10px 0; padding: 10px; background: var(--SmartThemeBodyColor, #333); border-radius: 5px; cursor: pointer;" data-template="character-card">
+                    <h6 style="margin: 0 0 5px 0; color: var(--SmartThemeBodyColor, #fff);">角色卡片</h6>
+                    <p style="margin: 0; font-size: 11px; color: var(--SmartThemeQuoteColor, #888);">显示角色基本信息和状态</p>
+                </div>
+
+                <div class="template-item" style="margin: 10px 0; padding: 10px; background: var(--SmartThemeBodyColor, #333); border-radius: 5px; cursor: pointer;" data-template="status-bar">
+                    <h6 style="margin: 0 0 5px 0; color: var(--SmartThemeBodyColor, #fff);">状态栏</h6>
+                    <p style="margin: 0; font-size: 11px; color: var(--SmartThemeQuoteColor, #888);">简洁的生命值和状态显示</p>
+                </div>
+
+                <div class="template-item" style="margin: 10px 0; padding: 10px; background: var(--SmartThemeBodyColor, #333); border-radius: 5px; cursor: pointer;" data-template="inventory-grid">
+                    <h6 style="margin: 0 0 5px 0; color: var(--SmartThemeBodyColor, #fff);">物品网格</h6>
+                    <p style="margin: 0; font-size: 11px; color: var(--SmartThemeQuoteColor, #888);">网格式物品展示界面</p>
+                </div>
+
+                <div class="template-item" style="margin: 10px 0; padding: 10px; background: var(--SmartThemeBodyColor, #333); border-radius: 5px; cursor: pointer;" data-template="rpg-dashboard">
+                    <h6 style="margin: 0 0 5px 0; color: var(--SmartThemeBodyColor, #fff);">RPG仪表板</h6>
+                    <p style="margin: 0; font-size: 11px; color: var(--SmartThemeQuoteColor, #888);">完整的RPG游戏界面</p>
+                </div>
+
+                <button class="btn btn-secondary" style="width: 100%; margin-top: 10px;" data-action="import-template">
+                    <i class="fas fa-upload"></i> 导入自定义模板
+                </button>
+            </div>
+        `;
+    }
+
+    /**
+     * 更新模板预览
+     */
+    updateTemplatePreview() {
+        try {
+            const modal = document.querySelector('.html-template-editor-modal');
+            if (!modal) return;
+
+            const textarea = modal.querySelector('.html-template-textarea');
+            const preview = modal.querySelector('.preview-container');
+
+            if (!textarea || !preview) return;
+
+            const template = textarea.value;
+
+            // 获取示例数据
+            const sampleData = this.getSampleData();
+
+            // 使用HTML模板解析器渲染预览
+            const infoBarTool = window.SillyTavernInfobar?.modules?.infoBarTool;
+            if (infoBarTool && infoBarTool.htmlTemplateParser) {
+                const renderedHTML = infoBarTool.htmlTemplateParser.parseTemplate(template, sampleData);
+                preview.innerHTML = renderedHTML;
+            } else {
+                // 简单的预览渲染
+                preview.innerHTML = this.simpleTemplateRender(template, sampleData);
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新模板预览失败:', error);
+            const preview = document.querySelector('.html-template-editor-modal .preview-container');
+            if (preview) {
+                preview.innerHTML = `<div style="color: red; padding: 10px;">预览错误: ${error.message}</div>`;
+            }
+        }
+    }
+
+    /**
+     * 获取示例数据
+     */
+    getSampleData() {
+        return {
+            data: {
+                name: '影之刃',
+                health: 1240,
+                maxHealth: 1580,
+                energy: 320,
+                maxEnergy: 450,
+                level: 42,
+                class: '暗影刺客',
+                location: '暗影森林',
+                mood: '警觉',
+                items: [
+                    { name: '暗影之牙', type: '武器', quantity: 1 },
+                    { name: '治疗药水', type: '消耗品', quantity: 8 },
+                    { name: '回城卷轴', type: '道具', quantity: 3 }
+                ]
+            },
+            computed: {
+                healthPercentage: 78,
+                energyPercentage: 71,
+                timestamp: new Date().toLocaleString()
+            }
+        };
+    }
+
+    /**
+     * 简单的模板渲染
+     */
+    simpleTemplateRender(template, data) {
+        try {
+            let result = template;
+
+            // 简单的数据绑定替换
+            result = result.replace(/\{\{data\.(\w+)\}\}/g, (match, field) => {
+                return data.data[field] || '';
+            });
+
+            result = result.replace(/\{\{computed\.(\w+)\}\}/g, (match, field) => {
+                return data.computed[field] || '';
+            });
+
+            return result;
+        } catch (error) {
+            return `<div style="color: red;">渲染错误: ${error.message}</div>`;
+        }
+    }
+
+    /**
+     * 加载当前数据信息
+     */
+    async loadCurrentDataInfo() {
+        try {
+            const modal = document.querySelector('.html-template-editor-modal');
+            if (!modal) return;
+
+            // 获取启用的面板信息
+            const enabledPanelsList = modal.querySelector('#enabled-panels-list');
+            const availableFieldsList = modal.querySelector('#available-fields-list');
+
+            if (enabledPanelsList) {
+                const enabledPanels = this.getEnabledPanels();
+                if (Object.keys(enabledPanels).length > 0) {
+                    enabledPanelsList.innerHTML = Object.entries(enabledPanels)
+                        .map(([panelId, config]) => `
+                            <div style="margin: 5px 0; padding: 5px; background: var(--SmartThemeBodyColor, #333); border-radius: 3px;">
+                                <strong>${config.name || panelId}</strong>
+                                <div style="font-size: 11px; color: var(--SmartThemeQuoteColor, #888);">
+                                    字段: ${(config.fields || []).join(', ') || '无'}
+                                </div>
+                            </div>
+                        `).join('');
+                } else {
+                    enabledPanelsList.innerHTML = '<p style="color: var(--SmartThemeQuoteColor, #888);">暂无启用的面板</p>';
+                }
+            }
+
+            if (availableFieldsList) {
+                try {
+                    // 获取当前数据字段
+                    const fields = await this.getCurrentDataFields();
+
+                    if (Object.keys(fields).length > 0) {
+                        availableFieldsList.innerHTML = Object.entries(fields)
+                            .map(([panelId, fieldList]) => `
+                                <div style="margin: 5px 0;">
+                                    <strong>${panelId}:</strong>
+                                    <div style="font-size: 11px; margin-left: 10px;">
+                                        ${fieldList.map(field => `<code style="background: ${this.getInfoBarThemeColor('surface')}; padding: 1px 3px; margin: 1px; border-radius: 2px; color: ${this.getInfoBarThemeColor('accent')};">{{data.${field}}}</code>`).join(' ')}
+                                    </div>
+                                </div>
+                            `).join('');
+                    } else {
+                        availableFieldsList.innerHTML = `<p style="color: ${this.getInfoBarThemeColor('textSecondary')};">暂无可用数据字段</p>`;
+                    }
+                } catch (error) {
+                    console.error('[InfoBarSettings] ❌ 加载数据字段失败:', error);
+                    availableFieldsList.innerHTML = `<p style="color: ${this.getInfoBarThemeColor('textSecondary')};">加载数据字段失败</p>`;
+                }
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载当前数据信息失败:', error);
+        }
+    }
+
+    /**
+     * 处理AI修改模板
+     */
+    async handleAIModifyTemplate() {
+        try {
+            const modal = document.querySelector('.html-template-editor-modal');
+            if (!modal) return;
+
+            const textarea = modal.querySelector('.html-template-textarea');
+            const aiButton = modal.querySelector('[data-action="ai-modify-template"]');
+
+            if (!textarea) return;
+
+            const userTemplate = textarea.value.trim();
+            if (!userTemplate) {
+                alert('请先输入HTML模板代码');
+                return;
+            }
+
+            // 显示加载状态
+            aiButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI处理中...';
+            aiButton.disabled = true;
+
+            // 调用AI助手 - 使用自定义API
+            try {
+                // 获取当前启用的面板信息
+                const enabledPanels = this.getEnabledPanels();
+                const availableFields = await this.getCurrentDataFields();
+
+                // 构建AI提示词
+                const prompt = this.buildAIModifyPrompt(userTemplate, enabledPanels, availableFields);
+
+                // 调用自定义API
+                const modifiedTemplate = await this.callCustomAI(prompt);
+
+                textarea.value = modifiedTemplate;
+                this.updateTemplatePreview();
+
+                // 显示成功消息
+                this.showNotification('AI修改完成！', 'success');
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ AI修改失败:', error);
+                throw new Error(`AI修改失败: ${error.message}`);
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ AI修改模板失败:', error);
+            this.showNotification(`AI修改失败: ${error.message}`, 'error');
+        } finally {
+            // 恢复按钮状态
+            const aiButton = document.querySelector('.html-template-editor-modal [data-action="ai-modify-template"]');
+            if (aiButton) {
+                aiButton.innerHTML = '<i class="fas fa-magic"></i> AI一键修改';
+                aiButton.disabled = false;
+            }
+        }
+    }
+
+    /**
+     * 显示通知
+     */
+    showNotification(message, type = 'info') {
+        // 创建通知元素
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
+            color: white;
+            border-radius: 5px;
+            z-index: 10001;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            max-width: 300px;
+        `;
+        notification.textContent = message;
+
+        document.body.appendChild(notification);
+
+        // 3秒后自动移除
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 3000);
+    }
+
+    /**
+     * 加载HTML模板
+     */
+    loadHTMLTemplate() {
+        try {
+            console.log('[InfoBarSettings] 📂 加载HTML模板...');
+
+            const modal = document.querySelector('.html-template-editor-modal');
+            const textarea = modal?.querySelector('.html-template-textarea');
+
+            if (!textarea) {
+                console.error('[InfoBarSettings] ❌ 找不到模板文本区域');
+                return;
+            }
+
+            // 获取保存的自定义HTML模板
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings || {};
+            const configs = extensionSettings['Information bar integration tool'] || {};
+            const customTemplate = configs.customHTMLTemplate;
+
+            if (customTemplate) {
+                console.log('[InfoBarSettings] ✅ 加载保存的自定义模板');
+                textarea.value = customTemplate;
+            } else {
+                console.log('[InfoBarSettings] 📝 加载默认状态栏模板');
+                // 加载你提供的状态栏模板
+                textarea.value = this.getDefaultStatusBarTemplate();
+            }
+
+            // 更新预览
+            this.updateTemplatePreview();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载HTML模板失败:', error);
+        }
+    }
+
+    /**
+     * 获取默认状态栏模板
+     */
+    getDefaultStatusBarTemplate() {
+        return `<div class="container" style="
+    display: flex;
+    max-width: 1200px;
+    width: 100%;
+    background: rgba(15, 23, 42, 0.85);
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(94, 234, 212, 0.2);
+    backdrop-filter: blur(10px);
+    margin: 10px auto;
+">
+    <!-- 角色信息面板 -->
+    <div class="character-panel" style="
+        flex: 1;
+        padding: 20px;
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
+        border-right: 1px solid rgba(94, 234, 212, 0.2);
+        position: relative;
+    ">
+        <div class="character-header" style="
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        ">
+            <div class="character-avatar" style="
+                width: 50px;
+                height: 50px;
+                border-radius: 50%;
+                background: linear-gradient(45deg, #5eead4, #06b6d4);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-right: 15px;
+                box-shadow: 0 4px 15px rgba(94, 234, 212, 0.3);
+            ">
+                <i class="fas fa-user" style="color: #0f172a; font-size: 20px;"></i>
+            </div>
+            <div class="character-info">
+                <h3 class="character-name" style="
+                    margin: 0;
+                    color: #5eead4;
+                    font-size: 18px;
+                    font-weight: 600;
+                    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+                ">{{data.character.name || '测试角色'}}</h3>
+                <p class="character-class" style="
+                    margin: 2px 0 0 0;
+                    color: #94a3b8;
+                    font-size: 14px;
+                ">{{data.character.class || '法师'}} - Lv.{{data.character.level || 30}}</p>
+            </div>
+        </div>
+
+        <!-- 生命值条 -->
+        <div class="stat-bar health-bar" style="margin-bottom: 12px;">
+            <div class="stat-label" style="
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 5px;
+                font-size: 12px;
+                color: #cbd5e1;
+            ">
+                <span><i class="fas fa-heart" style="color: #ef4444; margin-right: 5px;"></i>生命值</span>
+                <span>{{data.character.health || 850}}/{{data.character.maxHealth || 1000}}</span>
+            </div>
+            <div class="progress-bar" style="
+                width: 100%;
+                height: 8px;
+                background: rgba(15, 23, 42, 0.6);
+                border-radius: 4px;
+                overflow: hidden;
+                border: 1px solid rgba(239, 68, 68, 0.3);
+            ">
+                <div class="progress-fill" style="
+                    width: {{computed.healthPercentage || 85}}%;
+                    height: 100%;
+                    background: linear-gradient(90deg, #ef4444, #f87171);
+                    transition: width 0.3s ease;
+                    box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+                "></div>
+            </div>
+        </div>
+
+        <!-- 魔法值条 -->
+        <div class="stat-bar mana-bar" style="margin-bottom: 12px;">
+            <div class="stat-label" style="
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 5px;
+                font-size: 12px;
+                color: #cbd5e1;
+            ">
+                <span><i class="fas fa-magic" style="color: #3b82f6; margin-right: 5px;"></i>魔法值</span>
+                <span>{{data.character.energy || 320}}/{{data.character.maxEnergy || 450}}</span>
+            </div>
+            <div class="progress-bar" style="
+                width: 100%;
+                height: 8px;
+                background: rgba(15, 23, 42, 0.6);
+                border-radius: 4px;
+                overflow: hidden;
+                border: 1px solid rgba(59, 130, 246, 0.3);
+            ">
+                <div class="progress-fill" style="
+                    width: {{computed.energyPercentage || 71}}%;
+                    height: 100%;
+                    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+                    transition: width 0.3s ease;
+                    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+                "></div>
+            </div>
+        </div>
+
+        <!-- 金币 -->
+        <div class="gold-info" style="
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(251, 191, 36, 0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(251, 191, 36, 0.2);
+        ">
+            <i class="fas fa-coins" style="color: #fbbf24; margin-right: 8px;"></i>
+            <span style="color: #fbbf24; font-weight: 500;">{{data.character.gold || 2847}} 金币</span>
+        </div>
+    </div>
+
+    <!-- 状态信息面板 -->
+    <div class="status-panel" style="
+        flex: 1;
+        padding: 20px;
+        background: linear-gradient(135deg, rgba(20, 30, 48, 0.9), rgba(15, 23, 42, 0.9));
+        position: relative;
+    ">
+        <h4 style="
+            margin: 0 0 15px 0;
+            color: #5eead4;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        ">
+            <i class="fas fa-info-circle" style="margin-right: 8px;"></i>
+            状态信息
+        </h4>
+
+        <div class="status-grid" style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        ">
+            <div class="status-item" style="
+                padding: 10px;
+                background: rgba(30, 41, 59, 0.5);
+                border-radius: 8px;
+                border: 1px solid rgba(94, 234, 212, 0.1);
+            ">
+                <div style="color: #94a3b8; font-size: 11px; margin-bottom: 3px;">位置</div>
+                <div style="color: #e2e8f0; font-size: 13px; font-weight: 500;">{{data.status.location || '神秘森林'}}</div>
+            </div>
+
+            <div class="status-item" style="
+                padding: 10px;
+                background: rgba(30, 41, 59, 0.5);
+                border-radius: 8px;
+                border: 1px solid rgba(94, 234, 212, 0.1);
+            ">
+                <div style="color: #94a3b8; font-size: 11px; margin-bottom: 3px;">心情</div>
+                <div style="color: #e2e8f0; font-size: 13px; font-weight: 500;">{{data.status.mood || '专注'}}</div>
+            </div>
+
+            <div class="status-item" style="
+                padding: 10px;
+                background: rgba(30, 41, 59, 0.5);
+                border-radius: 8px;
+                border: 1px solid rgba(94, 234, 212, 0.1);
+            ">
+                <div style="color: #94a3b8; font-size: 11px; margin-bottom: 3px;">时间</div>
+                <div style="color: #e2e8f0; font-size: 13px; font-weight: 500;">{{data.status.time || '黄昏'}}</div>
+            </div>
+
+            <div class="status-item" style="
+                padding: 10px;
+                background: rgba(30, 41, 59, 0.5);
+                border-radius: 8px;
+                border: 1px solid rgba(94, 234, 212, 0.1);
+            ">
+                <div style="color: #94a3b8; font-size: 11px; margin-bottom: 3px;">天气</div>
+                <div style="color: #e2e8f0; font-size: 13px; font-weight: 500;">{{data.status.weather || '晴朗'}}</div>
+            </div>
+        </div>
+
+        <!-- 装饰性元素 -->
+        <div style="
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(94, 234, 212, 0.2), transparent);
+            animation: pulse 2s infinite;
+        "></div>
+    </div>
+</div>
+
+<style>
+@keyframes pulse {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.1); }
+}
+
+.container:hover {
+    transform: translateY(-2px);
+    transition: transform 0.3s ease;
+}
+
+.stat-bar:hover .progress-fill {
+    filter: brightness(1.2);
+}
+
+.status-item:hover {
+    background: rgba(30, 41, 59, 0.7) !important;
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+}
+</style>`;
+    }
+
+    /**
+     * 保存HTML模板
+     */
+    saveHTMLTemplate() {
+        try {
+            console.log('[InfoBarSettings] 💾 保存HTML模板...');
+
+            const modal = document.querySelector('.html-template-editor-modal');
+            const textarea = modal?.querySelector('.html-template-textarea');
+
+            if (!textarea) {
+                console.error('[InfoBarSettings] ❌ 找不到模板文本区域');
+                return;
+            }
+
+            const templateContent = textarea.value.trim();
+            if (!templateContent) {
+                console.warn('[InfoBarSettings] ⚠️ 模板内容为空');
+                return;
+            }
+
+            // 保存到SillyTavern扩展设置
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings || {};
+            if (!extensionSettings['Information bar integration tool']) {
+                extensionSettings['Information bar integration tool'] = {};
+            }
+
+            extensionSettings['Information bar integration tool'].customHTMLTemplate = templateContent;
+
+            // 使用正确的保存方法
+            context.saveSettingsDebounced();
+
+            console.log('[InfoBarSettings] ✅ HTML模板保存成功');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 保存HTML模板失败:', error);
+        }
+    }
+
+    /**
+     * 应用HTML模板
+     */
+    applyHTMLTemplate() {
+        try {
+            console.log('[InfoBarSettings] ✅ 应用HTML模板...');
+
+            const modal = document.querySelector('.html-template-editor-modal');
+            const textarea = modal?.querySelector('.html-template-textarea');
+
+            if (!textarea) {
+                console.error('[InfoBarSettings] ❌ 找不到模板文本区域');
+                return;
+            }
+
+            const templateContent = textarea.value.trim();
+            if (!templateContent) {
+                console.warn('[InfoBarSettings] ⚠️ 模板内容为空');
+                return;
+            }
+
+            // 先保存模板
+            this.saveHTMLTemplate();
+
+            // 更新信息栏设置，启用自定义HTML模板风格
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings || {};
+            if (!extensionSettings['Information bar integration tool']) {
+                extensionSettings['Information bar integration tool'] = {};
+            }
+
+            // 正确设置为自定义HTML模板风格
+            extensionSettings['Information bar integration tool'].style = {
+                current: 'custom-html',
+                lastUpdated: new Date().toISOString()
+            };
+
+            // 使用正确的保存方法
+            context.saveSettingsDebounced();
+
+            // 关闭编辑器
+            modal.remove();
+
+            // 刷新信息栏显示
+            if (this.infoBarTool && this.infoBarTool.messageInfoBarRenderer) {
+                this.infoBarTool.messageInfoBarRenderer.refreshAllInfoBars();
+            }
+
+            console.log('[InfoBarSettings] ✅ HTML模板应用成功，已切换到自定义HTML模板风格');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 应用HTML模板失败:', error);
+        }
+    }
+
+    /**
+     * 构建AI修改提示词
+     */
+    buildAIModifyPrompt(userTemplate, enabledPanels, availableFields) {
+        return `你是一个专业的HTML模板优化助手。请根据以下信息修改用户提供的HTML模板：
+
+当前启用的数据面板：
+${JSON.stringify(enabledPanels, null, 2)}
+
+可用的数据字段：
+${JSON.stringify(availableFields, null, 2)}
+
+数据获取途径：
+- 数据来源: AI消息解析
+- 数据格式: XML标签 <infobar_data>
+- 更新频率: 每条AI消息
+- 数据流程: 消息接收 → XML解析 → 数据核心 → 模板渲染
+
+用户的HTML模板：
+${userTemplate}
+
+请按照以下要求修改模板：
+1. 使用 {{data.fieldName}} 语法绑定数据字段
+2. 确保所有数据字段都有对应的显示位置
+3. 保持原有的样式和布局结构
+4. 添加必要的条件渲染 {{#if condition}}...{{/if}}
+5. 为数组数据添加循环渲染 {{#each array}}...{{/each}}
+6. 确保HTML结构语义化和可访问性
+7. 使用现代CSS样式，支持深色主题
+8. 添加适当的图标和视觉元素
+9. 确保响应式设计
+10. 优化用户体验和可读性
+
+请直接返回修改后的HTML代码，不需要额外说明。`;
+    }
+
+    /**
+     * 调用自定义AI API
+     */
+    async callCustomAI(prompt) {
+        try {
+            // 获取API配置
+            const apiConfig = this.getAPIConfig();
+
+            if (!apiConfig.enabled) {
+                throw new Error('AI API未启用，请在设置中配置API');
+            }
+
+            console.log('[InfoBarSettings] 🤖 调用自定义AI API...');
+
+            let requestBody, headers;
+
+            // 根据不同的API提供商构建请求
+            if (apiConfig.provider === 'gemini') {
+                headers = {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiConfig.apiKey,
+                    ...apiConfig.headers
+                };
+                requestBody = {
+                    contents: [{
+                        parts: [{
+                            text: `你是一个专业的HTML模板开发助手，专注于生成高质量、语义化的HTML代码。\n\n${prompt}`
+                        }]
+                    }],
+                    generationConfig: {
+                        maxOutputTokens: 4000,
+                        temperature: 0.3
+                    }
+                };
+            } else {
+                // OpenAI格式（默认）
+                headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiConfig.apiKey}`,
+                    ...apiConfig.headers
+                };
+                requestBody = {
+                    model: apiConfig.model,
+                    messages: [
+                        {
+                            role: 'system',
+                            content: '你是一个专业的HTML模板开发助手，专注于生成高质量、语义化的HTML代码。'
+                        },
+                        {
+                            role: 'user',
+                            content: prompt
+                        }
+                    ],
+                    max_tokens: 4000,
+                    temperature: 0.3
+                };
+            }
+
+            const response = await fetch(apiConfig.endpoint, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            let result;
+            if (apiConfig.provider === 'gemini') {
+                if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+                    throw new Error('Gemini API返回格式错误');
+                }
+                if (!data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
+                    throw new Error('Gemini API返回内容格式错误');
+                }
+                result = data.candidates[0].content.parts[0].text.trim();
+            } else {
+                // OpenAI格式
+                if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+                    throw new Error('AI API返回格式错误');
+                }
+                result = data.choices[0].message.content.trim();
+            }
+
+            // 清理返回的代码
+            return this.cleanAIResponse(result);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 自定义AI API调用失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 获取API配置
+     */
+    getAPIConfig() {
+        try {
+            // 从SillyTavern的扩展设置获取API配置
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings || {};
+            const configs = extensionSettings['Information bar integration tool'] || {};
+            const apiConfig = configs.apiConfig || {};
+
+            console.log('[InfoBarSettings] 📊 获取API配置:', {
+                enabled: apiConfig.enabled,
+                provider: apiConfig.provider,
+                model: apiConfig.model,
+                hasApiKey: !!apiConfig.apiKey
+            });
+
+            // 构建正确的端点URL
+            let endpoint = apiConfig.endpoint;
+            if (apiConfig.provider === 'gemini' && !endpoint) {
+                const model = apiConfig.model || 'gemini-pro';
+                endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+            } else if (!endpoint) {
+                endpoint = this.getDefaultEndpoint(apiConfig.provider);
+            }
+
+            return {
+                enabled: apiConfig.enabled || false,
+                endpoint: endpoint,
+                apiKey: apiConfig.apiKey || '',
+                model: apiConfig.model || 'gpt-3.5-turbo',
+                provider: apiConfig.provider || 'openai',
+                headers: apiConfig.headers || {}
+            };
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取API配置失败:', error);
+            return { enabled: false };
+        }
+    }
+
+    /**
+     * 获取默认API端点
+     */
+    getDefaultEndpoint(provider) {
+        const endpoints = {
+            openai: 'https://api.openai.com/v1/chat/completions',
+            anthropic: 'https://api.anthropic.com/v1/messages',
+            gemini: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+            custom: 'https://api.openai.com/v1/chat/completions'
+        };
+        return endpoints[provider] || endpoints.openai;
+    }
+
+    /**
+     * 清理AI响应
+     */
+    cleanAIResponse(response) {
+        // 移除可能的代码块标记
+        let cleaned = response.replace(/```html\n?/g, '').replace(/```\n?/g, '');
+
+        // 移除多余的空行
+        cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
+
+        return cleaned.trim();
+    }
+
+    /**
+     * 获取当前启用的面板
+     */
+    getEnabledPanels() {
+        try {
+            // 从配置管理器获取启用的面板
+            const panelConfigs = this.configManager?.getConfig('panels') || {};
+            const enabledPanels = {};
+
+            Object.entries(panelConfigs).forEach(([panelId, config]) => {
+                if (config && config.enabled) {
+                    enabledPanels[panelId] = {
+                        enabled: true,
+                        name: config.name || panelId,
+                        description: config.description || ''
+                    };
+                }
+            });
+
+            // 如果没有配置，返回默认启用的面板
+            if (Object.keys(enabledPanels).length === 0) {
+                return {
+                    character: { enabled: true, name: '角色信息', description: '角色基本信息和状态' },
+                    status: { enabled: true, name: '状态信息', description: '当前状态和环境信息' },
+                    inventory: { enabled: true, name: '物品信息', description: '背包和物品状态' }
+                };
+            }
+
+            return enabledPanels;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取启用面板失败:', error);
+            return {
+                character: { enabled: true, name: '角色信息', description: '角色基本信息和状态' },
+                status: { enabled: true, name: '状态信息', description: '当前状态和环境信息' }
+            };
+        }
+    }
+
+    /**
+     * 获取当前数据字段
+     */
+    async getCurrentDataFields() {
+        try {
+            // 从统一数据核心获取当前数据结构
+            const infoBarTool = window.SillyTavernInfobar?.modules?.infoBarTool;
+            if (infoBarTool && infoBarTool.dataCore) {
+                // 使用正确的方法获取所有面板数据
+                const allPanelData = await infoBarTool.dataCore.getAllPanelData();
+                if (allPanelData && Object.keys(allPanelData).length > 0) {
+                    const fields = {};
+                    Object.entries(allPanelData).forEach(([panelId, panelData]) => {
+                        fields[panelId] = Object.keys(panelData || {});
+                    });
+                    return fields;
+                }
+
+                // 尝试获取聊天数据
+                const chatData = await infoBarTool.dataCore.getAllData('chat');
+                if (chatData) {
+                    const fields = {};
+                    // 查找面板数据
+                    Object.entries(chatData).forEach(([key, value]) => {
+                        if (key.startsWith('panels.') && value) {
+                            const panelId = key.split('.').pop();
+                            fields[panelId] = Object.keys(value);
+                        }
+                    });
+                    if (Object.keys(fields).length > 0) {
+                        return fields;
+                    }
+                }
+            }
+
+            // 如果没有实际数据，返回示例字段
+            return {
+                character: ['name', 'class', 'level', 'health', 'maxHealth', 'energy', 'maxEnergy'],
+                status: ['location', 'mood', 'time', 'weather'],
+                inventory: ['items', 'gold', 'gems'],
+                skills: ['skills', 'experience']
+            };
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取当前数据字段失败:', error);
+            // 返回示例字段作为回退
+            return {
+                character: ['name', 'class', 'level', 'health', 'maxHealth', 'energy', 'maxEnergy'],
+                status: ['location', 'mood', 'time', 'weather'],
+                inventory: ['items', 'gold', 'gems'],
+                skills: ['skills', 'experience']
+            };
         }
     }
 }
