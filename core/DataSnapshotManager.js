@@ -223,6 +223,29 @@ export class DataSnapshotManager {
                 }
             }
 
+            // 🔧 调试：显示要恢复的快照数据内容
+            const snapshotPanels = targetSnapshot.data.panels || {};
+            console.log('[DataSnapshotManager] 📋 快照数据内容验证:', {
+                panelCount: Object.keys(snapshotPanels).length,
+                panelNames: Object.keys(snapshotPanels)
+            });
+            
+            // 🔧 调试：检查几个主要面板的数据内容
+            const samplePanels = ['personal', 'world', 'interaction'];
+            for (const panelName of samplePanels) {
+                if (snapshotPanels[panelName]) {
+                    const panelData = snapshotPanels[panelName];
+                    const fieldCount = Object.keys(panelData).length;
+                    console.log(`[DataSnapshotManager] 📋 快照面板 ${panelName} 内容:`, {
+                        fieldCount,
+                        hasData: fieldCount > 0,
+                        sampleFields: fieldCount > 0 ? Object.keys(panelData).slice(0, 3) : []
+                    });
+                } else {
+                    console.log(`[DataSnapshotManager] ⚠️ 快照中面板 ${panelName} 不存在`);
+                }
+            }
+
             // 恢复数据核心状态
             await this.restoreDataCore(chatId, targetSnapshot.data);
 
@@ -234,13 +257,19 @@ export class DataSnapshotManager {
 
             // 触发回溯完成事件
             if (this.eventSystem) {
-                this.eventSystem.emit('snapshot:rollback:completed', {
+                const eventData = {
                     chatId,
                     targetFloor: actualTargetFloor,
                     originalTargetFloor: targetFloor,
                     snapshotId: targetSnapshot.id,
                     timestamp: Date.now()
-                });
+                };
+                
+                console.log('[DataSnapshotManager] 🔔 准备触发回溯完成事件:', eventData);
+                this.eventSystem.emit('snapshot:rollback:completed', eventData);
+                console.log('[DataSnapshotManager] 🔔 回溯完成事件已触发');
+            } else {
+                console.warn('[DataSnapshotManager] ⚠️ 事件系统未初始化，无法触发回溯完成事件');
             }
 
             return true;
@@ -690,8 +719,8 @@ export class DataSnapshotManager {
 
             console.log('[DataSnapshotManager] 🎯 智能回溯目标: 从楼层', currentFloor, '回溯到楼层', targetFloor);
 
-            // 🔧 先清理被删消息对应楼层的快照，避免残留
-            await this.removeSnapshotsForFloor(chatId, currentFloor + 1); // 清理可能的下一楼层快照
+            // 🔧 修复：在回溯之前不要清理任何与目标相关的楼层快照，避免误删回溯所需的快照
+            // 如需清理残留，应在回溯完成后，再按需清理高于实际目标楼层的快照
 
             // 执行回溯
             const success = await this.rollbackToSnapshot(chatId, targetFloor);

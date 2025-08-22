@@ -29,6 +29,14 @@ export class ConfigManager {
             enableMemoryAssist: { type: 'boolean', default: true },
             defaultCollapsed: { type: 'boolean', default: false },
             
+            // 提示词插入位置配置验证
+            'promptPosition.mode': { 
+                type: 'string', 
+                enum: ['beforeCharacter', 'afterCharacter', 'atDepthSystem', 'atDepthUser', 'atDepthAssistant'], 
+                default: 'afterCharacter' 
+            },
+            'promptPosition.depth': { type: 'number', min: 0, max: 10, default: 0 },
+            
             // API配置验证
             'apiConfig.enabled': { type: 'boolean', default: false },
             'apiConfig.provider': { type: 'string', enum: ['gemini', 'openai'], default: 'gemini' },
@@ -40,6 +48,8 @@ export class ConfigManager {
             'apiConfig.maxTokens': { type: 'number', min: 1, max: 100000, default: 2000 },
             'apiConfig.retryCount': { type: 'number', min: 0, max: 10, default: 3 },
             'apiConfig.extraPrompt': { type: 'string', default: '' },
+            'apiConfig.mergeMessages': { type: 'boolean', default: true },
+            'apiConfig.includeWorldBook': { type: 'boolean', default: false },
             
             // 主题配置验证
             'theme.current': { type: 'string', default: 'default' },
@@ -501,7 +511,7 @@ export class ConfigManager {
                 /^enableTableRecord$/,          // 表格记录设置
                 /^enableMemoryAssist$/,         // 记忆辅助设置
                 /^defaultCollapsed$/,           // 默认折叠设置
-                /^apiConfig\./,                 // API配置
+                // /^apiConfig\./,              // API配置 - 已移除，不导出敏感信息
                 /^theme\./,                     // 主题配置
                 /^style\./,                     // 样式配置
                 /^frontendDisplay\./,           // 前端显示配置（新增：导出全部前端显示相关键）
@@ -509,14 +519,17 @@ export class ConfigManager {
                 /^.*\.config$/,                 // 各种配置项
                 /^.*\.settings$/,               // 各种设置项
                 /^panel_.*$/,                   // 面板配置
+                /^field_rules$/,                // 字段规则
+                /^panel_rules$/,                // 面板规则
                 /^custom_.*$/,                  // 自定义配置
                 /^settings_.*$/,                // 基础设置
                 /^.*_enabled$/,                 // 启用状态
                 /^.*_config$/,                  // 配置项
-                /^.*_settings$/                 // 设置项
+                /^.*_settings$/,                // 设置项
+                /^.*_rules$/                    // 规则配置
             ];
             
-            // 排除业务数据的模式
+            // 排除业务数据和敏感信息的模式
             const dataPatterns = [
                 /_data$/,                       // 业务数据
                 /_history$/,                    // 历史记录
@@ -527,6 +540,7 @@ export class ConfigManager {
                 /^cache_/,                      // 缓存前缀
                 /^temp_/,                       // 临时前缀
                 /^backup_/,                     // 备份前缀
+                /^apiConfig$/,                  // API配置（敏感信息）
                 /summary_settings$/,            // 总结设置（这是配置，不应排除）
                 /summary_history$/,             // 总结历史（这是数据，应排除）
                 /^.*\.data$/,                   // 数据字段

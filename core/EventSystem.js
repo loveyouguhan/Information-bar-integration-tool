@@ -1029,13 +1029,30 @@ export class EventSystem {
                 };
             }
 
-            // 更新面板数据
+            // 🔧 修复：按启用字段更新面板数据，避免跨面板数据污染
+            for (const [panelName, panelData] of Object.entries(parsedData)) {
+                const existingPanel = chatData.infobar_data.panels[panelName] || {};
+                
+                // 使用数据核心的启用字段过滤合并
+                if (this.dataCore && this.dataCore.mergeWithEnabledFields) {
+                    chatData.infobar_data.panels[panelName] = await this.dataCore.mergeWithEnabledFields(panelName, existingPanel, panelData);
+                } else {
+                    // 降级处理：只保留新数据，避免历史污染
+                    chatData.infobar_data.panels[panelName] = { ...panelData };
+                }
+                
+                console.log(`[EventSystem] 🔄 已按启用字段更新面板: ${panelName}`);
+            }
+            
+            // 🔧 分离系统元数据存储
+            if (!chatData.infobar_data.systemMetadata) {
+                chatData.infobar_data.systemMetadata = {};
+            }
             Object.keys(parsedData).forEach(panelName => {
-                chatData.infobar_data.panels[panelName] = {
-                    ...chatData.infobar_data.panels[panelName],
-                    ...parsedData[panelName],
+                chatData.infobar_data.systemMetadata[panelName] = {
                     lastUpdated: Date.now(),
-                    source: type
+                    source: type,
+                    fieldCount: Object.keys(chatData.infobar_data.panels[panelName]).length
                 };
             });
 

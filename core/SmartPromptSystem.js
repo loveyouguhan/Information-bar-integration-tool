@@ -114,8 +114,21 @@ export class SmartPromptSystem {
 
 📋 数据格式要求：
 在正常的角色扮演和剧情发展之外，请同时提供结构化的信息栏数据：
-1. <aiThinkProcess><!--五步分析思考--></aiThinkProcess>
-2. <infobar_data><!--完整面板数据--></infobar_data>
+
+🚨 **严格输出顺序要求** 🚨
+**必须按照以下顺序输出，严禁颠倒：**
+1. **先输出** <aiThinkProcess><!--五步分析思考--></aiThinkProcess>
+2. **再输出** <infobar_data><!--完整面板数据--></infobar_data>
+
+🚨 **强制注释包裹要求** 🚨
+**所有内容必须被注释符号包裹：**
+- ✅ 正确格式：<aiThinkProcess><!--内容在这里--></aiThinkProcess>
+- ✅ 正确格式：<infobar_data><!--内容在这里--></infobar_data>
+- ❌ 错误格式：<aiThinkProcess>内容在这里</aiThinkProcess>（缺少注释符号）
+- ❌ 错误格式：<!--内容在这里--><aiThinkProcess></aiThinkProcess>（注释符号位置错误）
+
+⚠️ **严禁先生成infobar_data再生成aiThinkProcess**
+⚠️ **严禁内容不被注释符号包裹**
 ⚠️ 这些标签用于数据解析，不会影响你的正常创作
 
 📋 规则2: XML紧凑格式规范
@@ -175,6 +188,9 @@ export class SmartPromptSystem {
 ⚠️ 正确格式是将注释符号<!--和-->放在标签内部，而不是外部
 ⚠️ NPC数据格式请使用npc索引和紧凑格式：npc0.姓名="NPC1", npc0.关系="关系", npc0.态度="态度", npc0.情绪="情绪"
 
+🚨 **必须严格按照以下顺序输出** 🚨
+
+**第一步：先输出五步思考分析（内容必须被<!--和-->包裹）**
 <aiThinkProcess>
 <!--
 [输出模式: {{OUTPUT_MODE}}]
@@ -189,18 +205,43 @@ export class SmartPromptSystem {
 -->
 </aiThinkProcess>
 
+**第二步：再输出面板数据（内容必须被<!--和-->包裹，必须严格遵循上述五步思考的分析结果）**
 <infobar_data>
 <!--
 {PANEL_DATA_TEMPLATE}
 -->
 </infobar_data>
 
+**⚠️ 严禁使用以下错误格式：**
+<aiThinkProcess>
+五步分析过程：（内容没有被注释符号包裹）
+0. 更新策略:全量更新
+1. 剧情分析：...
+</aiThinkProcess>
+
+<infobar_data>
+personal: name="张三"（内容没有被注释符号包裹）
+world: name="现代都市"
+</infobar_data>
+
 🚨【重要提醒】🚨
 
-请在正常的角色扮演和剧情发展之后，添加以下数据标签：
-1. <aiThinkProcess><!--五步分析思考--></aiThinkProcess>
-2. <infobar_data><!--完整面板数据--></infobar_data>
+请在正常的角色扮演和剧情发展之后，**严格按照以下顺序**添加数据标签：
+
+**🚨 强制输出顺序 🚨**
+1. **第一步：必须先输出** <aiThinkProcess><!--五步分析思考--></aiThinkProcess>
+2. **第二步：必须后输出** <infobar_data><!--完整面板数据--></infobar_data>
+
+**🚨 强制注释包裹格式 🚨**
+- ✅ **正确格式**：<aiThinkProcess><!--内容必须在注释符号内--></aiThinkProcess>
+- ✅ **正确格式**：<infobar_data><!--内容必须在注释符号内--></infobar_data>
+- ❌ **错误格式**：<aiThinkProcess>内容直接写在这里</aiThinkProcess>
+- ❌ **错误格式**：<infobar_data>内容直接写在这里</infobar_data>
+
+**⚠️ 严禁颠倒顺序！严禁先输出infobar_data！**
+**⚠️ 严禁内容不被<!--和-->包裹！**
 位置：建议放在回复的最后部分，不影响正常的剧情叙述
+**infobar_data的内容必须严格遵循aiThinkProcess中五步思考的分析结果**
 
 【⚠️ XML紧凑格式详细示例 ⚠️】
 
@@ -238,19 +279,22 @@ personal: name="张三", age="25"
 -->
 </infobar_data>
 
-✅ 正确格式示例 - 严格遵守XML紧凑格式：
+✅ 正确格式示例 - 严格遵守输出顺序和注释包裹格式：
+
+**第一步：必须先输出五步思考（注意：内容必须被<!--和-->包裹）**
 <aiThinkProcess>
 <!--
 五步分析过程：
 0. 更新策略:增量更新
-1. 剧情分析：当前发生什么事件？
-2. 数据变化识别：哪些信息发生了变化？
-3. 更新策略判断：需要更新哪些字段？
-4. 数据完整性检查：确保所有启用面板都有完整数据
-5. 质量验证：确认数据逻辑一致性
+1. 剧情分析：张三正在现代都市的办公室里工作，处理编程任务
+2. 数据变化识别：位置从家里变为办公室，状态从休息变为工作，新增了任务信息
+3. 更新策略判断：需要更新location为"办公室"，occupation保持"程序员"，新增tasks相关字段
+4. 数据完整性检查：personal、world、tasks面板都有完整数据
+5. 质量验证：数据与当前剧情一致，张三作为程序员在办公室工作符合逻辑
 -->
 </aiThinkProcess>
 
+**第二步：基于上述分析输出面板数据（注意：内容必须被<!--和-->包裹）**
 <infobar_data>
 <!--
 personal: name="张三", age="25", occupation="程序员"
@@ -259,12 +303,29 @@ tasks: creation="新任务创建", editing="任务编辑中"
 -->
 </infobar_data>
 
+❌ **错误格式示例（严禁使用）**：
+<aiThinkProcess>
+五步分析过程：（内容没有被注释符号包裹）
+0. 更新策略:增量更新
+1. 剧情分析：...
+</aiThinkProcess>
+
+<infobar_data>
+personal: name="张三", age="25"（内容没有被注释符号包裹）
+world: name="现代都市", type="都市"
+</infobar_data>
+
 【⚠️ 数据格式要求】
-✅ 标签名称：使用 <aiThinkProcess> 和 <infobar_data>
-✅ 格式要求：XML紧凑格式（面板名: 字段="值", 字段="值"）
-✅ 数据范围：只为下方模板列出的已启用面板生成数据
-❌ 避免：使用其他标签名、JSON格式、XML嵌套格式
-❌ 避免：生成未启用面板数据或添加额外字段
+✅ **输出顺序**：必须先输出 <aiThinkProcess>，再输出 <infobar_data>
+✅ **注释包裹**：所有内容必须被<!--和-->包裹
+✅ **标签名称**：使用 <aiThinkProcess> 和 <infobar_data>
+✅ **格式要求**：XML紧凑格式（面板名: 字段="值", 字段="值"）
+✅ **数据范围**：只为下方模板列出的已启用面板生成数据
+✅ **数据一致性**：infobar_data必须严格遵循aiThinkProcess中的五步分析结果
+❌ **避免**：使用其他标签名、JSON格式、XML嵌套格式
+❌ **避免**：生成未启用面板数据或添加额外字段
+❌ **严禁**：先输出infobar_data再输出aiThinkProcess
+❌ **严禁**：内容不被注释符号<!--和-->包裹
 
 ⭐ 重要：这些要求只适用于数据标签部分，不影响你的正常角色扮演和剧情创作`;
     }
@@ -415,14 +476,33 @@ tasks: creation="新任务创建", editing="任务编辑中"
             // 检测是否有新启用的子项需要补充数据
             const missingDataFields = await this.detectMissingDataFields(enabledPanels);
 
-            // 生成面板数据模板
-            const panelDataTemplate = this.generatePanelDataTemplate(enabledPanels);
-
-            // 🔧 新增：生成字段规则信息
-            const fieldRulesInfo = await this.generateFieldRulesInfo(enabledPanels);
+            // 🔧 优化：增量更新模式下跳过面板数据模板生成，但保持交互面板多NPC逻辑
+            let panelDataTemplate = '';
+            if (updateStrategy.type === 'incremental') {
+                // 增量模式：只为交互面板生成多NPC模板，其他面板跳过模板生成（有现有数据对照）
+                const interactionPanel = enabledPanels.find(p => p.id === 'interaction');
+                if (interactionPanel) {
+                    const panelKey = interactionPanel.type === 'custom' && interactionPanel.key ? interactionPanel.key : interactionPanel.id;
+                    const interactionTemplate = this.generateInteractionPanelTemplate(interactionPanel, panelKey);
+                    if (interactionTemplate) {
+                        panelDataTemplate = `增量更新模式 - 仅交互面板需要特殊处理多NPC:\n${interactionTemplate}`;
+                        console.log('[SmartPromptSystem] 📊 增量模式：仅生成交互面板多NPC模板');
+                    } else {
+                        panelDataTemplate = '增量更新模式 - 基于现有数据对照，无需数据模板';
+                        console.log('[SmartPromptSystem] 📊 增量模式：跳过所有面板数据模板生成');
+                    }
+                } else {
+                    panelDataTemplate = '增量更新模式 - 基于现有数据对照，无需数据模板';
+                    console.log('[SmartPromptSystem] 📊 增量模式：跳过所有面板数据模板生成');
+                }
+            } else {
+                // 完整模式：生成所有面板的数据模板
+                panelDataTemplate = this.generatePanelDataTemplate(enabledPanels);
+                console.log('[SmartPromptSystem] 📊 完整模式：生成所有面板数据模板');
+            }
 
             // 🔧 新增：生成当前数据对照信息
-            const currentDataInfo = this.generateCurrentDataInfo(currentPanelData, updateStrategy);
+            const currentDataInfo = await this.generateCurrentDataInfo(currentPanelData, updateStrategy);
 
             // 检测输出模式
             const outputMode = this.getOutputMode();
@@ -433,31 +513,34 @@ tasks: creation="新任务创建", editing="任务编辑中"
             // 🔧 新增：添加当前数据对照信息
             prompt = this.addCurrentDataInfo(prompt, currentDataInfo);
 
-            // 🔧 新增：添加字段规则信息
-            prompt = this.addFieldRulesInfo(prompt, fieldRulesInfo);
-
-            // 如果有缺失数据，添加增量补充指令
-            if (missingDataFields.length > 0) {
-                prompt = this.addIncrementalDataInstructions(prompt, missingDataFields);
-            }
-
-            // 增量策略：基于当前数据对照，只输出变化字段
+            // 增量策略：优先添加"只输出变化字段"的通用约束，再追加"缺失数据强制补充"以覆盖通用约束
             if (updateStrategy.type === 'incremental') {
+                // 先给出通用增量约束
                 prompt = this.addIncrementalOnlyChangedRules(prompt, currentPanelData, enabledPanels);
+                // 再以更高优先级追加强制补充要求（覆盖上面的通用规则）
+                if (missingDataFields.length > 0) {
+                    prompt = this.addIncrementalDataInstructions(prompt, missingDataFields);
+                    // 🔧 新增：在提示词最末尾添加终极验证提醒
+                    prompt = this.addFinalValidationReminder(prompt, missingDataFields);
+                }
             }
 
+            // 🔧 修复：先替换更新策略信息，再替换输出模式标识
+            prompt = this.addUpdateStrategyInfo(prompt, updateStrategy);
+            
             // 替换输出模式标识
             prompt = prompt.replace('{{OUTPUT_MODE}}', outputMode);
 
-            // 🔧 修改：使用智能分析的更新策略
-            prompt = this.addUpdateStrategyInfo(prompt, updateStrategy);
-
             // 添加严格的字段约束说明
-            prompt = this.addFieldConstraints(prompt, enabledPanels);
+            prompt = this.addFieldConstraints(prompt, enabledPanels, updateStrategy);
 
             console.log('[SmartPromptSystem] 🔍 模板替换结果:');
             console.log('原始模板长度:', this.promptTemplate.length);
-            console.log('面板数据模板:', panelDataTemplate);
+            if (updateStrategy.type === 'incremental') {
+                console.log('增量模式面板模板:', panelDataTemplate.substring(0, 100) + (panelDataTemplate.length > 100 ? '...' : ''));
+            } else {
+                console.log('完整模式面板模板长度:', panelDataTemplate.length);
+            }
             console.log('当前数据信息长度:', currentDataInfo.length);
             console.log('更新策略:', updateStrategy.type, `(数据覆盖率: ${updateStrategy.dataPercentage}%)`);
             console.log('最终提示词长度:', prompt.length);
@@ -510,13 +593,20 @@ tasks: creation="新任务创建", editing="任务编辑中"
                 return {};
             }
 
-            // 仅保留已启用面板
-            enabledPanels.forEach(panel => {
+            // 仅保留已启用面板，并按启用字段过滤数据
+            for (const panel of enabledPanels) {
                 const panelId = panel.id;
-                if (panels[panelId] && Object.keys(panels[panelId]).length > 0) {
-                    currentData[panelId] = panels[panelId];
+                const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+                const sourceData = panels[panelKey] || panels[panelId];
+                if (sourceData && Object.keys(sourceData).length > 0) {
+                    // 🔧 修复：使用启用字段过滤，避免跨面板数据污染在提示词中出现
+                    const filteredPanelData = this.filterByEnabledFields(panelId, sourceData, panel);
+                    if (Object.keys(filteredPanelData).length > 0) {
+                        currentData[panelKey] = filteredPanelData;
+                        console.log(`[SmartPromptSystem] 📊 面板 ${panelId}(${panelKey}): 过滤后保留 ${Object.keys(filteredPanelData).length} 个启用字段`);
+                    }
                 }
-            });
+            }
 
             console.log(`[SmartPromptSystem] 📊 当前数据获取完成，包含 ${Object.keys(currentData).length} 个面板的数据`);
             return currentData;
@@ -524,6 +614,63 @@ tasks: creation="新任务创建", editing="任务编辑中"
         } catch (error) {
             console.error('[SmartPromptSystem] ❌ 获取当前面板数据失败:', error);
             return {};
+        }
+    }
+
+    /**
+     * 🔧 新增：按启用字段过滤面板数据，避免提示词中出现错误字段
+     * @param {string} panelId - 面板ID
+     * @param {Object} panelData - 原始面板数据
+     * @param {Object} panelConfig - 面板配置（包含启用的子项）
+     * @returns {Object} 过滤后的面板数据
+     */
+    filterByEnabledFields(panelId, panelData, panelConfig) {
+        try {
+            const filteredData = {};
+            
+            // 收集启用字段的key列表
+            const enabledFieldKeys = new Set();
+            if (panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
+                panelConfig.subItems.forEach(subItem => {
+                    if (subItem.key) {
+                        enabledFieldKeys.add(subItem.key);
+                    }
+                });
+            }
+
+            // 只保留启用字段的数据，过滤掉跨面板污染字段
+            Object.keys(panelData).forEach(key => {
+                // 排除系统字段
+                if (['lastUpdated', 'source'].includes(key)) {
+                    return;
+                }
+                
+                // 交互对象面板：支持动态NPC字段，例如 npc0.name
+                if (panelId === 'interaction') {
+                    // 提取基础字段名：匹配 npc<number>.<field>
+                    const match = key.match(/^npc\d+\.(.+)$/);
+                    const baseField = match ? match[1] : key;
+                    if (enabledFieldKeys.has(baseField)) {
+                        filteredData[key] = panelData[key];
+                        return;
+                    }
+                }
+
+                // 其他面板：只保留精确匹配的启用字段
+                if (enabledFieldKeys.has(key)) {
+                    filteredData[key] = panelData[key];
+                    return;
+                }
+
+                console.log(`[SmartPromptSystem] 🧹 过滤掉面板 ${panelId} 的非启用字段: ${key}`);
+            });
+
+            console.log(`[SmartPromptSystem] 🔍 面板 ${panelId} 字段过滤: ${Object.keys(panelData).length} -> ${Object.keys(filteredData).length}`);
+            return filteredData;
+
+        } catch (error) {
+            console.error(`[SmartPromptSystem] ❌ 过滤面板 ${panelId} 字段失败:`, error);
+            return {}; // 出错时返回空对象，避免污染数据继续传播
         }
     }
 
@@ -690,16 +837,29 @@ tasks: creation="新任务创建", editing="任务编辑中"
                         });
 
                         // 2. 处理面板管理中的自定义子项（panel.subItems数组格式）
+                        let enabledCustomSubItems = [];
                         if (panel.subItems && Array.isArray(panel.subItems)) {
-                            const enabledCustomSubItems = panel.subItems.filter(subItem => subItem.enabled !== false);
+                            enabledCustomSubItems = panel.subItems.filter(subItem => subItem.enabled !== false);
+                            
+                            // 🔧 修复：创建键名集合，避免重复添加
+                            const existingKeys = new Set(allSubItems.map(item => item.key));
+                            
                             enabledCustomSubItems.forEach(subItem => {
-                                allSubItems.push({
-                                    key: subItem.key || subItem.name.toLowerCase().replace(/\s+/g, '_'),
-                                    name: subItem.displayName || subItem.name,
-                                    enabled: true,
-                                    value: subItem.value || '',
-                                    source: 'panelManagement' // 标记来源
-                                });
+                                const key = subItem.key || subItem.name.toLowerCase().replace(/\s+/g, '_');
+                                
+                                // 🔧 修复：检查是否已存在，避免重复
+                                if (!existingKeys.has(key)) {
+                                    allSubItems.push({
+                                        key: key,
+                                        name: subItem.displayName || subItem.name,
+                                        enabled: true,
+                                        value: subItem.value || '',
+                                        source: 'panelManagement' // 标记来源
+                                    });
+                                    existingKeys.add(key);
+                                } else {
+                                    console.log(`[SmartPromptSystem] ⚠️ 跳过重复的自定义子项: ${key} (基础面板 ${panelId} 已存在该键)`);
+                                }
                             });
                         }
 
@@ -711,7 +871,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
                                 subItems: allSubItems
                             });
 
-                            console.log(`[SmartPromptSystem] 📊 基础面板 ${panelId}: ${allSubItems.length} 个子项 (基础设置: ${enabledSubItems.length}, 自定义: ${panel.subItems?.length || 0})`);
+                            console.log(`[SmartPromptSystem] 📊 基础面板 ${panelId}: ${allSubItems.length} 个子项 (基础设置: ${enabledSubItems.length}, 自定义: ${enabledCustomSubItems.length})`);
                         }
                     }
                 }
@@ -720,22 +880,41 @@ tasks: creation="新任务创建", editing="任务编辑中"
             // 检查自定义面板 - 修复：使用与DataTable.js相同的读取逻辑
             if (configs.customPanels) {
                 for (const [panelId, panelConfig] of Object.entries(configs.customPanels)) {
-                    if (panelConfig && panelConfig.enabled) {
+                    console.log(`[SmartPromptSystem] 🔍 检查自定义面板: ${panelId}`, panelConfig);
+                    if (panelConfig && panelConfig.enabled !== false) { // 默认启用，除非明确设置为false
                         const subItems = panelConfig.subItems || [];
-                        if (subItems.length > 0) {
-                            enabledPanels.push({
-                                id: panelId,
-                                key: panelConfig.key || panelId, // 添加key属性
-                                type: 'custom',
-                                name: panelConfig.name || '未命名面板',
-                                subItems: subItems.map(subItem => ({
-                                    key: subItem.name || subItem,
-                                    name: subItem.name || subItem,
+                        console.log(`[SmartPromptSystem] 📊 自定义面板 ${panelId} 子项:`, subItems);
+                        
+                        // 🔧 修复：即使子项为空也应该包含面板，因为可能在其他地方有子项配置
+                        const processedSubItems = subItems.map(subItem => {
+                            // 处理不同的子项格式
+                            if (typeof subItem === 'string') {
+                                return {
+                                    key: subItem,
+                                    name: subItem,
                                     enabled: true,
                                     value: ''
-                                }))
-                            });
-                        }
+                                };
+                            } else if (subItem && typeof subItem === 'object') {
+                                return {
+                                    key: subItem.key || subItem.name || subItem.id,
+                                    name: subItem.name || subItem.displayName || subItem.key || subItem.id,
+                                    enabled: subItem.enabled !== false,
+                                    value: subItem.value || ''
+                                };
+                            }
+                            return null;
+                        }).filter(Boolean);
+
+                        enabledPanels.push({
+                            id: panelId,
+                            key: panelConfig.key || panelId, // 添加key属性
+                            type: 'custom',
+                            name: panelConfig.name || '未命名面板',
+                            subItems: processedSubItems
+                        });
+                        
+                        console.log(`[SmartPromptSystem] ✅ 添加自定义面板: ${panelId}, 子项数量: ${processedSubItems.length}`);
                     }
                 }
             }
@@ -776,24 +955,33 @@ tasks: creation="新任务创建", editing="任务编辑中"
     }
 
     /**
-     * 🔧 新增：生成当前数据对照信息
+     * 🔧 修复：生成当前数据对照信息 - 显示所有启用面板状态
      */
-    generateCurrentDataInfo(currentPanelData, updateStrategy) {
+    async generateCurrentDataInfo(currentPanelData, updateStrategy) {
         try {
             console.log('[SmartPromptSystem] 📋 生成当前数据对照信息...');
 
-            if (Object.keys(currentPanelData).length === 0) {
-                return '【当前数据状态】\n暂无现有数据，需要全量生成所有面板数据。';
+            // 获取所有启用的面板列表
+            const enabledPanels = await this.getEnabledPanels();
+
+            if (enabledPanels.length === 0) {
+                return '【当前数据状态】\n没有启用的面板。';
             }
 
             const dataInfoParts = ['【当前数据状态】'];
             dataInfoParts.push(`数据覆盖率: ${updateStrategy.dataPercentage}% (${updateStrategy.existingFields}/${updateStrategy.totalFields}个字段)`);
             dataInfoParts.push(`更新策略: ${updateStrategy.type === 'full' ? '全量更新' : '增量更新'} - ${updateStrategy.reason}`);
+            dataInfoParts.push(`启用面板数量: ${enabledPanels.length}个`);
             dataInfoParts.push('');
 
-            // 按面板显示当前数据
-            for (const [panelId, panelData] of Object.entries(currentPanelData)) {
-                dataInfoParts.push(`【${panelId}面板 - 现有数据】`);
+            // 🔧 修复：显示所有启用面板的状态，无论是否有现有数据
+            for (const panel of enabledPanels) {
+                const panelId = panel.id;
+                const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+                const panelName = this.getBasicPanelDisplayName(panelId);
+                const panelData = currentPanelData[panelKey] || currentPanelData[panelId] || {};
+                
+                dataInfoParts.push(`【${panelName}面板 (${panelId}) - ${Object.keys(panelData).length > 0 ? '现有数据' : '待生成数据'}】`);
 
                 const dataEntries = Object.entries(panelData);
                 if (dataEntries.length > 0) {
@@ -803,7 +991,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
                         dataInfoParts.push(`${key}: ${displayValue}`);
                     });
                 } else {
-                    dataInfoParts.push('(无有效数据)');
+                    dataInfoParts.push(`(无现有数据，需要根据剧情生成${panel.subItems.length}个字段)`);
                 }
                 dataInfoParts.push('');
             }
@@ -872,6 +1060,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
      */
     generatePanelDataTemplate(enabledPanels) {
         console.log('[SmartPromptSystem] 📝 生成面板数据模板，面板数量:', enabledPanels.length);
+        console.log('[SmartPromptSystem] 🔍 面板列表:', enabledPanels.map(p => `${p.id}(${p.type})`));
 
         const templateParts = [];
 
@@ -889,19 +1078,38 @@ tasks: creation="新任务创建", editing="任务编辑中"
                 }
             } else {
                 // 其他面板使用原有逻辑
+                console.log(`[SmartPromptSystem] 🔍 面板 ${panelKey} 子项详情:`, panel.subItems);
                 const subItemTemplates = panel.subItems.map(subItem => {
-                    // 🔧 修复：使用占位符而不是中文显示名称，避免AI输出字段名称
-                    return `${subItem.key}="具体内容"`;
+                    // 🔧 修复：为personal面板提供正确的字段示例，不包含跨面板字段
+                    if (panel.id === 'personal') {
+                        // personal面板使用正确的字段示例，只包含实际启用的字段
+                        const personalExamples = {
+                            'name': 'name="张三"',
+                            'age': 'age="25"',
+                            'gender': 'gender="男"',
+                            'occupation': 'occupation="程序员"',
+                            'appearance': 'appearance="中等身材，黑发"',
+                            'personality': 'personality="开朗，友善"'
+                        };
+                        return personalExamples[subItem.key] || `${subItem.key}="具体内容"`;
+                    } else {
+                        return `${subItem.key}="具体内容"`;
+                    }
                 });
 
                 if (subItemTemplates.length > 0) {
                     const panelTemplate = `${panelKey}: ${subItemTemplates.join(', ')}`;
                     templateParts.push(panelTemplate);
                     console.log(`[SmartPromptSystem] 面板模板: ${panelTemplate}`);
+                } else {
+                    console.warn(`[SmartPromptSystem] ⚠️ 面板 ${panelKey} 没有有效的子项模板，跳过生成`);
                 }
             }
         }
 
+        console.log(`[SmartPromptSystem] 📋 模板部分数组长度: ${templateParts.length}`);
+        console.log('[SmartPromptSystem] 📋 模板部分内容:', templateParts);
+        
         const result = templateParts.join('\n');
         console.log('[SmartPromptSystem] 生成的面板数据模板:', result);
 
@@ -925,10 +1133,18 @@ tasks: creation="新任务创建", editing="任务编辑中"
             return `npc0.${subItem.key}="具体${chineseDisplayName}内容"`;
         });
 
-        const result = `${panelKey}: 使用npcX.字段名格式，其中X为NPC编号(0,1,2...)，可用字段: ${availableFields.join(', ')}
-示例格式: ${exampleFields.join(', ')}`;
+        // 🔥 强化交互对象面板的NPC前缀指令 + 严格限制只输出一个interaction面板
+        const result = `${panelKey}: 🚨 **只能输出一个${panelKey}面板；所有NPC字段必须使用npcX.前缀** 🚨（X为0,1,2...）
+**⚠️ 自定义子项同样必须带npc前缀：npc0.自定义字段**
+可用字段: ${availableFields.join(', ')}
+✅ 正确示例（单一面板，多个NPC在同一行内区分）: ${exampleFields.join(', ')}, npc1.name="另一个NPC", npc1.type="类型"
+❌ 错误示例（多个面板）:
+${panelKey}: npc0.name="NPC1"
+${panelKey}: npc1.name="NPC2" ← 错误！${panelKey}面板只能出现一次！
+❌ 错误示例（缺少前缀）: ${panel.subItems.slice(0, 2).map(subItem => `${subItem.key}="内容"`).join(', ')}
+✅ 正确示例（包含前缀）: ${panel.subItems.slice(0, 2).map(subItem => `npc0.${subItem.key}="内容"`).join(', ')}`;
 
-        console.log('[SmartPromptSystem] 🎭 交互对象动态NPC模板生成完成');
+        console.log('[SmartPromptSystem] 🎭 交互对象动态NPC模板生成完成（已强化NPC前缀指令）');
         return result;
     }
 
@@ -987,28 +1203,49 @@ tasks: creation="新任务创建", editing="任务编辑中"
      * 🔧 修改：添加更新策略信息（支持智能策略对象）
      */
     addUpdateStrategyInfo(prompt, updateStrategy = null) {
-        // 如果传入了智能策略对象，使用它；否则使用原有逻辑
+        // 🔧 修复：保持与旧版本完全一致的格式，包含[输出模式: {{OUTPUT_MODE}}]标识行
         let strategyInfo;
 
         if (updateStrategy && typeof updateStrategy === 'object') {
             strategyInfo = updateStrategy.type === 'incremental'
-                ? `0. 更新策略:增量更新 - ${updateStrategy.reason} (数据覆盖率: ${updateStrategy.dataPercentage}%)`
-                : `0. 更新策略:全量更新 - ${updateStrategy.reason} (数据覆盖率: ${updateStrategy.dataPercentage}%)`;
+                ? `[输出模式: {{OUTPUT_MODE}}]\n\n五步分析过程：\n0. 更新策略:增量更新 - ${updateStrategy.reason} (数据覆盖率: ${updateStrategy.dataPercentage}%)`
+                : `[输出模式: {{OUTPUT_MODE}}]\n\n五步分析过程：\n0. 更新策略:全量更新 - ${updateStrategy.reason} (数据覆盖率: ${updateStrategy.dataPercentage}%)`;
         } else {
             // 兼容原有逻辑
             strategyInfo = this.updateStrategy === 'incremental'
-                ? '0. 更新策略:增量更新 - 只更新变化的字段，保持其他字段不变'
-                : '0. 更新策略:全量更新 - 输出所有启用面板的完整数据';
+                ? '[输出模式: {{OUTPUT_MODE}}]\n\n五步分析过程：\n0. 更新策略:增量更新 - 只更新变化的字段，保持其他字段不变'
+                : '[输出模式: {{OUTPUT_MODE}}]\n\n五步分析过程：\n0. 更新策略:全量更新 - 输出所有启用面板的完整数据';
         }
 
-        return prompt.replace('0. 更新策略:全量/增量更新', strategyInfo);
+        // 🔧 替换整个五步分析模板块，正确匹配模板中的换行格式
+        return prompt.replace(/\[输出模式: {{OUTPUT_MODE}}\]\s*\n\s*五步分析过程：\s*\n\s*0\. 更新策略:全量\/增量更新/g, strategyInfo);
     }
 
     /**
      * 添加严格的字段约束说明
      */
-    addFieldConstraints(prompt, enabledPanels) {
+    addFieldConstraints(prompt, enabledPanels, updateStrategy = null) {
         console.log('[SmartPromptSystem] 📋 添加字段约束说明');
+
+        // 🔧 新增：检查是否为增量更新模式
+        const isIncrementalUpdate = updateStrategy && updateStrategy.type === 'incremental';
+        
+        if (isIncrementalUpdate) {
+            // 增量更新模式：输出简化的约束说明
+            console.log('[SmartPromptSystem] 🔄 增量更新模式，使用简化字段约束');
+            
+            const simplifiedConstraint = `
+
+【📋 增量更新模式约束】
+⚠️ **只输出发生变化的字段，保持现有字段名格式**
+⚠️ **交互对象面板使用 npcX.字段名 格式（X为0,1,2...）**
+⚠️ **严禁添加未启用的面板或字段**`;
+            
+            return prompt + simplifiedConstraint;
+        }
+
+        // 全量更新模式：保持原有的详细约束说明
+        console.log('[SmartPromptSystem] 📊 全量更新模式，使用详细字段约束');
 
         // 收集所有允许的字段名
         const allowedFields = [];
@@ -1020,8 +1257,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
             if (panel.id === 'interaction') {
                 // 交互对象面板：收集字段用于动态格式说明
                 interactionFields = panel.subItems.map(subItem => {
-                    const chineseDisplayName = this.getInteractionFieldDisplayName(subItem.key);
-                    return `${subItem.key}="${chineseDisplayName}"`;
+                    return `${subItem.key}="具体内容"`;
                 });
             } else {
                 // 其他面板：使用原有格式
@@ -1032,14 +1268,49 @@ tasks: creation="新任务创建", editing="任务编辑中"
             }
         }
 
-        // 生成约束说明
+        // 🔧 修复：生成按面板分组的约束说明，避免AI混用字段
         let constraintText = `
 
-【⚠️ 字段使用指南】
-以下是您可以使用的所有字段，请不要使用其他字段：
+【🚨 严格字段约束 - 按面板分组】
+⚠️ **重要：每个面板只能使用其对应的启用字段，严禁跨面板使用或添加额外字段！**
 
-${allowedFields.slice(0, 15).join('\n')}
-${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段` : ''}`;
+📋 **启用面板及其允许字段：**`;
+
+        // 按面板分组显示允许的字段
+        for (const panel of enabledPanels) {
+            const panelName = this.getBasicPanelDisplayName(panel.id);
+            constraintText += `\n\n**✅ ${panelName}面板 (${panel.id})：**`;
+            
+            if (panel.id === 'interaction') {
+                // 交互对象面板：特殊处理
+                constraintText += `\n⚠️ 使用动态NPC格式：npcX.字段名="内容"（X为NPC编号0,1,2...）\n📋 可用字段：`;
+                
+                for (const subItem of panel.subItems) {
+                    const displayName = this.getSubItemDisplayName(panel.id, subItem.key);
+                    constraintText += `\n  - ${subItem.key}="${displayName}"`;
+                }
+            } else {
+                // 其他面板：标准格式
+                constraintText += `\n📋 可用字段（共${panel.subItems.length}个）：`;
+                for (const subItem of panel.subItems) {
+                    const displayName = this.getSubItemDisplayName(panel.id, subItem.key);
+                    constraintText += `\n  - ${subItem.key}="${displayName}"`;
+                }
+            }
+        }
+
+        constraintText += `
+
+**🔥 严格约束规则：**
+❌ **严禁添加不在上述列表中的字段**（如：current_action、mood、activity等）
+❌ **严禁跨面板使用字段**（如：不能在personal面板使用world面板的location字段）
+❌ **严禁使用英文字段名或自创字段**
+❌ **严禁使用占位符**（如："未知"、"N/A"、"待补全"）
+
+**✅ 正确做法：**
+- 每个面板严格按照上述列表输出字段
+- 字段数量必须与用户启用的字段数量一致
+- 使用确切的中文字段名和值`;
 
         // 如果有交互对象面板，添加动态NPC格式说明
         if (interactionFields.length > 0) {
@@ -1061,13 +1332,13 @@ ${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段
 可用字段: ${interactionFields.join(', ')}
 
 ✅ 正确示例（NPC角色信息）:
-- npc0.姓名="奥兰多教授", npc0.关系="导师", npc0.态度="友善", npc0.情绪="专注"
-- npc1.姓名="马尔科姆", npc1.关系="同学", npc1.态度="冷淡", npc1.情绪="疑惑"
-- npc2.姓名="瓦里安血棘", npc2.关系="敌人", npc2.态度="敌对", npc2.情绪="愤怒"
+- npc0.name="奥兰多教授", npc0.relationship="导师", npc0.status="友善", npc0.type="教授"
+- npc1.name="马尔科姆", npc1.relationship="同学", npc1.status="冷淡", npc1.type="学生"
+- npc2.name="瓦里安血棘", npc2.relationship="敌人", npc2.status="敌对", npc2.type="战士"
 
 ❌ 错误示例（用户角色信息误填入交互对象）:
-- npc0.姓名="用户角色名", npc0.关系="自己" ← 这是错误的！
-- npc0.姓名="我", npc0.态度="自信" ← 用户信息不应出现在交互对象面板！
+- npc0.name="用户角色名", npc0.relationship="自己" ← 这是错误的！
+- npc0.name="我", npc0.status="自信" ← 用户信息不应出现在交互对象面板！
 
 🔍 角色区分要点：
 - 个人信息面板 = 用户角色数据（玩家自己）
@@ -1201,11 +1472,20 @@ ${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段
                 return;
             }
 
-            // 将提示词添加到系统消息或用户消息中
-            // 这里使用SillyTavern的内置机制
+            // 🔧 新增：获取提示词位置配置
+            const promptPosition = extensionSettings.promptPosition || { mode: 'afterCharacter', depth: 0 };
+            const { mode, depth } = promptPosition;
+
+            // 根据配置的位置模式注入提示词
             if (typeof this.context.setExtensionPrompt === 'function') {
-                this.context.setExtensionPrompt('Information bar integration tool', prompt, 1, false);
-                console.log('[SmartPromptSystem] ✅ 使用SillyTavern内置机制注入提示词');
+                const injectionParams = this.getInjectionParameters(mode, depth);
+                this.context.setExtensionPrompt(
+                    injectionParams.identifier, 
+                    prompt, 
+                    injectionParams.priority, 
+                    injectionParams.position
+                );
+                console.log(`[SmartPromptSystem] ✅ 使用SillyTavern内置机制注入提示词 (模式: ${mode}, 深度: ${depth})`);
             } else {
                 // 备用方案：直接修改最后一条消息
                 console.log('[SmartPromptSystem] ⚠️ 使用备用方案注入提示词');
@@ -1215,6 +1495,58 @@ ${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段
         } catch (error) {
             console.error('[SmartPromptSystem] ❌ 注入提示词失败:', error);
             throw error;
+        }
+    }
+
+    /**
+     * 根据位置模式获取注入参数
+     */
+    getInjectionParameters(mode, depth) {
+        const baseParams = {
+            identifier: 'Information bar integration tool',
+            priority: 1
+        };
+
+        switch (mode) {
+            case 'beforeCharacter':
+                return {
+                    ...baseParams,
+                    position: 0  // 在角色定义之前，位置为0
+                };
+            
+            case 'afterCharacter':
+                return {
+                    ...baseParams,
+                    position: false  // 在角色定义之后，使用默认位置
+                };
+            
+            case 'atDepthSystem':
+                return {
+                    ...baseParams,
+                    identifier: 'Information bar integration tool - System',
+                    position: depth  // 系统角色消息，使用指定深度
+                };
+            
+            case 'atDepthUser':
+                return {
+                    ...baseParams,
+                    identifier: 'Information bar integration tool - User',
+                    position: depth  // 用户角色消息，使用指定深度
+                };
+            
+            case 'atDepthAssistant':
+                return {
+                    ...baseParams,
+                    identifier: 'Information bar integration tool - Assistant',
+                    position: depth  // 助手角色消息，使用指定深度
+                };
+            
+            default:
+                console.warn(`[SmartPromptSystem] ⚠️ 未知的位置模式: ${mode}，使用默认配置`);
+                return {
+                    ...baseParams,
+                    position: false
+                };
         }
     }
 
@@ -1399,8 +1731,12 @@ ${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段
                 return;
             }
 
-            // 获取当前角色ID
-            const characterId = this.context.characterId || 'default';
+            // 获取当前角色ID（更稳健）：优先SillyTavern上下文，其次window.this_chid，最后default
+            let characterId = this.context.characterId || window.this_chid || 'default';
+            if (typeof characterId === 'number') characterId = String(characterId);
+            if (!characterId || characterId === 'null' || characterId === 'undefined') {
+                characterId = 'default';
+            }
 
             // 更新每个面板的数据 - 修复：使用正确的scope参数
             for (const [panelId, panelData] of Object.entries(parsedData.panels)) {
@@ -1476,12 +1812,13 @@ ${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段
 
             for (const panel of enabledPanels) {
                 const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
-                const panelData = panels[panelKey];
+                const panelData = panels[panelKey] || panels[panel.id];
 
                 if (!panelData || Object.keys(panelData).length === 0) {
                     // 整个面板都缺失
                     missingFields.push({
                         panelId: panel.id,
+                        panelKey: panelKey, // 🔧 修复：添加实际使用的panelKey，自定义面板使用key
                         panelName: panel.name,
                         missingSubItems: panel.subItems.map(subItem => ({
                             key: subItem.key,
@@ -1493,16 +1830,35 @@ ${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段
 
                 // 检查子项是否缺失
                 const missingSubItems = [];
+                // 交互对象面板需要识别 npcX.<key> 形式
+                let interactionBaseFields = null;
+                if (panel.id === 'interaction') {
+                    interactionBaseFields = new Set();
+                    Object.keys(panelData).forEach(k => {
+                        const m = k.match(/^npc\d+\.(.+)$/);
+                        if (m && m[1]) interactionBaseFields.add(m[1]);
+                    });
+                }
+
                 for (const subItem of panel.subItems) {
-                    if (!Object.prototype.hasOwnProperty.call(panelData, subItem.key)) {
-                        const displayName = subItem.name || this.getSubItemDisplayName(panel.id, subItem.key);
-                        missingSubItems.push({ key: subItem.key, displayName });
+                    const key = subItem.key;
+                    let present = false;
+                    if (panel.id === 'interaction') {
+                        // 只要任意 npcX.key 存在，就视为该字段已存在
+                        present = interactionBaseFields && interactionBaseFields.has(key);
+                    } else {
+                        present = Object.prototype.hasOwnProperty.call(panelData, key);
+                    }
+                    if (!present) {
+                        const displayName = subItem.name || this.getSubItemDisplayName(panel.id, key);
+                        missingSubItems.push({ key, displayName });
                     }
                 }
 
                 if (missingSubItems.length > 0) {
                     missingFields.push({
                         panelId: panel.id,
+                        panelKey: panelKey, // 🔧 修复：添加实际使用的panelKey，自定义面板使用key
                         panelName: panel.name,
                         missingSubItems
                     });
@@ -1529,28 +1885,36 @@ ${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段
     addIncrementalDataInstructions(prompt, missingFields) {
         console.log('[SmartPromptSystem] 📝 添加增量数据补充指令...');
 
+        // 🔧 简化：以清晰业务语言列出需补充字段
         let incrementalInstructions = `
 
 【🔄 增量数据补充 - 重要】
-检测到以下字段缺失数据，请为这些新启用的字段生成合适的内容：
+检测到以下新启用字段缺失，请为这些字段生成内容（必须出现在<infobar_data>中）：
 
 `;
 
         for (const field of missingFields) {
-            incrementalInstructions += `📋 ${field.panelName} (${field.panelId}):\n`;
+            const panelKey = field.panelKey || field.panelId; // 🔧 修复：使用正确的面板键
+            incrementalInstructions += `📋 ${field.panelName} (${panelKey}):\n`;
 
             for (const subItem of field.missingSubItems) {
-                incrementalInstructions += `  - ${subItem.key}="${subItem.displayName}": 请生成合适的内容\n`;
+                // 交互对象面板：强制使用npc前缀
+                if (panelKey === 'interaction') {
+                    incrementalInstructions += `  - npc0.${subItem.key}="${subItem.displayName}": 请生成合适的内容（必须包含npcX.前缀）\n`;
+                } else {
+                    incrementalInstructions += `  - ${subItem.key}="${subItem.displayName}": 请生成合适的内容\n`;
+                }
             }
             incrementalInstructions += '\n';
         }
 
         incrementalInstructions += `
-⚠️ 补充规则：
-1. 只为上述缺失字段生成数据，不要修改已有字段
-2. 生成的内容要符合当前剧情和角色设定
-3. 使用增量更新策略，保持数据一致性
-4. 确保新数据与现有数据逻辑连贯
+
+⚠️ 规则：
+1. 仅补充上述缺失字段，不修改已存在字段
+2. 生成内容需与当前剧情一致，具体、可用
+3. 这些字段属于“新增启用”，即使增量模式也必须输出
+4. 交互对象面板字段必须使用npcX.前缀（例如：npc0.${missingFields?.[0]?.missingSubItems?.[0]?.key || 'name'}="...")
 
 `;
 
@@ -1560,7 +1924,105 @@ ${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段
     }
 
     /**
-     * 增量更新约束：基于“当前数据对照信息”，只输出变化字段
+     * 🔥 生成强制面板模板（极端策略）
+     */
+    generateForcedPanelsForMainTemplate(missingFields) {
+        let forcedPanelsText = '';
+        
+        for (const field of missingFields) {
+            const panelKey = field.panelKey || field.panelId;
+            forcedPanelsText += `⚡ ${field.panelName} (${panelKey}): `;
+            
+            const subItemsList = field.missingSubItems.map(subItem => subItem.key).join(', ');
+            forcedPanelsText += `${subItemsList}\n`;
+        }
+        
+        if (forcedPanelsText) {
+            forcedPanelsText = `
+❌ MISSING CRITICAL PANELS ❌
+${forcedPanelsText.trim()}
+
+💀 **SYSTEM DIRECTIVE**: You MUST include ALL above panels in your <infobar_data> response.
+💀 **FAILURE CONSEQUENCE**: System crash, data corruption, user experience failure.
+💀 **OVERRIDE CODE**: FORCE_OUTPUT_MISSING_PANELS_NOW
+`;
+        }
+        
+        console.log('[SmartPromptSystem] 🔥 生成强制面板模板:', forcedPanelsText.length, '字符');
+        return forcedPanelsText;
+    }
+
+    /**
+     * 🔥 生成预填充的缺失面板模板（强制AI填写）
+     */
+    generatePrefilledMissingPanels(missingFields) {
+        let prefilledTemplate = '';
+        
+        for (const field of missingFields) {
+            const panelKey = field.panelKey || field.panelId;
+            prefilledTemplate += `${panelKey}: `;
+            
+            const subItemTemplates = [];
+            for (const subItem of field.missingSubItems) {
+                subItemTemplates.push(`${subItem.key}="【请填写${subItem.displayName}的具体内容】"`);
+            }
+            
+            prefilledTemplate += subItemTemplates.join(', ') + '\n';
+        }
+        
+        if (prefilledTemplate) {
+            prefilledTemplate = `
+🔥 **预设模板（您必须复制并填写具体内容）：**
+\`\`\`
+${prefilledTemplate.trim()}
+\`\`\`
+
+⚡ **使用说明**：请将上述模板复制到您的<infobar_data>中，并将【请填写...】替换为具体内容！
+`;
+        }
+        
+        console.log('[SmartPromptSystem] 🔥 生成预填充模板:', prefilledTemplate.length, '字符');
+        return prefilledTemplate;
+    }
+
+    /**
+     * 添加终极验证提醒（在提示词最末尾）
+     */
+    addFinalValidationReminder(prompt, missingFields) {
+        let finalReminder = `
+
+💥💥💥 **最终执行检查清单** 💥💥💥
+在您完成<infobar_data>标签之前，请务必确认：
+
+🔍 **强制输出验证**：
+`;
+
+        for (const field of missingFields) {
+            const panelKey = field.panelKey || field.panelId;
+            finalReminder += `☑️ ${field.panelName} (${panelKey}) - 是否已包含在<infobar_data>中？\n`;
+            for (const subItem of field.missingSubItems) {
+                finalReminder += `   ☑️ ${subItem.key}="具体内容" - 是否已填写？\n`;
+            }
+        }
+
+        finalReminder += `
+⚡ **如果上述任何一项为"否"，请立即在<infobar_data>中补充！**
+⚡ **系统已为您预设模板，请复制并填写具体内容！**
+⚡ **这是系统的最后检查，错过将导致数据完全丢失！**
+
+🎯 **重要提醒**：
+- 即使是增量更新，这些缺失面板也必须无条件输出！
+- 请使用上方提供的预设模板，将【请填写...】替换为具体内容！
+- 不要跳过任何预设的面板或字段！
+
+`;
+
+        console.log('[SmartPromptSystem] 🔥 添加终极验证提醒');
+        return prompt + finalReminder;
+    }
+
+    /**
+     * 增量更新约束：基于"当前数据对照信息"，只输出变化字段
      */
     addIncrementalOnlyChangedRules(prompt, currentPanelData, enabledPanels) {
         try {
@@ -1569,17 +2031,17 @@ ${allowedFields.length > 15 ? `... 还有 ${allowedFields.length - 15} 个字段
             let rules = `
 
 【🔁 增量更新模式 - 只输出变化数据】
-请严格基于上文的“当前数据对照信息”进行对比，仅当你决定修改某个字段的内容时，才为该字段输出键值；若字段内容与当前数据保持一致，请不要输出该字段。
+请严格基于上文的"当前数据对照信息"进行对比，仅当你决定修改某个字段的内容时，才为该字段输出键值；若字段内容与当前数据保持一致，请不要输出该字段。
 
 约束要求：
 1. 仅输出以下已启用面板中的变化字段：${allowedPanels.join(', ')}。
 2. 不要输出未变化、为空、未知或占位的字段值；不要重复输出同一字段。
 3. 不要输出未启用面板；不要创建未定义的新字段键名（必须使用已定义的子项键）。
 4. 仅包含发生变化的面板；没有变化的面板不要出现在输出中。
-5. 输出格式保持为每行“面板名: 键="值", 键2="值2"”的形式，且所有值为最终内容，不要解释说明。
+5. 输出格式保持为每行"面板名: 键="值", 键2="值2"的形式，且所有值为最终内容，不要解释说明。
 
 示例（仅演示格式）：
-interaction: npc0.status="清醒", npc0.mood="愉悦"
+interaction: npc0.name="小张", npc0.relationship="同事"
 plot: exposition="剧情推进到清晨，……"
 
 `;
@@ -1596,7 +2058,7 @@ plot: exposition="剧情推进到清晨，……"
      */
     async injectPanelDataToMemory() {
         try {
-            console.log('[SmartPromptSystem] 🧠 开始检查面板记忆注入...');
+
 
             // 获取扩展配置
             const extensionSettings = this.context.extensionSettings['Information bar integration tool'] || {};
@@ -1887,17 +2349,13 @@ plot: exposition="剧情推进到清晨，……"
 
 请严格遵守以下输出要求：
 
-1. **必须输出 infobar_data 标签**：
-   - 在每次回复的最后部分，必须包含 <infobar_data> 标签
-   - 标签内容格式：<infobar_data><!--面板数据--></infobar_data>
-   - **必须根据【信息栏数据格式规范】生成具体内容**
-   - 使用XML紧凑格式：面板名: 字段="值", 字段="值"
-   - 示例：personal: name="张三", age="25", occupation="程序员"
-   - **禁止只输出空标签或占位符**
+**🚨 强制输出顺序要求 🚨**
+**必须严格按照以下顺序输出，严禁颠倒：**
 
-2. **必须输出 aiThinkProcess 标签**：
-   - 在每次回复的最后部分，必须包含 <aiThinkProcess> 标签
-   - 标签内容格式：<aiThinkProcess><!--五步分析思考--></aiThinkProcess>
+1. **第一步：必须先输出 aiThinkProcess 标签**：
+   - 在每次回复的最后部分，必须首先包含 <aiThinkProcess> 标签
+   - **强制注释包裹格式**：<aiThinkProcess><!--五步分析思考--></aiThinkProcess>
+   - **严禁格式**：<aiThinkProcess>五步分析思考</aiThinkProcess>（缺少注释符号）
    - **必须包含完整的五步分析过程**：
      * 0. 更新策略：全量/增量更新
      * 1. 剧情分析：当前发生什么事件？角色在哪里？在做什么？
@@ -1905,6 +2363,19 @@ plot: exposition="剧情推进到清晨，……"
      * 3. 更新策略判断：需要新增哪些字段？需要更新哪些字段？
      * 4. 数据完整性检查：确保所有启用面板都有完整数据
      * 5. 质量验证：确认数据逻辑一致性和合理性
+
+2. **第二步：必须后输出 infobar_data 标签**：
+   - 在aiThinkProcess标签之后，必须包含 <infobar_data> 标签
+   - **强制注释包裹格式**：<infobar_data><!--面板数据--></infobar_data>
+   - **严禁格式**：<infobar_data>面板数据</infobar_data>（缺少注释符号）
+   - **必须根据【信息栏数据格式规范】生成具体内容**
+   - **必须严格遵循上述aiThinkProcess中五步分析的结果**
+   - 使用XML紧凑格式：面板名: 字段="值", 字段="值"
+   - 示例：personal: name="张三", age="25", occupation="程序员"
+   - **禁止只输出空标签或占位符**
+
+**⚠️ 严禁先输出infobar_data再输出aiThinkProcess！**
+**⚠️ 严禁内容不被<!--和-->注释符号包裹！**
 
 3. **格式规范要求**：
    - **严格遵循【信息栏数据格式规范】**
@@ -1914,22 +2385,37 @@ plot: exposition="剧情推进到清晨，……"
 
 4. **具体格式示例**：
 
-   infobar_data标签示例：
-   <infobar_data>
-   personal: name="艾莉丝", age="23", occupation="魔法师", location="魔法学院图书馆"
-   status: health="良好", mood="专注", energy="80%", magic_power="充足"
-   inventory: gold="150", weapon="法杖", armor="魔法袍", potion="治疗药水x3"
-   </infobar_data>
-
-   aiThinkProcess标签示例：
+   **第一步：aiThinkProcess标签示例（必须先输出，注意注释包裹）：**
    <aiThinkProcess>
+   <!--
    0. 更新策略：增量更新
    1. 剧情分析：艾莉丝正在魔法学院图书馆研究古老的魔法书籍，寻找关于传送法术的信息
    2. 数据变化识别：位置从宿舍变更为图书馆，心情从疲惫变为专注，正在进行魔法研究活动
    3. 更新策略判断：需要更新location字段为"魔法学院图书馆"，mood字段为"专注"，添加当前活动信息
    4. 数据完整性检查：个人信息、状态、物品清单都已包含完整数据
    5. 质量验证：数据与当前剧情一致，艾莉丝作为魔法师在图书馆研究符合角色设定
+   -->
    </aiThinkProcess>
+
+   **第二步：infobar_data标签示例（必须后输出，基于上述分析，注意注释包裹）：**
+   <infobar_data>
+   <!--
+   personal: name="艾莉丝", age="23", occupation="魔法师", appearance="红发，绿眼"
+   world: name="魔法学院", locations="图书馆", type="奇幻"
+   inventory: storage="法杖、魔法袍", retrieval="便捷", organization="有序", capacity="充足"
+   -->
+   </infobar_data>
+
+   **❌ 错误格式示例（严禁使用）：**
+   <aiThinkProcess>
+   0. 更新策略：增量更新（内容没有被<!--和-->包裹）
+   1. 剧情分析：艾莉丝正在图书馆...
+   </aiThinkProcess>
+
+   <infobar_data>
+   personal: name="艾莉丝", age="23"（内容没有被<!--和-->包裹）
+   world: time="上午", weather="晴朗"
+   </infobar_data>
 
 5. **🚨 关键输出位置要求 🚨**：
    - **必须在所有剧情内容和剧情标签之外输出**
@@ -1937,21 +2423,23 @@ plot: exposition="剧情推进到清晨，……"
    - **必须在回复的最末尾，所有其他内容完成后输出**
    - **正确位置**：在所有剧情标签结束后，作为独立的标签输出
    - **错误位置**：在任何剧情标签内部输出（会导致XML解析失败）
-   - **输出顺序**：剧情内容 → 剧情标签结束 → infobar_data标签 → aiThinkProcess标签
+   - **输出顺序**：剧情内容 → 剧情标签结束 → aiThinkProcess标签 → infobar_data标签
 
-**🚨 系统级强制要求 🚨**：
-1. **必须在每次回复中包含这些标签**
-2. **必须生成符合格式规范的具体内容，不能只输出空标签**
-3. **必须参考上述示例格式生成真实数据**
+**🚨 系统级强制要求 - 违反将导致系统故障 🚨**：
+1. **强制要求：必须在每次回复中包含这些标签 - 不可跳过**
+2. **强制要求：必须生成符合格式规范的具体内容，严禁输出空标签**
+3. **强制要求：必须参考上述示例格式生成真实数据，严禁敷衍**
 4. **🔥 关键：标签必须在所有剧情标签外部输出，绝对不能被content等标签包裹 🔥**
-5. **如果标签被剧情标签包裹，会导致XML解析完全失败，数据无法提取**
+5. **🔥 如果标签被剧情标签包裹，会导致XML解析完全失败，数据无法提取，系统将崩溃 🔥**
+6. **⚠️ 系统监控：如果您不输出这些标签，信息栏功能将完全失效**
+7. **⚠️ 用户依赖：用户期望每条消息都包含这些数据，不输出会影响体验**
 
 **正确的输出结构**：
 [角色扮演内容和剧情发展]
 [剧情标签结束]
 
-infobar_data标签（独立输出）
-aiThinkProcess标签（独立输出）
+aiThinkProcess标签（独立输出，必须先输出）
+infobar_data标签（独立输出，必须后输出）
             `.trim();
 
             // 先清理可能存在的禁止规则
@@ -2078,226 +2566,9 @@ aiThinkProcess标签（独立输出）
         }
     }
 
-    /**
-     * 🔧 新增：生成字段规则信息
-     */
-    async generateFieldRulesInfo(enabledPanels) {
-        try {
-            if (!this.fieldRuleManager) {
-                console.log('[SmartPromptSystem] ℹ️ 字段规则管理器不可用，跳过字段规则生成');
-                return '';
-            }
 
-            console.log('[SmartPromptSystem] 📋 生成字段规则信息...');
-            console.log('[SmartPromptSystem] 🔍 启用的面板数量:', enabledPanels.length);
 
-            const fieldRulesInfo = [];
 
-            for (const panel of enabledPanels) {
-                console.log(`[SmartPromptSystem] 🔍 处理面板: ${panel.id}, 子项数量: ${panel.items?.length || 0}`);
-                const panelRules = [];
-
-                // 获取面板中所有启用的字段 - 修复：使用subItems而不是items
-                const allFields = panel.items || panel.subItems || [];
-                const enabledFields = allFields.filter(item => item.enabled) || [];
-                console.log(`[SmartPromptSystem] 🔍 面板 ${panel.id} 总字段数量: ${allFields.length}, 启用的字段数量: ${enabledFields.length}`);
-
-                for (const field of enabledFields) {
-                    // 🔧 调试：记录字段信息
-                    console.log(`[SmartPromptSystem] 🔍 检查字段规则: 面板=${panel.id}, 字段ID=${field.id}, 字段名=${field.name}`);
-
-                    // 获取字段规则 - 先尝试用字段ID
-                    let fieldRule = this.fieldRuleManager.getFieldRule(panel.id, field.id);
-                    let actualFieldKey = field.id;
-
-                    // 🔧 如果用字段ID找不到，尝试用字段名
-                    if (!fieldRule && field.name && field.name !== field.id) {
-                        console.log(`[SmartPromptSystem] 🔄 用字段ID未找到规则，尝试用字段名: ${field.name}`);
-                        fieldRule = this.fieldRuleManager.getFieldRule(panel.id, field.name);
-                        if (fieldRule) {
-                            actualFieldKey = field.name;
-                        }
-                    }
-
-                    // 🔧 如果还是找不到，尝试通过字段映射查找中文字段名
-                    if (!fieldRule && window.SillyTavernInfobar?.infoBarSettings) {
-                        try {
-                            const completeMapping = window.SillyTavernInfobar.infoBarSettings.getCompleteDisplayNameMapping();
-                            const panelMapping = completeMapping[panel.id];
-
-                            // 使用字段名而不是字段ID进行映射查找
-                            const fieldKey = field.id || field.name;
-                            if (panelMapping && panelMapping[fieldKey]) {
-                                const chineseFieldName = panelMapping[fieldKey];
-                                console.log(`[SmartPromptSystem] 🔄 尝试用中文字段名查找规则: ${fieldKey} -> ${chineseFieldName}`);
-                                fieldRule = this.fieldRuleManager.getFieldRule(panel.id, chineseFieldName);
-                                if (fieldRule) {
-                                    actualFieldKey = chineseFieldName;
-                                    console.log(`[SmartPromptSystem] ✅ 通过字段映射找到规则: ${panel.id}.${chineseFieldName}`);
-                                }
-                            } else {
-                                console.log(`[SmartPromptSystem] 🔍 字段映射中没有找到: ${panel.id}.${fieldKey}`);
-                            }
-                        } catch (error) {
-                            console.warn(`[SmartPromptSystem] ⚠️ 字段映射查找失败:`, error);
-                        }
-                    }
-
-                    if (fieldRule) {
-                        console.log(`[SmartPromptSystem] ✅ 找到字段规则: ${panel.id}.${actualFieldKey}`);
-                        const ruleInfo = this.formatFieldRuleInfo(panel.id, actualFieldKey, fieldRule);
-                        if (ruleInfo) {
-                            panelRules.push(ruleInfo);
-                        }
-                    } else {
-                        console.log(`[SmartPromptSystem] ❌ 未找到字段规则: ${panel.id}.${field.id}`);
-                    }
-                }
-
-                if (panelRules.length > 0) {
-                    fieldRulesInfo.push({
-                        panelName: panel.name || panel.id,
-                        panelId: panel.id,
-                        rules: panelRules
-                    });
-                }
-            }
-
-            if (fieldRulesInfo.length === 0) {
-                console.log('[SmartPromptSystem] ℹ️ 没有找到任何字段规则，跳过字段规则生成');
-                return '';
-            }
-
-            // 格式化为提示词文本
-            let rulesText = '\n\n## 字段生成规则\n\n';
-            rulesText += '请严格按照以下字段规则生成内容：\n\n';
-
-            for (const panelInfo of fieldRulesInfo) {
-                rulesText += `### ${panelInfo.panelName} 面板规则\n\n`;
-
-                for (const rule of panelInfo.rules) {
-                    rulesText += `**${rule.fieldName}**：\n`;
-
-                    if (rule.description) {
-                        rulesText += `- 规则描述：${rule.description}\n`;
-                    }
-
-                    if (rule.format) {
-                        rulesText += `- 输出格式：${rule.format}\n`;
-                    }
-
-                    if (rule.examples && rule.examples.length > 0) {
-                        rulesText += `- 参考示例：\n`;
-                        for (const example of rule.examples) {
-                            rulesText += `  * ${example.value}${example.description ? ` - ${example.description}` : ''}\n`;
-                        }
-                    }
-
-                    if (rule.constraints && rule.constraints.length > 0) {
-                        rulesText += `- 约束条件：${rule.constraints.join('、')}\n`;
-                    }
-
-                    if (rule.dynamicRules && rule.dynamicRules.length > 0) {
-                        rulesText += `- 动态规则：\n`;
-                        for (const dynamicRule of rule.dynamicRules) {
-                            rulesText += `  * ${dynamicRule.condition} → ${dynamicRule.action}\n`;
-                            if (dynamicRule.examples && dynamicRule.examples.length > 0) {
-                                rulesText += `    示例：${dynamicRule.examples.join('、')}\n`;
-                            }
-                        }
-                    }
-
-                    rulesText += '\n';
-                }
-            }
-
-            console.log('[SmartPromptSystem] ✅ 字段规则信息生成完成，包含', fieldRulesInfo.length, '个面板的规则');
-            return rulesText;
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 生成字段规则信息失败:', error);
-            return '';
-        }
-    }
-
-    /**
-     * 🔧 新增：格式化字段规则信息
-     */
-    formatFieldRuleInfo(panelId, fieldId, fieldRule) {
-        try {
-            const ruleInfo = {
-                fieldName: fieldId,
-                panelId: panelId
-            };
-
-            // 添加规则描述
-            if (fieldRule.rules?.description) {
-                ruleInfo.description = fieldRule.rules.description;
-            }
-
-            // 添加输出格式
-            if (fieldRule.rules?.format) {
-                ruleInfo.format = fieldRule.rules.format;
-            }
-
-            // 添加示例
-            if (fieldRule.examples && Array.isArray(fieldRule.examples)) {
-                ruleInfo.examples = fieldRule.examples.filter(example =>
-                    example && example.value !== undefined
-                );
-            }
-
-            // 添加约束条件
-            if (fieldRule.rules?.constraints && Array.isArray(fieldRule.rules.constraints)) {
-                ruleInfo.constraints = fieldRule.rules.constraints.filter(constraint =>
-                    constraint && typeof constraint === 'string'
-                );
-            }
-
-            // 添加动态规则
-            if (fieldRule.dynamicRules && Array.isArray(fieldRule.dynamicRules)) {
-                ruleInfo.dynamicRules = fieldRule.dynamicRules.filter(rule =>
-                    rule && rule.condition && rule.action
-                );
-            }
-
-            return ruleInfo;
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 格式化字段规则信息失败:', error);
-            return null;
-        }
-    }
-
-    /**
-     * 🔧 新增：添加字段规则信息到提示词
-     */
-    addFieldRulesInfo(prompt, fieldRulesInfo) {
-        try {
-            if (!fieldRulesInfo || fieldRulesInfo.trim() === '') {
-                return prompt;
-            }
-
-            // 在提示词中查找合适的位置插入字段规则
-            // 通常在面板数据模板之后，输出要求之前
-            const insertMarker = '## 输出要求';
-            const insertIndex = prompt.indexOf(insertMarker);
-
-            if (insertIndex !== -1) {
-                // 在输出要求之前插入字段规则
-                const beforeInsert = prompt.substring(0, insertIndex);
-                const afterInsert = prompt.substring(insertIndex);
-                return beforeInsert + fieldRulesInfo + '\n' + afterInsert;
-            } else {
-                // 如果找不到标记，就添加到末尾
-                return prompt + fieldRulesInfo;
-            }
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 添加字段规则信息失败:', error);
-            return prompt;
-        }
-    }
 
     /**
      * 获取系统状态

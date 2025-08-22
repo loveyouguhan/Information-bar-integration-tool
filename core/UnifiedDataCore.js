@@ -58,6 +58,12 @@ export class UnifiedDataCore {
             enableMemoryAssist: true,
             defaultCollapsed: false,
             
+            // 提示词插入位置配置
+            promptPosition: {
+                mode: 'afterCharacter', // 'beforeCharacter' | 'afterCharacter' | 'atDepthSystem' | 'atDepthUser' | 'atDepthAssistant'
+                depth: 0 // 用于 @D 模式的深度控制
+            },
+            
             // API配置
             apiConfig: {
                 enabled: false,
@@ -69,7 +75,9 @@ export class UnifiedDataCore {
                 temperature: 0.7,
                 maxTokens: 2000,
                 retryCount: 3,
-                extraPrompt: ''
+                extraPrompt: '',
+                mergeMessages: true,
+                includeWorldBook: false
             },
             
             // 界面配置
@@ -184,7 +192,16 @@ export class UnifiedDataCore {
                     this.context.saveSettingsDebounced();
                 }
             },
-            getAll: () => extensionSettings[this.MODULE_NAME] || {}
+            getAll: () => extensionSettings[this.MODULE_NAME] || {},
+            // 🔧 新增：清空当前扩展命名空间下的所有全局数据
+            clear: async () => {
+                try {
+                    extensionSettings[this.MODULE_NAME] = {};
+                    this.context.saveSettingsDebounced();
+                } catch (e) {
+                    console.warn('[UnifiedDataCore] ⚠️ 清空全局数据时出现问题（已继续）:', e);
+                }
+            }
         };
         
         // chatMetadata管理器 - 🔧 修复：每次都获取最新的context
@@ -215,6 +232,20 @@ export class UnifiedDataCore {
                 const context = SillyTavern.getContext();
                 const metadata = context.chatMetadata;
                 return metadata?.[this.MODULE_NAME] || {};
+            },
+            // 🔧 新增：清空当前扩展命名空间下的所有聊天数据
+            clear: async () => {
+                try {
+                    const context = SillyTavern.getContext();
+                    const metadata = context.chatMetadata;
+                    if (metadata && metadata[this.MODULE_NAME]) {
+                        // 仅清理本扩展命名空间，避免影响其他插件/系统
+                        metadata[this.MODULE_NAME] = {};
+                        await context.saveMetadata();
+                    }
+                } catch (e) {
+                    console.warn('[UnifiedDataCore] ⚠️ 清空聊天数据时出现问题（已继续）:', e);
+                }
             }
         };
         
@@ -303,6 +334,130 @@ export class UnifiedDataCore {
     }
 
     /**
+     * 按启用字段合并面板数据
+     * @param {string} panelId - 面板ID
+     * @param {Object} existingData - 现有数据
+     * @param {Object} newData - 新数据
+     * @returns {Object} 过滤后的合并数据
+     */
+    async mergeWithEnabledFields(panelId, existingData = {}, newData = {}) {
+        try {
+            // 从SillyTavern上下文读取启用字段配置
+            const context = window.SillyTavern?.getContext?.();
+            const configs = context?.extensionSettings?.['Information bar integration tool'] || {};
+            // 同时支持根级自定义面板与 customPanels 下的配置
+            const rootPanelConfig = configs?.[panelId];
+            const customPanelConfig = configs?.customPanels?.[panelId];
+            const panelConfig = rootPanelConfig || customPanelConfig;
+
+            // 若无配置，只保留新数据（避免历史污染）
+            if (!panelConfig) {
+                console.warn(`[UnifiedDataCore] ⚠️ 面板 ${panelId} 无配置，只保留新数据`);
+                return { ...newData };
+            }
+
+            // 收集启用字段键列表
+            const enabledKeys = new Set();
+
+            // 基础设置的子项（仅当对象且包含enabled时）
+            Object.keys(panelConfig).forEach(key => {
+                const val = panelConfig[key];
+                if (
+                    key !== 'enabled' &&
+                    key !== 'subItems' &&
+                    key !== 'description' &&
+                    key !== 'icon' &&
+                    key !== 'required' &&
+                    key !== 'memoryInject' &&
+                    key !== 'prompts' &&
+                    typeof val === 'object' &&
+                    val?.enabled === true
+                ) {
+                    enabledKeys.add(key);
+                }
+            });
+
+            // 自定义子项
+            if (Array.isArray(panelConfig.subItems)) {
+                panelConfig.subItems.forEach(subItem => {
+                    if (subItem && subItem.enabled !== false) {
+                        const key = subItem.key || subItem.name || subItem.id || subItem.field || subItem?.toString?.();
+                        // 规范化：空格转下划线
+                        const normalized = typeof key === 'string' ? key.replace(/\s+/g, '_') : null;
+                        if (normalized) enabledKeys.add(normalized);
+                    }
+                });
+            }
+
+            console.log(`[UnifiedDataCore] 🔍 面板 ${panelId} 启用字段:`, Array.from(enabledKeys));
+
+            // 若启用列表为空，但新数据存在字段，采取宽松策略：直接接受新数据，避免丢失（常见于自定义面板配置未及时写入）
+            if (enabledKeys.size === 0 && newData && Object.keys(newData).length > 0) {
+                console.warn(`[UnifiedDataCore] ⚠️ 面板 ${panelId} 启用字段为空，采用宽松策略：直接接受AI新数据 (${Object.keys(newData).length}项)`);
+                return { ...existingData, ...newData };
+            }
+
+            // 构建过滤后的合并数据
+            const result = {};
+            
+            // 1. 从现有数据中保留启用字段
+            Object.keys(existingData).forEach(fieldKey => {
+                let shouldInclude = false;
+                
+                if (panelId === 'interaction') {
+                    // 🔧 特殊处理：交互对象面板的动态NPC字段格式 (npcX.fieldName)
+                    const npcFieldMatch = fieldKey.match(/^npc\d+\.(.+)$/);
+                    if (npcFieldMatch) {
+                        const baseFieldName = npcFieldMatch[1];
+                        shouldInclude = enabledKeys.has(baseFieldName);
+                    } else {
+                        shouldInclude = enabledKeys.has(fieldKey);
+                    }
+                } else {
+                    shouldInclude = enabledKeys.has(fieldKey);
+                }
+                
+                if (shouldInclude) {
+                    result[fieldKey] = existingData[fieldKey];
+                }
+            });
+            
+            // 2. 用新数据覆盖（只保留启用字段）
+            Object.keys(newData).forEach(fieldKey => {
+                let shouldInclude = false;
+                
+                if (panelId === 'interaction') {
+                    // 🔧 特殊处理：交互对象面板的动态NPC字段格式 (npcX.fieldName)
+                    const npcFieldMatch = fieldKey.match(/^npc\d+\.(.+)$/);
+                    if (npcFieldMatch) {
+                        const baseFieldName = npcFieldMatch[1];
+                        shouldInclude = enabledKeys.has(baseFieldName);
+                        if (shouldInclude) {
+                            console.log(`[UnifiedDataCore] ✅ 交互对象动态字段合并: ${fieldKey} -> ${baseFieldName}`);
+                        }
+                    } else {
+                        shouldInclude = enabledKeys.has(fieldKey);
+                    }
+                } else {
+                    shouldInclude = enabledKeys.has(fieldKey);
+                }
+                
+                if (shouldInclude) {
+                    result[fieldKey] = newData[fieldKey];
+                }
+            });
+
+            console.log(`[UnifiedDataCore] ✅ 面板 ${panelId} 过滤合并: ${Object.keys(existingData).length} + ${Object.keys(newData).length} -> ${Object.keys(result).length}`);
+            return result;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 合并启用字段失败:', error);
+            // 降级到只保留新数据
+            return { ...newData };
+        }
+    }
+
+    /**
      * 设置数据
      * @param {string} key - 数据键
      * @param {any} value - 数据值
@@ -324,7 +479,9 @@ export class UnifiedDataCore {
 
                     // 读取现有的面板数据（优先从内存Map），回退到chatMetadata键值
                     const existingPanelData = (this.data instanceof Map ? this.data.get(panelId) : undefined) || (await this.getData(key, 'chat')) || {};
-                    const mergedPanelData = UnifiedDataCore.deepMerge(existingPanelData, value);
+                    
+                    // 🔧 修复：使用启用字段过滤的合并，避免跨面板数据污染
+                    const mergedPanelData = await this.mergeWithEnabledFields(panelId, existingPanelData, value);
 
                     // 写回 chat 范围的键（保持原有键值可用）
                     await this.chatMetadata.set(key, mergedPanelData);
@@ -344,15 +501,29 @@ export class UnifiedDataCore {
                         if (!chatData.infobar_data.panels) {
                             chatData.infobar_data.panels = {};
                         }
-                        // 以合并结果更新对应面板
+                        // 🔧 修复：也对这里使用启用字段过滤的合并
                         const prevPanel = chatData.infobar_data.panels[panelId] || {};
-                        const newPanel = UnifiedDataCore.deepMerge(prevPanel, mergedPanelData);
+                        const newPanel = await this.mergeWithEnabledFields(panelId, prevPanel, mergedPanelData);
 
+                        // 🔧 分离系统字段：将系统元数据单独存储，避免与用户字段混合
+                        const systemMetadata = {
+                            lastUpdated: Date.now(),
+                            source: value.source || 'AI_UPDATE',
+                            fieldCount: Object.keys(newPanel).length
+                        };
+                        
                         // 🆕 记录字段级别的变更历史（AI更新）
-                        await this.recordPanelFieldChanges(panelId, prevPanel, newPanel, 'AI_UPDATE');
+                        await this.recordPanelFieldChanges(panelId, prevPanel, newPanel, systemMetadata.source);
 
                         chatData.infobar_data.panels[panelId] = newPanel;
-                        chatData.infobar_data.lastUpdated = Date.now();
+                        chatData.infobar_data.lastUpdated = systemMetadata.lastUpdated;
+                        
+                        // 系统元数据存储到单独区域
+                        if (!chatData.infobar_data.systemMetadata) {
+                            chatData.infobar_data.systemMetadata = {};
+                        }
+                        chatData.infobar_data.systemMetadata[panelId] = systemMetadata;
+                        
                         await this.chatMetadata.set(chatDataKey, chatData);
                         // 刷新当前聊天缓存
                         this.chatDataCache.set(chatId, chatData);
@@ -523,11 +694,27 @@ export class UnifiedDataCore {
             
             let chatData = this.chatDataCache.get(currentChatId);
             
-            // 🔧 修复：确保聊天数据是数组格式（兼容旧数据）
+            // 🔧 修复：确保聊天数据是数组格式（兼容旧数据，但保留现有面板数据）
             if (!Array.isArray(chatData)) {
-                console.log('[UnifiedDataCore] 🔧 转换旧数据格式为数组格式');
+                console.log('[UnifiedDataCore] 🔧 转换旧数据格式为数组格式，保留现有面板数据');
+                
+                // 🔧 关键修复：保留现有的infobar_data.panels数据
+                const existingPanels = (chatData && chatData.infobar_data && chatData.infobar_data.panels) ? 
+                    chatData.infobar_data.panels : {};
+                
+                // 创建新的数组格式
                 chatData = [];
+                
+                // 🔧 重要：将保留的面板数据附加到数组对象上
+                chatData.infobar_data = {
+                    panels: existingPanels,
+                    history: [],
+                    lastUpdated: Date.now()
+                };
+                
                 this.chatDataCache.set(currentChatId, chatData);
+                
+                console.log(`[UnifiedDataCore] ✅ 数据格式转换完成，保留了 ${Object.keys(existingPanels).length} 个面板的数据`);
             }
             
             chatData.push(dataEntry);
@@ -535,7 +722,7 @@ export class UnifiedDataCore {
             console.log('[UnifiedDataCore] 💾 数据已存储到聊天缓存');
             console.log('[UnifiedDataCore] 📋 当前聊天数据条目数量:', chatData.length);
 
-            // 🔧 新增：将本次解析到的面板数据合并到缓存数组的附加 infobar_data.panels 上
+            // 🔧 修复：将本次解析到的面板数据按启用字段合并到缓存数组的附加 infobar_data.panels 上
             if (!chatData.infobar_data) {
                 chatData.infobar_data = { panels: {}, history: [], lastUpdated: 0 };
             }
@@ -543,15 +730,34 @@ export class UnifiedDataCore {
                 chatData.infobar_data.panels = {};
             }
             if (eventData.data && typeof eventData.data === 'object') {
-                Object.entries(eventData.data).forEach(([panelName, panelFields]) => {
+                for (const [panelName, panelFields] of Object.entries(eventData.data)) {
                     const prev = chatData.infobar_data.panels[panelName] || {};
-                    chatData.infobar_data.panels[panelName] = UnifiedDataCore.deepMerge(prev, panelFields);
-                });
+                    // 🔧 使用启用字段过滤的合并
+                    chatData.infobar_data.panels[panelName] = await this.mergeWithEnabledFields(panelName, prev, panelFields);
+                }
                 chatData.infobar_data.lastUpdated = Date.now();
             }
             
             // 更新最近条目缓存（用于向后兼容，不再覆盖主数据存储Map）
             this.recentEntries = chatData;
+            
+            // 🔧 修复：将新数据按启用字段合并到 this.data Map 中
+            if (eventData.data && typeof eventData.data === 'object') {
+                for (const [panelName, panelData] of Object.entries(eventData.data)) {
+                    if (panelData && typeof panelData === 'object') {
+                        // 获取现有面板数据
+                        const existingPanelData = this.data.get(panelName) || {};
+                        
+                        // 🔧 使用启用字段过滤的合并，避免跨面板数据污染
+                        const mergedPanelData = await this.mergeWithEnabledFields(panelName, existingPanelData, panelData);
+                        
+                        // 更新到数据 Map
+                        this.data.set(panelName, mergedPanelData);
+                        
+                        console.log(`[UnifiedDataCore] 🔄 已按启用字段合并面板数据: ${panelName}, 字段数: ${Object.keys(mergedPanelData).length}`);
+                    }
+                }
+            }
             
             // 触发数据更新事件
             if (this.eventSystem) {
@@ -1255,10 +1461,10 @@ export class UnifiedDataCore {
                 // 更新缓存
                 this.chatDataCache.set(chatId, storedChatData);
             } else {
-                console.log('[UnifiedDataCore] 📥 chatMetadata中无数据，尝试解析历史消息:', chatId);
-
-                // 🔧 新增：回退到解析历史消息
-                await this.parseHistoryMessagesForChat(chatId);
+                console.log('[UnifiedDataCore] 📥 chatMetadata中无数据，保持空状态:', chatId);
+                
+                // 清空当前数据，不再回退到解析历史消息
+                this.data.clear();
             }
 
         } catch (error) {
@@ -1686,6 +1892,128 @@ export class UnifiedDataCore {
     }
 
     /**
+     * 🔧 新增：获取当前启用的面板列表
+     * @returns {Array} 启用的面板ID列表
+     */
+    async getEnabledPanelsList() {
+        try {
+            // 获取配置管理器
+            const infoBarTool = window.SillyTavernInfobar;
+            const configManager = infoBarTool?.modules?.configManager;
+
+            if (!configManager) {
+                console.warn('[UnifiedDataCore] 配置管理器不可用，返回默认面板列表');
+                // 返回默认的基础面板列表
+                return ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+            }
+
+            // 基础面板列表
+            const basePanels = ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+
+            // 检查每个基础面板是否启用
+            const enabledPanels = [];
+            for (const panelId of basePanels) {
+                try {
+                    const panelConfig = await configManager.getConfig(panelId);
+                    // 如果配置不存在或者enabled不是false，则认为是启用的
+                    if (!panelConfig || panelConfig.enabled !== false) {
+                        enabledPanels.push(panelId);
+                    }
+                } catch (error) {
+                    // 如果获取配置失败，默认认为是启用的
+                    enabledPanels.push(panelId);
+                }
+            }
+
+            // 🔧 强制策略：总是尝试数据扫描检测自定义面板（无论配置是否可用）
+            console.log('[UnifiedDataCore] 🔧 开始数据扫描策略检测自定义面板...');
+            
+            const chatId = this.getCurrentChatId();
+            if (chatId) {
+                try {
+                    const allChatData = await this.getAllData('chat');
+                    
+                    // 🔧 修复：更强健的角色ID获取逻辑
+                    let characterId = null;
+                    try {
+                        // 方式1: 直接访问全局变量
+                        if (typeof window !== 'undefined' && window.this_chid !== undefined && window.this_chid !== null) {
+                            characterId = String(window.this_chid);
+                            console.log('[UnifiedDataCore] 🔍 通过this_chid获取角色ID:', characterId);
+                        }
+                    } catch (e) {
+                        console.warn('[UnifiedDataCore] 无法通过this_chid获取角色ID:', e);
+                    }
+                    
+                    // 方式2: 从数据键名中推断角色ID（更强健的模式匹配）
+                    if (!characterId) {
+                        const panelKeyPattern = /^panels\.(\d+)\./;
+                        for (const key of Object.keys(allChatData)) {
+                            const match = key.match(panelKeyPattern);
+                            if (match) {
+                                characterId = match[1];
+                                console.log('[UnifiedDataCore] 🔍 通过数据键推断角色ID:', characterId, '来源键:', key);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    const chatPrefix = `panels.${chatId}.`;
+                    const characterPrefix = characterId !== null ? `panels.${characterId}.` : null;
+                    
+                    // 扫描所有面板数据，找到自定义面板
+                    const detectedCustomPanels = [];
+                    for (const [key, value] of Object.entries(allChatData)) {
+                        let panelName = null;
+                        
+                        if (key.startsWith(chatPrefix)) {
+                            panelName = key.substring(chatPrefix.length);
+                        } else if (characterPrefix && key.startsWith(characterPrefix)) {
+                            panelName = key.substring(characterPrefix.length);
+                        }
+                        
+                        // 如果是非基础面板且有数据，认为是自定义面板
+                        if (panelName && !panelName.includes('.') && !basePanels.includes(panelName) && 
+                            value && typeof value === 'object' && Object.keys(value).length > 0) {
+                            detectedCustomPanels.push(panelName);
+                        }
+                    }
+                    
+                    // 添加检测到的自定义面板
+                    enabledPanels.push(...detectedCustomPanels);
+                    console.log('[UnifiedDataCore] 🔍 通过数据扫描检测到自定义面板:', detectedCustomPanels);
+                    
+                } catch (error) {
+                    console.warn('[UnifiedDataCore] 数据扫描检测自定义面板失败:', error);
+                }
+            }
+            
+            // 🔧 兜底策略：尝试传统配置获取（如果配置管理器可用）
+            try {
+                const customPanels = await configManager.getConfig('customPanels');
+                if (customPanels && typeof customPanels === 'object') {
+                    console.log('[UnifiedDataCore] 🔧 传统配置获取到自定义面板:', Object.keys(customPanels));
+                    for (const [panelId, config] of Object.entries(customPanels)) {
+                        if (config && config.enabled !== false && !enabledPanels.includes(panelId)) {
+                            enabledPanels.push(panelId);
+                        }
+                    }
+                }
+            } catch (configError) {
+                console.warn('[UnifiedDataCore] 传统配置获取失败，已通过数据扫描补偿:', configError.message);
+            }
+
+            console.log('[UnifiedDataCore] 📋 最终启用面板列表:', `(${enabledPanels.length})`, enabledPanels);
+            return enabledPanels;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取启用面板列表失败:', error);
+            // 返回默认的基础面板列表作为后备
+            return ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+        }
+    }
+
+    /**
      * 🆕 获取所有记忆数据（用于STScript同步）
      * @returns {Object} 所有面板的记忆数据
      */
@@ -1693,6 +2021,13 @@ export class UnifiedDataCore {
         try {
             const chatId = this.getCurrentChatId();
             if (!chatId) return {};
+
+            // 🔧 修复：获取当前启用的面板列表，只返回启用面板的数据
+            const enabledPanels = await this.getEnabledPanelsList();
+            if (!enabledPanels || enabledPanels.length === 0) {
+                console.log('[UnifiedDataCore] ℹ️ 没有启用的面板');
+                return {};
+            }
 
             // 获取所有聊天数据
             const allChatData = await this.getAllData('chat');
@@ -1740,13 +2075,15 @@ export class UnifiedDataCore {
                     panelName = key.substring(characterPrefix.length);
                 }
 
-                if (panelName && !panelName.includes('.')) { // 确保是顶级面板，不是子字段
+                // 🔧 修复：只包含启用的面板数据
+                if (panelName && !panelName.includes('.') && enabledPanels.includes(panelName)) {
                     panelsData[panelName] = value;
                 }
             }
 
-            console.log('[UnifiedDataCore] 📊 获取记忆数据:', Object.keys(panelsData));
+            console.log('[UnifiedDataCore] 📊 获取记忆数据:', `(${Object.keys(panelsData).length})`, Object.keys(panelsData));
             console.log('[UnifiedDataCore] 🔍 使用的前缀:', { chatPrefix, characterPrefix });
+            console.log('[UnifiedDataCore] 🔧 启用的面板:', `(${enabledPanels.length})`, enabledPanels);
             return panelsData;
 
         } catch (error) {
@@ -1888,27 +2225,35 @@ export class UnifiedDataCore {
     }
 
     /**
-     * 🆕 获取英文字段名（中文显示名 -> 英文字段名）
-     * @param {string} chineseDisplayName - 中文显示名
+     * 🔄 获取字段名（现在使用中文键名作为主键）
+     * @param {string} fieldName - 字段名（中文或英文）
      * @param {string} panelId - 面板ID
-     * @returns {string|null} 英文字段名
+     * @returns {string|null} 标准化的中文字段名
      */
-    getEnglishFieldName(chineseDisplayName, panelId) {
+    getChineseFieldName(fieldName, panelId) {
         try {
             // 获取完整的字段映射表
-            if (!window.SillyTavernInfobar?.infoBarSettings) {
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+            if (!infoBarSettings) {
                 console.warn('[UnifiedDataCore] ⚠️ InfoBarSettings 不可用');
-                return null;
+                return fieldName; // 直接返回原字段名
             }
 
-            const completeMapping = window.SillyTavernInfobar.infoBarSettings.getCompleteDisplayNameMapping();
+            const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
 
             // 首先在指定面板中查找
             if (panelId && completeMapping[panelId]) {
-                for (const [englishName, chineseName] of Object.entries(completeMapping[panelId])) {
-                    if (chineseName === chineseDisplayName) {
-                        console.log('[UnifiedDataCore] 🎯 找到字段映射:', chineseDisplayName, '->', englishName);
-                        return englishName;
+                // 如果字段名已经存在于映射中（作为键），直接返回
+                if (completeMapping[panelId][fieldName]) {
+                    return fieldName;
+                }
+
+                // 如果是英文字段名，尝试找到对应的中文名
+                for (const [chineseName, displayName] of Object.entries(completeMapping[panelId])) {
+                    if (displayName === fieldName) {
+                        console.log('[UnifiedDataCore] 🎯 找到字段映射:', fieldName, '->', chineseName);
+                        return chineseName;
                     }
                 }
             }
@@ -1916,21 +2261,80 @@ export class UnifiedDataCore {
             // 如果在指定面板中没找到，在所有面板中查找
             for (const [panelKey, panelMapping] of Object.entries(completeMapping)) {
                 if (panelMapping && typeof panelMapping === 'object') {
-                    for (const [englishName, chineseName] of Object.entries(panelMapping)) {
-                        if (chineseName === chineseDisplayName) {
-                            console.log('[UnifiedDataCore] 🎯 在面板', panelKey, '中找到字段映射:', chineseDisplayName, '->', englishName);
-                            return englishName;
+                    // 检查是否已经是中文键名
+                    if (panelMapping[fieldName]) {
+                        return fieldName;
+                    }
+
+                    // 尝试从英文名找到中文名
+                    for (const [chineseName, displayName] of Object.entries(panelMapping)) {
+                        if (displayName === fieldName) {
+                            console.log('[UnifiedDataCore] 🎯 在面板', panelKey, '中找到字段映射:', fieldName, '->', chineseName);
+                            return chineseName;
                         }
                     }
                 }
             }
 
-            console.log('[UnifiedDataCore] ⚠️ 未找到字段映射:', chineseDisplayName);
+            console.log('[UnifiedDataCore] ℹ️ 未找到字段映射，使用原字段名:', fieldName);
+            return fieldName; // 如果找不到映射，返回原字段名
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取中文字段名失败:', error);
+            return fieldName; // 出错时返回原字段名
+        }
+    }
+
+    /**
+     * 🔄 获取英文字段名（从中文字段名映射到英文键名）
+     * @param {string} chineseDisplayName - 中文字段名
+     * @param {string} panelId - 面板ID
+     * @returns {string|null} 对应的英文字段键名
+     */
+    getEnglishFieldName(chineseDisplayName, panelId) {
+        try {
+            // 获取完整的字段映射表
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+            if (!infoBarSettings) {
+                console.warn('[UnifiedDataCore] ⚠️ InfoBarSettings 不可用');
+                return chineseDisplayName; // 直接返回原字段名
+            }
+
+            const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
+
+            // 首先在指定面板中查找
+            if (panelId && completeMapping[panelId]) {
+                // 查找中文字段名对应的英文键名
+                for (const [englishKey, chineseDisplayName_mapped] of Object.entries(completeMapping[panelId])) {
+                    if (chineseDisplayName_mapped === chineseDisplayName) {
+                        return englishKey; // 返回英文键名
+                    }
+                }
+            }
+
+            // 如果在指定面板中没找到，在所有面板中搜索
+            for (const [panelKey, panelMapping] of Object.entries(completeMapping)) {
+                if (panelMapping && typeof panelMapping === 'object') {
+                    for (const [englishKey, chineseDisplayName_mapped] of Object.entries(panelMapping)) {
+                        if (chineseDisplayName_mapped === chineseDisplayName) {
+                            return englishKey; // 返回英文键名
+                        }
+                    }
+                }
+            }
+
+            // 如果都没找到，检查是否已经是英文键名
+            if (panelId && completeMapping[panelId] && completeMapping[panelId][chineseDisplayName]) {
+                return chineseDisplayName; // 已经是英文键名
+            }
+
+            console.warn(`[UnifiedDataCore] ⚠️ 无法映射中文字段名到英文: ${panelId}.${chineseDisplayName}`);
             return null;
 
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 获取英文字段名失败:', error);
-            return null;
+            return chineseDisplayName; // 出错时返回原字段名
         }
     }
 }

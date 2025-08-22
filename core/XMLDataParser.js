@@ -46,12 +46,46 @@ export class XMLDataParser {
         try {
             console.log('[XMLDataParser] 🔄 动态更新支持的面板类型...');
 
-            // 基础面板类型
+            // 基础面板类型（英文ID）
             this.supportedPanels = new Set([
                 'personal', 'world', 'interaction', 'tasks', 'organization',
                 'news', 'inventory', 'abilities', 'plot', 'cultivation',
                 'fantasy', 'modern', 'historical', 'magic', 'training'
             ]);
+            
+            // 🔧 修复：添加中文名称到英文ID的映射表
+            this.panelNameMapping = {
+                // 中文名称到英文ID的映射
+                '个人信息': 'personal',
+                '世界信息': 'world', 
+                '交互对象': 'interaction',
+                '任务系统': 'tasks',
+                '组织架构': 'organization',
+                '组织信息': 'organization', // 备用映射
+                '新闻资讯': 'news',
+                '新闻事件': 'news', // 备用映射
+                '物品清单': 'inventory',
+                '能力技能': 'abilities',
+                '能力属性': 'abilities', // 备用映射
+                '剧情发展': 'plot',
+                '修炼体系': 'cultivation',
+                '修真境界': 'cultivation', // 备用映射
+                '奇幻设定': 'fantasy',
+                '现代设定': 'modern',
+                '现代生活': 'modern', // 备用映射
+                '历史设定': 'historical',
+                '历史背景': 'historical', // 备用映射
+                '魔法系统': 'magic',
+                '魔法能力': 'magic', // 备用映射
+                '训练系统': 'training',
+                '调教系统': 'training' // 备用映射
+            };
+            
+            // 反向映射：英文ID到中文名称
+            this.panelIdMapping = {};
+            Object.entries(this.panelNameMapping).forEach(([chineseName, englishId]) => {
+                this.panelIdMapping[englishId] = chineseName;
+            });
 
             // 获取当前启用的面板配置，包括自定义子项
             const context = window.SillyTavern?.getContext?.();
@@ -707,6 +741,92 @@ export class XMLDataParser {
     }
 
     /**
+     * 仅保留启用的子项字段
+     */
+    filterEnabledSubItems(panelId, panelData) {
+        try {
+            const result = {};
+
+            // 从SillyTavern上下文读取启用字段配置
+            const context = window.SillyTavern?.getContext?.();
+            const configs = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const panelConfig = configs?.[panelId];
+
+            // 若无配置，直接返回原数据（兼容性）
+            if (!panelConfig) return panelData;
+
+            // 收集启用字段键列表（基础设置 + 自定义子项）
+            const enabledKeys = new Set();
+
+            // 基础设置里的子项：panelConfig[key].enabled === true
+            Object.keys(panelConfig).forEach(key => {
+                const val = panelConfig[key];
+                if (
+                    key !== 'enabled' &&
+                    key !== 'subItems' &&
+                    key !== 'description' &&
+                    key !== 'icon' &&
+                    key !== 'required' &&
+                    key !== 'memoryInject' &&
+                    key !== 'prompts' &&
+                    typeof val === 'object' &&
+                    val?.enabled === true
+                ) {
+                    enabledKeys.add(key);
+                }
+            });
+
+            // 面板管理中的自定义子项
+            if (Array.isArray(panelConfig.subItems)) {
+                panelConfig.subItems.forEach(subItem => {
+                    if (subItem && subItem.enabled !== false) {
+                        const key = subItem.key || subItem.name?.toLowerCase?.().replace?.(/\s+/g, '_');
+                        if (key) enabledKeys.add(key);
+                    }
+                });
+            }
+
+            // 若未收集到启用字段，直接返回原数据（避免误删）
+            if (enabledKeys.size === 0) return panelData;
+
+            // 过滤面板数据，仅保留启用子项
+            Object.keys(panelData).forEach(field => {
+                let shouldInclude = false;
+                
+                if (panelId === 'interaction') {
+                    // 🔧 特殊处理：交互对象面板的动态NPC字段格式 (npcX.fieldName)
+                    const npcFieldMatch = field.match(/^npc\d+\.(.+)$/);
+                    if (npcFieldMatch) {
+                        // 提取基础字段名并检查是否启用
+                        const baseFieldName = npcFieldMatch[1];
+                        shouldInclude = enabledKeys.has(baseFieldName);
+                        if (shouldInclude) {
+                            console.log(`[XMLDataParser] ✅ 交互对象动态字段匹配: ${field} -> ${baseFieldName}`);
+                        } else {
+                            console.log(`[XMLDataParser] ❌ 交互对象动态字段未启用: ${field} (${baseFieldName})`);
+                        }
+                    } else {
+                        // 非动态格式，直接匹配
+                        shouldInclude = enabledKeys.has(field);
+                    }
+                } else {
+                    // 其他面板使用直接匹配
+                    shouldInclude = enabledKeys.has(field);
+                }
+                
+                if (shouldInclude) {
+                    result[field] = panelData[field];
+                }
+            });
+
+            return result;
+        } catch (e) {
+            console.warn('[XMLDataParser] 启用字段过滤失败，回退为原数据:', e?.message);
+            return panelData;
+        }
+    }
+
+    /**
      * 验证和清理数据
      * @param {Object} data - 原始数据
      * @returns {Object} 验证后的数据
@@ -717,10 +837,19 @@ export class XMLDataParser {
             
             Object.keys(data).forEach(panelName => {
                 const panelData = data[panelName];
-                
+
+                // 将中文面板名映射为英文ID，统一键名，避免跨面板污染
+                const englishPanelId = this.panelNameMapping?.[panelName] || panelName;
+
                 // 验证面板数据
                 if (this.isValidPanelData(panelName, panelData)) {
-                    cleanedData[panelName] = this.cleanPanelData(panelData);
+                    // 依据启用配置过滤子项，只保留启用字段
+                    const filtered = this.filterEnabledSubItems(englishPanelId, panelData);
+                    if (Object.keys(filtered).length > 0) {
+                        cleanedData[englishPanelId] = this.cleanPanelData(filtered);
+                    } else {
+                        console.log('[XMLDataParser] ℹ️ 过滤后无启用字段，跳过面板:', englishPanelId);
+                    }
                 } else {
                     console.warn('[XMLDataParser] ⚠️ 面板数据验证失败:', panelName);
                 }
@@ -759,10 +888,15 @@ export class XMLDataParser {
             }
 
             // 🔧 修复：动态验证面板是否受支持（包括自定义面板和自定义子项）
-            if (!this.supportedPanels.has(panelName)) {
-                console.warn(`[XMLDataParser] ⚠️ 不支持的面板类型: ${panelName}`);
+            const englishPanelId = this.panelNameMapping?.[panelName] || panelName;
+            const isSupported = this.supportedPanels.has(englishPanelId) || this.supportedPanels.has(panelName);
+            
+            if (!isSupported) {
+                console.warn(`[XMLDataParser] ⚠️ 不支持的面板类型: ${panelName} (英文ID: ${englishPanelId})`);
                 // 不再直接返回false，而是记录警告但仍然处理数据
                 console.log(`[XMLDataParser] ℹ️ 继续处理未知面板: ${panelName}，可能是新增的自定义面板`);
+            } else {
+                console.log(`[XMLDataParser] ✅ 面板类型验证通过: ${panelName} -> ${englishPanelId}`);
             }
             
             return true;
@@ -784,15 +918,13 @@ export class XMLDataParser {
             
             Object.keys(panelData).forEach(fieldName => {
                 const fieldValue = panelData[fieldName];
-                
+
                 // 清理字段名和值
-                const cleanedFieldName = fieldName.trim();
+                const cleanedFieldName = String(fieldName).trim();
                 const cleanedFieldValue = typeof fieldValue === 'string' ? fieldValue.trim() : fieldValue;
-                
+
                 if (cleanedFieldName && cleanedFieldValue !== '') {
-                    // 🔧 修复：不再过滤未知字段，允许自定义子项通过
                     cleaned[cleanedFieldName] = cleanedFieldValue;
-                    console.log(`[XMLDataParser] 🔍 保留字段: ${cleanedFieldName} = "${cleanedFieldValue.toString().substring(0, 50)}${cleanedFieldValue.toString().length > 50 ? '...' : ''}"`);
                 }
             });
             

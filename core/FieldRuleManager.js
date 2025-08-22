@@ -217,40 +217,65 @@ export class FieldRuleManager {
     }
 
     /**
-     * 设置字段规则
+     * 🔄 标准化面板和字段名为中文键名
+     */
+    normalizeNames(panelName, fieldName) {
+        try {
+            // 如果有 UnifiedDataCore，使用其标准化方法
+            if (this.unifiedDataCore && this.unifiedDataCore.getChineseFieldName) {
+                const normalizedFieldName = this.unifiedDataCore.getChineseFieldName(fieldName, panelName);
+                return {
+                    panelName: panelName, // 面板名通常已经是中文
+                    fieldName: normalizedFieldName || fieldName
+                };
+            }
+
+            // 否则直接返回原名
+            return { panelName, fieldName };
+
+        } catch (error) {
+            console.error('[FieldRuleManager] ❌ 标准化名称失败:', error);
+            return { panelName, fieldName };
+        }
+    }
+
+    /**
+     * 设置字段规则（现在使用中文键名）
      */
     async setFieldRule(panelName, fieldName, rule) {
         try {
-            const ruleKey = `${panelName}.${fieldName}`;
-            
+            // 标准化名称为中文键名
+            const { panelName: normalizedPanelName, fieldName: normalizedFieldName } = this.normalizeNames(panelName, fieldName);
+            const ruleKey = `${normalizedPanelName}.${normalizedFieldName}`;
+
             // 验证规则格式
             const validatedRule = this.validateRule(rule);
-            
+
             // 保存规则
             this.fieldRules.set(ruleKey, {
                 ...validatedRule,
-                panelName,
-                fieldName,
+                panelName: normalizedPanelName,
+                fieldName: normalizedFieldName,
                 createdAt: Date.now(),
                 updatedAt: Date.now()
             });
-            
+
             // 持久化保存
             await this.saveFieldRules();
-            
+
             // 触发事件
             if (this.eventSystem) {
                 this.eventSystem.emit('fieldRule:updated', {
-                    panelName,
-                    fieldName,
+                    panelName: normalizedPanelName,
+                    fieldName: normalizedFieldName,
                     rule: validatedRule,
                     timestamp: Date.now()
                 });
             }
-            
+
             console.log('[FieldRuleManager] ✅ 字段规则已设置:', ruleKey);
             return true;
-            
+
         } catch (error) {
             console.error('[FieldRuleManager] ❌ 设置字段规则失败:', error);
             return false;
@@ -258,41 +283,50 @@ export class FieldRuleManager {
     }
 
     /**
-     * 获取字段规则
+     * 获取字段规则（现在使用中文键名）
      */
     getFieldRule(panelName, fieldName) {
-        const ruleKey = `${panelName}.${fieldName}`;
-        return this.fieldRules.get(ruleKey) || null;
+        try {
+            // 标准化名称为中文键名
+            const { panelName: normalizedPanelName, fieldName: normalizedFieldName } = this.normalizeNames(panelName, fieldName);
+            const ruleKey = `${normalizedPanelName}.${normalizedFieldName}`;
+            return this.fieldRules.get(ruleKey) || null;
+        } catch (error) {
+            console.error('[FieldRuleManager] ❌ 获取字段规则失败:', error);
+            return null;
+        }
     }
 
     /**
-     * 删除字段规则
+     * 删除字段规则（现在使用中文键名）
      */
     async deleteFieldRule(panelName, fieldName) {
         try {
-            const ruleKey = `${panelName}.${fieldName}`;
-            
+            // 标准化名称为中文键名
+            const { panelName: normalizedPanelName, fieldName: normalizedFieldName } = this.normalizeNames(panelName, fieldName);
+            const ruleKey = `${normalizedPanelName}.${normalizedFieldName}`;
+
             if (this.fieldRules.has(ruleKey)) {
                 this.fieldRules.delete(ruleKey);
-                
+
                 // 持久化保存
                 await this.saveFieldRules();
-                
+
                 // 触发事件
                 if (this.eventSystem) {
                     this.eventSystem.emit('fieldRule:deleted', {
-                        panelName,
-                        fieldName,
+                        panelName: normalizedPanelName,
+                        fieldName: normalizedFieldName,
                         timestamp: Date.now()
                     });
                 }
-                
+
                 console.log('[FieldRuleManager] ✅ 字段规则已删除:', ruleKey);
                 return true;
             }
-            
+
             return false;
-            
+
         } catch (error) {
             console.error('[FieldRuleManager] ❌ 删除字段规则失败:', error);
             return false;
@@ -303,22 +337,46 @@ export class FieldRuleManager {
      * 验证规则格式
      */
     validateRule(rule) {
+        // 🔧 修复：支持新的简化格式
+        if (rule.type === 'simple' && rule.content) {
+            // 新的简化格式：只有content字段
+            return {
+                content: rule.content,
+                type: rule.type,
+                examples: [],
+                rules: {},
+                dynamicRules: []
+            };
+        }
+
+        // 兼容旧格式，保留所有原始属性
         const validatedRule = {
+            type: rule.type,
+            format: rule.format,
+            range: rule.range,
+            changeRate: rule.changeRate,
+            validation: rule.validation,
+            unit: rule.unit,
+            units: rule.units,
+            preferredUnit: rule.preferredUnit,  // 🔧 新增：优先单位
+            categories: rule.categories,
+            intensity: rule.intensity,
+            levels: rule.levels,
             examples: rule.examples || [],
             rules: rule.rules || {},
             dynamicRules: rule.dynamicRules || []
         };
-        
+
         // 验证示例格式
         if (Array.isArray(validatedRule.examples)) {
-            validatedRule.examples = validatedRule.examples.filter(example => 
+            validatedRule.examples = validatedRule.examples.filter(example =>
                 example && typeof example === 'object' && example.value !== undefined
             );
         }
-        
+
         // 验证动态规则格式
         if (Array.isArray(validatedRule.dynamicRules)) {
-            validatedRule.dynamicRules = validatedRule.dynamicRules.filter(rule => 
+            validatedRule.dynamicRules = validatedRule.dynamicRules.filter(rule =>
                 rule && typeof rule === 'object' && rule.condition && rule.action
             );
         }
