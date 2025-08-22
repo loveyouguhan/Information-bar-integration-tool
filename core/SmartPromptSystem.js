@@ -882,11 +882,13 @@ world: name="现代都市", type="都市"
                 for (const [panelId, panelConfig] of Object.entries(configs.customPanels)) {
                     console.log(`[SmartPromptSystem] 🔍 检查自定义面板: ${panelId}`, panelConfig);
                     if (panelConfig && panelConfig.enabled !== false) { // 默认启用，除非明确设置为false
-                        const subItems = panelConfig.subItems || [];
-                        console.log(`[SmartPromptSystem] 📊 自定义面板 ${panelId} 子项:`, subItems);
+                        const allSubItems = panelConfig.subItems || [];
+                        // 🔧 修复：只统计启用的子项
+                        const enabledSubItems = allSubItems.filter(subItem => subItem.enabled !== false);
+                        console.log(`[SmartPromptSystem] 📊 自定义面板 ${panelId} 所有子项: ${allSubItems.length}, 启用子项: ${enabledSubItems.length}`);
                         
-                        // 🔧 修复：即使子项为空也应该包含面板，因为可能在其他地方有子项配置
-                        const processedSubItems = subItems.map(subItem => {
+                        // 🔧 修复：处理启用的子项
+                        const processedSubItems = enabledSubItems.map(subItem => {
                             // 处理不同的子项格式
                             if (typeof subItem === 'string') {
                                 return {
@@ -914,7 +916,7 @@ world: name="现代都市", type="都市"
                             subItems: processedSubItems
                         });
                         
-                        console.log(`[SmartPromptSystem] ✅ 添加自定义面板: ${panelId}, 子项数量: ${processedSubItems.length}`);
+                        console.log(`[SmartPromptSystem] ✅ 添加自定义面板: ${panelId}, 启用子项数量: ${processedSubItems.length}/${allSubItems.length}`);
                     }
                 }
             }
