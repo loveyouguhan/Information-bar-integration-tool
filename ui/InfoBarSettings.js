@@ -16212,17 +16212,254 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                 throw new Error('API配置不完整');
             }
 
+            // 🔧 修复：为自定义API添加系统提示词，确保输出正确的中文格式和五步分析
+            const enhancedMessages = await this.enhanceMessagesWithSystemPrompt(messages);
+
             // 根据提供商和接口类型发送请求
             if (apiConfig.provider === 'gemini' && apiConfig.format === 'native') {
-                return await this.sendGeminiNativeRequest(messages, apiConfig);
+                return await this.sendGeminiNativeRequest(enhancedMessages, apiConfig);
             } else {
-                return await this.sendOpenAICompatibleRequest(messages, apiConfig);
+                return await this.sendOpenAICompatibleRequest(enhancedMessages, apiConfig);
             }
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 发送自定义API请求失败:', error);
             return { success: false, error: error.message };
         }
+    }
+
+    /**
+     * 🔧 新增：为自定义API消息添加系统提示词
+     * 确保自定义API能够输出正确的中文格式和五步分析
+     */
+    async enhanceMessagesWithSystemPrompt(messages) {
+        try {
+            console.log('[InfoBarSettings] 🔧 为自定义API添加系统提示词...');
+
+            // 生成自定义API专用的系统提示词
+            const systemPrompt = await this.generateCustomAPISystemPrompt();
+
+            // 检查是否已有系统消息
+            const hasSystemMessage = messages.some(msg => msg.role === 'system');
+
+            if (hasSystemMessage) {
+                // 如果已有系统消息，将新的系统提示词合并到第一个系统消息中
+                const systemMessageIndex = messages.findIndex(msg => msg.role === 'system');
+                const existingSystemContent = messages[systemMessageIndex].content;
+                messages[systemMessageIndex].content = systemPrompt + '\n\n' + existingSystemContent;
+                console.log('[InfoBarSettings] 🔧 已合并系统提示词到现有系统消息');
+            } else {
+                // 如果没有系统消息，在开头添加系统消息
+                messages.unshift({
+                    role: 'system',
+                    content: systemPrompt
+                });
+                console.log('[InfoBarSettings] 🔧 已添加新的系统消息');
+            }
+
+            console.log('[InfoBarSettings] ✅ 系统提示词增强完成，消息数量:', messages.length);
+            return messages;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 增强消息失败:', error);
+            // 如果增强失败，返回原始消息
+            return messages;
+        }
+    }
+
+    /**
+     * 🔧 新增：生成自定义API专用的系统提示词
+     * 包含五步分析、中文格式、增量更新等完整要求
+     */
+    async generateCustomAPISystemPrompt() {
+        try {
+            console.log('[InfoBarSettings] 📝 生成自定义API系统提示词...');
+
+            // 获取当前启用的面板信息
+            const enabledPanelsInfo = await this.getEnabledPanelsInfo();
+            
+            // 获取当前数据状态（用于增量更新判断）
+            const currentDataInfo = await this.getCurrentDataInfo();
+
+            // 构建完整的系统提示词
+            const systemPrompt = `🚨【信息栏数据格式规范 - 自定义API专用】🚨
+
+🌟 **重要说明：您正在使用自定义API模式处理信息栏数据** 🌟
+
+📋 **核心输出要求**：
+**🚨 必须严格按照以下顺序输出，严禁颠倒 🚨**
+
+**第一步：必须先输出五步分析思考**
+<aiThinkProcess>
+<!--
+[输出模式: 自定义API]
+
+五步分析过程：
+0. 更新策略: 根据现有数据判断是全量更新还是增量更新
+1. 剧情分析：当前发生什么事件？角色在哪里？在做什么？
+2. 数据变化识别：哪些信息发生了变化？哪些是新信息？
+3. 更新策略判断：需要新增哪些字段？需要更新哪些字段？哪些保持不变？
+4. 数据完整性检查：确保所有启用面板都有完整数据
+5. 质量验证：确认数据逻辑一致性和合理性
+-->
+</aiThinkProcess>
+
+**第二步：必须后输出面板数据**
+<infobar_data>
+<!--
+[根据上述五步分析，输出具体的面板数据，使用XML紧凑格式]
+${enabledPanelsInfo}
+-->
+</infobar_data>
+
+🚨 **强制格式要求** 🚨：
+1. **输出顺序**：必须先输出 <aiThinkProcess>，再输出 <infobar_data>
+2. **注释包裹**：所有内容必须被 <!--  --> 包裹
+3. **中文输出**：所有内容必须使用中文，包括分析过程和数据值
+4. **XML紧凑格式**：面板数据使用格式 面板名: 字段="值", 字段="值"
+5. **具体数据**：避免使用"未知"、"N/A"等占位符，生成具体内容
+
+${currentDataInfo}
+
+📋 **数据格式示例**：
+<aiThinkProcess>
+<!--
+[输出模式: 自定义API]
+
+五步分析过程：
+0. 更新策略: 增量更新
+1. 剧情分析：张三正在现代都市的办公室里工作，处理编程任务
+2. 数据变化识别：位置从家里变为办公室，状态从休息变为工作，新增了任务信息
+3. 更新策略判断：需要更新location为"办公室"，occupation保持"程序员"，新增tasks相关字段
+4. 数据完整性检查：personal、world、tasks面板都有完整数据
+5. 质量验证：数据与当前剧情一致，张三作为程序员在办公室工作符合逻辑
+-->
+</aiThinkProcess>
+
+<infobar_data>
+<!--
+personal: name="张三", age="25", occupation="程序员"
+world: name="现代都市", type="都市", time="2024年"
+tasks: creation="新任务创建", editing="任务编辑中"
+-->
+</infobar_data>
+
+⚠️ **严禁格式错误**：
+❌ 错误：<aiThinkProcess>内容不被注释包裹</aiThinkProcess>
+❌ 错误：先输出infobar_data再输出aiThinkProcess
+❌ 错误：使用英文内容或占位符
+
+✅ **必须使用中文进行思考和数据生成**
+✅ **必须基于具体剧情生成真实数据**
+✅ **必须遵循上述输出顺序和格式要求**`;
+
+            console.log('[InfoBarSettings] ✅ 自定义API系统提示词生成完成');
+            return systemPrompt;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 生成系统提示词失败:', error);
+            // 返回基础系统提示词
+            return this.getBasicCustomAPISystemPrompt();
+        }
+    }
+
+    /**
+     * 🔧 新增：获取启用面板信息（用于系统提示词）
+     */
+    async getEnabledPanelsInfo() {
+        try {
+            // 获取SmartPromptSystem来获取启用面板信息
+            const smartPromptSystem = window.SillyTavernInfobar?.modules?.smartPromptSystem;
+            if (!smartPromptSystem) {
+                return '请根据用户设置的面板生成对应数据';
+            }
+
+            const enabledPanels = await smartPromptSystem.getEnabledPanels();
+            if (!enabledPanels || enabledPanels.length === 0) {
+                return '没有启用的面板';
+            }
+
+            let panelInfo = `当前启用的面板 (${enabledPanels.length}个)：\n`;
+            
+            for (const panel of enabledPanels) {
+                const panelName = panel.name || panel.id;
+                const subItemCount = panel.subItems ? panel.subItems.length : 0;
+                panelInfo += `- ${panelName}面板 (${panel.id}): ${subItemCount}个字段\n`;
+                
+                if (panel.subItems && panel.subItems.length > 0) {
+                    const fieldList = panel.subItems.map(item => item.key || item.name).join(', ');
+                    panelInfo += `  字段: ${fieldList}\n`;
+                }
+            }
+
+            return panelInfo;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取启用面板信息失败:', error);
+            return '请根据用户设置的面板生成对应数据';
+        }
+    }
+
+    /**
+     * 🔧 新增：获取当前数据信息（用于增量更新判断）
+     */
+    async getCurrentDataInfo() {
+        try {
+            // 获取SmartPromptSystem来获取当前数据状态
+            const smartPromptSystem = window.SillyTavernInfobar?.modules?.smartPromptSystem;
+            if (!smartPromptSystem) {
+                return '';
+            }
+
+            const enabledPanels = await smartPromptSystem.getEnabledPanels();
+            if (!enabledPanels || enabledPanels.length === 0) {
+                return '';
+            }
+
+            const currentPanelData = await smartPromptSystem.getCurrentPanelData(enabledPanels);
+            const updateStrategy = await smartPromptSystem.analyzeUpdateStrategy(enabledPanels, currentPanelData);
+
+            let dataInfo = `\n📊 **当前数据状态**：\n`;
+            dataInfo += `- 数据覆盖率: ${updateStrategy.dataPercentage}%\n`;
+            dataInfo += `- 建议策略: ${updateStrategy.type === 'full' ? '全量更新' : '增量更新'}\n`;
+            dataInfo += `- 启用面板: ${enabledPanels.length}个\n\n`;
+
+            if (Object.keys(currentPanelData).length > 0) {
+                dataInfo += `**现有数据概览**：\n`;
+                for (const [panelKey, panelData] of Object.entries(currentPanelData)) {
+                    const fieldCount = Object.keys(panelData).length;
+                    dataInfo += `- ${panelKey}: ${fieldCount}个字段已有数据\n`;
+                }
+                dataInfo += '\n**增量更新指导**：只输出发生变化或新增的字段数据\n';
+            } else {
+                dataInfo += `**全量更新指导**：生成所有启用面板的完整数据\n`;
+            }
+
+            return dataInfo;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取当前数据信息失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 🔧 新增：获取基础系统提示词（备用）
+     */
+    getBasicCustomAPISystemPrompt() {
+        return `🚨【信息栏数据格式规范 - 自定义API】🚨
+
+**必须输出格式**：
+1. 先输出: <aiThinkProcess><!--五步分析思考--></aiThinkProcess>
+2. 再输出: <infobar_data><!--面板数据--></infobar_data>
+
+**格式要求**：
+- 使用中文进行分析和数据生成
+- 内容必须被 <!--  --> 包裹
+- 数据格式: 面板名: 字段="值", 字段="值"
+- 避免使用占位符，生成具体内容
+
+**严禁颠倒输出顺序或省略任何标签**`;
     }
 
     /**
