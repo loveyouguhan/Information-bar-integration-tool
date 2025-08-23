@@ -595,6 +595,7 @@ export class APIIntegration {
      */
     async tryDirectRequest(url, options = {}) {
         console.log('[APIIntegration] 🔄 尝试直接请求:', url);
+        console.log('[APIIntegration] 🔍 请求头部:', JSON.stringify(options.headers || {}, null, 2));
         
         const safeOptions = {
             ...options,
@@ -605,11 +606,23 @@ export class APIIntegration {
         
         try {
             const response = await fetch(url, safeOptions);
-            // 如果状态码表示成功或认证错误（非CORS问题），返回响应
-            if (response.status < 500) {
+            console.log(`[APIIntegration] 📊 响应状态: ${response.status} ${response.statusText}`);
+            
+            // 🔧 改进的状态码处理逻辑
+            if (response.status === 401) {
+                console.error('[APIIntegration] ❌ 401未授权错误 - API Key可能无效或缺失');
+                console.error('[APIIntegration] 🔍 请检查:', {
+                    hasAuthHeader: !!(options.headers && options.headers['Authorization']),
+                    authHeaderFormat: options.headers?.['Authorization']?.substring(0, 20) + '...'
+                });
+                return response; // 返回401响应让调用者处理
+            } else if (response.status < 400) {
                 console.log(`[APIIntegration] ✅ 直接请求成功: ${response.status}`);
                 this.requestStats.directSuccess++;
                 return response;
+            } else if (response.status < 500) {
+                console.warn(`[APIIntegration] ⚠️ 客户端错误: ${response.status} ${response.statusText}`);
+                return response; // 返回客户端错误让调用者处理
             }
             throw new Error(`Server error: ${response.status}`);
         } catch (error) {
@@ -1102,11 +1115,31 @@ class OpenAIProvider {
     async testConnection() {
         try {
             console.log('[OpenAIProvider] 🔍 开始测试API连接...');
-            console.log('[OpenAIProvider] 📊 测试端点:', `${this.endpoint}/v1/models`);
+            
+            // 🔧 改进的URL拼接逻辑
+            let endpoint = this.endpoint.trim();
+            if (endpoint.endsWith('/')) {
+                endpoint = endpoint.slice(0, -1);
+            }
+            const testUrl = `${endpoint}/v1/models`;
+            console.log('[OpenAIProvider] 📊 测试端点:', testUrl);
+            
+            // 🔧 API Key验证
+            if (!this.apiKey || this.apiKey.trim() === '') {
+                console.error('[OpenAIProvider] ❌ API Key未设置或为空');
+                return {
+                    success: false,
+                    error: 'API Key未设置，请在扩展设置中配置有效的API Key'
+                };
+            }
+            
+            const apiKeyLength = this.apiKey.length;
+            const apiKeyPreview = this.apiKey.substring(0, 8) + '***' + this.apiKey.slice(-4);
+            console.log(`[OpenAIProvider] 🔑 API Key信息: 长度=${apiKeyLength}, 预览=${apiKeyPreview}`);
             
             // 使用CORS兼容的fetch
             const response = await this.apiIntegration.proxyCompatibleFetch(
-                `${this.endpoint}/v1/models`,
+                testUrl,
                 {
                     method: 'GET',
                     headers: { 
@@ -1155,6 +1188,29 @@ class OpenAIProvider {
                     };
                 }
             } else {
+                // 🔧 专门处理401未授权错误
+                if (response.status === 401) {
+                    let errorData = '';
+                    try {
+                        errorData = await response.text();
+                        console.error('[OpenAIProvider] ❌ 401未授权错误 - 详细信息:', errorData);
+                    } catch (e) {
+                        console.warn('[OpenAIProvider] ⚠️ 无法读取401错误响应');
+                    }
+                    
+                    return {
+                        success: false,
+                        error: `API认证失败: 您的API Key无效或已过期。请检查以下项目：
+1. API Key是否正确配置 (当前长度: ${this.apiKey?.length || 0})
+2. API Key是否有访问权限
+3. 反代服务器是否正确转发Authorization头部
+4. 服务器端点地址是否正确: ${this.endpoint}
+技术详情: HTTP ${response.status} ${response.statusText}${errorData ? ' - ' + errorData.substring(0, 200) : ''}`,
+                        status: response.status,
+                        endpoint: this.endpoint
+                    };
+                }
+                
                 // 详细的错误信息
                 let errorDetails = `HTTP ${response.status}: ${response.statusText}`;
                 try {
@@ -1350,11 +1406,28 @@ class OpenAIProvider {
     async loadModels() {
         try {
             console.log('[OpenAIProvider] 📋 开始加载模型列表...');
-            console.log('[OpenAIProvider] 🔗 请求端点:', `${this.endpoint}/v1/models`);
+            
+            // 🔧 改进的URL拼接逻辑
+            let endpoint = this.endpoint.trim();
+            if (endpoint.endsWith('/')) {
+                endpoint = endpoint.slice(0, -1);
+            }
+            const modelsUrl = `${endpoint}/v1/models`;
+            console.log('[OpenAIProvider] 🔗 请求端点:', modelsUrl);
+            
+            // 🔧 API Key验证和调试信息
+            if (!this.apiKey || this.apiKey.trim() === '') {
+                console.error('[OpenAIProvider] ❌ API Key未设置或为空');
+                throw new Error('API Key未设置，请在扩展设置中配置有效的API Key');
+            }
+            
+            const apiKeyLength = this.apiKey.length;
+            const apiKeyPreview = this.apiKey.substring(0, 8) + '***' + this.apiKey.slice(-4);
+            console.log(`[OpenAIProvider] 🔑 API Key信息: 长度=${apiKeyLength}, 预览=${apiKeyPreview}`);
             
             // 使用CORS兼容的fetch
             const response = await this.apiIntegration.proxyCompatibleFetch(
-                `${this.endpoint}/v1/models`,
+                modelsUrl,
                 {
                     method: 'GET',
                     headers: { 
@@ -1381,6 +1454,25 @@ class OpenAIProvider {
             }
             
             if (!response.ok) {
+                // 🔧 专门处理401未授权错误
+                if (response.status === 401) {
+                    let errorDetail = '';
+                    try {
+                        const errorData = await response.text();
+                        errorDetail = errorData.substring(0, 200);
+                        console.error('[OpenAIProvider] ❌ 401未授权错误 - 详细信息:', errorDetail);
+                    } catch (e) {
+                        console.warn('[OpenAIProvider] ⚠️ 无法读取401错误响应');
+                    }
+                    
+                    throw new Error(`API认证失败: 您的API Key无效或已过期。请检查以下项目：
+1. API Key是否正确配置 (当前长度: ${this.apiKey?.length || 0})
+2. API Key是否有访问模型列表的权限
+3. 反代服务器是否正确转发Authorization头部
+4. 服务器端点地址是否正确: ${this.endpoint}
+技术详情: ${response.status} ${response.statusText}${errorDetail ? ' - ' + errorDetail : ''}`);
+                }
+                
                 // 尝试获取详细错误信息
                 let errorDetail = '';
                 try {
