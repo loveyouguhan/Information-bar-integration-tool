@@ -15283,7 +15283,7 @@ export class InfoBarSettings {
             let lastError = null;
             while (attempt <= maxRetry) {
                 attempt++;
-                const result = await this.sendCustomAPIRequest(messages);
+                const result = await this.sendCustomAPIRequest(messages, { skipSystemPrompt: false });
                 if (result && result.success && typeof result.text === 'string' && result.text.trim().length > 0) {
                     console.log('[InfoBarSettings] ✅ 自定义API返回结果，长度:', result.text.length, ' 尝试次数:', attempt);
                     await this.processAPIResult(result.text);
@@ -16368,22 +16368,49 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
 
     /**
      * 发送自定义API请求
+     * @param {Array} messages - 消息数组
+     * @param {Object} options - 选项配置
+     * @param {boolean} options.skipSystemPrompt - 是否跳过系统提示词添加（用于总结等场景）
      */
-    async sendCustomAPIRequest(messages) {
+    async sendCustomAPIRequest(messages, options = {}) {
         try {
             console.log('[InfoBarSettings] 📡 发送自定义API请求...');
 
-            // 获取API配置
-            const context = SillyTavern.getContext();
-            const extensionSettings = context.extensionSettings;
-            const apiConfig = extensionSettings['Information bar integration tool']?.apiConfig || {};
+            // 🔧 获取API配置：优先使用传递的配置，否则从扩展设置获取
+            let apiConfig;
+            if (options.apiConfig) {
+                console.log('[InfoBarSettings] 🔧 使用传递的API配置（总结模式）');
+                apiConfig = options.apiConfig;
+                console.log('[InfoBarSettings] 📊 传递的API配置详情:', {
+                    provider: apiConfig.provider,
+                    model: apiConfig.model,
+                    baseUrl: apiConfig.baseUrl,
+                    endpoint: apiConfig.endpoint,
+                    format: apiConfig.format,
+                    maxTokens: apiConfig.maxTokens,
+                    temperature: apiConfig.temperature,
+                    hasApiKey: !!apiConfig.apiKey
+                });
+            } else {
+                console.log('[InfoBarSettings] 📊 使用扩展设置的API配置');
+                const context = SillyTavern.getContext();
+                const extensionSettings = context.extensionSettings;
+                apiConfig = extensionSettings['Information bar integration tool']?.apiConfig || {};
+            }
 
             if (!apiConfig.provider || !apiConfig.model || !apiConfig.apiKey) {
                 throw new Error('API配置不完整');
             }
 
-            // 🔧 修复：为自定义API添加系统提示词，确保输出正确的中文格式和五步分析
-            const enhancedMessages = await this.enhanceMessagesWithSystemPrompt(messages);
+            let enhancedMessages;
+            if (options.skipSystemPrompt) {
+                console.log('[InfoBarSettings] ⏭️ 跳过系统提示词添加（总结模式）');
+                enhancedMessages = messages;
+            } else {
+                // 🔧 修复：为自定义API添加系统提示词，确保输出正确的中文格式和五步分析
+                console.log('[InfoBarSettings] 🔧 为自定义API添加系统提示词...');
+                enhancedMessages = await this.enhanceMessagesWithSystemPrompt(messages);
+            }
 
             // 根据提供商和接口类型发送请求
             if (apiConfig.provider === 'gemini' && apiConfig.format === 'native') {
@@ -16695,14 +16722,105 @@ tasks: creation="新任务创建", editing="任务编辑中"
         }
 
         if (!response.ok) {
-            throw new Error(`Gemini API错误: ${response.status} ${response.statusText}`);
+            // 🔧 特殊处理429和500错误
+            if (response.status === 429) {
+                // 获取重试建议时间
+                const retryAfter = response.headers.get('Retry-After') || 60;
+                console.warn(`[InfoBarSettings] ⚠️ 429频率限制，建议${retryAfter}秒后重试`);
+                
+                throw new Error(`API请求频率过高(429)，请等待${retryAfter}秒后重试。建议调整请求间隔或稍后再试。`);
+            } else if (response.status === 500) {
+                console.error('[InfoBarSettings] ❌ 500服务器内部错误');
+                
+                // 尝试获取错误详情
+                let errorDetail = '';
+                try {
+                    const errorData = await response.text();
+                    errorDetail = errorData.substring(0, 200);
+                    console.error('[InfoBarSettings] 📊 500错误详情:', errorDetail);
+                } catch (e) {
+                    console.warn('[InfoBarSettings] ⚠️ 无法读取500错误详情');
+                }
+                
+                throw new Error(`Gemini服务器内部错误(500)，这可能是临时问题。建议稍后重试。${errorDetail ? '错误详情: ' + errorDetail : ''}`);
+            } else {
+                throw new Error(`Gemini API错误: ${response.status} ${response.statusText}`);
+            }
         }
 
         const data = await response.json();
+        
+        console.log('[InfoBarSettings] 🔍 Gemini API响应数据结构:', JSON.stringify(data, null, 2));
+        
+        // 🔧 改进的响应解析逻辑，支持多种可能的格式
+        let extractedText = '';
+        
+        // 尝试标准的Gemini响应格式
+        if (data.candidates && data.candidates[0]) {
+            const candidate = data.candidates[0];
+            console.log('[InfoBarSettings] 📊 候选响应结构:', {
+                hasContent: !!candidate.content,
+                hasParts: !!(candidate.content?.parts),
+                partsLength: candidate.content?.parts?.length || 0,
+                hasText: !!candidate.text,
+                hasOutput: !!candidate.output
+            });
+            
+            if (candidate.content && candidate.content.parts && candidate.content.parts[0]) {
+                extractedText = candidate.content.parts[0].text || '';
+                console.log('[InfoBarSettings] ✅ 从标准路径提取文本，长度:', extractedText.length);
+            } else if (candidate.text) {
+                extractedText = candidate.text;
+                console.log('[InfoBarSettings] ✅ 从candidate.text提取文本，长度:', extractedText.length);
+            } else if (candidate.output) {
+                extractedText = candidate.output;
+                console.log('[InfoBarSettings] ✅ 从candidate.output提取文本，长度:', extractedText.length);
+            }
+        }
+        
+        // 如果标准路径失败，尝试其他可能的格式
+        if (!extractedText && data.text) {
+            extractedText = data.text;
+            console.log('[InfoBarSettings] ✅ 从data.text提取文本，长度:', extractedText.length);
+        }
+        
+        // 最后尝试从整个响应中查找文本内容
+        if (!extractedText) {
+            console.warn('[InfoBarSettings] ⚠️ 无法从标准路径提取文本，尝试深度搜索...');
+            
+            // 递归搜索所有可能包含文本内容的字段
+            const searchForText = (obj, path = '') => {
+                if (typeof obj === 'string' && obj.trim() && obj.length > 20) {
+                    console.log(`[InfoBarSettings] 🔍 找到可能的文本内容: ${path} (长度: ${obj.length})`);
+                    return obj;
+                }
+                if (typeof obj === 'object' && obj !== null) {
+                    for (const [key, value] of Object.entries(obj)) {
+                        if (key !== 'usage' && key !== 'usageMetadata') { // 跳过使用统计
+                            const result = searchForText(value, `${path}.${key}`);
+                            if (result) return result;
+                        }
+                    }
+                }
+                return null;
+            };
+            
+            extractedText = searchForText(data, 'data') || '';
+        }
+        
+        if (!extractedText) {
+            console.error('[InfoBarSettings] ❌ 无法从Gemini响应中提取任何文本内容');
+            console.error('[InfoBarSettings] 📊 完整响应结构keys:', Object.keys(data));
+            console.error('[InfoBarSettings] 📊 候选者详情:', data.candidates);
+            
+            // 如果完全没有文本内容，返回错误而不是空文本
+            throw new Error('Gemini API返回了空的文本内容，请检查API配置或模型响应');
+        }
+        
         return {
             success: true,
-            text: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
-            usage: data.usageMetadata
+            text: extractedText.trim(),
+            usage: data.usageMetadata || data.usage
         };
     }
 
@@ -16712,6 +16830,21 @@ tasks: creation="新任务创建", editing="任务编辑中"
     async sendOpenAICompatibleRequest(messages, apiConfig) {
         console.log('[InfoBarSettings] 🔄 发送OpenAI兼容请求...');
         
+        // 🔧 修复：确保baseUrl存在，否则使用fallback
+        let baseUrl = apiConfig.baseUrl || apiConfig.endpoint;
+        if (!baseUrl) {
+            console.error('[InfoBarSettings] ❌ baseUrl和endpoint都未配置');
+            throw new Error('API基础URL未配置，请检查API设置');
+        }
+        
+        // 🔧 移除末尾可能的路径部分，确保只有基础URL
+        if (baseUrl.endsWith('/chat/completions')) {
+            baseUrl = baseUrl.replace('/chat/completions', '');
+        }
+        if (baseUrl.endsWith('/v1')) {
+            baseUrl = baseUrl.replace('/v1', '');
+        }
+        
         const requestBody = {
             model: apiConfig.model,
             messages: messages,
@@ -16719,7 +16852,14 @@ tasks: creation="新任务创建", editing="任务编辑中"
             max_tokens: Math.min(apiConfig.maxTokens || 4000, 8000) // 🔧 使用用户设置，最大限制8000
         };
         
-        const requestUrl = `${apiConfig.baseUrl}/chat/completions`;
+        console.log('[InfoBarSettings] 🔧 API请求参数:', {
+            model: requestBody.model,
+            temperature: requestBody.temperature,
+            max_tokens: requestBody.max_tokens, // 🔧 显示实际使用的最大令牌数
+            messagesCount: messages.length
+        });
+        
+        const requestUrl = `${baseUrl}/v1/chat/completions`;
         console.log('[InfoBarSettings] 🌐 使用CORS兼容请求:', requestUrl);
 
         let response;
@@ -16763,6 +16903,28 @@ tasks: creation="新任务创建", editing="任务编辑中"
         }
 
         if (!response.ok) {
+            // 🔧 专门处理500服务器错误
+            if (response.status === 500) {
+                let errorDetail = '';
+                try {
+                    const errorText = await response.text();
+                    errorDetail = errorText.substring(0, 300);
+                    console.error('[InfoBarSettings] ❌ 500服务器错误详情:', errorDetail);
+                } catch (e) {
+                    console.warn('[InfoBarSettings] ⚠️ 无法读取500错误详情');
+                }
+                
+                throw new Error(`反代服务器内部错误 (500): 可能是以下问题之一：
+1. 反代配置问题：/v1/chat/completions端点配置错误
+2. 后端API问题：上游API服务异常或配额不足  
+3. 请求格式问题：反代服务器不支持当前请求格式
+4. 认证问题：后端API Key无效或过期
+
+技术详情: ${response.status} ${response.statusText}${errorDetail ? ' - ' + errorDetail : ''}
+
+建议检查反代服务器日志以获取更多信息。`);
+            }
+            
             throw new Error(`API错误: ${response.status} ${response.statusText}`);
         }
 
@@ -17385,8 +17547,18 @@ tasks: creation="新任务创建", editing="任务编辑中"
      * 触发手动总结
      */
     async triggerManualSummary() {
+        // 🔧 防止重复点击 - 检查是否已经在进行中
+        if (this._summaryInProgress) {
+            console.warn('[InfoBarSettings] ⚠️ 总结已在进行中，忽略重复点击');
+            this.showMessage('⏳ 总结正在进行中，请耐心等待...', 'warning');
+            return;
+        }
+
         try {
             console.log('[InfoBarSettings] 🖊️ 触发手动总结...');
+            
+            // 设置进行中标志
+            this._summaryInProgress = true;
 
             const manualSummaryBtn = this.modal.querySelector('#header-manual-summary-btn');
             if (manualSummaryBtn) {
@@ -17427,8 +17599,27 @@ tasks: creation="新任务创建", editing="任务编辑中"
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 触发手动总结失败:', error);
-            this.showMessage('❌ 总结生成失败', 'error');
+            
+            // 🔧 改进的错误消息处理
+            let errorMessage = '❌ 总结生成失败';
+            
+            if (error.message?.includes('429')) {
+                errorMessage = '❌ API请求过于频繁，请稍后再试 (429错误)';
+            } else if (error.message?.includes('500')) {
+                errorMessage = '❌ Gemini服务器内部错误，请稍后重试 (500错误)';
+            } else if (error.message?.includes('空的文本内容')) {
+                errorMessage = '❌ 模型没有返回内容，请检查配置或重试';
+            } else if (error.message?.includes('总结正在进行中')) {
+                errorMessage = '⏳ 总结正在进行中，请耐心等待';
+            } else if (error.message) {
+                errorMessage += ': ' + error.message;
+            }
+            
+            this.showMessage(errorMessage, 'error');
         } finally {
+            // 🔧 清除进行中标志
+            this._summaryInProgress = false;
+            
             // 恢复按钮状态
             const manualSummaryBtn = this.modal.querySelector('#header-manual-summary-btn');
             if (manualSummaryBtn) {
