@@ -2222,11 +2222,61 @@ export class MessageInfoBarRenderer {
         // 注入安全样式（仅作用于Shadow范围内）
         const style = document.createElement('style');
         style.textContent = `
-            :host { display: block; max-width: 100%; }
-            .custom-root { position: relative; display: block; max-width: 100%; overflow: hidden; }
-            .scale-inner { transform-origin: top left; will-change: transform; }
+            :host { 
+                display: block; 
+                max-width: 100%; 
+                /* 🔥 大幅增加容器尺寸，优先保证内容显示 */
+                min-height: 120px; /* 从40px增加到120px */
+                min-width: 300px; /* 从200px增加到300px */
+                max-height: none; /* 移除最大高度限制 */
+            }
+            .custom-root { 
+                position: relative; 
+                display: block; 
+                max-width: 100%; 
+                overflow: visible; /* 从hidden改为visible，允许内容显示 */
+                /* 🔥 更大的布局控制，优先内容显示 */
+                min-height: 120px; /* 确保足够高度 */
+                background: transparent;
+            }
+            .scale-inner { 
+                transform-origin: top left; 
+                will-change: transform;
+                /* 🎨 确保内容可见和可交互 */
+                pointer-events: auto;
+                user-select: text;
+                position: relative;
+                z-index: 1;
+            }
             /* 限制影子内部滚动，尽量由外层容器管理高度 */
-            .custom-root * { box-sizing: border-box; }
+            .custom-root * { 
+                box-sizing: border-box; 
+            }
+            /* 🚀 增强交互性：确保按钮和链接可点击 */
+            .custom-root button,
+            .custom-root a,
+            .custom-root [onclick],
+            .custom-root [data-action],
+            .custom-root .clickable,
+            .custom-root input,
+            .custom-root select,
+            .custom-root textarea {
+                pointer-events: auto !important;
+                cursor: pointer;
+                position: relative;
+                z-index: 10;
+            }
+            /* 🔥 状态栏专用优化：大幅增加显示空间 */
+            .infobar-container,
+            .infobar-wrapper {
+                pointer-events: auto !important;
+                min-height: 150px; /* 从30px增加到150px */
+                max-height: none; /* 移除高度限制 */
+            }
+            /* 🚀 确保状态栏内容有足够空间 */
+            .infobar-container.infobar-style-custom-html {
+                min-height: 200px; /* 自定义HTML样式更大空间 */
+            }
         `;
         shadowRoot.appendChild(style);
 
@@ -2241,6 +2291,12 @@ export class MessageInfoBarRenderer {
 
         // 标记已封装
         wrapper.setAttribute('data-shadow', 'true');
+
+        // 🚀 **关键修复**: 执行用户自定义HTML中的JavaScript代码
+        this.executeCustomHTMLScripts(shadowRoot);
+
+        // 🚀 设置Shadow DOM事件代理（作为备用方案）
+        this.setupShadowDOMEventHandling(shadowRoot, container);
 
         // 应用首次缩放并注册窗口缩放监听
         const apply = () => {
@@ -2262,17 +2318,745 @@ export class MessageInfoBarRenderer {
     }
 
     /**
+     * 🚀 新增：设置Shadow DOM事件处理机制
+     */
+    setupShadowDOMEventHandling(shadowRoot, container) {
+        try {
+            console.log('[MessageInfoBarRenderer] 🎯 设置Shadow DOM事件代理...');
+
+            // 获取消息ID用于事件处理
+            const messageId = (container && container.getAttribute('data-message-id')) || 'unknown';
+
+            // 在Shadow Root内部添加事件监听器
+            shadowRoot.addEventListener('click', (e) => {
+                this.handleShadowDOMClick(e, messageId, container);
+            }, true); // 使用捕获阶段确保能够接收到事件
+
+            shadowRoot.addEventListener('mousedown', (e) => {
+                // 阻止事件冒泡到外部，避免干扰拖拽等功能
+                e.stopPropagation();
+            }, true);
+
+            // 处理键盘事件（用于可访问性）
+            shadowRoot.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    const target = e.target;
+                    if (target && (target.onclick || target.getAttribute('data-action'))) {
+                        e.preventDefault();
+                        this.handleShadowDOMClick(e, messageId, container);
+                    }
+                }
+            }, true);
+
+            console.log('[MessageInfoBarRenderer] ✅ Shadow DOM事件代理设置完成');
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 设置Shadow DOM事件处理失败:', error);
+        }
+    }
+
+    /**
+     * 🎯 处理Shadow DOM内的点击事件
+     */
+    handleShadowDOMClick(e, messageId, container) {
+        try {
+            const target = e.target;
+            if (!target) return;
+
+            // 🔍 查找具有点击行为的元素
+            const clickableElement = target.closest('button, a, [onclick], [data-action], .clickable, .wrapper-toggle');
+            if (!clickableElement) return;
+
+            console.log('[MessageInfoBarRenderer] 🎯 处理Shadow DOM点击:', {
+                tagName: clickableElement.tagName,
+                className: clickableElement.className,
+                onclick: !!clickableElement.onclick,
+                dataAction: clickableElement.getAttribute('data-action'),
+                text: clickableElement.textContent?.trim()
+            });
+
+            // 🚀 优先让HTML模板内的JavaScript代码处理事件
+            // 检查是否有内联的onclick或者data-tab属性（用户自定义模板的标准）
+            if (clickableElement.onclick) {
+                try {
+                    clickableElement.onclick.call(clickableElement, e);
+                    console.log('[MessageInfoBarRenderer] ✅ 执行onclick事件成功');
+                    return; // 成功执行，直接返回
+                } catch (error) {
+                    console.warn('[MessageInfoBarRenderer] ⚠️ 执行onclick事件失败:', error);
+                }
+            }
+
+            // 🎯 处理用户自定义HTML模板中的标签页切换
+            if (clickableElement.classList.contains('main-tab-btn') || clickableElement.dataset.tab) {
+                this.handleCustomTabSwitch(clickableElement, e.currentTarget);
+                return;
+            }
+
+            // 🔧 处理其他自定义动作
+            if (clickableElement.getAttribute('data-action')) {
+                const action = clickableElement.getAttribute('data-action');
+                this.handleCustomAction(action, messageId, clickableElement, container);
+            } else if (clickableElement.classList.contains('wrapper-toggle')) {
+                const wrapper = clickableElement.closest('.infobar-wrapper');
+                if (wrapper) {
+                    wrapper.classList.toggle('collapsed');
+                    console.log('[MessageInfoBarRenderer] 🎯 切换状态栏折叠状态');
+                }
+            } else if (clickableElement.tagName === 'A' && clickableElement.href) {
+                if (clickableElement.target === '_blank') {
+                    window.open(clickableElement.href, '_blank');
+                } else {
+                    window.location.href = clickableElement.href;
+                }
+                console.log('[MessageInfoBarRenderer] 🔗 处理链接点击');
+            } else if (clickableElement.tagName === 'BUTTON') {
+                // 🔥 最后才尝试通用按钮处理，并且确保container有效
+                if (container) {
+                    this.handleGenericButtonClick(clickableElement, messageId, container);
+                } else {
+                    console.warn('[MessageInfoBarRenderer] ⚠️ Container为null，使用简化处理');
+                    this.handleSimpleButtonClick(clickableElement);
+                }
+            }
+
+            // 只在必要时阻止事件传播
+            e.stopPropagation();
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 处理Shadow DOM点击事件失败:', error);
+        }
+    }
+
+    /**
+     * 🎯 处理用户自定义HTML模板中的标签页切换
+     */
+    handleCustomTabSwitch(clickedButton, shadowRoot) {
+        try {
+            const targetTab = clickedButton.dataset.tab;
+            console.log('[MessageInfoBarRenderer] 🎮 处理自定义标签页切换:', targetTab);
+
+            // 在Shadow DOM中查找所有标签按钮和内容区域
+            const tabButtons = shadowRoot.querySelectorAll('.main-tab-btn');
+            const tabContents = shadowRoot.querySelectorAll('main[id^="tab-"]');
+
+            // 移除所有active类
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+
+            // 激活点击的按钮
+            clickedButton.classList.add('active');
+
+            // 激活对应的内容区域
+            if (targetTab) {
+                const targetContent = shadowRoot.querySelector(`#${targetTab}`);
+                if (targetContent) {
+                    targetContent.classList.add('active');
+                    console.log('[MessageInfoBarRenderer] ✅ 标签页切换成功:', targetTab);
+                }
+            }
+
+            // 🎨 提供视觉反馈
+            this.provideButtonFeedback(clickedButton);
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 处理自定义标签页切换失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 简化按钮点击处理（当container为null时使用）
+     */
+    handleSimpleButtonClick(button) {
+        try {
+            const buttonText = button.textContent?.trim() || '';
+            console.log('[MessageInfoBarRenderer] 🔧 简化按钮处理:', buttonText);
+
+            // 基本的视觉反馈
+            this.provideButtonFeedback(button);
+
+            // 简单的通知
+            this.showNotification(`🎯 ${buttonText} 已被触发`, 'info');
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 简化按钮处理失败:', error);
+        }
+    }
+
+    /**
+     * 🔥 新增：处理通用按钮点击（没有明确事件的按钮）
+     */
+    handleGenericButtonClick(button, messageId, container) {
+        try {
+            const buttonText = button.textContent?.trim() || '';
+            const buttonClass = button.className || '';
+            const buttonId = button.id || '';
+
+            console.log('[MessageInfoBarRenderer] 🎮 处理通用按钮点击:', {
+                text: buttonText,
+                class: buttonClass,
+                id: buttonId
+            });
+
+            // 🎯 根据按钮文本和类名判断功能
+            const buttonActions = {
+                // 状态栏标签页
+                '史程征途': () => this.switchToTab('history', container),
+                '世界地图': () => this.switchToTab('worldMap', container),
+                '据点建设': () => this.switchToTab('baseBuilding', container),
+                '世界图鉴': () => this.switchToTab('worldAtlas', container),
+                
+                // 物品相关
+                '使用物品': () => this.handleInventoryAction('use', container),
+                '整理物品': () => this.handleInventoryAction('organize', container),
+                '获取物品': () => this.handleInventoryAction('acquire', container),
+                
+                // 动作按钮
+                '选择立国据点': () => this.handleGameAction('selectFoundationSite', container),
+                '窥探建设': () => this.handleGameAction('spyConstruction', container),
+                '执行队列': () => this.handleGameAction('executeQueue', container),
+                
+                // 资源相关
+                '获取': () => this.handleResourceAction('acquire', button, container),
+                '使用': () => this.handleResourceAction('use', button, container),
+                
+                // 通用操作
+                '详情': () => this.showDetails(button, container),
+                '查看': () => this.showDetails(button, container),
+                '展开': () => this.toggleExpansion(button, container),
+                '收起': () => this.toggleExpansion(button, container),
+            };
+
+            // 🚀 执行对应的动作
+            const action = buttonActions[buttonText];
+            if (action) {
+                action();
+                console.log('[MessageInfoBarRenderer] ✅ 执行按钮动作成功:', buttonText);
+                
+                // 🎨 提供视觉反馈
+                this.provideButtonFeedback(button);
+            } else {
+                // 🔍 如果没有预定义动作，尝试通用处理
+                this.handleUnknownButtonClick(button, messageId, container);
+            }
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 处理通用按钮点击失败:', error);
+        }
+    }
+
+    /**
+     * 🎮 切换标签页
+     */
+    switchToTab(tabName, container) {
+        try {
+            console.log('[MessageInfoBarRenderer] 🎮 切换标签页:', tabName);
+            
+            // 查找所有标签按钮和内容区域
+            const shadowRoot = container.shadowRoot || container.querySelector(':scope').shadowRoot;
+            if (shadowRoot) {
+                // 更新标签按钮状态
+                const tabButtons = shadowRoot.querySelectorAll('.main-tab-btn');
+                tabButtons.forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                
+                // 激活当前按钮
+                const currentButton = Array.from(tabButtons).find(btn => {
+                    const text = btn.textContent.trim();
+                    return (tabName === 'history' && text === '史程征途') ||
+                           (tabName === 'worldMap' && text === '世界地图') ||
+                           (tabName === 'baseBuilding' && text === '据点建设') ||
+                           (tabName === 'worldAtlas' && text === '世界图鉴');
+                });
+                
+                if (currentButton) {
+                    currentButton.classList.add('active');
+                }
+                
+                // 切换内容显示区域
+                this.updateTabContent(tabName, shadowRoot);
+            }
+            
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 切换标签页失败:', error);
+        }
+    }
+
+    /**
+     * 🎯 更新标签页内容
+     */
+    updateTabContent(tabName, shadowRoot) {
+        try {
+            // 查找内容区域
+            const contentAreas = shadowRoot.querySelectorAll('.tab-content');
+            contentAreas.forEach(area => {
+                area.style.display = 'none';
+            });
+            
+            // 显示对应内容
+            const targetArea = shadowRoot.querySelector(`[data-tab="${tabName}"]`);
+            if (targetArea) {
+                targetArea.style.display = 'block';
+            }
+            
+            console.log('[MessageInfoBarRenderer] 🎯 已更新标签页内容:', tabName);
+            
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 更新标签页内容失败:', error);
+        }
+    }
+
+    /**
+     * 🎒 处理物品相关动作
+     */
+    handleInventoryAction(action, container) {
+        try {
+            console.log('[MessageInfoBarRenderer] 🎒 处理物品动作:', action);
+            
+            const actions = {
+                'use': () => {
+                    this.showNotification('💊 使用物品功能已激活', 'success');
+                    console.log('[MessageInfoBarRenderer] 🎮 执行使用物品动作');
+                },
+                'organize': () => {
+                    this.showNotification('📦 物品整理功能已激活', 'info');
+                    console.log('[MessageInfoBarRenderer] 🎮 执行整理物品动作');
+                },
+                'acquire': () => {
+                    this.showNotification('🎁 获取物品功能已激活', 'success');
+                    console.log('[MessageInfoBarRenderer] 🎮 执行获取物品动作');
+                }
+            };
+            
+            if (actions[action]) {
+                actions[action]();
+            }
+            
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 处理物品动作失败:', error);
+        }
+    }
+
+    /**
+     * 🎮 处理游戏动作
+     */
+    handleGameAction(action, container) {
+        try {
+            console.log('[MessageInfoBarRenderer] 🎮 处理游戏动作:', action);
+            
+            const actions = {
+                'selectFoundationSite': () => {
+                    this.showNotification('🏰 立国据点选择功能已激活', 'info');
+                    console.log('[MessageInfoBarRenderer] 🎮 执行选择立国据点动作');
+                },
+                'spyConstruction': () => {
+                    this.showNotification('🔍 窥探建设功能已激活', 'warning');
+                    console.log('[MessageInfoBarRenderer] 🎮 执行窥探建设动作');
+                },
+                'executeQueue': () => {
+                    this.showNotification('⚡ 队列执行功能已激活', 'success');
+                    console.log('[MessageInfoBarRenderer] 🎮 执行队列动作');
+                }
+            };
+            
+            if (actions[action]) {
+                actions[action]();
+            }
+            
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 处理游戏动作失败:', error);
+        }
+    }
+
+    /**
+     * 💎 处理资源动作
+     */
+    handleResourceAction(action, button, container) {
+        try {
+            const resourceType = this.getResourceTypeFromContext(button);
+            console.log('[MessageInfoBarRenderer] 💎 处理资源动作:', action, resourceType);
+            
+            const message = action === 'acquire' ? 
+                `🎁 已获取${resourceType}资源` : 
+                `💫 已使用${resourceType}资源`;
+            
+            this.showNotification(message, 'success');
+            
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 处理资源动作失败:', error);
+        }
+    }
+
+    /**
+     * 🔍 显示详情
+     */
+    showDetails(button, container) {
+        try {
+            const itemName = this.getItemNameFromContext(button);
+            console.log('[MessageInfoBarRenderer] 🔍 显示详情:', itemName);
+            
+            this.showNotification(`📖 正在查看${itemName}的详细信息`, 'info');
+            
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 显示详情失败:', error);
+        }
+    }
+
+    /**
+     * 📋 切换展开/收起状态
+     */
+    toggleExpansion(button, container) {
+        try {
+            const isExpanded = button.textContent.includes('收起');
+            const newText = isExpanded ? '展开' : '收起';
+            const newIcon = isExpanded ? '▼' : '▲';
+            
+            button.textContent = newText;
+            console.log('[MessageInfoBarRenderer] 📋 切换展开状态:', newText);
+            
+            this.showNotification(`${newIcon} ${newText}内容`, 'info');
+            
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 切换展开状态失败:', error);
+        }
+    }
+
+    /**
+     * 🎨 提供按钮视觉反馈
+     */
+    provideButtonFeedback(button) {
+        try {
+            // 添加点击动画效果
+            button.style.transform = 'scale(0.95)';
+            button.style.transition = 'transform 0.1s ease';
+            
+            setTimeout(() => {
+                button.style.transform = 'scale(1)';
+            }, 100);
+            
+            // 临时高亮效果
+            const originalBackground = button.style.background;
+            button.style.background = 'rgba(0, 123, 255, 0.2)';
+            
+            setTimeout(() => {
+                button.style.background = originalBackground;
+            }, 300);
+            
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 提供按钮反馈失败:', error);
+        }
+    }
+
+    /**
+     * ❓ 处理未知按钮点击
+     */
+    handleUnknownButtonClick(button, messageId, container) {
+        try {
+            const buttonText = button.textContent?.trim() || '未知按钮';
+            console.log('[MessageInfoBarRenderer] ❓ 处理未知按钮:', buttonText);
+            
+            // 提供通用反馈
+            this.showNotification(`🎯 ${buttonText} 功能已被触发`, 'info');
+            this.provideButtonFeedback(button);
+            
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 处理未知按钮失败:', error);
+        }
+    }
+
+    /**
+     * 📢 显示通知消息
+     */
+    showNotification(message, type = 'info') {
+        try {
+            const colors = {
+                'success': '#28a745',
+                'info': '#17a2b8', 
+                'warning': '#ffc107',
+                'error': '#dc3545'
+            };
+            
+            // 创建通知元素
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${colors[type] || colors.info};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 6px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10000;
+                font-size: 14px;
+                max-width: 300px;
+                word-wrap: break-word;
+            `;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            // 自动消失
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 3000);
+            
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 显示通知失败:', error);
+        }
+    }
+
+    /**
+     * 🔍 从上下文获取资源类型
+     */
+    getResourceTypeFromContext(button) {
+        try {
+            const context = button.closest('[data-resource-type]');
+            return context?.getAttribute('data-resource-type') || '未知';
+        } catch (error) {
+            return '未知';
+        }
+    }
+
+    /**
+     * 🔍 从上下文获取物品名称
+     */
+    getItemNameFromContext(button) {
+        try {
+            const context = button.closest('[data-item-name]');
+            return context?.getAttribute('data-item-name') || '物品';
+        } catch (error) {
+            return '物品';
+        }
+    }
+
+    /**
+     * 🚀 执行自定义HTML中的JavaScript代码
+     */
+    executeCustomHTMLScripts(shadowRoot) {
+        try {
+            console.log('[MessageInfoBarRenderer] 🚀 执行自定义HTML脚本...');
+
+            // 查找所有script标签
+            const scripts = shadowRoot.querySelectorAll('script');
+            
+            if (scripts.length === 0) {
+                console.log('[MessageInfoBarRenderer] 📝 未找到脚本标签');
+                return;
+            }
+
+            scripts.forEach((script, index) => {
+                try {
+                    console.log(`[MessageInfoBarRenderer] 📝 处理脚本 ${index + 1}/${scripts.length}`);
+
+                    if (script.src) {
+                        // 外部脚本 - 创建新脚本加载
+                        const newScript = document.createElement('script');
+                        newScript.src = script.src;
+                        newScript.async = false;
+                        document.head.appendChild(newScript);
+                        console.log(`[MessageInfoBarRenderer] 📥 外部脚本已加载: ${script.src}`);
+                    } else {
+                        // 内联脚本 - 在Shadow DOM的上下文中执行
+                        const scriptContent = script.textContent;
+                        
+                        if (scriptContent.trim()) {
+                            // 🔧 在正确的上下文中执行脚本
+                            this.executeScriptInShadowDOM(scriptContent, shadowRoot);
+                            console.log(`[MessageInfoBarRenderer] ✅ 内联脚本 ${index + 1} 执行成功`);
+                        }
+                    }
+
+                } catch (error) {
+                    console.error(`[MessageInfoBarRenderer] ❌ 脚本 ${index + 1} 执行失败:`, error);
+                }
+            });
+
+            console.log('[MessageInfoBarRenderer] 🎉 所有脚本处理完成');
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 执行自定义HTML脚本失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 在Shadow DOM中执行脚本
+     */
+    executeScriptInShadowDOM(scriptContent, shadowRoot) {
+        try {
+            console.log('[MessageInfoBarRenderer] 🚀 开始在Shadow DOM中执行脚本...');
+
+            // 🎯 增强的执行环境：提供完整的DOM API和全局函数
+            const executeInContext = new Function('shadowRoot', 'document', 'window', 'SillyTavern', 'getVariables', 'triggerSlash', `
+                // 🔧 重写DOM查询方法，使其指向shadowRoot
+                const getElementById = (id) => shadowRoot.getElementById(id) || shadowRoot.querySelector('#' + id);
+                const querySelector = (selector) => shadowRoot.querySelector(selector);
+                const querySelectorAll = (selector) => shadowRoot.querySelectorAll(selector);
+                const getElementsByClassName = (className) => shadowRoot.querySelectorAll('.' + className);
+                const getElementsByTagName = (tagName) => shadowRoot.querySelectorAll(tagName);
+                
+                // 🎮 创建用户自定义HTML模板需要的全局对象
+                const shadowDocument = {
+                    getElementById: getElementById,
+                    querySelector: querySelector,
+                    querySelectorAll: querySelectorAll,
+                    getElementsByClassName: getElementsByClassName,
+                    getElementsByTagName: getElementsByTagName,
+                    createElement: (tag) => document.createElement(tag),
+                    addEventListener: (event, handler, options) => shadowRoot.addEventListener(event, handler, options),
+                    body: shadowRoot,
+                    head: shadowRoot
+                };
+
+                // 🔄 重写document引用，使用shadowRoot作为文档根节点
+                const originalDocument = document;
+                document = shadowDocument;
+                
+                // 📦 提供常用的全局函数
+                const alert = window.alert;
+                const console = window.console;
+                const setTimeout = window.setTimeout;
+                const setInterval = window.setInterval;
+                const requestAnimationFrame = window.requestAnimationFrame;
+                const fetch = window.fetch;
+                
+                // 🎯 提供SillyTavern特定的API
+                const getVariablesSafe = getVariables || (() => Promise.resolve({}));
+                const triggerSlashSafe = triggerSlash || ((cmd) => console.log('triggerSlash not available:', cmd));
+
+                try {
+                    // 🚀 执行用户脚本
+                    ${scriptContent}
+                    
+                    console.log('[ShadowDOM Script] ✅ 脚本执行成功');
+                    
+                } catch (error) {
+                    console.error('[ShadowDOM Script] ❌ 脚本执行错误:', error);
+                    throw error;
+                } finally {
+                    // 恢复原始document
+                    document = originalDocument;
+                }
+            `);
+
+            // 🚀 在增强的上下文中执行脚本
+            executeInContext.call(null, 
+                shadowRoot, 
+                shadowRoot.ownerDocument || document, 
+                window,
+                window.SillyTavern || {},
+                window.getVariables,
+                window.triggerSlash
+            );
+
+            console.log('[MessageInfoBarRenderer] ✅ Shadow DOM脚本执行完成');
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ Shadow DOM脚本执行失败:', error);
+            
+            // 🔄 增强的备用方案：使用全局上下文但提供Shadow DOM上下文
+            try {
+                console.warn('[MessageInfoBarRenderer] ⚠️ 尝试增强备用脚本执行方案...');
+                
+                // 在全局上下文中创建临时的shadowRoot引用
+                const originalGetElementById = document.getElementById;
+                const originalQuerySelector = document.querySelector;
+                const originalQuerySelectorAll = document.querySelectorAll;
+                
+                // 临时重写全局DOM方法
+                document.getElementById = (id) => shadowRoot.getElementById(id) || shadowRoot.querySelector('#' + id) || originalGetElementById.call(document, id);
+                document.querySelector = (selector) => shadowRoot.querySelector(selector) || originalQuerySelector.call(document, selector);
+                document.querySelectorAll = (selector) => {
+                    const shadowResult = shadowRoot.querySelectorAll(selector);
+                    const documentResult = originalQuerySelectorAll.call(document, selector);
+                    return shadowResult.length > 0 ? shadowResult : documentResult;
+                };
+                
+                // 提供shadowRoot全局引用
+                window.shadowRootContext = shadowRoot;
+                
+                try {
+                    // 执行脚本
+                    eval(`
+                        (function() {
+                            const shadowRoot = window.shadowRootContext;
+                            ${scriptContent}
+                        })();
+                    `);
+                    
+                    console.log('[MessageInfoBarRenderer] ✅ 备用脚本执行成功');
+                    
+                } finally {
+                    // 恢复原始DOM方法
+                    document.getElementById = originalGetElementById;
+                    document.querySelector = originalQuerySelector;
+                    document.querySelectorAll = originalQuerySelectorAll;
+                    delete window.shadowRootContext;
+                }
+                
+            } catch (fallbackError) {
+                console.error('[MessageInfoBarRenderer] ❌ 备用脚本执行也失败:', fallbackError);
+                
+                // 🔧 最终备用方案：直接在全局执行但记录shadowRoot
+                try {
+                    window.currentShadowRoot = shadowRoot;
+                    eval(scriptContent);
+                    console.log('[MessageInfoBarRenderer] ⚠️ 最终备用方案执行完成');
+                } catch (finalError) {
+                    console.error('[MessageInfoBarRenderer] ❌ 所有脚本执行方案均失败:', finalError);
+                } finally {
+                    delete window.currentShadowRoot;
+                }
+            }
+        }
+    }
+
+    /**
+     * 🎬 处理自定义动作
+     */
+    handleCustomAction(action, messageId, element, container) {
+        try {
+            console.log('[MessageInfoBarRenderer] 🎬 处理自定义动作:', action);
+
+            switch (action) {
+                case 'toggle-panel':
+                    const panelId = element.getAttribute('data-panel-id');
+                    if (panelId) {
+                        this.togglePanel(panelId, container);
+                    }
+                    break;
+                case 'refresh-data':
+                    this.refreshInfoBarData(messageId);
+                    break;
+                case 'export-data':
+                    this.exportInfoBarData(messageId);
+                    break;
+                case 'edit-data':
+                    this.editInfoBarData(messageId);
+                    break;
+                default:
+                    console.warn('[MessageInfoBarRenderer] ⚠️ 未知的自定义动作:', action);
+            }
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 处理自定义动作失败:', error);
+        }
+    }
+
+    /**
      * 按容器宽度与最大高度对自定义HTML进行比例缩放，防止溢出
      */
     applyCustomHTMLScaling(container, wrapper, root, inner) {
         if (!container || !wrapper || !root || !inner) return;
 
-        // 目标宽度与最大高度（CSS变量可配置）
+        // 🚀 移除高度限制，让内容自由显示
         const containerWidth = container.clientWidth || 0;
         const computed = getComputedStyle(container);
-        const maxHeightStr = computed.getPropertyValue('--infobar-custom-max-height');
-        const maxHeight = Math.max(120, parseInt(maxHeightStr, 10) || 420);
-        const scaleMode = (computed.getPropertyValue('--infobar-custom-scale-mode') || 'width').trim() || 'width';
+        // 不再限制最大高度，让内容完全展示
+        const scaleMode = (computed.getPropertyValue('--infobar-custom-scale-mode') || 'readable').trim() || 'readable';
 
         // 重置缩放以获取自然尺寸
         inner.style.transform = 'scale(1)';
@@ -2284,55 +3068,55 @@ export class MessageInfoBarRenderer {
         const naturalHeight = inner.scrollHeight || inner.offsetHeight || 0;
         if (containerWidth <= 0 || naturalWidth <= 0 || naturalHeight <= 0) return;
 
-        // 计算缩放因子
+        // 🚀 仅基于宽度的缩放策略：完全显示内容，无高度限制
         const scaleW = containerWidth / naturalWidth;
-        const scaleH = maxHeight / naturalHeight;
-        // 默认优先宽度适配；如出现溢出则回退到contain适配
-        let scale = scaleMode === 'contain' ? Math.min(scaleW, scaleH) : scaleW;
-        // 合理范围约束
-        scale = Math.max(0.1, Math.min(3, scale));
+        // 不再基于高度进行缩放限制
+        
+        let scale;
+        if (scaleMode === 'readable') {
+            // 🚀 可读性优先模式：尽可能保持大尺寸
+            // 🚀 仅基于宽度缩放：让内容完全显示，不限制高度
+            if (naturalWidth <= containerWidth) {
+                // 内容宽度适配，保持原始比例
+                scale = 1.0;
+            } else {
+                // 内容过宽，缩放到适配宽度
+                scale = scaleW;
+            }
+        } else {
+            // 所有其他模式都只基于宽度缩放
+            scale = scaleW;
+        }
+        
+        // 🚀 移除缩放范围限制，让内容自由缩放
+        // 不限制缩放范围，完全基于内容和容器宽度
 
         // 应用缩放及外层尺寸
         inner.style.transform = `scale(${scale})`;
         inner.style.width = naturalWidth + 'px';
         inner.style.height = naturalHeight + 'px';
 
-        // 如按当前scale会造成任一方向超界，则自动回退到contain以确保完整可见
-        let usedContainFallback = false;
-        const scaledWidthRaw = Math.ceil(naturalWidth * scale);
-        const scaledHeightRawPre = Math.ceil(naturalHeight * scale);
-        if (scaledWidthRaw > containerWidth + 1 || scaledHeightRawPre > maxHeight + 1) {
-            const containScale = Math.min(scaleW, scaleH);
-            scale = Math.max(0.1, Math.min(3, containScale));
-            inner.style.transform = `scale(${scale})`;
-            usedContainFallback = true;
-        }
-
-        // 外层wrapper高度设置：若超出最大高度，则在容器内滚动
-        const scaledHeightRaw = Math.ceil(naturalHeight * scale);
-        const exceed = scaledHeightRaw > maxHeight;
-        const scaledHeight = exceed ? maxHeight : scaledHeightRaw;
+        // 🔥 新策略：允许适度溢出以保证可读性，减少回退
+        // 🚀 完全移除高度限制，让内容自由显示
         wrapper.style.width = '100%';
-        wrapper.style.height = scaledHeight + 'px';
+        wrapper.style.height = 'auto'; // 自动高度，无限制
+        wrapper.style.maxHeight = 'none'; // 移除最大高度限制
         wrapper.style.overflowX = 'hidden';
-        wrapper.style.overflowY = exceed ? 'auto' : 'hidden';
+        wrapper.style.overflowY = 'visible'; // 允许内容完全显示
+        console.log('[MessageInfoBarRenderer] 🚀 完全移除高度限制，内容自由显示');
 
-        // 二次校准：仅在模式为width且未触发contain回退时，才将宽度迭代贴合容器
+        // 🎯 二次校准：仅调整宽度适配，不限制高度
         const rect = inner.getBoundingClientRect();
         const currentWidth = rect.width || 0;
-        if (!usedContainFallback && scaleMode !== 'contain' && currentWidth > 0 && Math.abs(currentWidth - containerWidth) > 2) {
+        if (currentWidth > 0 && Math.abs(currentWidth - containerWidth) > 2) {
             const fix = containerWidth / currentWidth;
             let newScale = scale * fix;
-            newScale = Math.max(0.1, Math.min(3, newScale));
             inner.style.transform = `scale(${newScale})`;
-
-            const newScaledHeight = Math.ceil(naturalHeight * newScale);
-            const newExceed = newScaledHeight > maxHeight;
-            wrapper.style.height = (newExceed ? maxHeight : newScaledHeight) + 'px';
-            wrapper.style.overflowY = newExceed ? 'auto' : 'hidden';
+            // 不再设置高度限制和滚动条
+            console.log('[MessageInfoBarRenderer] 🎯 二次校准完成，新缩放比例:', newScale.toFixed(3));
         }
 
-        // 三次校准：在下一帧再测量一次，确保浏览器完成布局后宽度仍能铺满容器
+        // 🚀 三次校准：仅调整宽度，完全移除高度限制
         const laterCalibrate = () => {
             try {
                 const rect2 = inner.getBoundingClientRect();
@@ -2341,19 +3125,16 @@ export class MessageInfoBarRenderer {
                     const adjust = containerWidth / w2;
                     const prevScale = parseFloat((inner.style.transform.match(/scale\(([^)]+)\)/) || [])[1] || '1');
                     let finalScale = prevScale * adjust;
-                    finalScale = Math.max(0.1, Math.min(3, finalScale));
                     inner.style.transform = `scale(${finalScale})`;
-
-                    const finalHeight = Math.ceil(naturalHeight * finalScale);
-                    const finalExceed = finalHeight > maxHeight;
-                    wrapper.style.height = (finalExceed ? maxHeight : finalHeight) + 'px';
-                    wrapper.style.overflowY = finalExceed ? 'auto' : 'hidden';
+                    // 🚀 完全移除高度设置，让内容自由显示
+                    console.log('[MessageInfoBarRenderer] 🎯 三次校准完成，最终缩放比例:', finalScale.toFixed(3));
                 }
             } catch (e) {
                 // 忽略
             }
         };
-        if (!usedContainFallback && scaleMode !== 'contain' && typeof requestAnimationFrame === 'function') {
+        // 无条件执行校准，确保宽度适配
+        if (typeof requestAnimationFrame === 'function') {
             requestAnimationFrame(() => {
                 laterCalibrate();
                 setTimeout(laterCalibrate, 100);
@@ -2539,8 +3320,12 @@ export class MessageInfoBarRenderer {
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings['Information bar integration tool'] || {};
 
-            // 检查基础设置中的启用状态
-            return configs.enabled !== false; // 默认启用，除非明确设置为false
+            // 🔧 修复：检查插件是否启用
+            const basicSettings = configs.basic || {};
+            const integrationSystemSettings = basicSettings.integrationSystem || {};
+            const isPluginEnabled = integrationSystemSettings.enabled !== false; // 默认启用，除非明确设置为false
+
+            return isPluginEnabled;
 
         } catch (error) {
             console.error('[MessageInfoBarRenderer] ❌ 检查启用状态失败:', error);

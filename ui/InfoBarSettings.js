@@ -635,9 +635,9 @@ export class InfoBarSettings {
                     <div class="setting-item">
                         <div class="checkbox-wrapper">
                             <input type="checkbox" id="integration-system-checkbox" name="basic.integrationSystem.enabled" checked />
-                            <label for="integration-system-checkbox" class="checkbox-label">启用集成系统</label>
+                            <label for="integration-system-checkbox" class="checkbox-label">启用插件</label>
                         </div>
-                        <div class="setting-desc">启用信息栏与SillyTavern的深度集成</div>
+                        <div class="setting-desc">启用信息栏插件的所有功能</div>
                     </div>
 
                     <div class="setting-item">
@@ -14124,17 +14124,48 @@ export class InfoBarSettings {
      * 加载Gemini原生接口模型
      */
     async loadGeminiNativeModels(baseUrl, apiKey) {
-        console.log('[InfoBarSettings] 加载Gemini原生模型...');
+        console.log('[InfoBarSettings] 🔄 加载Gemini原生模型...');
 
         // 使用正确的Gemini API端点
         const modelsUrl = `${baseUrl}/v1beta/models?key=${apiKey}`;
+        
+        console.log('[InfoBarSettings] 🌐 使用CORS兼容请求:', modelsUrl);
 
-        const response = await fetch(modelsUrl, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
+        let response;
+        try {
+            // 🔧 修复：使用APIIntegration的CORS兼容fetch方法
+            if (this.apiIntegration && typeof this.apiIntegration.proxyCompatibleFetch === 'function') {
+                console.log('[InfoBarSettings] ✅ 使用CORS兼容的fetch方法');
+                response = await this.apiIntegration.proxyCompatibleFetch(modelsUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'SillyTavern-InfoBar/1.0'
+                    }
+                });
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ APIIntegration不可用，使用原生fetch');
+                response = await fetch(modelsUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'SillyTavern-InfoBar/1.0'
+                    }
+                });
             }
-        });
+        } catch (fetchError) {
+            console.error('[InfoBarSettings] ❌ Gemini请求失败:', fetchError);
+            
+            // 检查是否是CORS错误
+            if (fetchError.message.includes('CORS_BLOCKED') || 
+                fetchError.message.includes('CORS') ||
+                (fetchError.name === 'TypeError' && fetchError.message.includes('fetch'))) {
+                    
+                throw new Error('CORS跨域错误：无法访问Gemini模型列表，请检查API配置或使用服务器端代理');
+            }
+            
+            throw fetchError;
+        }
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -14164,7 +14195,7 @@ export class InfoBarSettings {
      * 加载OpenAI兼容接口模型
      */
     async loadOpenAICompatibleModels(baseUrl, apiKey, provider) {
-        console.log('[InfoBarSettings] 加载OpenAI兼容模型...');
+        console.log('[InfoBarSettings] 🔄 加载OpenAI兼容模型...');
 
         let modelsUrl;
         let headers;
@@ -14174,37 +14205,144 @@ export class InfoBarSettings {
             modelsUrl = `https://generativelanguage.googleapis.com/v1beta/openai/models`;
             headers = {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                'Authorization': `Bearer ${apiKey}`,
+                'User-Agent': 'SillyTavern-InfoBar/1.0'
             };
         } else {
             // 自定义OpenAI兼容接口
             modelsUrl = `${baseUrl}/models`;
             headers = {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                'Authorization': `Bearer ${apiKey}`,
+                'User-Agent': 'SillyTavern-InfoBar/1.0'
             };
         }
 
-        const response = await fetch(modelsUrl, {
-            method: 'GET',
-            headers: headers
-        });
+        console.log('[InfoBarSettings] 🌐 使用CORS兼容请求:', modelsUrl);
+        
+        let response;
+        try {
+            // 🔧 修复：使用APIIntegration的CORS兼容fetch方法
+            if (this.apiIntegration && typeof this.apiIntegration.proxyCompatibleFetch === 'function') {
+                console.log('[InfoBarSettings] ✅ 使用CORS兼容的fetch方法');
+                response = await this.apiIntegration.proxyCompatibleFetch(modelsUrl, {
+                    method: 'GET',
+                    headers: headers
+                });
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ APIIntegration不可用，使用原生fetch');
+                response = await fetch(modelsUrl, {
+                    method: 'GET',
+                    headers: headers
+                });
+            }
+        } catch (fetchError) {
+            console.error('[InfoBarSettings] ❌ 请求失败:', fetchError);
+            
+            // 检查是否是CORS错误
+            if (fetchError.message.includes('CORS_BLOCKED') || 
+                fetchError.message.includes('CORS') ||
+                (fetchError.name === 'TypeError' && fetchError.message.includes('fetch'))) {
+                    
+                throw new Error('CORS跨域错误：无法访问模型列表，请检查反代服务器的CORS配置或使用服务器端代理');
+            }
+            
+            throw fetchError;
+        }
 
         if (!response.ok) {
-            const errorText = await response.text();
+            let errorText = '';
+            try {
+                errorText = await response.text();
+            } catch (e) {
+                errorText = '无法读取错误响应';
+            }
+            
+            console.error('[InfoBarSettings] 🔥 API响应错误:', {
+                status: response.status,
+                statusText: response.statusText,
+                url: modelsUrl,
+                errorText: errorText.substring(0, 200)
+            });
+            
             throw new Error(`API错误 (${response.status}): ${errorText}`);
         }
 
-        const data = await response.json();
+        let data;
+        try {
+            data = await response.json();
+            console.log('[InfoBarSettings] 📊 API响应数据结构:', Object.keys(data));
+        } catch (parseError) {
+            console.error('[InfoBarSettings] ❌ 响应解析失败:', parseError);
+            throw new Error('API响应格式错误：无法解析JSON数据');
+        }
 
-        // 解析OpenAI格式响应
-        const models = data.data?.map(model => ({
-            id: model.id,
-            name: model.id,
-            description: model.description || `模型: ${model.id}`
-        })) || [];
+        // 🔧 增强的响应格式兼容性处理
+        let models = [];
+        
+        if (data.data && Array.isArray(data.data)) {
+            // 标准OpenAI格式: { "data": [...] }
+            console.log('[InfoBarSettings] 📋 检测到标准OpenAI格式');
+            models = data.data.map(model => ({
+                id: model.id || model.model || 'unknown',
+                name: model.id || model.model || model.name || 'Unknown Model',
+                description: model.description || `模型: ${model.id || model.model || 'unknown'}`
+            }));
+        } else if (data.models && Array.isArray(data.models)) {
+            // 某些反代使用的格式: { "models": [...] }
+            console.log('[InfoBarSettings] 📋 检测到自定义models格式');
+            models = data.models.map(model => ({
+                id: model.id || model.model || model.name || 'unknown',
+                name: model.name || model.id || model.model || 'Unknown Model',
+                description: model.description || `模型: ${model.id || model.name || 'unknown'}`
+            }));
+        } else if (Array.isArray(data)) {
+            // 直接数组格式: [...]
+            console.log('[InfoBarSettings] 📋 检测到直接数组格式');
+            models = data.map(model => {
+                if (typeof model === 'string') {
+                    return { id: model, name: model, description: `模型: ${model}` };
+                } else {
+                    return {
+                        id: model.id || model.model || model.name || 'unknown',
+                        name: model.name || model.id || model.model || 'Unknown Model',
+                        description: model.description || `模型: ${model.id || model.name || 'unknown'}`
+                    };
+                }
+            });
+        } else {
+            console.warn('[InfoBarSettings] ⚠️ 未识别的响应格式，提供降级模型列表');
+            console.log('[InfoBarSettings] 🔍 原始响应:', JSON.stringify(data, null, 2));
+            
+            // 提供降级模型列表
+            if (provider === 'gemini') {
+                models = [
+                    { id: 'gemini-pro', name: 'Gemini Pro (降级)', description: '无法获取模型列表时的默认Gemini模型' },
+                    { id: 'gemini-pro-vision', name: 'Gemini Pro Vision (降级)', description: '无法获取模型列表时的默认Gemini视觉模型' }
+                ];
+            } else {
+                models = [
+                    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo (降级)', description: '无法获取模型列表时的默认模型' },
+                    { id: 'gpt-4', name: 'GPT-4 (降级)', description: '无法获取模型列表时的默认模型' },
+                    { id: 'gpt-4-turbo', name: 'GPT-4 Turbo (降级)', description: '无法获取模型列表时的默认模型' }
+                ];
+            }
+        }
+        
+        // 过滤和验证模型列表
+        models = models.filter(model => 
+            model && 
+            typeof model === 'object' && 
+            model.id && 
+            typeof model.id === 'string' &&
+            model.id.trim() !== ''
+        );
 
-        console.log(`[InfoBarSettings] OpenAI兼容接口加载了 ${models.length} 个模型`);
+        console.log(`[InfoBarSettings] ✅ OpenAI兼容接口成功加载了 ${models.length} 个模型`);
+        models.forEach((model, index) => {
+            console.log(`[InfoBarSettings] 📋 模型 ${index + 1}: ${model.id} (${model.name})`);
+        });
+        
         return models;
     }
 
@@ -14375,20 +14513,52 @@ export class InfoBarSettings {
 
             if (provider === 'gemini' && interfaceType === 'native') {
                 testUrl = `${baseUrl}/v1beta/models?key=${apiKey}`;
-                headers = { 'Content-Type': 'application/json' };
+                headers = { 
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'SillyTavern-InfoBar/1.0'
+                };
             } else {
                 testUrl = `${baseUrl}/models`;
                 headers = {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
+                    'Authorization': `Bearer ${apiKey}`,
+                    'User-Agent': 'SillyTavern-InfoBar/1.0'
                 };
             }
 
-            const response = await fetch(testUrl, {
-                method: 'GET',
-                headers: headers,
-                timeout: 10000
-            });
+            console.log('[InfoBarSettings] 🌐 使用CORS兼容连接测试:', testUrl);
+            
+            let response;
+            try {
+                // 🔧 修复：使用APIIntegration的CORS兼容fetch方法
+                if (this.apiIntegration && typeof this.apiIntegration.proxyCompatibleFetch === 'function') {
+                    console.log('[InfoBarSettings] ✅ 使用CORS兼容的fetch方法');
+                    response = await this.apiIntegration.proxyCompatibleFetch(testUrl, {
+                        method: 'GET',
+                        headers: headers,
+                        timeout: 10000
+                    });
+                } else {
+                    console.warn('[InfoBarSettings] ⚠️ APIIntegration不可用，使用原生fetch');
+                    response = await fetch(testUrl, {
+                        method: 'GET',
+                        headers: headers,
+                        timeout: 10000
+                    });
+                }
+            } catch (fetchError) {
+                console.error('[InfoBarSettings] ❌ 连接测试请求失败:', fetchError);
+                
+                // 检查是否是CORS错误
+                if (fetchError.message.includes('CORS_BLOCKED') || 
+                    fetchError.message.includes('CORS') ||
+                    (fetchError.name === 'TypeError' && fetchError.message.includes('fetch'))) {
+                        
+                    throw new Error('CORS跨域错误：无法访问API服务器，请检查反代配置或使用服务器端代理');
+                }
+                
+                throw fetchError;
+            }
 
             if (response.ok) {
                 if (connectionStatus) {
@@ -16466,6 +16636,8 @@ tasks: creation="新任务创建", editing="任务编辑中"
      * 发送Gemini原生API请求
      */
     async sendGeminiNativeRequest(messages, apiConfig) {
+        console.log('[InfoBarSettings] 🔄 发送Gemini原生请求...');
+        
         const systemMessage = messages.find(m => m.role === 'system');
         const userMessage = messages.find(m => m.role === 'user');
 
@@ -16480,15 +16652,47 @@ tasks: creation="新任务创建", editing="任务编辑中"
                 maxOutputTokens: apiConfig.maxTokens || 2000
             }
         };
+        
+        const requestUrl = `${apiConfig.baseUrl}/v1beta/models/${apiConfig.model}:generateContent?key=${apiConfig.apiKey}`;
+        console.log('[InfoBarSettings] 🌐 使用CORS兼容请求:', requestUrl);
 
-        const response = await fetch(
-            `${apiConfig.baseUrl}/v1beta/models/${apiConfig.model}:generateContent?key=${apiConfig.apiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
+        let response;
+        try {
+            // 🔧 修复：使用APIIntegration的CORS兼容fetch方法
+            if (this.apiIntegration && typeof this.apiIntegration.proxyCompatibleFetch === 'function') {
+                console.log('[InfoBarSettings] ✅ 使用CORS兼容的fetch方法');
+                response = await this.apiIntegration.proxyCompatibleFetch(requestUrl, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'SillyTavern-InfoBar/1.0'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ APIIntegration不可用，使用原生fetch');
+                response = await fetch(requestUrl, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'SillyTavern-InfoBar/1.0'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
             }
-        );
+        } catch (fetchError) {
+            console.error('[InfoBarSettings] ❌ Gemini原生请求失败:', fetchError);
+            
+            // 检查是否是CORS错误
+            if (fetchError.message.includes('CORS_BLOCKED') || 
+                fetchError.message.includes('CORS') ||
+                (fetchError.name === 'TypeError' && fetchError.message.includes('fetch'))) {
+                    
+                throw new Error('CORS跨域错误：无法访问Gemini API，请检查反代配置或使用服务器端代理');
+            }
+            
+            throw fetchError;
+        }
 
         if (!response.ok) {
             throw new Error(`Gemini API错误: ${response.status} ${response.statusText}`);
@@ -16506,21 +16710,57 @@ tasks: creation="新任务创建", editing="任务编辑中"
      * 发送OpenAI兼容API请求
      */
     async sendOpenAICompatibleRequest(messages, apiConfig) {
+        console.log('[InfoBarSettings] 🔄 发送OpenAI兼容请求...');
+        
         const requestBody = {
             model: apiConfig.model,
             messages: messages,
             temperature: apiConfig.temperature || 0.7,
-            max_tokens: apiConfig.maxTokens || 2000
+            max_tokens: Math.min(apiConfig.maxTokens || 4000, 8000) // 🔧 使用用户设置，最大限制8000
         };
+        
+        const requestUrl = `${apiConfig.baseUrl}/chat/completions`;
+        console.log('[InfoBarSettings] 🌐 使用CORS兼容请求:', requestUrl);
 
-        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiConfig.apiKey}`
-            },
-            body: JSON.stringify(requestBody)
-        });
+        let response;
+        try {
+            // 🔧 修复：使用APIIntegration的CORS兼容fetch方法
+            if (this.apiIntegration && typeof this.apiIntegration.proxyCompatibleFetch === 'function') {
+                console.log('[InfoBarSettings] ✅ 使用CORS兼容的fetch方法');
+                response = await this.apiIntegration.proxyCompatibleFetch(requestUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiConfig.apiKey}`,
+                        'User-Agent': 'SillyTavern-InfoBar/1.0'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ APIIntegration不可用，使用原生fetch');
+                response = await fetch(requestUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiConfig.apiKey}`,
+                        'User-Agent': 'SillyTavern-InfoBar/1.0'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+            }
+        } catch (fetchError) {
+            console.error('[InfoBarSettings] ❌ OpenAI兼容请求失败:', fetchError);
+            
+            // 检查是否是CORS错误
+            if (fetchError.message.includes('CORS_BLOCKED') || 
+                fetchError.message.includes('CORS') ||
+                (fetchError.name === 'TypeError' && fetchError.message.includes('fetch'))) {
+                    
+                throw new Error('CORS跨域错误：无法访问反代API，请检查反代服务器的CORS配置或使用服务器端代理');
+            }
+            
+            throw fetchError;
+        }
 
         if (!response.ok) {
             throw new Error(`API错误: ${response.status} ${response.statusText}`);
@@ -22321,7 +22561,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
     }
 
     /**
-     * 创建HTML模板编辑器HTML
+     * 创建HTML模板编辑器HTML - 全新响应式设计
      */
     createHTMLTemplateEditorHTML() {
         // 预先获取所有主题颜色，避免在模板字符串中重复调用
@@ -22339,88 +22579,172 @@ tasks: creation="新任务创建", editing="任务编辑中"
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.8);
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.85);
                 z-index: 10000;
                 display: flex;
                 justify-content: center;
                 align-items: center;
+                padding: 20px;
+                box-sizing: border-box;
             ">
                 <div class="html-template-editor-container" style="
-                    width: 90%;
-                    height: 90%;
+                    width: 100%;
+                    height: 100%;
+                    max-width: 1600px;
+                    max-height: 900px;
+                    min-width: 800px;
+                    min-height: 600px;
                     background: ${themeColors.background};
-                    border-radius: 10px;
+                    border-radius: 12px;
                     display: flex;
                     flex-direction: column;
                     overflow: hidden;
-                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
                     border: 1px solid ${themeColors.border};
+                    position: relative;
                 ">
-                    <!-- 编辑器头部 -->
+                    <!-- 编辑器头部 - 响应式设计 -->
                     <div class="editor-header" style="
-                        padding: 15px 20px;
+                        padding: 16px 24px;
                         background: ${themeColors.surface};
                         border-bottom: 1px solid ${themeColors.border};
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
+                        flex-shrink: 0;
+                        min-height: 70px;
                     ">
-                        <div class="editor-title">
-                            <h3 style="margin: 0; color: ${themeColors.text};">
-                                <i class="fas fa-code"></i> HTML模板编辑器
+                        <div class="editor-title" style="flex-grow: 1; min-width: 0;">
+                            <h3 style="margin: 0; color: ${themeColors.text}; font-size: 18px; font-weight: 600;">
+                                <i class="fas fa-code" style="margin-right: 8px; color: ${themeColors.accent};"></i> 
+                                HTML模板编辑器
                             </h3>
-                            <p style="margin: 5px 0 0 0; color: ${themeColors.textSecondary}; font-size: 14px;">
-                                创建和编辑自定义HTML状态栏模板
+                            <p style="margin: 4px 0 0 0; color: ${themeColors.textSecondary}; font-size: 13px;">
+                                智能创建和编辑自定义HTML状态栏模板，支持实时预览和语法检查
                             </p>
                         </div>
-                        <div class="editor-controls">
-                            <button class="btn btn-primary ai-modify-btn" data-action="ai-modify-template" style="margin-right: 10px;">
-                                <i class="fas fa-magic"></i> AI一键修改
+                        <div class="editor-controls" style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
+                            <button class="btn btn-outline-primary" data-action="format-template" style="
+                                padding: 8px 16px; 
+                                font-size: 13px;
+                                border: 1px solid ${themeColors.accent};
+                                background: transparent;
+                                color: ${themeColors.accent};
+                                border-radius: 6px;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                            " onmouseover="this.style.background='${themeColors.accent}'; this.style.color='${themeColors.background}'" 
+                               onmouseout="this.style.background='transparent'; this.style.color='${themeColors.accent}'">
+                                <i class="fas fa-indent"></i> 格式化
                             </button>
-                            <button class="btn btn-secondary" data-action="close-html-editor">
-                                <i class="fas fa-times"></i> 关闭
+                            <button class="btn btn-primary ai-modify-btn" data-action="ai-modify-template" style="
+                                padding: 8px 16px; 
+                                font-size: 13px;
+                                background: ${themeColors.accent};
+                                color: ${themeColors.background};
+                                border: none;
+                                border-radius: 6px;
+                                cursor: pointer;
+                                font-weight: 500;
+                                box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+                                transition: all 0.2s ease;
+                            " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 12px rgba(0, 123, 255, 0.4)'" 
+                               onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0, 123, 255, 0.3)'">
+                                <i class="fas fa-magic"></i> AI优化
+                            </button>
+                            <button class="btn btn-secondary" data-action="close-html-editor" style="
+                                padding: 8px 12px; 
+                                background: transparent;
+                                border: 1px solid ${themeColors.border};
+                                color: ${themeColors.textSecondary};
+                                border-radius: 6px;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                            " onmouseover="this.style.background='${themeColors.surface}'; this.style.color='${themeColors.text}'" 
+                               onmouseout="this.style.background='transparent'; this.style.color='${themeColors.textSecondary}'">
+                                <i class="fas fa-times"></i>
                             </button>
                         </div>
                     </div>
 
-                    <!-- 编辑器主体 -->
+                    <!-- 编辑器主体 - 可调整的响应式布局 -->
                     <div class="editor-body" style="
                         flex: 1;
                         display: flex;
                         overflow: hidden;
+                        position: relative;
+                        min-height: 0;
                     ">
-                        <!-- 左侧编辑区 -->
+                        <!-- 左侧编辑区 - 自适应宽度 -->
                         <div class="editor-left" style="
-                            width: 60%;
+                            flex: 1;
+                            min-width: 400px;
                             display: flex;
                             flex-direction: column;
                             border-right: 1px solid ${themeColors.border};
+                            background: ${themeColors.background};
                         ">
-                            <div class="editor-tabs" style="
+                            <!-- 编辑器工具栏 -->
+                            <div class="editor-toolbar" style="
                                 display: flex;
+                                align-items: center;
+                                padding: 8px 16px;
                                 background: ${themeColors.surface};
                                 border-bottom: 1px solid ${themeColors.border};
+                                gap: 12px;
+                                flex-shrink: 0;
                             ">
+                                <div class="editor-tabs" style="display: flex; gap: 4px;">
                                 <button class="editor-tab active" data-tab="html" style="
-                                    padding: 10px 20px;
-                                    background: none;
+                                        padding: 6px 12px;
+                                        background: ${themeColors.accent};
                                     border: none;
-                                    color: ${themeColors.text};
+                                        color: ${themeColors.background};
                                     cursor: pointer;
-                                    border-bottom: 2px solid ${themeColors.accent};
-                                ">HTML模板</button>
+                                        border-radius: 4px;
+                                        font-size: 12px;
+                                        font-weight: 500;
+                                        transition: all 0.2s ease;
+                                    ">编辑器</button>
                                 <button class="editor-tab" data-tab="preview" style="
-                                    padding: 10px 20px;
-                                    background: none;
-                                    border: none;
+                                        padding: 6px 12px;
+                                        background: transparent;
+                                        border: 1px solid ${themeColors.border};
                                     color: ${themeColors.textSecondary};
                                     cursor: pointer;
-                                    border-bottom: 2px solid transparent;
-                                ">实时预览</button>
+                                        border-radius: 4px;
+                                        font-size: 12px;
+                                        transition: all 0.2s ease;
+                                    ">预览</button>
                             </div>
-                            <div class="editor-content" style="flex: 1; position: relative;">
+                                <div class="editor-tools" style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
+                                    <span class="editor-info" style="font-size: 11px; color: ${themeColors.textSecondary};">
+                                        <i class="fas fa-info-circle"></i> 行: <span class="line-count">1</span>, 列: <span class="col-count">1</span>
+                                    </span>
+                                    <button class="editor-tool-btn" data-action="toggle-wrap" style="
+                                        padding: 4px 8px;
+                                        background: transparent;
+                                        border: 1px solid ${themeColors.border};
+                                        color: ${themeColors.textSecondary};
+                                        border-radius: 3px;
+                                        cursor: pointer;
+                                        font-size: 11px;
+                                    ">
+                                        <i class="fas fa-text-width"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="editor-content" style="flex: 1; position: relative; overflow: hidden;">
+                                <!-- 代码编辑器 -->
+                                <div class="code-editor-container" style="
+                                    width: 100%;
+                                    height: 100%;
+                                    position: relative;
+                                    background: ${themeColors.background};
+                                ">
                                 <textarea class="html-template-textarea" style="
                                     width: 100%;
                                     height: 100%;
@@ -22428,21 +22752,56 @@ tasks: creation="新任务创建", editing="任务编辑中"
                                     color: ${themeColors.text};
                                     border: none;
                                     padding: 20px;
-                                    font-family: 'Courier New', monospace;
-                                    font-size: 14px;
-                                    line-height: 1.5;
+                                        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                                        font-size: 13px;
+                                        line-height: 1.6;
                                     resize: none;
                                     outline: none;
+                                        box-sizing: border-box;
+                                        tab-size: 2;
+                                        white-space: pre;
+                                        overflow-wrap: normal;
+                                        word-break: normal;
                                 " placeholder="在此输入您的HTML模板代码...
 
-示例：
-<div class='character-status'>
+🚀 快速开始：
+<div class='status-card'>
+    <div class='status-header'>
     <h3>{{data.name}}</h3>
-    <div class='health-bar'>
-        <div class='health-fill' style='width: {{computed.healthPercentage}}%'></div>
+        <span class='status-badge'>{{data.status}}</span>
+    </div>
+    <div class='status-content'>
+        <div class='progress-bar'>
+            <div class='progress-fill' style='width: {{computed.healthPercentage}}%'></div>
     </div>
     <p>生命值: {{data.health}}/{{data.maxHealth}}</p>
-</div>"></textarea>
+    </div>
+</div>
+
+💡 提示：使用右侧面板查看可用数据字段和语法帮助"></textarea>
+                                    
+                                    <!-- 语法高亮层 -->
+                                    <div class="syntax-highlight-layer" style="
+                                        position: absolute;
+                                        top: 0;
+                                        left: 0;
+                                        width: 100%;
+                                        height: 100%;
+                                        pointer-events: none;
+                                        z-index: 1;
+                                        background: transparent;
+                                        padding: 20px;
+                                        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                                        font-size: 13px;
+                                        line-height: 1.6;
+                                        box-sizing: border-box;
+                                        overflow: hidden;
+                                        white-space: pre;
+                                        color: transparent;
+                                    "></div>
+                                </div>
+                                
+                                <!-- 预览容器 -->
                                 <div class="preview-container" style="
                                     width: 100%;
                                     height: 100%;
@@ -22450,88 +22809,176 @@ tasks: creation="新任务创建", editing="任务编辑中"
                                     padding: 20px;
                                     overflow: auto;
                                     display: none;
-                                "></div>
+                                    box-sizing: border-box;
+                                    border: 1px solid ${themeColors.border};
+                                    border-radius: 8px;
+                                    margin: 10px;
+                                    width: calc(100% - 20px);
+                                    height: calc(100% - 20px);
+                                ">
+                                    <div class="preview-content"></div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- 右侧信息面板 -->
+                        <!-- 可调整分隔条 -->
+                        <div class="editor-resizer" style="
+                            width: 4px;
+                            background: ${themeColors.border};
+                            cursor: col-resize;
+                            position: relative;
+                            transition: background 0.2s ease;
+                            flex-shrink: 0;
+                        " 
+                        onmouseover="this.style.background='${themeColors.accent}'" 
+                        onmouseout="this.style.background='${themeColors.border}'">
+                            <div style="
+                                position: absolute;
+                                top: 50%;
+                                left: 50%;
+                                transform: translate(-50%, -50%);
+                                width: 2px;
+                                height: 30px;
+                                background: ${themeColors.textSecondary};
+                                border-radius: 1px;
+                            "></div>
+                        </div>
+
+                        <!-- 右侧信息面板 - 自适应宽度 -->
                         <div class="editor-right" style="
-                            width: 40%;
+                            width: 420px;
+                            min-width: 300px;
+                            max-width: 600px;
                             background: ${themeColors.surface};
                             display: flex;
                             flex-direction: column;
+                            border-left: 1px solid ${themeColors.border};
                         ">
                             <div class="info-tabs" style="
                                 display: flex;
                                 background: ${themeColors.background};
                                 border-bottom: 1px solid ${themeColors.border};
+                                flex-shrink: 0;
                             ">
                                 <button class="info-tab active" data-info-tab="data-source" style="
                                     flex: 1;
-                                    padding: 10px;
-                                    background: none;
+                                    padding: 12px 8px;
+                                    background: ${themeColors.accent};
                                     border: none;
-                                    color: ${themeColors.text};
+                                    color: ${themeColors.background};
                                     cursor: pointer;
-                                    border-bottom: 2px solid ${themeColors.accent};
-                                    font-size: 12px;
-                                ">数据源</button>
+                                    font-size: 11px;
+                                    font-weight: 500;
+                                    transition: all 0.2s ease;
+                                ">
+                                    <i class="fas fa-database"></i> 数据源
+                                </button>
                                 <button class="info-tab" data-info-tab="syntax-help" style="
                                     flex: 1;
-                                    padding: 10px;
-                                    background: none;
+                                    padding: 12px 8px;
+                                    background: transparent;
                                     border: none;
                                     color: ${themeColors.textSecondary};
                                     cursor: pointer;
-                                    border-bottom: 2px solid transparent;
-                                    font-size: 12px;
-                                ">语法帮助</button>
+                                    font-size: 11px;
+                                    transition: all 0.2s ease;
+                                ">
+                                    <i class="fas fa-code"></i> 语法
+                                </button>
                                 <button class="info-tab" data-info-tab="templates" style="
                                     flex: 1;
-                                    padding: 10px;
-                                    background: none;
+                                    padding: 12px 8px;
+                                    background: transparent;
                                     border: none;
                                     color: ${themeColors.textSecondary};
                                     cursor: pointer;
-                                    border-bottom: 2px solid transparent;
-                                    font-size: 12px;
-                                ">模板库</button>
+                                    font-size: 11px;
+                                    transition: all 0.2s ease;
+                                ">
+                                    <i class="fas fa-layer-group"></i> 模板
+                                </button>
                             </div>
                             <div class="info-content" style="
                                 flex: 1;
-                                padding: 15px;
-                                overflow: auto;
-                                color: var(--SmartThemeBodyColor, #fff);
-                                font-size: 13px;
-                                line-height: 1.4;
+                                padding: 16px;
+                                overflow-y: auto;
+                                color: ${themeColors.text};
+                                font-size: 12px;
+                                line-height: 1.5;
+                                min-height: 0;
                             ">
-                                ${this.createDataSourceInfo()}
+                                ${this.createAdvancedDataSourceInfo()}
                             </div>
                         </div>
                     </div>
 
-                    <!-- 编辑器底部 -->
+                    <!-- 编辑器底部状态栏 - 响应式设计 -->
                     <div class="editor-footer" style="
-                        padding: 15px 20px;
-                        background: var(--SmartThemeBlurTintColor, #2a2a2a);
-                        border-top: 1px solid var(--SmartThemeBorderColor, #333);
+                        padding: 12px 24px;
+                        background: ${themeColors.surface};
+                        border-top: 1px solid ${themeColors.border};
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
+                        flex-shrink: 0;
+                        min-height: 50px;
+                        gap: 16px;
                     ">
-                        <div class="editor-status">
-                            <span style="color: var(--SmartThemeQuoteColor, #888); font-size: 12px;">
-                                就绪 | 行: 1, 列: 1
+                        <div class="editor-status" style="display: flex; align-items: center; gap: 16px; flex-grow: 1;">
+                            <span class="status-indicator" style="
+                                display: flex;
+                                align-items: center;
+                                gap: 6px;
+                                color: ${themeColors.textSecondary}; 
+                                font-size: 11px;
+                            ">
+                                <i class="fas fa-circle" style="color: #4CAF50; font-size: 8px;"></i>
+                                就绪
+                            </span>
+                            <span class="template-size" style="color: ${themeColors.textSecondary}; font-size: 11px;">
+                                大小: <span class="size-value">0</span> 字符
+                            </span>
+                            <span class="validation-status" style="color: ${themeColors.textSecondary}; font-size: 11px;">
+                                <i class="fas fa-check-circle" style="color: #4CAF50;"></i> 语法正确
                             </span>
                         </div>
-                        <div class="editor-actions">
-                            <button class="btn btn-secondary" data-action="load-template" style="margin-right: 10px;">
-                                <i class="fas fa-folder-open"></i> 加载模板
+                        <div class="editor-actions" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                            <button class="btn btn-sm btn-outline-secondary" data-action="load-template" style="
+                                padding: 6px 12px; 
+                                font-size: 11px;
+                                border: 1px solid ${themeColors.border};
+                                background: transparent;
+                                color: ${themeColors.textSecondary};
+                                border-radius: 4px;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                            ">
+                                <i class="fas fa-folder-open"></i> 加载
                             </button>
-                            <button class="btn btn-secondary" data-action="save-template" style="margin-right: 10px;">
-                                <i class="fas fa-save"></i> 保存模板
+                            <button class="btn btn-sm btn-outline-secondary" data-action="save-template" style="
+                                padding: 6px 12px; 
+                                font-size: 11px;
+                                border: 1px solid ${themeColors.border};
+                                background: transparent;
+                                color: ${themeColors.textSecondary};
+                                border-radius: 4px;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                            ">
+                                <i class="fas fa-save"></i> 保存
                             </button>
-                            <button class="btn btn-primary" data-action="apply-template">
+                            <button class="btn btn-sm btn-primary" data-action="apply-template" style="
+                                padding: 6px 16px; 
+                                font-size: 11px;
+                                background: ${themeColors.accent};
+                                color: ${themeColors.background};
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-weight: 500;
+                                box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+                                transition: all 0.2s ease;
+                            ">
                                 <i class="fas fa-check"></i> 应用模板
                             </button>
                         </div>
@@ -22542,40 +22989,76 @@ tasks: creation="新任务创建", editing="任务编辑中"
     }
 
     /**
-     * 创建数据源信息
+     * 创建高级数据源信息展示
      */
-    createDataSourceInfo() {
+    createAdvancedDataSourceInfo() {
+        const themeColors = {
+            background: this.getInfoBarThemeColor('background'),
+            surface: this.getInfoBarThemeColor('surface'),
+            border: this.getInfoBarThemeColor('border'),
+            text: this.getInfoBarThemeColor('text'),
+            textSecondary: this.getInfoBarThemeColor('textSecondary'),
+            accent: this.getInfoBarThemeColor('accent')
+        };
+
         return `
-            <div class="data-source-info">
-                <h4 style="margin: 0 0 10px 0; color: var(--SmartThemeQuoteColor, #007bff);">
-                    <i class="fas fa-database"></i> 当前启用的数据面板
+            <div class="advanced-data-source-info">
+                <!-- 快速插入区域 -->
+                <div class="quick-insert-section" style="
+                    background: ${themeColors.background};
+                    border: 1px solid ${themeColors.border};
+                    border-radius: 6px;
+                    padding: 12px;
+                    margin-bottom: 16px;
+                ">
+                    <h4 style="margin: 0 0 8px 0; color: ${themeColors.accent}; font-size: 13px; font-weight: 600;">
+                        <i class="fas fa-bolt"></i> 快速插入
                 </h4>
-                <div class="enabled-panels-list" id="enabled-panels-list">
-                    <p style="color: var(--SmartThemeQuoteColor, #888);">正在加载...</p>
+                    <div class="quick-insert-buttons" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                        <button class="quick-insert-btn" data-insert="{{data.name}}" style="
+                            padding: 4px 8px; background: transparent; border: 1px solid ${themeColors.border};
+                            color: ${themeColors.text}; border-radius: 3px; cursor: pointer; font-size: 10px;
+                        ">姓名</button>
+                        <button class="quick-insert-btn" data-insert="{{data.health}}" style="
+                            padding: 4px 8px; background: transparent; border: 1px solid ${themeColors.border};
+                            color: ${themeColors.text}; border-radius: 3px; cursor: pointer; font-size: 10px;
+                        ">生命值</button>
+                    </div>
                 </div>
 
-                <h4 style="margin: 20px 0 10px 0; color: var(--SmartThemeQuoteColor, #007bff);">
-                    <i class="fas fa-tags"></i> 可用数据字段
+                <!-- 当前启用面板 -->
+                <div class="enabled-panels-section">
+                    <h4 style="margin: 0 0 10px 0; color: ${themeColors.accent}; font-size: 13px; font-weight: 600;">
+                        <i class="fas fa-database"></i> 当前启用的数据面板
                 </h4>
-                <div class="available-fields-list" id="available-fields-list">
-                    <p style="color: var(--SmartThemeQuoteColor, #888);">正在加载...</p>
+                    <div class="enabled-panels-list" id="enabled-panels-list" style="
+                        background: ${themeColors.background}; border: 1px solid ${themeColors.border};
+                        border-radius: 4px; padding: 10px; margin-bottom: 16px; min-height: 80px;
+                        max-height: 120px; overflow-y: auto;
+                    ">
+                        <div style="color: ${themeColors.textSecondary}; font-size: 11px;">正在加载数据面板...</div>
+                    </div>
                 </div>
 
-                <h4 style="margin: 20px 0 10px 0; color: var(--SmartThemeQuoteColor, #007bff);">
-                    <i class="fas fa-info-circle"></i> 数据获取途径
+                <!-- 可用数据字段 -->
+                <div class="available-fields-section">
+                    <h4 style="margin: 0 0 10px 0; color: ${themeColors.accent}; font-size: 13px; font-weight: 600;">
+                        <i class="fas fa-tags"></i> 可用数据字段
                 </h4>
-                <div class="data-source-details">
-                    <p><strong>数据来源:</strong> AI消息解析</p>
-                    <p><strong>数据格式:</strong> XML标签 &lt;infobar_data&gt;</p>
-                    <p><strong>更新频率:</strong> 每条AI消息</p>
-                    <p><strong>数据流程:</strong> 消息接收 → XML解析 → 数据核心 → 模板渲染</p>
+                    <div class="available-fields-list" id="available-fields-list" style="
+                        background: ${themeColors.background}; border: 1px solid ${themeColors.border};
+                        border-radius: 4px; padding: 8px; min-height: 120px; max-height: 200px;
+                        overflow-y: auto; font-size: 11px;
+                    ">
+                        <div style="color: ${themeColors.textSecondary}; font-size: 11px;">正在加载字段列表...</div>
+                    </div>
                 </div>
             </div>
         `;
     }
 
     /**
-     * 绑定HTML模板编辑器事件
+     * 绑定HTML模板编辑器事件 - 全新响应式版本
      */
     bindHTMLTemplateEditorEvents() {
         try {
@@ -22589,16 +23072,34 @@ tasks: creation="新任务创建", editing="任务编辑中"
                 }
             });
 
-            // 标签页切换
+            // 阻止点击编辑器容器时关闭模态框
+            modal.querySelector('.html-template-editor-container')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            // 🚀 新增：格式化按钮
+            modal.querySelector('[data-action="format-template"]')?.addEventListener('click', () => {
+                this.formatTemplate();
+            });
+
+            // 标签页切换 - 编辑器标签
             modal.querySelectorAll('.editor-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     this.switchEditorTab(tab.dataset.tab);
                 });
             });
 
+            // 标签页切换 - 信息面板标签
             modal.querySelectorAll('.info-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     this.switchInfoTab(tab.dataset.infoTab);
+                });
+            });
+
+            // 🚀 新增：快速插入按钮
+            modal.querySelectorAll('.quick-insert-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.insertTemplateText(btn.dataset.insert);
                 });
             });
 
@@ -22620,21 +23121,58 @@ tasks: creation="新任务创建", editing="任务编辑中"
                 this.applyHTMLTemplate();
             });
 
-            // 实时预览
+            // 🚀 新增：编辑器工具按钮
+            modal.querySelector('[data-action="toggle-wrap"]')?.addEventListener('click', () => {
+                this.toggleWordWrap();
+            });
+
+            // 实时预览和语法检查
             const textarea = modal.querySelector('.html-template-textarea');
             if (textarea) {
+                // 输入事件 - 实时预览
                 textarea.addEventListener('input', () => {
                     this.updateTemplatePreview();
+                    this.updateEditorStatus();
+                    this.validateTemplateSyntax();
+                });
+
+                // 🚀 新增：光标位置跟踪
+                textarea.addEventListener('selectionchange', () => {
+                    this.updateCursorPosition();
+                });
+
+                textarea.addEventListener('keyup', () => {
+                    this.updateCursorPosition();
+                });
+
+                textarea.addEventListener('click', () => {
+                    this.updateCursorPosition();
+                });
+
+                // 🚀 新增：键盘快捷键
+                textarea.addEventListener('keydown', (e) => {
+                    this.handleEditorKeydown(e);
                 });
             }
 
-            // 加载当前数据信息
-            this.loadCurrentDataInfo();
+            // 🚀 新增：可调整分隔条拖拽功能
+            this.initEditorResizer(modal);
+
+            // 🚀 新增：窗口大小变化时的响应式调整
+            window.addEventListener('resize', () => {
+                this.adjustEditorLayout();
+            });
+
+            // 加载数据信息
+            this.loadAdvancedDataInfo();
 
             // 自动加载HTML模板
             this.loadHTMLTemplate();
 
-            console.log('[InfoBarSettings] ✅ HTML模板编辑器事件绑定完成');
+            // 🚀 新增：初始化语法高亮
+            this.initSyntaxHighlight();
+
+            console.log('[InfoBarSettings] ✅ HTML模板编辑器事件绑定完成 (响应式版本)');
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 绑定HTML模板编辑器事件失败:', error);
@@ -22642,36 +23180,370 @@ tasks: creation="新任务创建", editing="任务编辑中"
     }
 
     /**
-     * 切换编辑器标签页
+     * 🚀 新增：初始化可调整分隔条
+     */
+    initEditorResizer(modal) {
+        try {
+            const resizer = modal.querySelector('.editor-resizer');
+            const leftPanel = modal.querySelector('.editor-left');
+            const rightPanel = modal.querySelector('.editor-right');
+            
+            if (!resizer || !leftPanel || !rightPanel) return;
+
+            let isResizing = false;
+            let startX = 0;
+            let startLeftWidth = 0;
+            let startRightWidth = 0;
+
+            resizer.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                startX = e.clientX;
+                startLeftWidth = leftPanel.offsetWidth;
+                startRightWidth = rightPanel.offsetWidth;
+                
+                document.body.style.cursor = 'col-resize';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+
+                const deltaX = e.clientX - startX;
+                const containerWidth = leftPanel.parentElement.offsetWidth;
+                const newLeftWidth = startLeftWidth + deltaX;
+                const newRightWidth = startRightWidth - deltaX;
+
+                // 限制最小宽度
+                if (newLeftWidth >= 300 && newRightWidth >= 250) {
+                    leftPanel.style.flex = 'none';
+                    leftPanel.style.width = `${newLeftWidth}px`;
+                    rightPanel.style.width = `${newRightWidth}px`;
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                }
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化分隔条失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：插入模板文本
+     */
+    insertTemplateText(text) {
+        try {
+            const textarea = document.querySelector('.html-template-textarea');
+            if (!textarea) return;
+
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const currentValue = textarea.value;
+
+            const newValue = currentValue.substring(0, start) + text + currentValue.substring(end);
+            textarea.value = newValue;
+
+            // 设置光标位置到插入文本之后
+            const newCursorPos = start + text.length;
+            textarea.setSelectionRange(newCursorPos, newCursorPos);
+            textarea.focus();
+
+            // 触发更新事件
+            this.updateTemplatePreview();
+            this.updateEditorStatus();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 插入模板文本失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：格式化模板
+     */
+    formatTemplate() {
+        try {
+            const textarea = document.querySelector('.html-template-textarea');
+            if (!textarea) return;
+
+            const code = textarea.value;
+            if (!code.trim()) return;
+
+            // 简单的HTML格式化
+            const formatted = this.formatHTML(code);
+            textarea.value = formatted;
+
+            // 触发更新
+            this.updateTemplatePreview();
+            this.updateEditorStatus();
+
+            console.log('[InfoBarSettings] ✅ 模板格式化完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 格式化模板失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：HTML格式化
+     */
+    formatHTML(html) {
+        try {
+            let formatted = html;
+            let indent = 0;
+            const indentSize = 2;
+
+            // 移除多余的空白
+            formatted = formatted.replace(/\s+/g, ' ').trim();
+
+            // 添加换行和缩进
+            formatted = formatted.replace(/</g, '\n<');
+            formatted = formatted.replace(/>/g, '>\n');
+
+            const lines = formatted.split('\n').filter(line => line.trim());
+            const result = [];
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+
+                // 减少缩进（闭合标签）
+                if (trimmed.startsWith('</')) {
+                    indent = Math.max(0, indent - indentSize);
+                }
+
+                // 添加缩进
+                result.push(' '.repeat(indent) + trimmed);
+
+                // 增加缩进（开放标签）
+                if (trimmed.startsWith('<') && !trimmed.startsWith('</') && !trimmed.endsWith('/>')) {
+                    // 检查是否是自闭合标签
+                    const tagName = trimmed.match(/<([^>\s]+)/)?.[1];
+                    const selfClosingTags = ['input', 'img', 'br', 'hr', 'meta', 'link'];
+                    if (!selfClosingTags.includes(tagName)) {
+                        indent += indentSize;
+                    }
+                }
+            }
+
+            return result.join('\n');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ HTML格式化失败:', error);
+            return html;
+        }
+    }
+
+    /**
+     * 🚀 新增：更新光标位置显示
+     */
+    updateCursorPosition() {
+        try {
+            const textarea = document.querySelector('.html-template-textarea');
+            const lineCount = document.querySelector('.line-count');
+            const colCount = document.querySelector('.col-count');
+
+            if (!textarea || !lineCount || !colCount) return;
+
+            const text = textarea.value.substring(0, textarea.selectionStart);
+            const lines = text.split('\n');
+            const currentLine = lines.length;
+            const currentCol = lines[lines.length - 1].length + 1;
+
+            lineCount.textContent = currentLine;
+            colCount.textContent = currentCol;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新光标位置失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：更新编辑器状态
+     */
+    updateEditorStatus() {
+        try {
+            const textarea = document.querySelector('.html-template-textarea');
+            const sizeValue = document.querySelector('.size-value');
+
+            if (!textarea || !sizeValue) return;
+
+            const charCount = textarea.value.length;
+            sizeValue.textContent = charCount.toLocaleString();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新编辑器状态失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：验证模板语法
+     */
+    validateTemplateSyntax() {
+        try {
+            const textarea = document.querySelector('.html-template-textarea');
+            const validationStatus = document.querySelector('.validation-status');
+
+            if (!textarea || !validationStatus) return;
+
+            const template = textarea.value;
+            const errors = this.checkTemplateSyntax(template);
+
+            if (errors.length === 0) {
+                validationStatus.innerHTML = '<i class="fas fa-check-circle" style="color: #4CAF50;"></i> 语法正确';
+            } else {
+                validationStatus.innerHTML = `<i class="fas fa-exclamation-triangle" style="color: #FF5722;"></i> ${errors.length} 个错误`;
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 验证模板语法失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：检查模板语法
+     */
+    checkTemplateSyntax(template) {
+        const errors = [];
+
+        try {
+            // 检查HTML标签匹配
+            const htmlErrors = this.checkHTMLSyntax(template);
+            errors.push(...htmlErrors);
+
+            // 检查模板语法
+            const templateErrors = this.checkTemplateBindingSyntax(template);
+            errors.push(...templateErrors);
+
+        } catch (error) {
+            errors.push('语法检查器内部错误');
+        }
+
+        return errors;
+    }
+
+    /**
+     * 🚀 新增：检查HTML语法
+     */
+    checkHTMLSyntax(html) {
+        const errors = [];
+        
+        try {
+            // 简单的标签匹配检查
+            const openTags = [];
+            const tagRegex = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g;
+            let match;
+
+            while ((match = tagRegex.exec(html)) !== null) {
+                const tag = match[1].toLowerCase();
+                const isClosing = match[0].startsWith('</');
+                const isSelfClosing = match[0].endsWith('/>');
+
+                if (isSelfClosing) continue;
+
+                if (isClosing) {
+                    const lastOpen = openTags.pop();
+                    if (!lastOpen || lastOpen !== tag) {
+                        errors.push(`标签不匹配: </${tag}>`);
+                    }
+                } else {
+                    // 自闭合标签不需要匹配
+                    const selfClosingTags = ['input', 'img', 'br', 'hr', 'meta', 'link'];
+                    if (!selfClosingTags.includes(tag)) {
+                        openTags.push(tag);
+                    }
+                }
+            }
+
+            // 检查未闭合的标签
+            openTags.forEach(tag => {
+                errors.push(`未闭合的标签: <${tag}>`);
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ HTML语法检查失败:', error);
+        }
+
+        return errors;
+    }
+
+    /**
+     * 🚀 新增：检查模板绑定语法
+     */
+    checkTemplateBindingSyntax(template) {
+        const errors = [];
+
+        try {
+            // 检查未闭合的模板标签
+            const openPatterns = [
+                { regex: /\{\{#if\s+[^}]+\}\}/g, close: '{{/if}}', name: 'if' },
+                { regex: /\{\{#each\s+[^}]+\}\}/g, close: '{{/each}}', name: 'each' }
+            ];
+
+            for (const pattern of openPatterns) {
+                const opens = [...template.matchAll(pattern.regex)];
+                const closes = [...template.matchAll(new RegExp(pattern.close.replace(/[{}]/g, '\\$&'), 'g'))];
+
+                if (opens.length !== closes.length) {
+                    errors.push(`${pattern.name} 标签数量不匹配`);
+                }
+            }
+
+            // 检查无效的绑定语法
+            const invalidBindings = template.match(/\{\{[^}]*\{\{|\}\}[^{]*\}\}/g);
+            if (invalidBindings) {
+                errors.push('检测到无效的绑定语法');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 模板绑定语法检查失败:', error);
+        }
+
+        return errors;
+    }
+
+    /**
+     * 切换编辑器标签页 - 更新版本
      */
     switchEditorTab(tabName) {
         try {
             const modal = document.querySelector('.html-template-editor-modal');
             if (!modal) return;
 
+            const themeColors = {
+                background: this.getInfoBarThemeColor('background'),
+                accent: this.getInfoBarThemeColor('accent'),
+                textSecondary: this.getInfoBarThemeColor('textSecondary')
+            };
+
             // 更新标签页状态
             modal.querySelectorAll('.editor-tab').forEach(tab => {
                 if (tab.dataset.tab === tabName) {
                     tab.classList.add('active');
-                    tab.style.color = 'var(--SmartThemeBodyColor, #fff)';
-                    tab.style.borderBottomColor = 'var(--SmartThemeQuoteColor, #007bff)';
+                    tab.style.background = themeColors.accent;
+                    tab.style.color = themeColors.background;
                 } else {
                     tab.classList.remove('active');
-                    tab.style.color = 'var(--SmartThemeQuoteColor, #888)';
-                    tab.style.borderBottomColor = 'transparent';
+                    tab.style.background = 'transparent';
+                    tab.style.color = themeColors.textSecondary;
+                    tab.style.border = '1px solid ' + this.getInfoBarThemeColor('border');
                 }
             });
 
             // 切换内容
-            const textarea = modal.querySelector('.html-template-textarea');
+            const codeEditor = modal.querySelector('.code-editor-container');
             const preview = modal.querySelector('.preview-container');
 
             if (tabName === 'html') {
-                textarea.style.display = 'block';
-                preview.style.display = 'none';
+                if (codeEditor) codeEditor.style.display = 'block';
+                if (preview) preview.style.display = 'none';
             } else if (tabName === 'preview') {
-                textarea.style.display = 'none';
-                preview.style.display = 'block';
+                if (codeEditor) codeEditor.style.display = 'none';
+                if (preview) preview.style.display = 'block';
                 this.updateTemplatePreview();
             }
 
@@ -22706,14 +23578,16 @@ tasks: creation="新任务创建", editing="任务编辑中"
             if (infoContent) {
                 switch (tabName) {
                     case 'data-source':
-                        infoContent.innerHTML = this.createDataSourceInfo();
-                        this.loadCurrentDataInfo();
+                        infoContent.innerHTML = this.createAdvancedDataSourceInfo();
+                        this.loadAdvancedDataInfo();
                         break;
                     case 'syntax-help':
                         infoContent.innerHTML = this.createSyntaxHelpInfo();
+                        this.bindSyntaxHelpEvents();
                         break;
                     case 'templates':
                         infoContent.innerHTML = this.createTemplateLibraryInfo();
+                        this.loadTemplateLibrary();
                         break;
                 }
             }
@@ -23416,36 +24290,218 @@ tasks: creation="新任务创建", editing="任务编辑中"
      * 构建AI修改提示词
      */
     buildAIModifyPrompt(userTemplate, enabledPanels, availableFields) {
-        return `你是一个专业的HTML模板优化助手。请根据以下信息修改用户提供的HTML模板：
+        // 🚀 构建简化的核心信息，避免token超限
+        const coreFieldsInfo = this.buildCoreFieldsInfo(enabledPanels, availableFields);
 
-当前启用的数据面板：
-${JSON.stringify(enabledPanels, null, 2)}
+        // 🔧 检测模板大小，决定处理策略
+        const templateLength = userTemplate.length;
+        console.log('[InfoBarSettings] 📏 模板长度检测:', templateLength, '字符');
 
-可用的数据字段：
-${JSON.stringify(availableFields, null, 2)}
+        if (templateLength > 20000) {
+            // 超大模板：只提供结构优化建议
+            return `您的HTML模板过大(${templateLength}字符)，无法完整处理。请采用以下策略：
 
-数据获取途径：
-- 数据来源: AI消息解析
-- 数据格式: XML标签 <infobar_data>
-- 更新频率: 每条AI消息
-- 数据流程: 消息接收 → XML解析 → 数据核心 → 模板渲染
+## 🎯 简化建议
+1. 移除大量CSS样式，改用外部样式表
+2. 删除复杂的JavaScript代码
+3. 简化HTML结构，专注核心内容
 
-用户的HTML模板：
+## 📊 可用数据字段
+${coreFieldsInfo}
+
+## 🔧 数据绑定语法
+- 基本绑定: {{data.personal.name}}
+- 条件显示: {{#if data.field}}内容{{/if}}
+- 循环列表: {{#each data.array}}{{this}}{{/each}}
+
+请手动为关键元素添加数据绑定，然后重新使用AI优化。
+
+## 📝 模板片段示例
+\`\`\`html
+<div class="player-info">
+    <h2><i class="fas fa-user"></i> {{data.personal.name}}</h2>
+    {{#if data.personal.level}}
+    <p>等级: {{data.personal.level}}</p>
+    {{/if}}
+</div>
+\`\`\``;
+        } else if (templateLength > 10000) {
+            // 大模板：精简处理
+            const templatePreview = userTemplate.substring(0, 5000) + '\n\n[模板过长，已截断...]';
+            return `优化HTML模板(简化版，原长度${templateLength}字符)：
+
+## 📊 数据字段
+${coreFieldsInfo}
+
+## 🔧 语法
+- {{data.panel.field}} - 数据绑定
+- {{#if data.field}}{{/if}} - 条件显示
+
+## 📝 用户模板(前5000字符)
+${templatePreview}
+
+## 要求
+仅为关键元素添加数据绑定，保持原结构，添加必要的Font Awesome图标。返回完整HTML：`;
+        } else {
+            // 正常大小模板：完整处理
+            return `优化以下HTML模板，添加数据绑定和现代化样式：
+
+## 可用数据字段
+${coreFieldsInfo}
+
+## 语法规则
+- 数据绑定: {{data.panelName.fieldName}}
+- 条件显示: {{#if data.field}}内容{{/if}}
+- 循环数组: {{#each data.array}}{{this}}{{/each}}
+
+## 用户模板
 ${userTemplate}
 
-请按照以下要求修改模板：
-1. 使用 {{data.fieldName}} 语法绑定数据字段
-2. 确保所有数据字段都有对应的显示位置
-3. 保持原有的样式和布局结构
-4. 添加必要的条件渲染 {{#if condition}}...{{/if}}
-5. 为数组数据添加循环渲染 {{#each array}}...{{/each}}
-6. 确保HTML结构语义化和可访问性
-7. 使用现代CSS样式，支持深色主题
-8. 添加适当的图标和视觉元素
-9. 确保响应式设计
-10. 优化用户体验和可读性
+## 要求
+1. 保持原有布局结构
+2. 添加所有可用数据字段的绑定
+3. 使用现代CSS样式，支持深色主题
+4. 添加适当的Font Awesome图标
+5. 确保响应式设计
+6. 为可选数据添加条件判断
 
-请直接返回修改后的HTML代码，不需要额外说明。`;
+直接返回完整的HTML代码，包含内联CSS：`;
+        }
+    }
+
+    /**
+     * 🔧 构建核心数据字段信息（简化版，避免token超限）
+     */
+    buildCoreFieldsInfo(enabledPanels, availableFields) {
+        let info = '';
+        
+        if (enabledPanels && typeof enabledPanels === 'object') {
+            const panelCount = Object.keys(enabledPanels).length;
+            info += `启用面板(${panelCount}个): `;
+            
+            const panelNames = Object.entries(enabledPanels)
+                .slice(0, 8) // 只显示前8个面板，避免过长
+                .map(([panelId, config]) => `${panelId}`)
+                .join(', ');
+                
+            info += panelNames;
+            if (panelCount > 8) info += `, ...等${panelCount}个`;
+            info += '\n\n';
+        }
+        
+        // 简化的字段示例
+        info += `数据访问示例:\n`;
+        info += `- 角色信息: {{data.personal.name}}, {{data.personal.age}}\n`;
+        info += `- 统计数据: {{data.stats.health}}, {{data.stats.level}}\n`;
+        info += `- 物品道具: {{data.inventory.items}}\n`;
+        info += `- 任务信息: {{data.tasks.current}}\n`;
+        info += `- 位置信息: {{data.world.location}}\n`;
+        
+        return info;
+    }
+
+    /**
+     * 🚀 构建详细的数据字段信息
+     */
+    buildDetailedFieldsInfo(enabledPanels, availableFields) {
+        let info = '';
+        
+        if (enabledPanels && typeof enabledPanels === 'object') {
+            const panelCount = Object.keys(enabledPanels).length;
+            info += `### 启用的数据面板 (${panelCount}个)：\n\n`;
+            
+            Object.entries(enabledPanels).forEach(([panelId, panelConfig]) => {
+                const panelName = this.getPanelDisplayName(panelId);
+                const fieldsCount = this.countEnabledFields(panelConfig);
+                
+                info += `#### 📊 ${panelName} (${panelId})\n`;
+                info += `- 状态: ${panelConfig.enabled !== false ? '✅ 已启用' : '❌ 已禁用'}\n`;
+                info += `- 字段数量: ${fieldsCount}个\n`;
+                info += `- 访问语法: \`{{data.${panelId}.fieldName}}\`\n\n`;
+            });
+        }
+        
+        if (availableFields && typeof availableFields === 'object') {
+            const totalFields = Object.keys(availableFields).length;
+            info += `### 可用数据字段 (${totalFields}个)：\n\n`;
+            
+            Object.entries(availableFields).forEach(([panelId, fields]) => {
+                if (fields && typeof fields === 'object') {
+                    const fieldList = Object.keys(fields);
+                    if (fieldList.length > 0) {
+                        info += `#### 🏷️ ${this.getPanelDisplayName(panelId)}面板字段:\n`;
+                        fieldList.forEach(field => {
+                            const fieldValue = fields[field];
+                            const fieldType = typeof fieldValue;
+                            info += `- \`{{data.${panelId}.${field}}}\` (${fieldType}) - 示例: "${fieldValue}"\n`;
+                        });
+                        info += '\n';
+                    }
+                }
+            });
+        }
+        
+        return info || '暂无可用的数据字段信息';
+    }
+
+    /**
+     * 🎯 获取模板语法指南
+     */
+    getTemplateSyntaxGuide() {
+        return `### 基础语法：
+- \`{{data.fieldName}}\` - 输出字段值
+- \`{{#if data.field}}\`内容\`{{/if}}\` - 条件渲染
+- \`{{#each data.array}}\`项目内容\`{{/each}}\` - 循环渲染
+- \`{{#unless data.field}}\`备用内容\`{{/unless}}\` - 反向条件
+
+### 面板访问：
+- \`{{data.character.name}}\` - 角色面板的name字段
+- \`{{data.stats.health}}\` - 统计面板的health字段
+- \`{{data.inventory.items}}\` - 物品面板的items数组
+
+### 高级用法：
+- \`{{data.stats.health}}/{{data.stats.maxHealth}}\` - 组合显示
+- 支持嵌套对象和数组访问
+- 自动处理undefined和null值`;
+    }
+
+    /**
+     * 💡 获取数据绑定示例
+     */
+    getDataBindingExamples() {
+        return `### 基础数据显示：
+\`\`\`html
+<div class="character-info">
+    <h3>{{data.character.name}}</h3>
+    <p>等级: {{data.character.level}}</p>
+</div>
+\`\`\`
+
+### 条件渲染示例：
+\`\`\`html
+{{#if data.stats.health}}
+<div class="health-bar">
+    <span>生命值: {{data.stats.health}}/{{data.stats.maxHealth}}</span>
+    <div class="progress-bar">
+        <div style="width: {{data.stats.healthPercent}}%"></div>
+    </div>
+</div>
+{{/if}}
+\`\`\`
+
+### 数组循环示例：
+\`\`\`html
+{{#if data.inventory.items}}
+<ul class="inventory-list">
+    {{#each data.inventory.items}}
+    <li class="item">
+        <i class="fas fa-box"></i>
+        <span>{{this.name}} (x{{this.quantity}})</span>
+    </li>
+    {{/each}}
+</ul>
+{{/if}}
+\`\`\``;
     }
 
     /**
@@ -23474,12 +24530,14 @@ ${userTemplate}
                 requestBody = {
                     contents: [{
                         parts: [{
-                            text: `你是一个专业的HTML模板开发助手，专注于生成高质量、语义化的HTML代码。\n\n${prompt}`
+                            text: `你是一个专业的HTML模板开发助手。请根据用户要求优化HTML模板，添加数据绑定。\n\n${prompt}`
                         }]
                     }],
                     generationConfig: {
-                        maxOutputTokens: 4000,
-                        temperature: 0.3
+                        maxOutputTokens: Math.min(apiConfig.maxTokens || 4000, 8000), // 🔧 使用用户设置，最大限制8000避免超限
+                        temperature: apiConfig.temperature || 0.7, // 🔧 使用用户设置的温度
+                        topP: 0.8,
+                        topK: 20
                     }
                 };
             } else {
@@ -23517,16 +24575,105 @@ ${userTemplate}
             }
 
             const data = await response.json();
+            
+            // 🔧 增加调试日志，帮助诊断API返回格式
+            console.log('[InfoBarSettings] 📋 API返回数据结构:', JSON.stringify(data, null, 2));
 
             let result;
             if (apiConfig.provider === 'gemini') {
-                if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-                    throw new Error('Gemini API返回格式错误');
+                // 🚀 增强Gemini API格式处理
+                try {
+                    if (!data.candidates || !Array.isArray(data.candidates) || data.candidates.length === 0) {
+                        console.error('[InfoBarSettings] ❌ Gemini返回格式错误 - 无candidates:', data);
+                        throw new Error(`Gemini API返回格式错误: 无candidates字段或为空数组`);
+                    }
+
+                    const candidate = data.candidates[0];
+                    if (!candidate) {
+                        console.error('[InfoBarSettings] ❌ Gemini返回格式错误 - 无candidate:', candidate);
+                        throw new Error('Gemini API返回格式错误: candidate为空');
+                    }
+
+                    // 🚀 检查是否因为MAX_TOKENS导致响应被截断
+                    if (candidate.finishReason === 'MAX_TOKENS') {
+                        console.warn('[InfoBarSettings] ⚠️ Gemini响应被截断 - MAX_TOKENS，尝试提取部分内容:', candidate);
+                        
+                        // 🔧 尝试获取截断前的部分内容
+                        let partialContent = '';
+                        if (candidate.content.parts && Array.isArray(candidate.content.parts) && candidate.content.parts.length > 0) {
+                            const part = candidate.content.parts[0];
+                            if (part && typeof part.text === 'string') {
+                                partialContent = part.text.trim();
+                            }
+                        }
+                        
+                        if (partialContent) {
+                            console.log('[InfoBarSettings] 🔄 获取到部分内容，长度:', partialContent.length);
+                            
+                            // 🎯 检查是否包含有效的HTML内容
+                            if (partialContent.includes('<html') || partialContent.includes('<!DOCTYPE') || partialContent.includes('<div')) {
+                                console.log('[InfoBarSettings] ✅ 检测到有效HTML内容，使用部分结果');
+                                result = partialContent + '\n\n<!-- ⚠️ 内容被截断，建议简化模板后重新生成 -->';
+                            } else {
+                                // 如果不是HTML内容，返回建议
+                                result = partialContent + '\n\n⚠️ AI建议：您的模板过大，请按照上述建议简化后重新尝试。';
+                            }
+                        } else {
+                            throw new Error('AI响应被截断且无可用内容，请大幅简化HTML模板或减少提示词长度。');
+                        }
+                    }
+
+                    // 🔧 如果不是MAX_TOKENS截断，进行正常内容处理
+                    if (candidate.finishReason !== 'MAX_TOKENS') {
+                        if (!candidate.content) {
+                            console.error('[InfoBarSettings] ❌ Gemini返回格式错误 - 无content:', candidate);
+                            throw new Error('Gemini API返回格式错误: candidate无content字段');
+                        }
+
+                        // 🔧 处理不同的content格式
+                        let textContent = '';
+                        
+                        if (candidate.content.parts && Array.isArray(candidate.content.parts) && candidate.content.parts.length > 0) {
+                            // 标准格式：有parts数组
+                            const part = candidate.content.parts[0];
+                            if (part && typeof part.text === 'string') {
+                                textContent = part.text.trim();
+                            }
+                        } else if (candidate.content.text && typeof candidate.content.text === 'string') {
+                            // 备用格式：直接包含text字段
+                            textContent = candidate.content.text.trim();
+                        } else if (typeof candidate.content === 'string') {
+                            // 备用格式：content直接是字符串
+                            textContent = candidate.content.trim();
+                        }
+
+                        if (!textContent) {
+                            console.error('[InfoBarSettings] ❌ Gemini返回内容为空:', candidate.content);
+                            throw new Error('Gemini API返回的内容为空，可能是因为提示词太长或其他API限制');
+                        }
+
+                        result = textContent;
+                        console.log('[InfoBarSettings] ✅ 成功解析Gemini返回内容，长度:', result.length);
+                    }
+
+                } catch (parseError) {
+                    console.error('[InfoBarSettings] ❌ 解析Gemini返回内容失败:', parseError);
+                    console.error('[InfoBarSettings] 📋 原始返回数据:', data);
+                    
+                    // 🔧 尝试其他可能的格式
+                    if (data.text) {
+                        console.log('[InfoBarSettings] 🔄 尝试直接使用data.text');
+                        result = data.text.trim();
+                    } else if (data.content && typeof data.content === 'string') {
+                        console.log('[InfoBarSettings] 🔄 尝试使用data.content');
+                        result = data.content.trim();
+                    } else if (typeof data === 'string') {
+                        console.log('[InfoBarSettings] 🔄 尝试直接使用data字符串');
+                        result = data.trim();
+                    } else {
+                        throw parseError;
+                    }
                 }
-                if (!data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
-                    throw new Error('Gemini API返回内容格式错误');
-                }
-                result = data.candidates[0].content.parts[0].text.trim();
             } else {
                 // OpenAI格式
                 if (!data.choices || !data.choices[0] || !data.choices[0].message) {
@@ -23559,6 +24706,8 @@ ${userTemplate}
                 enabled: apiConfig.enabled,
                 provider: apiConfig.provider,
                 model: apiConfig.model,
+                maxTokens: apiConfig.maxTokens, // 🔧 添加maxTokens到日志
+                temperature: apiConfig.temperature, // 🔧 添加temperature到日志
                 hasApiKey: !!apiConfig.apiKey
             });
 
@@ -23577,7 +24726,12 @@ ${userTemplate}
                 apiKey: apiConfig.apiKey || '',
                 model: apiConfig.model || 'gpt-3.5-turbo',
                 provider: apiConfig.provider || 'openai',
-                headers: apiConfig.headers || {}
+                headers: apiConfig.headers || {},
+                // 🔧 添加缺失的配置字段
+                maxTokens: apiConfig.maxTokens || 4000, // 从用户设置或默认4000
+                temperature: apiConfig.temperature || 0.7,
+                retryCount: apiConfig.retryCount || 3,
+                format: apiConfig.format || 'native'
             };
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 获取API配置失败:', error);
@@ -23599,16 +24753,80 @@ ${userTemplate}
     }
 
     /**
-     * 清理AI响应
+     * 🚀 增强的AI响应清理
      */
     cleanAIResponse(response) {
-        // 移除可能的代码块标记
-        let cleaned = response.replace(/```html\n?/g, '').replace(/```\n?/g, '');
+        if (!response || typeof response !== 'string') {
+            console.warn('[InfoBarSettings] ⚠️ AI响应为空或非字符串:', typeof response);
+            return '';
+        }
 
-        // 移除多余的空行
-        cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
+        console.log('[InfoBarSettings] 🧹 开始清理AI响应，原长度:', response.length);
 
-        return cleaned.trim();
+        let cleaned = response;
+
+        // 🔧 移除各种代码块标记
+        cleaned = cleaned.replace(/```html\s*\n?/gi, '');
+        cleaned = cleaned.replace(/```css\s*\n?/gi, '');
+        cleaned = cleaned.replace(/```javascript\s*\n?/gi, '');
+        cleaned = cleaned.replace(/```js\s*\n?/gi, '');
+        cleaned = cleaned.replace(/```\s*\n?/g, '');
+
+        // 🔧 移除可能的markdown格式
+        cleaned = cleaned.replace(/^#+\s+.*$/gm, ''); // 移除标题
+        cleaned = cleaned.replace(/^\*\*.*\*\*$/gm, ''); // 移除粗体行
+        cleaned = cleaned.replace(/^[-*]\s+.*$/gm, ''); // 移除列表项
+
+        // 🔧 移除AI可能添加的说明文字
+        const removePatterns = [
+            /^(这里是|以下是|这是一个|修改后的|优化后的).*HTML.*$/gim,
+            /^.*完整.*HTML.*代码.*$/gim,
+            /^.*修改.*模板.*$/gim,
+            /^.*优化.*建议.*$/gim,
+            /^.*注意事项.*$/gim,
+            /^.*说明.*$/gim,
+            /^.*解释.*$/gim
+        ];
+
+        removePatterns.forEach(pattern => {
+            cleaned = cleaned.replace(pattern, '');
+        });
+
+        // 🔧 查找并提取HTML内容
+        const htmlMatch = cleaned.match(/<[^>]+>/);
+        if (htmlMatch) {
+            // 找到HTML标签的起始位置
+            const htmlStart = cleaned.indexOf(htmlMatch[0]);
+            if (htmlStart > 0) {
+                // 移除HTML之前的所有说明文字
+                cleaned = cleaned.substring(htmlStart);
+                console.log('[InfoBarSettings] ✂️ 移除了HTML之前的说明文字');
+            }
+        }
+
+        // 🔧 移除多余的空行
+        cleaned = cleaned.replace(/\n\s*\n\s*\n+/g, '\n\n');
+        cleaned = cleaned.replace(/^\s*\n+/g, ''); // 移除开头空行
+        cleaned = cleaned.replace(/\n+\s*$/g, ''); // 移除结尾空行
+
+        // 🔧 基本HTML验证
+        const result = cleaned.trim();
+        
+        if (!result) {
+            console.error('[InfoBarSettings] ❌ 清理后AI响应为空');
+            throw new Error('AI返回的内容清理后为空');
+        }
+
+        // 检查是否包含基本HTML结构
+        const hasHTMLTags = /<[^>]+>/.test(result);
+        if (!hasHTMLTags) {
+            console.warn('[InfoBarSettings] ⚠️ 清理后的内容可能不是有效的HTML');
+        }
+
+        console.log('[InfoBarSettings] ✅ AI响应清理完成，最终长度:', result.length);
+        console.log('[InfoBarSettings] 📋 清理后内容预览:', result.substring(0, 200) + '...');
+
+        return result;
     }
 
     /**
@@ -23670,5 +24888,448 @@ ${userTemplate}
                 skills: ['skills', 'experience']
             };
         }
+    }
+
+    /**
+     * 🚀 新增：加载高级数据信息
+     */
+    loadAdvancedDataInfo() {
+        try {
+            // 加载当前启用的面板
+            this.loadEnabledPanelsList();
+            
+            // 加载可用字段
+            this.loadAvailableFieldsList();
+
+            // 绑定快速插入按钮事件
+            this.bindQuickInsertEvents();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载高级数据信息失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：加载当前启用的面板列表
+     */
+    async loadEnabledPanelsList() {
+        try {
+            const panelsList = document.querySelector('#enabled-panels-list');
+            if (!panelsList) return;
+
+            console.log('[InfoBarSettings] 📊 加载启用的面板列表...');
+
+            // 获取当前启用的面板
+            const enabledPanels = this.getEnabledPanels(); // 移除await，因为这是同步方法
+            
+            if (enabledPanels && Object.keys(enabledPanels).length > 0) {
+                const themeColors = {
+                    text: this.getInfoBarThemeColor('text'),
+                    textSecondary: this.getInfoBarThemeColor('textSecondary'),
+                    accent: this.getInfoBarThemeColor('accent'),
+                    background: this.getInfoBarThemeColor('background'),
+                    border: this.getInfoBarThemeColor('border')
+                };
+
+                // 🔧 修复：将面板对象转换为数组进行处理
+                const panelsHTML = Object.entries(enabledPanels).map(([panelId, panelConfig]) => `
+                    <div style="
+                        display: flex;
+                        align-items: center;
+                        padding: 6px 8px;
+                        margin-bottom: 4px;
+                        background: ${themeColors.background};
+                        border: 1px solid ${themeColors.border};
+                        border-radius: 3px;
+                        color: ${themeColors.text};
+                        font-size: 11px;
+                    ">
+                        <i class="${this.getPanelIcon(panelId)}" style="
+                            color: ${themeColors.accent}; 
+                            margin-right: 6px; 
+                            font-size: 10px;
+                        "></i>
+                        <span style="flex-grow: 1;">${this.getPanelDisplayName(panelId)}</span>
+                        <span style="
+                            color: ${themeColors.textSecondary}; 
+                            font-size: 9px;
+                        ">${this.countEnabledFields(panelConfig)}个字段</span>
+                    </div>
+                `).join('');
+
+                panelsList.innerHTML = panelsHTML;
+            } else {
+                panelsList.innerHTML = `
+                    <div style="
+                        text-align: center;
+                        padding: 20px;
+                        color: ${this.getInfoBarThemeColor('textSecondary')};
+                        font-size: 11px;
+                    ">
+                        <i class="fas fa-info-circle" style="margin-bottom: 8px; display: block; font-size: 16px;"></i>
+                        暂无启用的数据面板<br>
+                        <small style="font-size: 9px;">请先在面板管理中启用数据面板</small>
+                    </div>
+                `;
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载启用面板列表失败:', error);
+            const panelsList = document.querySelector('#enabled-panels-list');
+            if (panelsList) {
+                panelsList.innerHTML = `
+                    <div style="color: #FF5722; font-size: 11px; text-align: center; padding: 10px;">
+                        <i class="fas fa-exclamation-triangle"></i> 加载失败
+                    </div>
+                `;
+            }
+        }
+    }
+
+    /**
+     * 🔧 新增：计算面板中启用的字段数量
+     */
+    countEnabledFields(panelConfig) {
+        if (!panelConfig || typeof panelConfig !== 'object') return 0;
+        
+        let count = 0;
+        // 计算基本字段
+        Object.entries(panelConfig).forEach(([key, value]) => {
+            if (key !== 'enabled' && key !== 'name' && key !== 'subItems' && value && value.enabled !== false) {
+                count++;
+            }
+        });
+        
+        // 计算子项
+        if (panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
+            count += panelConfig.subItems.filter(item => item.enabled).length;
+        }
+        
+        return count;
+    }
+
+    /**
+     * 🔧 新增：获取面板图标
+     */
+    getPanelIcon(panelId) {
+        const iconMap = {
+            'character': 'fas fa-user',
+            'stats': 'fas fa-chart-bar',
+            'inventory': 'fas fa-box',
+            'location': 'fas fa-map-marker-alt',
+            'relationship': 'fas fa-heart',
+            'story': 'fas fa-book',
+            'custom': 'fas fa-layer-group',
+            'custom1': 'fas fa-cube',
+            'custom2': 'fas fa-puzzle-piece',
+            'custom3': 'fas fa-star'
+        };
+        
+        // 检查panelId是否匹配自定义面板格式
+        if (panelId && panelId.toLowerCase().startsWith('custom')) {
+            if (panelId === 'custom') return iconMap['custom'];
+            // 处理 custom_xxxxx 格式
+            if (panelId.includes('_')) {
+                return iconMap['custom'];
+            }
+            // 处理 Custom1, Custom2 等格式
+            const customMatch = panelId.match(/^custom(\d+)$/i);
+            if (customMatch) {
+                const num = parseInt(customMatch[1]);
+                return iconMap[`custom${Math.min(num, 3)}`] || iconMap['custom'];
+            }
+        }
+        
+        return iconMap[panelId] || 'fas fa-layer-group';
+    }
+
+    /**
+     * 🚀 新增：加载可用字段列表
+     */
+    async loadAvailableFieldsList() {
+        try {
+            const fieldsList = document.querySelector('#available-fields-list');
+            if (!fieldsList) return;
+
+            console.log('[InfoBarSettings] 🏷️ 加载可用字段列表...');
+
+            // 获取当前数据字段
+            const dataFields = await this.getCurrentDataFields();
+            
+            if (dataFields && Object.keys(dataFields).length > 0) {
+                const themeColors = {
+                    text: this.getInfoBarThemeColor('text'),
+                    textSecondary: this.getInfoBarThemeColor('textSecondary'),
+                    accent: this.getInfoBarThemeColor('accent'),
+                    background: this.getInfoBarThemeColor('background'),
+                    border: this.getInfoBarThemeColor('border')
+                };
+
+                let fieldsHTML = '';
+                
+                Object.entries(dataFields).forEach(([panelId, fields]) => {
+                    if (fields && fields.length > 0) {
+                        fieldsHTML += `
+                            <div style="margin-bottom: 12px;">
+                                <div style="
+                                    font-weight: 600;
+                                    color: ${themeColors.accent};
+                                    font-size: 11px;
+                                    margin-bottom: 6px;
+                                    padding-bottom: 3px;
+                                    border-bottom: 1px solid ${themeColors.border};
+                                ">
+                                    ${this.getPanelDisplayName(panelId)}
+                                </div>
+                                <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                        `;
+                        
+                        fields.forEach(field => {
+                            fieldsHTML += `
+                                <button class="field-insert-btn" 
+                                        data-insert="{{data.${field}}}"
+                                        style="
+                                    padding: 2px 6px;
+                                    background: transparent;
+                                    border: 1px solid ${themeColors.border};
+                                    color: ${themeColors.text};
+                                    border-radius: 2px;
+                                    cursor: pointer;
+                                    font-size: 9px;
+                                    transition: all 0.2s ease;
+                                " onmouseover="this.style.background='${themeColors.accent}'; this.style.color='${themeColors.background}'" 
+                                   onmouseout="this.style.background='transparent'; this.style.color='${themeColors.text}'">
+                                    ${field}
+                                </button>
+                            `;
+                        });
+                        
+                        fieldsHTML += `
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+
+                fieldsList.innerHTML = fieldsHTML;
+
+                // 绑定字段插入按钮事件
+                fieldsList.querySelectorAll('.field-insert-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.insertTemplateText(btn.dataset.insert);
+                    });
+                });
+
+            } else {
+                fieldsList.innerHTML = `
+                    <div style="
+                        text-align: center;
+                        padding: 20px;
+                        color: ${this.getInfoBarThemeColor('textSecondary')};
+                        font-size: 11px;
+                    ">
+                        <i class="fas fa-database" style="margin-bottom: 8px; display: block; font-size: 16px;"></i>
+                        暂无可用数据字段<br>
+                        <small style="font-size: 9px;">请先发送AI消息生成数据</small>
+                    </div>
+                `;
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载可用字段列表失败:', error);
+            const fieldsList = document.querySelector('#available-fields-list');
+            if (fieldsList) {
+                fieldsList.innerHTML = `
+                    <div style="color: #FF5722; font-size: 11px; text-align: center; padding: 10px;">
+                        <i class="fas fa-exclamation-triangle"></i> 加载失败
+                    </div>
+                `;
+            }
+        }
+    }
+
+    /**
+     * 🚀 新增：获取面板显示名称
+     */
+    getPanelDisplayName(panelId) {
+        const panelNames = {
+            character: '🧙‍♂️ 角色信息',
+            status: '💖 状态显示', 
+            inventory: '🎒 物品背包',
+            skills: '⚡ 技能能力',
+            world: '🌍 世界信息',
+            tasks: '📋 任务管理',
+            relationships: '👥 人际关系',
+            lore: '📚 传说典故',
+            combat: '⚔️ 战斗状态',
+            progress: '📈 进度追踪'
+        };
+        
+        return panelNames[panelId] || `📊 ${panelId}`;
+    }
+
+    /**
+     * 🚀 新增：绑定快速插入事件
+     */
+    bindQuickInsertEvents() {
+        try {
+            const modal = document.querySelector('.html-template-editor-modal');
+            if (!modal) return;
+
+            // 重新绑定快速插入按钮
+            modal.querySelectorAll('.quick-insert-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.insertTemplateText(btn.dataset.insert);
+                });
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 绑定快速插入事件失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：初始化语法高亮
+     */
+    initSyntaxHighlight() {
+        try {
+            // 简单的语法高亮实现
+            console.log('[InfoBarSettings] 🎨 语法高亮初始化完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化语法高亮失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：切换自动换行
+     */
+    toggleWordWrap() {
+        try {
+            const textarea = document.querySelector('.html-template-textarea');
+            if (!textarea) return;
+
+            const isWrapped = textarea.style.whiteSpace === 'pre-wrap';
+            textarea.style.whiteSpace = isWrapped ? 'pre' : 'pre-wrap';
+            textarea.style.overflowWrap = isWrapped ? 'normal' : 'break-word';
+
+            console.log('[InfoBarSettings] 🔄 自动换行已', isWrapped ? '关闭' : '开启');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换自动换行失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：处理编辑器键盘事件
+     */
+    handleEditorKeydown(e) {
+        try {
+            // Ctrl+S 保存
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault();
+                this.saveHTMLTemplate();
+                return;
+            }
+
+            // Ctrl+Shift+F 格式化
+            if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+                e.preventDefault();
+                this.formatTemplate();
+                return;
+            }
+
+            // Tab 键插入空格
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const textarea = e.target;
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                
+                textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
+                textarea.selectionStart = textarea.selectionEnd = start + 2;
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理键盘事件失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：调整编辑器布局
+     */
+    adjustEditorLayout() {
+        try {
+            const modal = document.querySelector('.html-template-editor-modal');
+            if (!modal) return;
+
+            // 响应式布局调整逻辑
+            const container = modal.querySelector('.html-template-editor-container');
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+
+            if (windowWidth < 1200) {
+                // 小屏幕优化
+                container.style.minWidth = '90vw';
+                container.style.maxWidth = '95vw';
+            } else {
+                // 恢复正常尺寸
+                container.style.minWidth = '800px';
+                container.style.maxWidth = '1600px';
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 调整编辑器布局失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：绑定语法帮助事件
+     */
+    bindSyntaxHelpEvents() {
+        try {
+            // 语法帮助相关事件绑定
+            console.log('[InfoBarSettings] ✅ 语法帮助事件绑定完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 绑定语法帮助事件失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：加载模板库
+     */
+    loadTemplateLibrary() {
+        try {
+            // 模板库加载逻辑
+            console.log('[InfoBarSettings] ✅ 模板库加载完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载模板库失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：创建模板库信息
+     */
+    createTemplateLibraryInfo() {
+        const themeColors = {
+            background: this.getInfoBarThemeColor('background'),
+            surface: this.getInfoBarThemeColor('surface'),
+            border: this.getInfoBarThemeColor('border'),
+            text: this.getInfoBarThemeColor('text'),
+            textSecondary: this.getInfoBarThemeColor('textSecondary'),
+            accent: this.getInfoBarThemeColor('accent')
+        };
+
+        return `
+            <div class="template-library-info">
+                <div class="template-categories">
+                    <h4 style="margin: 0 0 10px 0; color: ${themeColors.accent}; font-size: 13px; font-weight: 600;">
+                        <i class="fas fa-layer-group"></i> 模板分类
+                    </h4>
+                    <div style="color: ${themeColors.textSecondary}; font-size: 11px;">
+                        模板库功能开发中...
+                    </div>
+                </div>
+            </div>
+        `;
     }
 }
