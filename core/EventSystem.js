@@ -803,19 +803,157 @@ export class EventSystem {
     async handleMessageDeleted(data) {
         try {
             console.log('[EventSystem] 🗑️ 收到消息删除事件', data);
+            console.log('[EventSystem] 🔍 调试：事件数据类型:', typeof data);
+            console.log('[EventSystem] 🔍 调试：事件数据内容:', JSON.stringify(data, null, 2));
 
-            // 获取当前聊天ID
+            // 获取当前聊天ID和聊天数据
             const context = SillyTavern.getContext();
             const chatId = context?.chatId || this.dataCore?.getCurrentChatId();
+            const chat = context?.chat;
 
-            // 转发内部事件，包含聊天ID
+            console.log('[EventSystem] 🔍 调试：聊天上下文:', {
+                chatId: chatId,
+                chatLength: chat?.length,
+                hasChatData: !!chat
+            });
+
+            if (!chat || !Array.isArray(chat)) {
+                console.warn('[EventSystem] ⚠️ 无法获取聊天数据，跳过消息删除处理');
+                return;
+            }
+
+            // 🔧 增强调试：检查被删除的消息类型
+            let deletedMessageInfo = null;
+            let detectionStrategy = 'unknown';
+            
+            // 策略1：data是数字（消息索引）
+            if (typeof data === 'number') {
+                detectionStrategy = 'number_index';
+                const messageIndex = data;
+                console.log('[EventSystem] 🔍 调试：策略1 - 数字索引:', messageIndex);
+                
+                if (messageIndex >= 0 && messageIndex < chat.length) {
+                    const message = chat[messageIndex];
+                    console.log('[EventSystem] 🔍 调试：找到消息:', {
+                        index: messageIndex,
+                        is_user: message?.is_user,
+                        mes: message?.mes?.substring(0, 50) + '...'
+                    });
+                    
+                    deletedMessageInfo = {
+                        index: messageIndex,
+                        isUser: message?.is_user || false,
+                        message: message
+                    };
+                }
+            } 
+            // 策略2：data是对象
+            else if (data && typeof data === 'object') {
+                detectionStrategy = 'object_data';
+                console.log('[EventSystem] 🔍 调试：策略2 - 对象数据');
+                
+                // 尝试不同的索引字段
+                const possibleIndexFields = ['index', 'mesid', 'messageId', 'id'];
+                let messageIndex = null;
+                
+                for (const field of possibleIndexFields) {
+                    if (data[field] !== undefined) {
+                        messageIndex = data[field];
+                        console.log('[EventSystem] 🔍 调试：从字段', field, '获取索引:', messageIndex);
+                        break;
+                    }
+                }
+                
+                if (typeof messageIndex === 'number' && messageIndex >= 0 && messageIndex < chat.length) {
+                    const message = chat[messageIndex];
+                    console.log('[EventSystem] 🔍 调试：找到消息:', {
+                        index: messageIndex,
+                        is_user: message?.is_user,
+                        mes: message?.mes?.substring(0, 50) + '...'
+                    });
+                    
+                    deletedMessageInfo = {
+                        index: messageIndex,
+                        isUser: message?.is_user || false,
+                        message: message
+                    };
+                }
+            }
+            
+            // 策略3：尝试从聊天数组末尾推断（最后删除的消息）
+            if (!deletedMessageInfo && chat.length > 0) {
+                detectionStrategy = 'last_message_fallback';
+                console.log('[EventSystem] 🔍 调试：策略3 - 末尾推断，检查最后几条消息');
+                
+                // 检查最后3条消息，看是否能找到合理的删除目标
+                for (let i = Math.max(0, chat.length - 3); i < chat.length; i++) {
+                    const message = chat[i];
+                    console.log('[EventSystem] 🔍 调试：检查消息', i, ':', {
+                        is_user: message?.is_user,
+                        mes: message?.mes?.substring(0, 30) + '...'
+                    });
+                }
+                
+                // 默认选择最后一条消息
+                const lastIndex = chat.length - 1;
+                const lastMessage = chat[lastIndex];
+                
+                deletedMessageInfo = {
+                    index: lastIndex,
+                    isUser: lastMessage?.is_user || false,
+                    message: lastMessage
+                };
+                
+                console.log('[EventSystem] 🔍 调试：使用最后一条消息作为删除目标:', deletedMessageInfo);
+            }
+
+            console.log('[EventSystem] 🔍 调试：检测策略:', detectionStrategy);
+            console.log('[EventSystem] 🔍 调试：最终识别结果:', deletedMessageInfo);
+
+            if (!deletedMessageInfo) {
+                console.warn('[EventSystem] ⚠️ 无法确定被删除消息的类型，将按默认策略处理');
+                // 如果无法确定，为了安全起见，仍然触发回溯
+                deletedMessageInfo = { isUser: false, index: -1, message: null };
+            }
+
+            console.log('[EventSystem] 📊 被删除消息信息:', {
+                index: deletedMessageInfo.index,
+                isUser: deletedMessageInfo.isUser,
+                messageType: deletedMessageInfo.isUser ? '用户消息' : 'AI消息',
+                detectionStrategy: detectionStrategy
+            });
+
+            // 🔧 新增：只有在删除AI消息时才进行数据回溯
+            if (deletedMessageInfo.isUser) {
+                console.log('[EventSystem] ℹ️ 删除的是用户消息，不需要进行数据回溯');
+                
+                // 仍然发送删除事件（用于UI清理等），但标记为用户消息
+                this.emit(this.EVENT_TYPES.MESSAGE_DELETED, {
+                    ...data,
+                    chatId: chatId,
+                    timestamp: Date.now(),
+                    isUser: true,
+                    skipRollback: true,  // 明确标记跳过回溯
+                    messageInfo: deletedMessageInfo
+                });
+                
+                console.log('[EventSystem] ✅ 用户消息删除事件已转发（跳过回溯）');
+                return;
+            }
+
+            console.log('[EventSystem] 🔄 删除的是AI消息，将进行数据回溯...');
+
+            // 转发内部事件，包含聊天ID和消息类型信息
             this.emit(this.EVENT_TYPES.MESSAGE_DELETED, {
                 ...data,
                 chatId: chatId,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                isUser: false,
+                skipRollback: false,  // 明确标记需要回溯
+                messageInfo: deletedMessageInfo
             });
 
-            console.log('[EventSystem] ✅ 消息删除事件已转发');
+            console.log('[EventSystem] ✅ AI消息删除事件已转发（将触发回溯）');
 
         } catch (error) {
             console.error('[EventSystem] ❌ 处理消息删除事件失败:', error);
@@ -858,6 +996,19 @@ export class EventSystem {
     async extractAndParseInfobarData(messageData, type) {
         try {
             if (!messageData || !this.xmlParser || !this.dataCore) {
+                return;
+            }
+
+            // 🔧 新增：检查插件是否启用
+            const context = window.SillyTavern?.getContext?.();
+            const extensionSettings = context?.extensionSettings;
+            const configs = extensionSettings?.['Information bar integration tool'] || {};
+            const basicSettings = configs.basic || {};
+            const integrationSystemSettings = basicSettings.integrationSystem || {};
+            const isPluginEnabled = integrationSystemSettings.enabled !== false;
+
+            if (!isPluginEnabled) {
+                console.log('[EventSystem] ℹ️ 插件已禁用，跳过infobar数据解析');
                 return;
             }
 

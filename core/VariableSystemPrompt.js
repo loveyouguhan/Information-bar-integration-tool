@@ -89,10 +89,24 @@ export class VariableSystemPrompt {
         try {
             console.log('[VariableSystemPrompt] 🚀 检测到生成开始，检查是否需要注入变量系统读取提示词...');
 
-            // 🔧 修复：检查自定义API模式，避免与主API禁止规则冲突
             const context = SillyTavern.getContext();
             const extensionSettings = context?.extensionSettings;
-            const apiConfig = extensionSettings?.['Information bar integration tool']?.apiConfig;
+            const toolSettings = extensionSettings?.['Information bar integration tool'] || {};
+
+            // 🔧 新增：检查插件是否启用
+            const basicSettings = toolSettings.basic || {};
+            const integrationSystemSettings = basicSettings.integrationSystem || {};
+            const isPluginEnabled = integrationSystemSettings.enabled !== false; // 默认为true，只有明确设置为false才禁用
+
+            if (!isPluginEnabled) {
+                console.log('[VariableSystemPrompt] ℹ️ 插件已禁用，跳过变量系统读取提示词注入');
+                return;
+            }
+
+            console.log('[VariableSystemPrompt] ✅ 插件已启用，继续检查变量系统读取提示词注入条件...');
+
+            // 🔧 修复：检查自定义API模式，避免与主API禁止规则冲突
+            const apiConfig = toolSettings.apiConfig;
             
             if (apiConfig?.enabled && apiConfig?.apiKey && apiConfig?.model) {
                 console.log('[VariableSystemPrompt] 🚫 检测到自定义API模式已启用，跳过主API变量提示词注入');

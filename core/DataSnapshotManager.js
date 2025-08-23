@@ -702,7 +702,24 @@ export class DataSnapshotManager {
      */
     async handleMessageDeleted(data) {
         try {
-            console.log('[DataSnapshotManager] 🗑️ 检测到消息删除，开始数据回溯...');
+            console.log('[DataSnapshotManager] 🗑️ 检测到消息删除事件');
+
+            // 🔧 新增：检查是否需要跳过回溯（用户消息删除）
+            if (data && data.skipRollback === true) {
+                console.log('[DataSnapshotManager] ℹ️ 跳过数据回溯（删除的是用户消息）');
+                return;
+            }
+
+            // 🔧 新增：显示消息类型信息
+            const messageType = data?.messageInfo?.isUser ? '用户消息' : 'AI消息';
+            console.log('[DataSnapshotManager] 📊 消息类型:', messageType);
+
+            if (data?.messageInfo?.isUser) {
+                console.log('[DataSnapshotManager] ℹ️ 用户消息删除不需要数据回溯');
+                return;
+            }
+
+            console.log('[DataSnapshotManager] 🔄 开始AI消息删除的数据回溯...');
 
             const chatId = data.chatId || this.dataCore.getCurrentChatId();
             if (!chatId) {
@@ -726,9 +743,9 @@ export class DataSnapshotManager {
             const success = await this.rollbackToSnapshot(chatId, targetFloor);
 
             if (success) {
-                console.log('[DataSnapshotManager] ✅ 消息删除回溯成功');
+                console.log('[DataSnapshotManager] ✅ AI消息删除回溯成功');
             } else {
-                console.warn('[DataSnapshotManager] ⚠️ 消息删除回溯失败');
+                console.warn('[DataSnapshotManager] ⚠️ AI消息删除回溯失败');
 
                 // 🔧 回溯失败时的降级处理
                 await this.handleRollbackFailure(chatId, currentFloor);
