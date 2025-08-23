@@ -4563,7 +4563,12 @@ export class DataTable {
             return existingRule;
         }
 
-        // 如果是对象格式，提取内容
+        // 如果是对象格式，首先检查 content 属性（新的简化格式）
+        if (existingRule.content && typeof existingRule.content === 'string') {
+            return existingRule.content;
+        }
+
+        // 兼容旧的复杂格式，提取内容
         const parts = [];
 
         // 提取基础规则描述
@@ -4580,7 +4585,14 @@ export class DataTable {
             });
         }
 
-        return parts.join('\n');
+        // 如果有部分内容，返回合并结果
+        if (parts.length > 0) {
+            return parts.join('\n');
+        }
+
+        // 最后尝试直接返回对象的字符串表示（用于调试）
+        console.warn('[DataTable] ⚠️ 无法提取规则内容，规则格式:', existingRule);
+        return '';
     }
 
     /**
