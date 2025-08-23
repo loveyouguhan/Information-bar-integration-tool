@@ -1962,6 +1962,7 @@ export class STScriptDataSync {
 
             if (!infobarData[panelId]) {
                 console.warn(`[STScript同步] ⚠️ 面板 ${panelId} 不存在，跳过规则同步`);
+                this.showNotification('未找到变量结构，规则添加失败，请先点击生成变量', 'warning');
                 return;
             }
 
@@ -1997,6 +1998,7 @@ export class STScriptDataSync {
 
             if (!infobarData[panelId]) {
                 console.warn(`[STScript同步] ⚠️ 面板 ${panelId} 不存在，跳过规则移除`);
+                this.showNotification('未找到变量结构，规则移除失败，请先点击生成变量', 'warning');
                 return;
             }
 
@@ -2034,6 +2036,7 @@ export class STScriptDataSync {
 
             if (!infobarData[panelName] || !infobarData[panelName][actualFieldName]) {
                 console.warn(`[STScript同步] ⚠️ 字段 ${panelName}.${actualFieldName} 不存在，跳过规则同步`);
+                this.showNotification('未找到变量结构，规则添加失败，请先点击生成变量', 'warning');
                 return;
             }
 
@@ -2092,6 +2095,7 @@ export class STScriptDataSync {
 
             if (!infobarData[panelName] || !infobarData[panelName][actualFieldName]) {
                 console.warn(`[STScript同步] ⚠️ 字段 ${panelName}.${actualFieldName} 不存在，跳过规则移除`);
+                this.showNotification('未找到变量结构，规则移除失败，请先点击生成变量', 'warning');
                 return;
             }
 
@@ -2119,6 +2123,96 @@ export class STScriptDataSync {
     }
 
     /**
+     * 显示用户通知弹窗
+     */
+    showNotification(message, type = 'warning') {
+        try {
+            // 创建通知元素
+            const notification = document.createElement('div');
+            notification.className = `stscript-sync-notification notification-${type}`;
+            
+            const colors = {
+                'success': '#4CAF50',
+                'info': '#2196F3', 
+                'warning': '#ff9800',
+                'error': '#f44336'
+            };
+            
+            notification.innerHTML = `
+                <div class="notification-content">
+                    <i class="fa-solid ${type === 'warning' ? 'fa-exclamation-triangle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+
+            // 添加样式
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${colors[type] || colors.warning};
+                color: white;
+                padding: 16px 24px;
+                border-radius: 8px;
+                box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+                z-index: 10002;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                font-weight: 500;
+                max-width: 400px;
+                word-wrap: break-word;
+                animation: slideInRight 0.3s ease-out;
+                border-left: 4px solid ${colors[type] || colors.warning};
+            `;
+
+            // 添加CSS动画
+            if (!document.querySelector('#stscript-notification-styles')) {
+                const style = document.createElement('style');
+                style.id = 'stscript-notification-styles';
+                style.textContent = `
+                    @keyframes slideInRight {
+                        from { transform: translateX(100%); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                    @keyframes slideOutRight {
+                        from { transform: translateX(0); opacity: 1; }
+                        to { transform: translateX(100%); opacity: 0; }
+                    }
+                    .stscript-sync-notification .notification-content {
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    }
+                    .stscript-sync-notification .notification-content i {
+                        font-size: 16px;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            // 添加到页面
+            document.body.appendChild(notification);
+
+            // 5秒后自动移除（比其他通知稍长一些，因为是重要提示）
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.style.animation = 'slideOutRight 0.3s ease-in';
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            notification.parentNode.removeChild(notification);
+                        }
+                    }, 300);
+                }
+            }, 5000);
+
+            console.log(`[STScript同步] 📢 显示用户通知: ${message}`);
+
+        } catch (error) {
+            console.error('[STScript同步] ❌ 显示通知失败:', error);
+        }
+    }
+
+    /**
      * 将字段显示名映射为实际的字段键名
      */
     mapFieldNameToKey(panelName, fieldDisplayName) {
@@ -2139,6 +2233,7 @@ export class STScriptDataSync {
             }
 
             console.warn(`[STScript同步] ⚠️ 无法映射字段名: ${panelName}.${fieldDisplayName}`);
+            this.showNotification('未找到变量结构，规则添加失败，请先点击生成变量', 'warning');
             return null;
 
         } catch (error) {
