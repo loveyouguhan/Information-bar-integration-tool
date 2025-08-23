@@ -462,7 +462,12 @@ ${messageContent}
 
             console.log('[SummaryManager] 📡 使用API配置:', {
                 provider: apiConfig.provider,
-                model: apiConfig.model
+                model: apiConfig.model,
+                baseUrl: apiConfig.baseUrl,      // 🔧 显示baseUrl配置
+                endpoint: apiConfig.endpoint,    // 🔧 显示endpoint配置  
+                format: apiConfig.format,        // 🔧 显示接口格式
+                maxTokens: apiConfig.maxTokens || 4000,  // 🔧 显示最大令牌数设置
+                temperature: apiConfig.temperature || 0.7  // 🔧 显示温度设置
             });
 
             // 🔧 修复：使用正确的API调用方法
@@ -474,8 +479,25 @@ ${messageContent}
                 }
             ];
 
-            // 调用InfoBarSettings的sendCustomAPIRequest方法
-            const apiResult = await this.infoBarSettings.sendCustomAPIRequest(messages);
+            // 调用InfoBarSettings的sendCustomAPIRequest方法，传递完整的API配置
+            const apiResult = await this.infoBarSettings.sendCustomAPIRequest(messages, {
+                skipSystemPrompt: true,  // 🔧 关键修复：总结请求不需要信息栏数据系统提示词
+                // 🔧 关键修复：传递完整的API配置，确保使用用户设置的最大令牌数
+                apiConfig: {
+                    provider: apiConfig.provider,
+                    model: apiConfig.model,
+                    apiKey: apiConfig.apiKey,
+                    endpoint: apiConfig.endpoint,
+                    baseUrl: apiConfig.baseUrl || apiConfig.endpoint,  // 🔧 fallback到endpoint
+                    format: apiConfig.format,    // 🔧 添加format配置
+                    maxTokens: apiConfig.maxTokens || 4000,  // 使用用户设置的最大令牌数
+                    temperature: apiConfig.temperature || 0.7,
+                    headers: apiConfig.headers,
+                    // 🔧 确保传递完整配置
+                    enabled: apiConfig.enabled,
+                    retryCount: apiConfig.retryCount
+                }
+            });
 
             // 🔧 修复：处理API返回结果的格式
             let resultText = '';

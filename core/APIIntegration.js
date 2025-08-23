@@ -616,6 +616,24 @@ export class APIIntegration {
                     authHeaderFormat: options.headers?.['Authorization']?.substring(0, 20) + '...'
                 });
                 return response; // 返回401响应让调用者处理
+            } else if (response.status === 500) {
+                console.error('[APIIntegration] ❌ 500服务器内部错误 - 反代服务器配置问题');
+                console.error('[APIIntegration] 🔍 诊断信息:', {
+                    url: url,
+                    endpoint: url.split('/').pop(),
+                    isModelsEndpoint: url.includes('/models'),
+                    isChatEndpoint: url.includes('/chat/completions')
+                });
+                // 尝试获取服务器错误详情
+                try {
+                    const errorText = await response.clone().text();
+                    if (errorText) {
+                        console.error('[APIIntegration] 🔍 服务器错误详情:', errorText.substring(0, 300));
+                    }
+                } catch (e) {
+                    console.warn('[APIIntegration] ⚠️ 无法读取500错误详情');
+                }
+                return response; // 返回500响应让调用者处理
             } else if (response.status < 400) {
                 console.log(`[APIIntegration] ✅ 直接请求成功: ${response.status}`);
                 this.requestStats.directSuccess++;
