@@ -13,6 +13,51 @@
 
 /* 消息信息栏样式将直接包含在此文件中 */
 
+/* 🚀 信息栏容器完全自由显示：移除所有高度限制 */
+.infobar-container {
+    display: block;
+    width: 100%;
+    height: auto !important;
+    min-height: unset !important;
+    max-height: none !important;
+}
+
+.infobar-container.infobar-style-custom-html {
+    height: auto !important;
+    min-height: unset !important;
+    max-height: none !important;
+}
+
+.infobar-wrapper {
+    height: auto !important;
+    min-height: unset !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* 🎯 确保自定义HTML容器完全自由显示 */
+.custom-html-wrapper {
+    height: auto !important;
+    min-height: unset !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* 🚀 移除所有高度限制，让内容完全展示 */
+.infobar-container .custom-html-wrapper {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* 📏 确保Shadow DOM宿主元素完全自由 */
+.custom-html-wrapper[data-shadow="true"] {
+    height: auto !important;
+    min-height: unset !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
 /* ========== CSS变量定义 ========== */
 :root {
     /* 主色调 */
