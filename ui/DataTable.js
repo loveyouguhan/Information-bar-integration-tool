@@ -165,7 +165,10 @@ export class DataTable {
                             <span class="record-count">共 <span class="count-number">0</span> 条记录</span>
                         </div>
                         <div class="footer-right">
-                            <!-- 移除了分页控件 -->
+                            <button id="generate-variables-btn" class="generate-variables-btn">
+                                <i class="fa-solid fa-code"></i>
+                                生成变量
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1269,12 +1272,30 @@ export class DataTable {
                 return;
             }
 
+            // 🆕 生成变量按钮点击事件
+            const generateVarsBtn = e.target.closest('#generate-variables-btn');
+            if (generateVarsBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleGenerateVariables(e);
+                return;
+            }
+
             // 🆕 表格单元格点击事件
             const cellElement = e.target.closest('.cell-value');
             if (cellElement) {
                 e.preventDefault();
                 e.stopPropagation();
                 this.handleCellClick(cellElement, e);
+                return;
+            }
+
+            // 🆕 表格字段名称点击事件
+            const headerElement = e.target.closest('.col-property');
+            if (headerElement) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleHeaderClick(headerElement, e);
                 return;
             }
         });
@@ -1333,6 +1354,253 @@ export class DataTable {
     }
 
     /**
+     * 🆕 处理表格字段名称点击事件
+     */
+    handleHeaderClick(headerElement, event) {
+        try {
+            console.log('[DataTable] 🖱️ 字段名称被点击');
+
+            // 获取字段名称文本
+            const fieldName = headerElement.textContent.trim();
+            
+            // 获取表格组信息
+            const tableGroup = headerElement.closest('.table-group');
+            const panelId = this.getPanelIdFromTableGroup(tableGroup);
+
+            if (!panelId) {
+                console.warn('[DataTable] ⚠️ 无法从字段名称获取面板ID');
+                return;
+            }
+
+            // 尝试从data属性获取property信息（如果有的话）
+            let property = headerElement.getAttribute('data-property');
+            if (!property) {
+                // 如果没有data-property属性，尝试从字段名称推断
+                // 查找当前面板的子项配置来获取准确的property值
+                try {
+                    const infoBarTool = window.SillyTavernInfobar;
+                    const configManager = infoBarTool?.modules?.configManager;
+                    if (configManager) {
+                        const context = SillyTavern.getContext();
+                        const configs = context.extensionSettings['Information bar integration tool'] || {};
+                        const panelConfig = configs[panelId];
+                        
+                        if (panelConfig && panelConfig.subItems) {
+                            // 从面板配置中查找匹配的字段
+                            const matchedField = panelConfig.subItems.find(item => 
+                                item.name === fieldName || item.displayName === fieldName
+                            );
+                            if (matchedField) {
+                                property = matchedField.key || matchedField.name;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn('[DataTable] ⚠️ 获取字段配置失败:', error);
+                }
+
+                // 如果仍然无法获取property，使用字段名称作为fallback
+                if (!property) {
+                    property = fieldName;
+                }
+            }
+
+            console.log('[DataTable] 📊 字段名称信息:', {
+                panelId,
+                property,
+                fieldName,
+                headerText: fieldName
+            });
+
+            // 显示操作选项菜单（与单元格点击使用相同的菜单）
+            this.showCellActionMenu(headerElement, {
+                panelId,
+                property,
+                value: `[字段: ${fieldName}]`, // 字段名称点击时显示特殊标识
+                fieldName,
+                isHeaderClick: true, // 标记这是字段名称点击
+                event
+            });
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 处理字段名称点击失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理生成变量按钮点击事件
+     */
+    async handleGenerateVariables(event) {
+        try {
+            console.log('[DataTable] 🔧 开始生成STScript变量结构');
+
+            // 显示加载状态
+            const button = event.target.closest('#generate-variables-btn');
+            if (button) {
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 生成中...';
+                button.disabled = true;
+
+                try {
+                    await this.generateSTScriptVariables();
+                    
+                    // 显示成功状态
+                    button.innerHTML = '<i class="fa-solid fa-check"></i> 生成完成';
+                    setTimeout(() => {
+                        button.innerHTML = originalText;
+                        button.disabled = false;
+                    }, 2000);
+
+                } catch (error) {
+                    // 显示错误状态
+                    button.innerHTML = '<i class="fa-solid fa-exclamation-triangle"></i> 生成失败';
+                    setTimeout(() => {
+                        button.innerHTML = originalText;
+                        button.disabled = false;
+                    }, 2000);
+                    throw error;
+                }
+            }
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 生成变量失败:', error);
+            this.showNotification('生成变量失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 生成STScript变量结构的核心逻辑
+     */
+    async generateSTScriptVariables() {
+        try {
+            // 1. 获取启用的面板信息
+            const smartPromptSystem = window.SillyTavernInfobar?.modules?.smartPromptSystem;
+            if (!smartPromptSystem) {
+                throw new Error('无法获取智能提示系统');
+            }
+
+            const enabledPanels = await smartPromptSystem.getEnabledPanels();
+            console.log('[DataTable] 📋 获取到启用面板:', enabledPanels);
+
+            if (!enabledPanels || enabledPanels.length === 0) {
+                throw new Error('没有找到启用的面板');
+            }
+
+            // 2. 获取STScript同步模块
+            const stScriptSync = window.SillyTavernInfobar?.modules?.stScriptDataSync;
+            if (!stScriptSync) {
+                throw new Error('无法获取STScript同步模块');
+            }
+
+            // 3. 为每个启用的面板生成变量结构
+            const generatedStructures = {};
+            
+            for (const panel of enabledPanels) {
+                console.log('[DataTable] 🔧 处理面板:', panel.id);
+                
+                // 构建面板的变量结构
+                const panelStructure = {};
+                
+                // 添加启用的子项，如果没有数据则为空
+                if (panel.subItems && panel.subItems.length > 0) {
+                    for (const subItem of panel.subItems) {
+                        if (subItem.enabled !== false) {
+                            // 根据子项键创建变量，数值为空字符串（用户可以后续填充）
+                            panelStructure[subItem.key] = [''];
+                        }
+                    }
+                }
+
+                // 如果面板有规则，也添加到结构中
+                const panelRules = stScriptSync.getPanelRules?.(panel.id);
+                if (panelRules) {
+                    panelStructure['Panel Rules'] = panelRules;
+                }
+
+                generatedStructures[panel.id] = panelStructure;
+            }
+
+            console.log('[DataTable] 🎯 生成的变量结构:', generatedStructures);
+
+            // 4. 同步到STScript变量系统 - 每个面板分别同步到根级别
+            for (const [panelName, panelStructure] of Object.entries(generatedStructures)) {
+                await stScriptSync.updateInfobarStructure(panelName, panelStructure);
+                console.log(`[DataTable] ✅ 面板 ${panelName} 已同步到STScript根级别`);
+            }
+
+            // 5. 无需额外的全量同步，各面板已直接更新
+
+            console.log('[DataTable] ✅ STScript变量结构生成完成');
+            this.showNotification('STScript变量结构已成功生成', 'success');
+
+            // 6. 触发数据刷新事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('variables:generated', {
+                    structures: generatedStructures,
+                    timestamp: Date.now()
+                });
+            }
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 生成STScript变量结构失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🆕 显示通知消息
+     */
+    showNotification(message, type = 'info') {
+        try {
+            // 创建通知元素
+            const notification = document.createElement('div');
+            notification.className = `data-table-notification notification-${type}`;
+            notification.innerHTML = `
+                <div class="notification-content">
+                    <i class="fa-solid ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+
+            // 添加样式
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 10001;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                max-width: 400px;
+                word-wrap: break-word;
+                animation: slideInRight 0.3s ease-out;
+            `;
+
+            // 添加到页面
+            document.body.appendChild(notification);
+
+            // 3秒后自动移除
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.style.animation = 'slideOutRight 0.3s ease-in';
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            notification.parentNode.removeChild(notification);
+                        }
+                    }, 300);
+                }
+            }, 3000);
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 显示通知失败:', error);
+        }
+    }
+
+    /**
      * 🆕 从表格组获取面板ID
      */
     getPanelIdFromTableGroup(tableGroup) {
@@ -1356,6 +1624,13 @@ export class DataTable {
             // 移除已存在的菜单
             this.hideCellActionMenu();
 
+            // 根据点击类型设置菜单标题和信息
+            const isHeaderClick = cellInfo.isHeaderClick;
+            const menuTitle = isHeaderClick ? '字段操作' : '单元格操作';
+            const menuInfo = isHeaderClick ? 
+                `字段: ${cellInfo.fieldName || cellInfo.property}` : 
+                cellInfo.property;
+
             // 创建操作菜单
             const menu = document.createElement('div');
             menu.className = 'cell-action-menu';
@@ -1363,8 +1638,8 @@ export class DataTable {
                 <div class="menu-overlay"></div>
                 <div class="menu-content">
                     <div class="menu-header">
-                        <span class="menu-title">字段操作</span>
-                        <span class="menu-info">${cellInfo.property}</span>
+                        <span class="menu-title">${menuTitle}</span>
+                        <span class="menu-info">${menuInfo}</span>
                     </div>
                     <div class="menu-actions">
                         <button class="menu-btn edit-btn" data-action="edit-cell">
