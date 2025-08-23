@@ -3123,6 +3123,68 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     font-weight: 600;
 }
 
+/* 生成变量按钮样式 */
+.generate-variables-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, var(--theme-primary-color, #4299e1), var(--theme-secondary-color, #805ad5));
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.generate-variables-btn:hover {
+    background: linear-gradient(135deg, #3182ce, #6b46c1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+}
+
+.generate-variables-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.generate-variables-btn:disabled {
+    background: #6b7280;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.generate-variables-btn i {
+    font-size: 16px;
+}
+
+/* 通知消息动画 */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
 /* 分页样式已移除 - 简化界面 */
 
 /* ========== 横向布局表格样式 ========== */
