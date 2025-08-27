@@ -12,10 +12,23 @@
     "advanced_settings": "高级设置",
     
     "enable_extension": "启用信息栏扩展",
+    "enable_plugin": "启用插件",
+    "enable_plugin_desc": "启用信息栏插件的所有功能",
     "render_in_chat": "在聊天界面显示信息栏",
     "enable_table_record": "启用数据表格记录",
     "enable_memory_assist": "启用记忆辅助功能",
     "default_collapsed": "默认折叠信息栏",
+    
+    "prompt_position": "提示词插入位置",
+    "prompt_position_before_character": "角色定义之前",
+    "prompt_position_after_character": "角色定义之后",
+    "prompt_position_at_depth_system": "@ D⚙️ - 系统角色消息",
+    "prompt_position_at_depth_user": "@ D👤 - 用户角色消息",
+    "prompt_position_at_depth_assistant": "@ D🤖 - 助手角色消息",
+    "prompt_position_depth": "插入深度",
+    "prompt_position_before_character_desc": "在角色描述和场景之前插入此提示词。对对话有中等影响。",
+    "prompt_position_after_character_desc": "在角色描述和场景之后插入此提示词。对对话有更大影响。",
+    "prompt_position_at_depth_desc": "将信息栏提示词插入到聊天中的特定深度（深度 0 为提示词底部）。",
     
     "position": "信息栏位置",
     "position_left": "左侧",
@@ -36,6 +49,10 @@
     "max_tokens": "最大令牌数",
     "retry_count": "重试次数",
     "extra_prompt": "额外提示词",
+    "merge_messages": "合并消息",
+    "merge_messages_desc": "启用时将API返回数据合并到AI消息中再解析，禁用时直接解析API返回数据",
+    "include_worldbook": "读取世界书",
+    "include_worldbook_desc": "启用时将SillyTavern世界书内容注入到自定义API请求中",
     
     "test_connection": "测试连接",
     "load_models": "加载模型",
@@ -149,5 +166,14 @@
     "models_load_failed": "加载模型失败",
     
     "confirm_reset": "确定要重置所有设置到默认值吗？此操作不可撤销。",
-    "confirm_delete": "确定要删除选中的数据吗？此操作不可撤销。"
+    "confirm_delete": "确定要删除选中的数据吗？此操作不可撤销。",
+    
+    "generate_variables": "生成变量",
+    "generate_variables_desc": "根据启用的面板和子项自动生成STScript变量结构",
+    "generating_variables": "生成中...",
+    "variables_generated": "变量生成完成",
+    "variables_generate_failed": "变量生成失败",
+    "variables_generate_success": "STScript变量结构已成功生成",
+    "no_enabled_panels": "没有找到启用的面板",
+    "stscript_sync_unavailable": "无法获取STScript同步模块"
 }
