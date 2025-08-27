@@ -3474,7 +3474,7 @@ export class InfoBarSettings {
     }
 
     /**
-     * 创建单个子项HTML
+     * 创建单个子项HTML（增强版：支持多行数据配置）
      */
     createSubItemHtml(subItem) {
         if (!subItem) return '<div class="sub-item"></div>';
@@ -3484,6 +3484,13 @@ export class InfoBarSettings {
         // 使用子项的name作为表单字段名，确保能被collectFormData收集
         const fieldName = subItem.name || subItem.key || subItem.id;
 
+        // 🆕 检查是否支持多行数据
+        const isMultiRow = subItem.multiRow === true;
+        const multiRowId = `${subItem.id}_multirow`;
+
+        // 🆕 检查字段是否适合多行数据（基于字段名判断）
+        const multiRowSuggestions = this.detectMultiRowSuggestion(fieldName);
+
         return `
             <div class="sub-item">
                 <div class="checkbox-wrapper">
@@ -3491,10 +3498,72 @@ export class InfoBarSettings {
                            id="${subItem.id}"
                            name="${fieldName}"
                            ${isEnabled ? 'checked' : ''} />
-                    <label for="${subItem.id}" class="checkbox-label">${subItem.name}</label>
+                    <label for="${subItem.id}" class="checkbox-label">
+                        ${subItem.name}
+                        ${multiRowSuggestions ? '<span class="multirow-indicator" title="建议启用多行数据模式">📋</span>' : ''}
+                    </label>
+                </div>
+                
+                <!-- 🆕 多行数据配置选项 -->
+                <div class="multirow-config" style="
+                    margin-top: 4px;
+                    margin-left: 20px;
+                    font-size: 0.85em;
+                    display: ${isEnabled ? 'block' : 'none'};
+                ">
+                    <div class="multirow-checkbox-wrapper">
+                        <input type="checkbox"
+                               id="${multiRowId}"
+                               name="${fieldName}_multirow"
+                               class="multirow-checkbox"
+                               ${isMultiRow ? 'checked' : ''} />
+                        <label for="${multiRowId}" class="multirow-label">
+                            📝 多行数据模式 
+                            <span class="multirow-help" title="启用后，新数据将追加而不是覆盖现有内容">(?)</span>
+                        </label>
+                    </div>
+                    ${multiRowSuggestions ? `
+                    <div class="multirow-suggestion" style="
+                        color: rgba(255,255,255,0.7);
+                        font-size: 0.8em;
+                        margin-top: 2px;
+                    ">💡 ${multiRowSuggestions}</div>
+                    ` : ''}
                 </div>
             </div>
         `;
+    }
+
+    /**
+     * 🆕 检测字段是否适合多行数据模式
+     * @param {string} fieldName - 字段名
+     * @returns {string|null} 建议文本或null
+     */
+    detectMultiRowSuggestion(fieldName) {
+        const fieldLower = fieldName.toLowerCase();
+        
+        // 适合多行数据的字段类型
+        const multiRowIndicators = {
+            '记录': '适合记录多个条目',
+            '历史': '适合记录历史事件',
+            '事件': '适合记录多个事件',
+            '经历': '适合记录多个经历',
+            '活动': '适合记录多个活动',
+            '对话': '适合记录对话内容',
+            'log': '适合记录日志条目',
+            'history': '适合记录历史记录',
+            'events': '适合记录事件列表',
+            'notes': '适合记录多条笔记',
+            'achievements': '适合记录多项成就'
+        };
+
+        for (const [keyword, suggestion] of Object.entries(multiRowIndicators)) {
+            if (fieldLower.includes(keyword)) {
+                return suggestion;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -3577,7 +3646,7 @@ export class InfoBarSettings {
     }
 
     /**
-     * 收集子项数据（简化版本）
+     * 收集子项数据（增强版：支持多行数据配置）
      */
     collectSubItemsData() {
         try {
@@ -3595,17 +3664,59 @@ export class InfoBarSettings {
                     const checkbox = this.modal.querySelector(`input[name="${subItemName}"]`);
                     const isEnabled = checkbox ? checkbox.checked : true; // 如果找不到复选框，默认启用
                     
+                    // 🆕 获取多行数据配置
+                    const multiRowCheckbox = this.modal.querySelector(`input[name="${subItemName}_multirow"]`);
+                    const isMultiRow = multiRowCheckbox ? multiRowCheckbox.checked : false;
+                    
                     const subItem = {
                         id: subItemId,
                         name: subItemName,
                         key: subItemName.toLowerCase().replace(/\s+/g, '_'), // 名称转换为键名
                         displayName: subItemName, // 保存用户输入的显示名称
                         enabled: isEnabled, // 🔧 修复：使用复选框的真实状态
+                        multiRow: isMultiRow, // 🆕 添加多行数据配置
                         value: '' // 添加默认值字段
                     };
                     
-                    console.log(`[InfoBarSettings] 📊 收集子项: ${subItemName} enabled=${isEnabled}`);
+                    console.log(`[InfoBarSettings] 📊 收集子项: ${subItemName} enabled=${isEnabled} multiRow=${isMultiRow}`);
                     subItems.push(subItem);
+                }
+            });
+
+            // 🆕 同时从现有的子项配置中收集多行数据设置
+            const existingSubItems = this.modal.querySelectorAll('.sub-item');
+            existingSubItems.forEach(subItemElement => {
+                const checkbox = subItemElement.querySelector('input[type="checkbox"]:not(.multirow-checkbox)');
+                const multiRowCheckbox = subItemElement.querySelector('.multirow-checkbox');
+                
+                if (checkbox && multiRowCheckbox) {
+                    const fieldName = checkbox.getAttribute('name');
+                    const isEnabled = checkbox.checked;
+                    const isMultiRow = multiRowCheckbox.checked;
+                    
+                    // 查找是否已在subItems中存在
+                    let existingSubItem = subItems.find(item => 
+                        item.name === fieldName || item.key === fieldName
+                    );
+                    
+                    if (existingSubItem) {
+                        // 更新已存在的子项
+                        existingSubItem.multiRow = isMultiRow;
+                        existingSubItem.enabled = isEnabled;
+                    } else {
+                        // 添加来自现有配置的子项（可能是基础面板的子项）
+                        const subItem = {
+                            id: `existing_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                            name: fieldName,
+                            key: fieldName.toLowerCase().replace(/\s+/g, '_'),
+                            displayName: fieldName,
+                            enabled: isEnabled,
+                            multiRow: isMultiRow,
+                            value: ''
+                        };
+                        subItems.push(subItem);
+                        console.log(`[InfoBarSettings] 📊 收集现有子项多行配置: ${fieldName} enabled=${isEnabled} multiRow=${isMultiRow}`);
+                    }
                 }
             });
 

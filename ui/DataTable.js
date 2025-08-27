@@ -165,6 +165,10 @@ export class DataTable {
                             <span class="record-count">共 <span class="count-number">0</span> 条记录</span>
                         </div>
                         <div class="footer-right">
+                            <button id="refill-data-btn" class="refill-data-btn">
+                                <i class="fa-solid fa-rotate-right"></i>
+                                重新填表
+                            </button>
                             <button id="generate-variables-btn" class="generate-variables-btn">
                                 <i class="fa-solid fa-code"></i>
                                 生成变量
@@ -1047,7 +1051,7 @@ export class DataTable {
     }
 
     /**
-     * 格式化单元格内容，控制文本长度和显示方式
+     * 格式化单元格内容，控制文本长度和显示方式（增强版：支持多行数据）
      */
     formatCellValue(value) {
         try {
@@ -1055,12 +1059,29 @@ export class DataTable {
                 return '';
             }
 
-            // 将值转换为字符串
+            // 🆕 检查是否为多行数据数组格式
+            if (Array.isArray(value)) {
+                return this.formatMultiRowArray(value);
+            }
+
+            // 🆕 检查是否为JSON格式的多行数据
+            if (typeof value === 'string' && value.trim().startsWith('[') && value.trim().endsWith(']')) {
+                try {
+                    const parsedArray = JSON.parse(value);
+                    if (Array.isArray(parsedArray)) {
+                        return this.formatMultiRowArray(parsedArray);
+                    }
+                } catch (e) {
+                    // 不是有效的JSON，按普通字符串处理
+                }
+            }
+
+            // 传统字符串处理
             const strValue = String(value);
 
             // 🔧 控制文本长度，避免单元格过高
-            const maxLength = 100; // 最大显示字符数
-            const maxLines = 3;    // 最大显示行数
+            const maxLength = 120; // 增加最大显示字符数以适应多行内容
+            const maxLines = 4;    // 增加最大显示行数
 
             // 处理换行符，限制行数
             const lines = strValue.split('\n');
@@ -1085,8 +1106,8 @@ export class DataTable {
 
             // 🔧 应用CSS样式，确保横向显示为主
             return `<div class="cell-content" style="
-                max-width: 300px;
-                max-height: 80px;
+                max-width: 350px;
+                max-height: 100px;
                 overflow: hidden;
                 white-space: pre-wrap;
                 word-wrap: break-word;
@@ -1094,13 +1115,93 @@ export class DataTable {
                 line-height: 1.4;
                 text-overflow: ellipsis;
                 display: -webkit-box;
-                -webkit-line-clamp: 3;
+                -webkit-line-clamp: 4;
                 -webkit-box-orient: vertical;
             ">${this.escapeHtml(result)}</div>`;
 
         } catch (error) {
             console.error('[DataTable] ❌ 格式化单元格内容失败:', error);
             return this.escapeHtml(String(value || ''));
+        }
+    }
+
+    /**
+     * 🆕 格式化多行数据数组
+     * @param {Array} dataArray - 多行数据数组
+     * @returns {string} 格式化后的HTML
+     */
+    formatMultiRowArray(dataArray) {
+        try {
+            if (!Array.isArray(dataArray) || dataArray.length === 0) {
+                return '';
+            }
+
+            const maxItems = 3; // 最多显示3个条目
+            const displayItems = dataArray.slice(0, maxItems);
+            const hasMoreItems = dataArray.length > maxItems;
+
+            // 构建显示内容
+            const itemsHtml = displayItems.map((item, index) => {
+                let content = '';
+                let timestamp = '';
+                
+                if (typeof item === 'string') {
+                    content = item;
+                } else if (typeof item === 'object' && item.content) {
+                    content = item.content;
+                    if (item.timestamp) {
+                        const date = new Date(item.timestamp);
+                        timestamp = date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+                    }
+                } else {
+                    content = String(item);
+                }
+
+                // 限制单个条目长度
+                if (content.length > 50) {
+                    content = content.substring(0, 47) + '...';
+                }
+
+                return `<div class="multirow-item" style="
+                    margin: 2px 0;
+                    padding: 2px 4px;
+                    background: rgba(255,255,255,0.05);
+                    border-radius: 3px;
+                    font-size: 0.9em;
+                    position: relative;
+                ">
+                    <span class="item-content">${this.escapeHtml(content)}</span>
+                    ${timestamp ? `<span class="item-timestamp" style="
+                        font-size: 0.8em;
+                        color: rgba(255,255,255,0.6);
+                        margin-left: 6px;
+                    ">${timestamp}</span>` : ''}
+                </div>`;
+            }).join('');
+
+            // 添加"更多"提示
+            const moreIndicator = hasMoreItems ? 
+                `<div class="multirow-more" style="
+                    font-size: 0.8em;
+                    color: rgba(255,255,255,0.7);
+                    text-align: center;
+                    margin-top: 4px;
+                    font-style: italic;
+                ">+${dataArray.length - maxItems} 更多条目</div>` : '';
+
+            return `<div class="multirow-container" style="
+                max-width: 350px;
+                max-height: 120px;
+                overflow: hidden;
+                line-height: 1.2;
+            ">
+                ${itemsHtml}
+                ${moreIndicator}
+            </div>`;
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 格式化多行数据数组失败:', error);
+            return this.escapeHtml(String(dataArray));
         }
     }
 
@@ -1272,6 +1373,15 @@ export class DataTable {
                 return;
             }
 
+            // 🆕 重新填表按钮点击事件
+            const refillDataBtn = e.target.closest('#refill-data-btn');
+            if (refillDataBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleRefillData(e);
+                return;
+            }
+
             // 🆕 生成变量按钮点击事件
             const generateVarsBtn = e.target.closest('#generate-variables-btn');
             if (generateVarsBtn) {
@@ -1424,6 +1534,125 @@ export class DataTable {
 
         } catch (error) {
             console.error('[DataTable] ❌ 处理字段名称点击失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理重新填表按钮点击
+     */
+    async handleRefillData(event) {
+        try {
+            console.log('[DataTable] 🔄 开始重新填表...');
+
+            // 防止重复点击
+            if (this._refillInProgress) {
+                console.warn('[DataTable] ⚠️ 重新填表已在进行中，忽略重复点击');
+                this.showNotification('⏳ 重新填表正在进行中，请耐心等待...', 'warning');
+                return;
+            }
+
+            // 设置进行中标志
+            this._refillInProgress = true;
+
+            // 显示加载状态
+            const button = event.target.closest('#refill-data-btn');
+            if (button) {
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 重新填表中...';
+                button.disabled = true;
+
+                try {
+                    // 🔧 获取最新的AI消息内容
+                    const latestAIMessage = this.getLatestAIMessage();
+                    if (!latestAIMessage) {
+                        throw new Error('未找到AI消息，无法重新生成数据');
+                    }
+
+                    console.log('[DataTable] 📝 获取到AI消息，长度:', latestAIMessage.length);
+
+                    // 🔧 获取InfoBarSettings实例并调用processWithCustomAPI
+                    const infoBarSettings = window.SillyTavernInfobar?.modules?.settings;
+                    if (!infoBarSettings || typeof infoBarSettings.processWithCustomAPI !== 'function') {
+                        throw new Error('InfoBarSettings模块未就绪，请稍后重试');
+                    }
+
+                    // 调用自定义API重新生成数据
+                    await infoBarSettings.processWithCustomAPI(latestAIMessage);
+
+                    // 显示成功状态
+                    button.innerHTML = '<i class="fa-solid fa-check"></i> 重新填表完成';
+                    this.showNotification('✅ 数据重新生成完成', 'success');
+
+                    // 2秒后恢复按钮状态
+                    setTimeout(() => {
+                        if (button) {
+                            button.innerHTML = originalText;
+                            button.disabled = false;
+                        }
+                    }, 2000);
+
+                    // 🔧 刷新数据表格显示
+                    setTimeout(() => {
+                        this.updateGroupedTablesData();
+                    }, 1000);
+
+                } catch (error) {
+                    console.error('[DataTable] ❌ 重新填表失败:', error);
+                    
+                    // 恢复按钮状态
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                    
+                    // 显示用户友好的错误消息
+                    let errorMessage = '❌ 重新填表失败';
+                    if (error.message?.includes('未找到AI消息')) {
+                        errorMessage = '❌ 未找到AI消息内容，请先进行一次对话';
+                    } else if (error.message?.includes('429')) {
+                        errorMessage = '❌ API请求过于频繁，请稍后再试';
+                    } else if (error.message?.includes('500')) {
+                        errorMessage = '❌ 服务器错误，请稍后重试';
+                    } else if (error.message?.includes('未就绪')) {
+                        errorMessage = '❌ 系统未就绪，请稍后重试';
+                    } else if (error.message) {
+                        errorMessage += ': ' + error.message;
+                    }
+                    
+                    this.showNotification(errorMessage, 'error');
+                }
+            }
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 处理重新填表失败:', error);
+            this.showNotification('❌ 重新填表功能出现错误', 'error');
+        } finally {
+            // 清除进行中标志
+            this._refillInProgress = false;
+        }
+    }
+
+    /**
+     * 🔧 获取最新的AI消息内容
+     */
+    getLatestAIMessage() {
+        try {
+            const context = SillyTavern.getContext();
+            if (!context || !context.chat || context.chat.length === 0) {
+                return null;
+            }
+
+            // 从后往前查找最新的AI消息
+            for (let i = context.chat.length - 1; i >= 0; i--) {
+                const message = context.chat[i];
+                if (message && message.is_user === false && message.mes) {
+                    console.log('[DataTable] ✅ 找到最新AI消息，位置:', i);
+                    return message.mes;
+                }
+            }
+
+            return null;
+        } catch (error) {
+            console.error('[DataTable] ❌ 获取最新AI消息失败:', error);
+            return null;
         }
     }
 
