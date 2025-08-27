@@ -334,7 +334,7 @@ export class UnifiedDataCore {
     }
 
     /**
-     * 按启用字段合并面板数据
+     * 按启用字段合并面板数据 (增强版：支持多行插入)
      * @param {string} panelId - 面板ID
      * @param {Object} existingData - 现有数据
      * @param {Object} newData - 新数据
@@ -355,6 +355,9 @@ export class UnifiedDataCore {
                 console.warn(`[UnifiedDataCore] ⚠️ 面板 ${panelId} 无配置，只保留新数据`);
                 return { ...newData };
             }
+
+            // 🆕 获取多行数据配置
+            const multiRowFields = this.getMultiRowFieldsConfig(panelId, panelConfig);
 
             // 收集启用字段键列表
             const enabledKeys = new Set();
@@ -390,6 +393,7 @@ export class UnifiedDataCore {
             }
 
             console.log(`[UnifiedDataCore] 🔍 面板 ${panelId} 启用字段:`, Array.from(enabledKeys));
+            console.log(`[UnifiedDataCore] 📋 面板 ${panelId} 多行字段:`, Array.from(multiRowFields));
 
             // 若启用列表为空，但新数据存在字段，采取宽松策略：直接接受新数据，避免丢失（常见于自定义面板配置未及时写入）
             if (enabledKeys.size === 0 && newData && Object.keys(newData).length > 0) {
@@ -422,15 +426,16 @@ export class UnifiedDataCore {
                 }
             });
             
-            // 2. 用新数据覆盖（只保留启用字段）
+            // 2. 🆕 智能合并新数据（支持多行插入模式）
             Object.keys(newData).forEach(fieldKey => {
                 let shouldInclude = false;
+                let baseFieldName = fieldKey;
                 
                 if (panelId === 'interaction') {
                     // 🔧 特殊处理：交互对象面板的动态NPC字段格式 (npcX.fieldName)
                     const npcFieldMatch = fieldKey.match(/^npc\d+\.(.+)$/);
                     if (npcFieldMatch) {
-                        const baseFieldName = npcFieldMatch[1];
+                        baseFieldName = npcFieldMatch[1];
                         shouldInclude = enabledKeys.has(baseFieldName);
                         if (shouldInclude) {
                             console.log(`[UnifiedDataCore] ✅ 交互对象动态字段合并: ${fieldKey} -> ${baseFieldName}`);
@@ -443,11 +448,21 @@ export class UnifiedDataCore {
                 }
                 
                 if (shouldInclude) {
-                    result[fieldKey] = newData[fieldKey];
+                    // 🆕 检查是否为多行数据字段
+                    if (multiRowFields.has(baseFieldName)) {
+                        result[fieldKey] = this.mergeMultiRowData(fieldKey, result[fieldKey], newData[fieldKey], panelId);
+                    } else {
+                        // 传统覆盖模式
+                        result[fieldKey] = newData[fieldKey];
+                    }
                 }
             });
 
             console.log(`[UnifiedDataCore] ✅ 面板 ${panelId} 过滤合并: ${Object.keys(existingData).length} + ${Object.keys(newData).length} -> ${Object.keys(result).length}`);
+
+            // 🧠 自动添加历史记录（用于AI记忆增强）
+            await this.recordDataChangeForMemory(panelId, existingData, result, newData);
+
             return result;
 
         } catch (error) {
@@ -455,6 +470,209 @@ export class UnifiedDataCore {
             // 降级到只保留新数据
             return { ...newData };
         }
+    }
+
+    /**
+     * 🆕 获取多行数据字段配置
+     * @param {string} panelId - 面板ID
+     * @param {Object} panelConfig - 面板配置
+     * @returns {Set} 支持多行数据的字段集合
+     */
+    getMultiRowFieldsConfig(panelId, panelConfig) {
+        const multiRowFields = new Set();
+        
+        try {
+            // 🆕 默认多行数据字段配置
+            const defaultMultiRowFields = {
+                'personal': ['经历记录', 'experience_log', '重要事件', 'important_events'],
+                'world': ['位置记录', 'locations', '事件记录', 'events_log'], 
+                'interaction': ['对话记录', 'conversation_log', '互动历史', 'interaction_history'],
+                'tasks': ['任务记录', 'task_log', '完成记录', 'completion_log'],
+                'news': ['新闻事件', 'news_events', '事件记录', 'event_log'],
+                'plot': ['剧情发展', 'plot_development', '重要节点', 'key_moments'],
+                'organization': ['成员记录', 'member_log', '活动记录', 'activity_log']
+            };
+
+            // 添加面板默认的多行字段
+            if (defaultMultiRowFields[panelId]) {
+                defaultMultiRowFields[panelId].forEach(field => {
+                    multiRowFields.add(field);
+                });
+            }
+
+            // 🆕 从面板配置中检测多行字段（通过配置标识）
+            if (panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
+                panelConfig.subItems.forEach(subItem => {
+                    if (subItem && subItem.multiRow === true) {
+                        const key = subItem.key || subItem.name || subItem.id;
+                        if (key) {
+                            multiRowFields.add(key);
+                            console.log(`[UnifiedDataCore] 📋 从配置检测到多行字段: ${panelId}.${key}`);
+                        }
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取多行字段配置失败:', error);
+        }
+
+        return multiRowFields;
+    }
+
+    /**
+     * 🆕 合并多行数据
+     * @param {string} fieldKey - 字段键
+     * @param {any} existingValue - 现有值
+     * @param {any} newValue - 新值
+     * @param {string} panelId - 面板ID
+     * @returns {any} 合并后的值
+     */
+    mergeMultiRowData(fieldKey, existingValue, newValue, panelId) {
+        try {
+            console.log(`[UnifiedDataCore] 🔗 合并多行数据: ${panelId}.${fieldKey}`);
+            
+            // 如果新值为空，保持现有值
+            if (!newValue || (typeof newValue === 'string' && newValue.trim() === '')) {
+                console.log(`[UnifiedDataCore] ℹ️ 新值为空，保持现有值`);
+                return existingValue;
+            }
+
+            // 🆕 智能检测是否为增量追加模式
+            const isAppendMode = this.detectAppendMode(newValue);
+            
+            if (isAppendMode) {
+                console.log(`[UnifiedDataCore] 📝 检测到增量追加模式`);
+                return this.appendToMultiRowData(existingValue, newValue);
+            } else {
+                // 🆕 检查是否需要转换为数组格式
+                if (!Array.isArray(existingValue) && existingValue) {
+                    console.log(`[UnifiedDataCore] 🔄 转换现有数据为多行格式`);
+                    const convertedExisting = this.convertToMultiRowArray(existingValue);
+                    const convertedNew = this.convertToMultiRowArray(newValue);
+                    return this.mergeMultiRowArrays(convertedExisting, convertedNew);
+                }
+                
+                // 传统覆盖模式（向后兼容）
+                console.log(`[UnifiedDataCore] 🔄 使用传统覆盖模式`);
+                return newValue;
+            }
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 合并多行数据失败:', error);
+            // 降级到传统覆盖模式
+            return newValue;
+        }
+    }
+
+    /**
+     * 🆕 检测是否为增量追加模式
+     * @param {any} newValue - 新值
+     * @returns {boolean} 是否为追加模式
+     */
+    detectAppendMode(newValue) {
+        if (typeof newValue !== 'string') return false;
+        
+        // 🆕 检测追加关键词和格式
+        const appendIndicators = [
+            /^\+\s*/, // 以"+"开头
+            /^追加[:：]\s*/, // 以"追加:"开头
+            /^新增[:：]\s*/, // 以"新增:"开头
+            /^\d{1,2}[\.、]\s*/, // 以数字编号开头(1. 2、)
+            /^[●○▪▫►‣]\s*/, // 以列表符号开头
+            /^[-–—]\s*/, // 以破折号开头
+        ];
+
+        return appendIndicators.some(pattern => pattern.test(newValue.trim()));
+    }
+
+    /**
+     * 🆕 追加到多行数据
+     * @param {any} existingValue - 现有值
+     * @param {string} newValue - 新值
+     * @returns {Array} 追加后的数组
+     */
+    appendToMultiRowData(existingValue, newValue) {
+        // 将现有数据转换为数组
+        let existingArray = [];
+        if (Array.isArray(existingValue)) {
+            existingArray = [...existingValue];
+        } else if (existingValue && typeof existingValue === 'string') {
+            existingArray = this.convertToMultiRowArray(existingValue);
+        }
+
+        // 清理和格式化新值
+        const cleanedNewValue = newValue.replace(/^[+追加新增][:：]?\s*/, '').trim();
+        
+        // 检查是否已存在相同内容（避免重复）
+        const isDuplicate = existingArray.some(item => {
+            const itemContent = typeof item === 'string' ? item : item.content || item;
+            return itemContent.includes(cleanedNewValue) || cleanedNewValue.includes(itemContent);
+        });
+        
+        if (!isDuplicate) {
+            existingArray.push({
+                content: cleanedNewValue,
+                timestamp: Date.now(),
+                source: 'AI_APPEND'
+            });
+            
+            console.log(`[UnifiedDataCore] ✅ 已追加新内容:`, cleanedNewValue.substring(0, 50));
+        } else {
+            console.log(`[UnifiedDataCore] ℹ️ 内容已存在，跳过追加`);
+        }
+
+        return existingArray;
+    }
+
+    /**
+     * 🆕 将字符串内容转换为多行数组
+     * @param {string} value - 字符串值
+     * @returns {Array} 转换后的数组
+     */
+    convertToMultiRowArray(value) {
+        if (!value || typeof value !== 'string') return [];
+        
+        // 按行分割并清理
+        const lines = value.split(/\n|；|;/).filter(line => line.trim());
+        
+        return lines.map(line => ({
+            content: line.trim(),
+            timestamp: Date.now(),
+            source: 'LEGACY_CONVERSION'
+        }));
+    }
+
+    /**
+     * 🆕 合并多行数组数据
+     * @param {Array} existingArray - 现有数组
+     * @param {Array} newArray - 新数组
+     * @returns {Array} 合并后的数组
+     */
+    mergeMultiRowArrays(existingArray, newArray) {
+        if (!Array.isArray(existingArray)) existingArray = [];
+        if (!Array.isArray(newArray)) newArray = [];
+        
+        const mergedArray = [...existingArray];
+        
+        newArray.forEach(newItem => {
+            // 避免重复内容
+            const isDuplicate = mergedArray.some(existing => 
+                existing.content === newItem.content || 
+                existing.content.includes(newItem.content) ||
+                newItem.content.includes(existing.content)
+            );
+            
+            if (!isDuplicate) {
+                mergedArray.push({
+                    ...newItem,
+                    timestamp: Date.now(),
+                    source: 'AI_MERGE'
+                });
+            }
+        });
+        
+        return mergedArray;
     }
 
     /**
@@ -1308,6 +1526,568 @@ export class UnifiedDataCore {
             console.error('[UnifiedDataCore] ❌ 获取聊天数据失败:', error);
             return {};
         }
+    }
+
+    /**
+     * 🧠 获取聊天历史记录（用于AI记忆增强）
+     * @param {string} chatId - 聊天ID
+     * @returns {Array} 历史记录数组
+     */
+    async getChatHistory(chatId) {
+        try {
+            if (!chatId) {
+                console.warn('[UnifiedDataCore] ⚠️ 聊天ID为空');
+                return [];
+            }
+
+            const chatData = await this.getChatData(chatId);
+            if (!chatData || !chatData.infobar_data) {
+                return [];
+            }
+
+            // 返回历史记录，如果没有则返回空数组
+            return chatData.infobar_data.history || [];
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取聊天历史记录失败:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 🔒 获取持久化记忆数据（跨对话）
+     * @returns {Object} 持久化记忆数据
+     */
+    async getPersistentMemory() {
+        try {
+            const persistentData = await this.getData('persistent_memory', 'global');
+            return persistentData || {};
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取持久化记忆失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 🔒 设置持久化记忆数据（跨对话）
+     * @param {Object} memoryData - 记忆数据
+     */
+    async setPersistentMemory(memoryData) {
+        try {
+            await this.setData('persistent_memory', memoryData, 'global');
+            console.log('[UnifiedDataCore] 🔒 持久化记忆数据已保存');
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 保存持久化记忆失败:', error);
+        }
+    }
+
+    /**
+     * 📝 添加历史记录条目
+     * @param {string} chatId - 聊天ID
+     * @param {Object} historyEntry - 历史记录条目
+     */
+    async addHistoryEntry(chatId, historyEntry) {
+        try {
+            if (!chatId || !historyEntry) {
+                return;
+            }
+
+            const chatData = await this.getChatData(chatId);
+            if (!chatData.infobar_data) {
+                chatData.infobar_data = { panels: {}, history: [], lastUpdated: 0 };
+            }
+
+            if (!chatData.infobar_data.history) {
+                chatData.infobar_data.history = [];
+            }
+
+            // 添加时间戳
+            const entry = {
+                ...historyEntry,
+                timestamp: Date.now(),
+                id: this.generateHistoryId()
+            };
+
+            // 添加到历史记录
+            chatData.infobar_data.history.push(entry);
+
+            // 限制历史记录数量（保留最近50条）
+            if (chatData.infobar_data.history.length > 50) {
+                chatData.infobar_data.history = chatData.infobar_data.history.slice(-50);
+            }
+
+            // 保存更新后的数据
+            await this.setChatData(chatId, chatData);
+
+            console.log(`[UnifiedDataCore] 📝 历史记录已添加: ${entry.id}`);
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 添加历史记录失败:', error);
+        }
+    }
+
+    /**
+     * 🆔 生成历史记录ID
+     */
+    generateHistoryId() {
+        return `hist_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    }
+
+    /**
+     * 🧠 记录数据变更用于AI记忆增强
+     * @param {string} panelId - 面板ID
+     * @param {Object} existingData - 原有数据
+     * @param {Object} resultData - 合并后数据
+     * @param {Object} newData - 新数据
+     */
+    async recordDataChangeForMemory(panelId, existingData, resultData, newData) {
+        try {
+            const currentChatId = this.getCurrentChatId();
+            if (!currentChatId) {
+                return;
+            }
+
+            // 检测是否有实际数据变更
+            const hasChanges = this.detectDataChanges(existingData, resultData);
+            if (!hasChanges) {
+                return;
+            }
+
+            // 创建历史记录条目
+            const historyEntry = {
+                panelId: panelId,
+                type: 'data_change',
+                changes: this.calculateDataChanges(existingData, resultData),
+                panels: {
+                    [panelId]: resultData
+                },
+                source: newData.source || 'ai-message',
+                importance: this.calculateChangeImportance(existingData, resultData),
+                metadata: {
+                    fieldCount: Object.keys(resultData).length,
+                    changeCount: Object.keys(this.calculateDataChanges(existingData, resultData)).length,
+                    chatId: currentChatId
+                }
+            };
+
+            // 添加到历史记录
+            await this.addHistoryEntry(currentChatId, historyEntry);
+
+            // 更新持久化记忆（重要数据）
+            if (historyEntry.importance > 0.7) {
+                await this.updatePersistentMemory(panelId, resultData, historyEntry.importance);
+            }
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 记录数据变更失败:', error);
+        }
+    }
+
+    /**
+     * 🔍 检测数据变更
+     */
+    detectDataChanges(oldData, newData) {
+        const oldKeys = Object.keys(oldData || {});
+        const newKeys = Object.keys(newData || {});
+
+        // 检查键数量变化
+        if (oldKeys.length !== newKeys.length) {
+            return true;
+        }
+
+        // 检查值变化
+        for (const key of newKeys) {
+            if (oldData[key] !== newData[key]) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 📊 计算数据变更详情
+     */
+    calculateDataChanges(oldData, newData) {
+        const changes = {};
+        const oldKeys = new Set(Object.keys(oldData || {}));
+        const newKeys = new Set(Object.keys(newData || {}));
+
+        // 新增字段
+        for (const key of newKeys) {
+            if (!oldKeys.has(key)) {
+                changes[key] = { type: 'added', value: newData[key] };
+            } else if (oldData[key] !== newData[key]) {
+                changes[key] = { type: 'modified', oldValue: oldData[key], newValue: newData[key] };
+            }
+        }
+
+        // 删除字段
+        for (const key of oldKeys) {
+            if (!newKeys.has(key)) {
+                changes[key] = { type: 'removed', oldValue: oldData[key] };
+            }
+        }
+
+        return changes;
+    }
+
+    /**
+     * 📈 计算变更重要性
+     */
+    calculateChangeImportance(oldData, newData) {
+        const changes = this.calculateDataChanges(oldData, newData);
+        const changeCount = Object.keys(changes).length;
+        const totalFields = Math.max(Object.keys(oldData || {}).length, Object.keys(newData || {}).length);
+
+        if (totalFields === 0) return 0;
+
+        // 基础重要性：变更字段比例
+        let importance = changeCount / totalFields;
+
+        // 新增字段权重更高
+        const addedCount = Object.values(changes).filter(c => c.type === 'added').length;
+        importance += addedCount * 0.2;
+
+        // 限制在0-1范围内
+        return Math.min(importance, 1.0);
+    }
+
+    /**
+     * 🔒 更新持久化记忆
+     */
+    async updatePersistentMemory(panelId, data, importance) {
+        try {
+            const persistentMemory = await this.getPersistentMemory();
+
+            if (!persistentMemory[panelId]) {
+                persistentMemory[panelId] = {};
+            }
+
+            // 只保存重要字段到持久化记忆
+            for (const [key, value] of Object.entries(data)) {
+                if (this.isImportantField(key, value)) {
+                    persistentMemory[panelId][key] = {
+                        value: value,
+                        importance: importance,
+                        lastUpdated: Date.now(),
+                        updateCount: (persistentMemory[panelId][key]?.updateCount || 0) + 1
+                    };
+                }
+            }
+
+            await this.setPersistentMemory(persistentMemory);
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 更新持久化记忆失败:', error);
+        }
+    }
+
+    /**
+     * 🎯 判断是否为重要字段
+     */
+    isImportantField(key, value) {
+        // 排除临时字段
+        if (['lastUpdated', 'source', 'timestamp'].includes(key)) {
+            return false;
+        }
+
+        // 排除空值
+        if (!value || (typeof value === 'string' && value.trim() === '')) {
+            return false;
+        }
+
+        // 重要字段关键词
+        const importantKeywords = ['name', 'status', 'health', 'mood', 'location', 'relationship', 'goal', 'personality'];
+        const keyLower = key.toLowerCase();
+
+        return importantKeywords.some(keyword => keyLower.includes(keyword));
+    }
+
+    /**
+     * 🔍 语义搜索记忆数据（基础实现）
+     * @param {string} query - 搜索查询
+     * @param {Object} options - 搜索选项
+     * @returns {Array} 搜索结果
+     */
+    async searchMemories(query, options = {}) {
+        try {
+            const {
+                chatId = this.getCurrentChatId(),
+                limit = 10,
+                minRelevance = 0.3,
+                includeHistorical = true,
+                includePersistent = true
+            } = options;
+
+            console.log(`[UnifiedDataCore] 🔍 开始语义搜索: "${query}"`);
+
+            const results = [];
+            const queryLower = query.toLowerCase();
+            const queryWords = queryLower.split(/\s+/).filter(word => word.length > 1);
+
+            // 1. 搜索历史记忆
+            if (includeHistorical && chatId) {
+                const history = await this.getChatHistory(chatId);
+                for (const entry of history) {
+                    const relevance = this.calculateTextRelevance(query, entry, queryWords);
+                    if (relevance >= minRelevance) {
+                        results.push({
+                            type: 'historical',
+                            relevance: relevance,
+                            timestamp: entry.timestamp,
+                            data: entry,
+                            source: 'chat_history'
+                        });
+                    }
+                }
+            }
+
+            // 2. 搜索持久化记忆
+            if (includePersistent) {
+                const persistentMemory = await this.getPersistentMemory();
+                for (const [panelId, panelData] of Object.entries(persistentMemory)) {
+                    for (const [fieldKey, fieldData] of Object.entries(panelData)) {
+                        const relevance = this.calculateFieldRelevance(query, fieldKey, fieldData, queryWords);
+                        if (relevance >= minRelevance) {
+                            results.push({
+                                type: 'persistent',
+                                relevance: relevance,
+                                panelId: panelId,
+                                fieldKey: fieldKey,
+                                data: fieldData,
+                                source: 'persistent_memory'
+                            });
+                        }
+                    }
+                }
+            }
+
+            // 3. 搜索当前数据
+            const currentData = await this.getAllPanelData();
+            for (const [panelId, panelData] of Object.entries(currentData)) {
+                for (const [fieldKey, fieldValue] of Object.entries(panelData)) {
+                    const relevance = this.calculateCurrentDataRelevance(query, fieldKey, fieldValue, queryWords);
+                    if (relevance >= minRelevance) {
+                        results.push({
+                            type: 'current',
+                            relevance: relevance,
+                            panelId: panelId,
+                            fieldKey: fieldKey,
+                            value: fieldValue,
+                            source: 'current_data'
+                        });
+                    }
+                }
+            }
+
+            // 按相关性排序并限制结果数量
+            const sortedResults = results
+                .sort((a, b) => b.relevance - a.relevance)
+                .slice(0, limit);
+
+            console.log(`[UnifiedDataCore] 🔍 语义搜索完成: 找到 ${sortedResults.length} 个相关结果`);
+            return sortedResults;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 语义搜索失败:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 📊 计算文本相关性（历史记录）
+     */
+    calculateTextRelevance(query, entry, queryWords) {
+        let relevance = 0;
+        const queryLower = query.toLowerCase();
+
+        // 检查面板数据
+        if (entry.panels) {
+            for (const panelData of Object.values(entry.panels)) {
+                for (const [key, value] of Object.entries(panelData)) {
+                    const textContent = `${key} ${value}`.toLowerCase();
+
+                    // 完全匹配加分
+                    if (textContent.includes(queryLower)) {
+                        relevance += 0.8;
+                    }
+
+                    // 关键词匹配
+                    const matchedWords = queryWords.filter(word => textContent.includes(word));
+                    relevance += (matchedWords.length / queryWords.length) * 0.6;
+                }
+            }
+        }
+
+        // 检查变更信息
+        if (entry.changes) {
+            for (const change of Object.values(entry.changes)) {
+                const changeText = JSON.stringify(change).toLowerCase();
+                if (changeText.includes(queryLower)) {
+                    relevance += 0.5;
+                }
+            }
+        }
+
+        // 重要性加权
+        if (entry.importance) {
+            relevance *= (1 + entry.importance * 0.5);
+        }
+
+        return Math.min(relevance, 1.0);
+    }
+
+    /**
+     * 📊 计算字段相关性（持久化记忆）
+     */
+    calculateFieldRelevance(query, fieldKey, fieldData, queryWords) {
+        const queryLower = query.toLowerCase();
+        const textContent = `${fieldKey} ${fieldData.value}`.toLowerCase();
+
+        let relevance = 0;
+
+        // 完全匹配
+        if (textContent.includes(queryLower)) {
+            relevance += 0.9;
+        }
+
+        // 关键词匹配
+        const matchedWords = queryWords.filter(word => textContent.includes(word));
+        relevance += (matchedWords.length / queryWords.length) * 0.7;
+
+        // 重要性和更新频率加权
+        if (fieldData.importance) {
+            relevance *= (1 + fieldData.importance * 0.3);
+        }
+
+        if (fieldData.updateCount > 1) {
+            relevance *= 1.2; // 经常更新的字段更重要
+        }
+
+        return Math.min(relevance, 1.0);
+    }
+
+    /**
+     * 📊 计算当前数据相关性
+     */
+    calculateCurrentDataRelevance(query, fieldKey, fieldValue, queryWords) {
+        const queryLower = query.toLowerCase();
+        const textContent = `${fieldKey} ${fieldValue}`.toLowerCase();
+
+        let relevance = 0;
+
+        // 完全匹配
+        if (textContent.includes(queryLower)) {
+            relevance += 0.7;
+        }
+
+        // 关键词匹配
+        const matchedWords = queryWords.filter(word => textContent.includes(word));
+        relevance += (matchedWords.length / queryWords.length) * 0.5;
+
+        // 重要字段加权
+        if (this.isImportantField(fieldKey, fieldValue)) {
+            relevance *= 1.3;
+        }
+
+        return Math.min(relevance, 1.0);
+    }
+
+    /**
+     * 🧠 智能记忆检索（基于上下文）
+     * @param {string} context - 当前上下文
+     * @param {Object} options - 检索选项
+     * @returns {Object} 检索结果
+     */
+    async intelligentMemoryRetrieval(context, options = {}) {
+        try {
+            const {
+                maxResults = 5,
+                includeRecentHistory = true,
+                includePersistentMemory = true,
+                contextWindow = 3
+            } = options;
+
+            console.log(`[UnifiedDataCore] 🧠 开始智能记忆检索...`);
+
+            // 提取上下文关键词
+            const contextKeywords = this.extractContextKeywords(context);
+
+            const retrievalResults = {
+                relevantMemories: [],
+                contextKeywords: contextKeywords,
+                retrievalStrategy: 'intelligent',
+                timestamp: Date.now()
+            };
+
+            // 基于关键词搜索相关记忆
+            for (const keyword of contextKeywords) {
+                const searchResults = await this.searchMemories(keyword, {
+                    limit: Math.ceil(maxResults / contextKeywords.length),
+                    minRelevance: 0.4,
+                    includeHistorical: includeRecentHistory,
+                    includePersistent: includePersistentMemory
+                });
+
+                retrievalResults.relevantMemories.push(...searchResults);
+            }
+
+            // 去重并按相关性排序
+            const uniqueMemories = this.deduplicateMemories(retrievalResults.relevantMemories);
+            retrievalResults.relevantMemories = uniqueMemories
+                .sort((a, b) => b.relevance - a.relevance)
+                .slice(0, maxResults);
+
+            console.log(`[UnifiedDataCore] 🧠 智能记忆检索完成: 找到 ${retrievalResults.relevantMemories.length} 个相关记忆`);
+            return retrievalResults;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 智能记忆检索失败:', error);
+            return {
+                relevantMemories: [],
+                contextKeywords: [],
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * 🔤 提取上下文关键词
+     */
+    extractContextKeywords(context) {
+        if (!context || typeof context !== 'string') {
+            return [];
+        }
+
+        // 简单的关键词提取（可以后续用更复杂的NLP算法替换）
+        const words = context.toLowerCase()
+            .replace(/[^\w\s\u4e00-\u9fff]/g, ' ') // 保留中英文字符
+            .split(/\s+/)
+            .filter(word => word.length > 1);
+
+        // 移除常见停用词
+        const stopWords = new Set(['the', 'is', 'at', 'which', 'on', 'and', 'or', 'but', 'in', 'with', 'to', 'for', 'of', 'as', 'by', '的', '了', '在', '是', '我', '你', '他', '她', '它']);
+
+        const keywords = words.filter(word => !stopWords.has(word));
+
+        // 返回前5个最有意义的关键词
+        return [...new Set(keywords)].slice(0, 5);
+    }
+
+    /**
+     * 🔄 去重记忆结果
+     */
+    deduplicateMemories(memories) {
+        const seen = new Set();
+        return memories.filter(memory => {
+            const key = `${memory.type}_${memory.panelId || ''}_${memory.fieldKey || ''}_${JSON.stringify(memory.data || memory.value)}`;
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
     }
 
     /**

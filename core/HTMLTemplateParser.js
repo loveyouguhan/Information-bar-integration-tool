@@ -33,7 +33,8 @@ export class HTMLTemplateParser {
             conditionalEnd: /\{\{\/if\}\}/g,           // {{/if}}
             loopStart: /\{\{#each\s+([^}]+)\}\}/g,     // {{#each array}}
             loopEnd: /\{\{\/each\}\}/g,                // {{/each}}
-            computedField: /\{\{computed\.([^}]+)\}\}/g // {{computed.field}}
+            computedField: /\{\{computed\.([^}]+)\}\}/g, // {{computed.field}}
+            fieldDirective: /\{\{field:([^}]+)\}\}/g   // {{field:panelName.fieldName}} - 🆕 直接字段读取指令
         };
 
         // 🛡️ 安全配置
@@ -226,6 +227,11 @@ export class HTMLTemplateParser {
                 } else if (expr.startsWith('computed.')) {
                     compiled.hasComputedFields = true;
                     compiled.dependencies.add(expr);
+                } else if (expr.startsWith('field:')) {
+                    // 🆕 分析字段指令依赖
+                    compiled.hasFieldDirectives = true;
+                    compiled.dependencies.add(expr);
+                    console.log('[HTMLTemplateParser] 🎯 检测到字段指令依赖:', expr);
                 }
             }
         });
@@ -450,6 +456,12 @@ export class HTMLTemplateParser {
      */
     evaluateExpression(expression, data) {
         try {
+            // 🆕 处理直接字段读取指令 field:panelName.fieldName
+            if (expression.startsWith('field:')) {
+                const fieldPath = expression.substring(6); // 去掉 'field:' 前缀
+                return this.getDirectFieldValue(fieldPath);
+            }
+
             // 🔧 修复：支持 || 运算符（默认值语法）
             if (expression.includes(' || ')) {
                 const parts = expression.split(' || ');
@@ -501,6 +513,115 @@ export class HTMLTemplateParser {
             return expression;
         } catch (error) {
             console.warn('[HTMLTemplateParser] ⚠️ 表达式计算失败:', expression, error);
+            return '';
+        }
+    }
+
+    /**
+     * 🆕 直接获取字段值 - 核心优化功能
+     * @param {string} fieldPath - 字段路径 panelName.fieldName
+     * @returns {any} 字段值
+     */
+    getDirectFieldValue(fieldPath) {
+        try {
+            console.log('[HTMLTemplateParser] 🎯 直接读取字段:', fieldPath);
+
+            // 解析字段路径 panelName.fieldName
+            const parts = fieldPath.split('.');
+            if (parts.length !== 2) {
+                console.warn('[HTMLTemplateParser] ⚠️ 字段路径格式错误，应为 panelName.fieldName:', fieldPath);
+                return '';
+            }
+
+            const [panelName, fieldName] = parts;
+
+            // 获取数据核心
+            if (!this.unifiedDataCore) {
+                console.warn('[HTMLTemplateParser] ⚠️ 数据核心不可用');
+                return '';
+            }
+
+            // 直接从数据核心的数据Map中同步读取面板数据
+            let panelData = null;
+            
+            // 方式1: 直接从数据核心的data Map读取
+            if (this.unifiedDataCore.data && this.unifiedDataCore.data instanceof Map) {
+                panelData = this.unifiedDataCore.data.get(panelName);
+            }
+            
+            // 方式2: 如果Map中没有，尝试从缓存的记忆数据中读取
+            if (!panelData && this.unifiedDataCore.getMemoryData) {
+                try {
+                    const memoryData = this.unifiedDataCore.getMemoryData();
+                    // 如果getMemoryData返回Promise，这里会有问题，但我们先用同步方式尝试
+                    if (memoryData && typeof memoryData.then !== 'function') {
+                        panelData = memoryData[panelName];
+                    }
+                } catch (error) {
+                    console.warn('[HTMLTemplateParser] ⚠️ 读取记忆数据失败:', error);
+                }
+            }
+            
+            // 方式3: 最后尝试直接访问缓存的最近条目
+            if (!panelData && this.unifiedDataCore.recentEntries && Array.isArray(this.unifiedDataCore.recentEntries)) {
+                // 查找最新的条目中是否有该面板的数据
+                if (this.unifiedDataCore.recentEntries.infobar_data && this.unifiedDataCore.recentEntries.infobar_data.panels) {
+                    panelData = this.unifiedDataCore.recentEntries.infobar_data.panels[panelName];
+                }
+            }
+            
+            if (!panelData) {
+                console.warn(`[HTMLTemplateParser] ⚠️ 面板数据不存在: ${panelName}`);
+                return '';
+            }
+
+            // 支持中文字段名访问
+            let fieldValue = panelData[fieldName];
+            
+            // 如果直接访问失败，尝试通过字段映射查找
+            if (fieldValue === undefined || fieldValue === null) {
+                // 获取InfoBarSettings模块来处理字段名映射
+                const infoBarTool = window.SillyTavernInfobar;
+                const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+                
+                if (infoBarSettings) {
+                    // 尝试获取英文字段名
+                    const englishFieldName = infoBarSettings.getEnglishFieldName?.(fieldName, panelName);
+                    if (englishFieldName && englishFieldName !== fieldName) {
+                        fieldValue = panelData[englishFieldName];
+                        console.log(`[HTMLTemplateParser] 🔄 字段名映射: ${fieldName} -> ${englishFieldName}, 值: ${fieldValue}`);
+                    }
+                    
+                    // 如果还没找到，尝试反向映射（从英文找中文）
+                    if ((fieldValue === undefined || fieldValue === null) && infoBarSettings.getChineseFieldName) {
+                        const chineseFieldName = infoBarSettings.getChineseFieldName(fieldName, panelName);
+                        if (chineseFieldName && chineseFieldName !== fieldName) {
+                            fieldValue = panelData[chineseFieldName];
+                            console.log(`[HTMLTemplateParser] 🔄 反向字段名映射: ${fieldName} -> ${chineseFieldName}, 值: ${fieldValue}`);
+                        }
+                    }
+                }
+            }
+
+            // 如果仍然找不到，尝试在面板数据中查找所有可能的键
+            if (fieldValue === undefined || fieldValue === null) {
+                // 遍历面板数据的所有键，寻找匹配项
+                for (const [key, value] of Object.entries(panelData)) {
+                    if (key.toLowerCase() === fieldName.toLowerCase() || 
+                        key.replace(/[_\s]/g, '') === fieldName.replace(/[_\s]/g, '')) {
+                        fieldValue = value;
+                        console.log(`[HTMLTemplateParser] 🔍 模糊匹配字段: ${fieldName} -> ${key}, 值: ${fieldValue}`);
+                        break;
+                    }
+                }
+            }
+
+            const result = fieldValue !== undefined && fieldValue !== null ? String(fieldValue) : '';
+            console.log(`[HTMLTemplateParser] ✅ 字段读取结果: ${panelName}.${fieldName} = "${result}"`);
+            return result;
+
+        } catch (error) {
+            console.error('[HTMLTemplateParser] ❌ 直接读取字段失败:', fieldPath, error);
             return '';
         }
     }
@@ -830,6 +951,76 @@ export class HTMLTemplateParser {
                             ">×{{this.quantity}}</div>
                         </div>
                         {{/each}}
+                    </div>
+                </div>
+            `,
+            'field-directive-demo': `
+                <div class="field-directive-demo" style="
+                    background: #f0f8ff; 
+                    border: 2px solid #4a90e2; 
+                    border-radius: 10px; 
+                    padding: 20px; 
+                    color: #333;
+                    max-width: 100%; 
+                    box-sizing: border-box;
+                ">
+                    <h4 style="
+                        margin: 0 0 15px 0; 
+                        color: #2c5aa0; 
+                        text-align: center;
+                        font-size: 16px;
+                    ">
+                        <i class="fas fa-magic" style="margin-right: 8px;"></i>
+                        字段指令演示
+                    </h4>
+                    <div class="demo-content" style="
+                        display: grid; 
+                        gap: 12px;
+                        font-size: 14px;
+                        line-height: 1.4;
+                    ">
+                        <div class="demo-item" style="
+                            background: white; 
+                            padding: 10px; 
+                            border-radius: 6px; 
+                            border-left: 4px solid #4a90e2;
+                        ">
+                            <strong>个人信息:</strong> {{field:personal.姓名}} - {{field:personal.年龄}}岁
+                        </div>
+                        <div class="demo-item" style="
+                            background: white; 
+                            padding: 10px; 
+                            border-radius: 6px; 
+                            border-left: 4px solid #28a745;
+                        ">
+                            <strong>位置:</strong> {{field:world.地点}} ({{field:world.天气}})
+                        </div>
+                        <div class="demo-item" style="
+                            background: white; 
+                            padding: 10px; 
+                            border-radius: 6px; 
+                            border-left: 4px solid #ffc107;
+                        ">
+                            <strong>状态:</strong> HP {{field:personal.生命值}} / {{field:personal.最大生命值}}
+                        </div>
+                        <div class="demo-item" style="
+                            background: white; 
+                            padding: 10px; 
+                            border-radius: 6px; 
+                            border-left: 4px solid #dc3545;
+                        ">
+                            <strong>任务:</strong> {{field:tasks.当前任务}} ({{field:tasks.进度}})
+                        </div>
+                    </div>
+                    <div style="
+                        margin-top: 15px; 
+                        padding-top: 15px; 
+                        border-top: 1px solid #ddd; 
+                        font-size: 12px; 
+                        color: #666; 
+                        text-align: center;
+                    ">
+                        💡 使用 {{field:面板名.字段名}} 直接读取任意面板字段
                     </div>
                 </div>
             `

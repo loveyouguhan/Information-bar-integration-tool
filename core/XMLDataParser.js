@@ -196,28 +196,31 @@ export class XMLDataParser {
             
             // 验证和清理数据
             const validatedData = this.validateAndCleanData(parsedData);
-            
+
+            // 🔧 新增：检测并修复交互面板的NPC信息混合问题
+            const fixedData = this.fixNpcDataMixing(validatedData);
+
             this.parseStats.successfulParsed++;
             this.parseStats.lastParseTime = Date.now();
-            
-            console.log('[XMLDataParser] ✅ infobar_data解析成功，包含', Object.keys(validatedData).length, '个面板');
+
+            console.log('[XMLDataParser] ✅ infobar_data解析成功，包含', Object.keys(fixedData).length, '个面板');
 
             // 🔧 优化：缓存解析结果
             if (options.messageId) {
                 const cacheKey = this.generateCacheKey(messageContent, options.messageId);
-                this.cacheParseResult(cacheKey, validatedData);
+                this.cacheParseResult(cacheKey, fixedData);
             }
 
             // 触发解析完成事件
             if (this.eventSystem) {
                 this.eventSystem.emit('xml:data:parsed', {
-                    data: validatedData,
+                    data: fixedData,
                     timestamp: Date.now(),
-                    panelCount: Object.keys(validatedData).length
+                    panelCount: Object.keys(fixedData).length
                 });
             }
 
-            return validatedData;
+            return fixedData;
             
         } catch (error) {
             console.error('[XMLDataParser] ❌ 解析infobar_data失败:', error);
@@ -1040,5 +1043,191 @@ export class XMLDataParser {
             supportedPanelsCount: this.supportedPanels.size,
             cacheSize: this.parsedMessageCache.size
         };
+    }
+
+    /**
+     * 🔧 新增：检测并修复交互面板的NPC信息混合问题
+     * @param {Object} data - 解析后的数据
+     * @returns {Object} 修复后的数据
+     */
+    fixNpcDataMixing(data) {
+        try {
+            if (!data || typeof data !== 'object') {
+                return data;
+            }
+
+            console.log('[XMLDataParser] 🔍 开始检测NPC信息混合问题...');
+
+            const fixedData = { ...data };
+            let hasFixed = false;
+
+            // 检查交互面板
+            if (fixedData.interaction && typeof fixedData.interaction === 'object') {
+                console.log('[XMLDataParser] 🎭 检测交互面板NPC数据混合...');
+
+                const originalInteraction = fixedData.interaction;
+                const fixedInteraction = this.fixInteractionNpcMixing(originalInteraction);
+
+                if (fixedInteraction !== originalInteraction) {
+                    fixedData.interaction = fixedInteraction;
+                    hasFixed = true;
+                    console.log('[XMLDataParser] ✅ 修复了交互面板的NPC信息混合问题');
+                }
+            }
+
+            if (hasFixed) {
+                console.log('[XMLDataParser] 🔧 NPC信息混合修复完成');
+            } else {
+                console.log('[XMLDataParser] ✅ 未发现NPC信息混合问题');
+            }
+
+            return fixedData;
+
+        } catch (error) {
+            console.error('[XMLDataParser] ❌ 修复NPC信息混合失败:', error);
+            return data; // 返回原始数据
+        }
+    }
+
+    /**
+     * 🔧 修复交互面板的NPC信息混合
+     * @param {Object} interactionData - 交互面板数据
+     * @returns {Object} 修复后的交互面板数据
+     */
+    fixInteractionNpcMixing(interactionData) {
+        try {
+            console.log('[XMLDataParser] 🔍 分析交互面板字段:', Object.keys(interactionData));
+
+            // 第一步：检测所有字段中的混合信息，确定NPC数量
+            const fieldAnalysis = {};
+            let maxNpcCount = 1;
+
+            Object.entries(interactionData).forEach(([key, value]) => {
+                if (!value || typeof value !== 'string') {
+                    fieldAnalysis[key] = { hasMixed: false, values: [value] };
+                    return;
+                }
+
+                const hasMixedInfo = this.detectMixedNpcInfo(value);
+                if (hasMixedInfo) {
+                    const separatedValues = this.separateNpcInfo(value);
+                    fieldAnalysis[key] = { hasMixed: true, values: separatedValues };
+                    maxNpcCount = Math.max(maxNpcCount, separatedValues.length);
+                    console.log(`[XMLDataParser] 🚨 检测到混合NPC信息: ${key} = "${value}" -> ${separatedValues.length}个值`);
+                } else {
+                    fieldAnalysis[key] = { hasMixed: false, values: [value] };
+                }
+            });
+
+            console.log(`[XMLDataParser] 📊 检测到最大NPC数量: ${maxNpcCount}`);
+
+            // 第二步：重新组织数据，确保每个NPC有完整的字段组
+            const fixedData = {};
+
+            // 如果没有检测到混合信息，保持原样
+            if (maxNpcCount === 1) {
+                console.log('[XMLDataParser] ✅ 未检测到NPC信息混合，保持原样');
+                return interactionData;
+            }
+
+            // 为每个NPC创建完整的字段组
+            for (let npcIndex = 0; npcIndex < maxNpcCount; npcIndex++) {
+                Object.entries(fieldAnalysis).forEach(([fieldKey, analysis]) => {
+                    const cleanFieldKey = fieldKey.replace(/^npc\d+\./, '');
+                    const npcKey = `npc${npcIndex}.${cleanFieldKey}`;
+
+                    if (analysis.hasMixed && analysis.values[npcIndex]) {
+                        // 使用分离后的值
+                        fixedData[npcKey] = analysis.values[npcIndex].trim();
+                        console.log(`[XMLDataParser] ✅ 分离NPC信息: ${npcKey} = "${analysis.values[npcIndex].trim()}"`);
+                    } else if (!analysis.hasMixed && npcIndex === 0) {
+                        // 对于没有混合的字段，只给第一个NPC赋值
+                        fixedData[npcKey] = analysis.values[0];
+                        console.log(`[XMLDataParser] ✅ 保持原有信息: ${npcKey} = "${analysis.values[0]}"`);
+                    }
+                    // 其他情况不创建字段（避免空值）
+                });
+            }
+
+            return fixedData;
+
+        } catch (error) {
+            console.error('[XMLDataParser] ❌ 修复交互面板NPC混合失败:', error);
+            return interactionData;
+        }
+    }
+
+    /**
+     * 🔍 检测是否包含混合的NPC信息
+     * @param {string} value - 字段值
+     * @returns {boolean} 是否包含混合信息
+     */
+    detectMixedNpcInfo(value) {
+        if (!value || typeof value !== 'string') {
+            return false;
+        }
+
+        // 检测常见的分隔符模式
+        const mixingPatterns = [
+            /,\s*[^,\s]/,           // 逗号分隔: "A, B, C"
+            /\/[^\/\s]/,            // 斜杠分隔: "A/B/C"
+            /、[^、\s]/,            // 中文顿号分隔: "A、B、C"
+            /；[^；\s]/,            // 中文分号分隔: "A；B；C"
+            /\s+和\s+/,             // "和"连接: "A 和 B"
+            /\s+与\s+/,             // "与"连接: "A 与 B"
+            /\s+以及\s+/,           // "以及"连接: "A 以及 B"
+        ];
+
+        return mixingPatterns.some(pattern => pattern.test(value));
+    }
+
+    /**
+     * 🔧 分离混合的NPC信息
+     * @param {string} value - 包含混合信息的值
+     * @returns {Array} 分离后的值数组
+     */
+    separateNpcInfo(value) {
+        if (!value || typeof value !== 'string') {
+            return [value];
+        }
+
+        // 尝试不同的分隔符
+        let separated = [];
+
+        // 优先使用逗号分隔
+        if (value.includes(',')) {
+            separated = value.split(',').map(v => v.trim()).filter(v => v);
+        }
+        // 其次使用斜杠分隔
+        else if (value.includes('/')) {
+            separated = value.split('/').map(v => v.trim()).filter(v => v);
+        }
+        // 中文顿号分隔
+        else if (value.includes('、')) {
+            separated = value.split('、').map(v => v.trim()).filter(v => v);
+        }
+        // 中文分号分隔
+        else if (value.includes('；')) {
+            separated = value.split('；').map(v => v.trim()).filter(v => v);
+        }
+        // "和"连接
+        else if (value.includes(' 和 ')) {
+            separated = value.split(' 和 ').map(v => v.trim()).filter(v => v);
+        }
+        // "与"连接
+        else if (value.includes(' 与 ')) {
+            separated = value.split(' 与 ').map(v => v.trim()).filter(v => v);
+        }
+        // "以及"连接
+        else if (value.includes(' 以及 ')) {
+            separated = value.split(' 以及 ').map(v => v.trim()).filter(v => v);
+        }
+        else {
+            // 没有找到分隔符，返回原值
+            separated = [value];
+        }
+
+        // 过滤掉空值和过短的值
+        return separated.filter(v => v && v.length > 0);
     }
 }

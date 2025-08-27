@@ -467,8 +467,9 @@ world: name="现代都市", type="都市"
                 return '';
             }
 
-            // 🔧 新增：获取当前数据核心中的面板数据
-            const currentPanelData = await this.getCurrentPanelData(enabledPanels);
+            // 🚀 增强：获取AI记忆增强数据（包含历史记忆）
+            const memoryEnhancedData = await this.getAIMemoryEnhancedData(enabledPanels);
+            const currentPanelData = memoryEnhancedData.current;
 
             // 🔧 新增：智能分析更新策略
             const updateStrategy = await this.analyzeUpdateStrategy(enabledPanels, currentPanelData);
@@ -501,17 +502,17 @@ world: name="现代都市", type="都市"
                 console.log('[SmartPromptSystem] 📊 完整模式：生成所有面板数据模板');
             }
 
-            // 🔧 新增：生成当前数据对照信息
-            const currentDataInfo = await this.generateCurrentDataInfo(currentPanelData, updateStrategy);
+            // 🚀 增强：生成包含记忆增强的数据对照信息
+            const currentDataInfo = await this.generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy);
 
             // 检测输出模式
             const outputMode = this.getOutputMode();
 
-            // 替换模板中的占位符
-            let prompt = this.promptTemplate.replace('{PANEL_DATA_TEMPLATE}', panelDataTemplate);
+            // 🚀 重要：首先将记忆增强内容放到提示词最顶部
+            let prompt = this.addMemoryEnhancedDataToTop(currentDataInfo, this.promptTemplate);
 
-            // 🔧 新增：添加当前数据对照信息
-            prompt = this.addCurrentDataInfo(prompt, currentDataInfo);
+            // 替换模板中的占位符
+            prompt = prompt.replace('{PANEL_DATA_TEMPLATE}', panelDataTemplate);
 
             // 增量策略：优先添加"只输出变化字段"的通用约束，再追加"缺失数据强制补充"以覆盖通用约束
             if (updateStrategy.type === 'incremental') {
@@ -577,7 +578,7 @@ world: name="现代都市", type="都市"
     }
 
     /**
-     * 🔧 新增：获取当前数据核心中的面板数据
+     * 🔧 增强：获取当前数据核心中的面板数据（包含历史记忆）
      */
     async getCurrentPanelData(enabledPanels) {
         try {
@@ -615,6 +616,202 @@ world: name="现代都市", type="都市"
             console.error('[SmartPromptSystem] ❌ 获取当前面板数据失败:', error);
             return {};
         }
+    }
+
+    /**
+     * 🚀 新增：获取AI记忆增强数据（包含历史记忆和上下文）
+     */
+    async getAIMemoryEnhancedData(enabledPanels) {
+        try {
+            console.log('[SmartPromptSystem] 🧠 开始获取AI记忆增强数据...');
+
+            // 1. 获取当前面板数据
+            const currentData = await this.getCurrentPanelData(enabledPanels);
+
+            // 2. 获取历史记忆数据
+            const memoryData = await this.getHistoricalMemoryData(enabledPanels);
+
+            // 3. 获取跨对话持久化数据
+            const persistentData = await this.getPersistentMemoryData(enabledPanels);
+
+            // 4. 获取上下文相关数据
+            const contextData = await this.getContextualMemoryData();
+
+            // 5. 合并所有记忆数据
+            const enhancedData = {
+                current: currentData,
+                historical: memoryData,
+                persistent: persistentData,
+                context: contextData,
+                metadata: {
+                    timestamp: Date.now(),
+                    chatId: this.dataCore.getCurrentChatId?.(),
+                    totalPanels: enabledPanels.length,
+                    memoryDepth: Object.keys(memoryData).length
+                }
+            };
+
+            console.log('[SmartPromptSystem] 🧠 AI记忆增强数据获取完成');
+            console.log(`- 当前数据: ${Object.keys(currentData).length} 个面板`);
+            console.log(`- 历史记忆: ${Object.keys(memoryData).length} 个条目`);
+            console.log(`- 持久化数据: ${Object.keys(persistentData).length} 个条目`);
+            console.log(`- 上下文数据: ${Object.keys(contextData).length} 个条目`);
+
+            return enhancedData;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 获取AI记忆增强数据失败:', error);
+            return {
+                current: await this.getCurrentPanelData(enabledPanels),
+                historical: {},
+                persistent: {},
+                context: {},
+                metadata: { error: error.message }
+            };
+        }
+    }
+
+    /**
+     * 🧠 获取历史记忆数据
+     */
+    async getHistoricalMemoryData(enabledPanels) {
+        try {
+            const memoryData = {};
+            const currentChatId = this.dataCore.getCurrentChatId?.();
+
+            if (!currentChatId) {
+                return {};
+            }
+
+            // 获取当前聊天的所有历史数据变更
+            const chatHistory = await this.dataCore.getChatHistory?.(currentChatId);
+            if (!chatHistory || !Array.isArray(chatHistory)) {
+                return {};
+            }
+
+            // 分析历史数据变更，提取重要记忆点
+            for (const historyEntry of chatHistory.slice(-10)) { // 最近10条记录
+                if (historyEntry.panels) {
+                    for (const panel of enabledPanels) {
+                        const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+                        const panelData = historyEntry.panels[panelKey];
+
+                        if (panelData) {
+                            if (!memoryData[panelKey]) {
+                                memoryData[panelKey] = [];
+                            }
+
+                            memoryData[panelKey].push({
+                                timestamp: historyEntry.timestamp,
+                                data: panelData,
+                                source: historyEntry.source || 'ai-message',
+                                importance: this.calculateMemoryImportance(panelData)
+                            });
+                        }
+                    }
+                }
+            }
+
+            return memoryData;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 获取历史记忆数据失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 🔒 获取持久化记忆数据（跨对话）
+     */
+    async getPersistentMemoryData(enabledPanels) {
+        try {
+            const persistentData = {};
+
+            // 获取全局持久化数据
+            const globalData = await this.dataCore.getData('persistent_memory', 'global');
+            if (globalData) {
+                for (const panel of enabledPanels) {
+                    const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+                    if (globalData[panelKey]) {
+                        persistentData[panelKey] = globalData[panelKey];
+                    }
+                }
+            }
+
+            return persistentData;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 获取持久化记忆数据失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 🌐 获取上下文相关数据
+     */
+    async getContextualMemoryData() {
+        try {
+            const contextData = {};
+
+            // 获取当前角色信息
+            const context = this.context;
+            if (context.characters && context.characters.length > 0) {
+                const currentChar = context.characters[context.characterId];
+                if (currentChar) {
+                    contextData.character = {
+                        name: currentChar.name,
+                        description: currentChar.description,
+                        personality: currentChar.personality,
+                        scenario: currentChar.scenario
+                    };
+                }
+            }
+
+            // 获取世界书信息
+            if (context.world_info && context.world_info.length > 0) {
+                contextData.worldInfo = context.world_info.slice(0, 5).map(entry => ({
+                    key: entry.key,
+                    content: entry.content,
+                    selective: entry.selective
+                }));
+            }
+
+            // 获取最近的聊天消息上下文
+            if (context.chat && context.chat.length > 0) {
+                const recentMessages = context.chat.slice(-5).map(msg => ({
+                    role: msg.is_user ? 'user' : 'assistant',
+                    content: msg.mes ? msg.mes.substring(0, 200) : '',
+                    timestamp: msg.send_date
+                }));
+                contextData.recentMessages = recentMessages;
+            }
+
+            return contextData;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 获取上下文数据失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 📊 计算记忆重要性评分
+     */
+    calculateMemoryImportance(data) {
+        let importance = 0;
+
+        // 基于数据完整性评分
+        const fieldCount = Object.keys(data).length;
+        importance += Math.min(fieldCount * 0.1, 1.0);
+
+        // 基于数据新鲜度评分
+        if (data.lastUpdated) {
+            const age = Date.now() - new Date(data.lastUpdated).getTime();
+            const dayAge = age / (1000 * 60 * 60 * 24);
+            importance += Math.max(0, 1 - dayAge * 0.1);
+        }
+
+        return Math.min(importance, 1.0);
     }
 
     /**
@@ -1021,6 +1218,153 @@ world: name="现代都市", type="都市"
     }
 
     /**
+     * 🚀 新增：生成包含记忆增强的数据对照信息
+     */
+    async generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy) {
+        try {
+            console.log('[SmartPromptSystem] 🧠 生成记忆增强数据对照信息...');
+
+            const { current, historical, persistent, context, metadata } = memoryEnhancedData;
+
+            // 获取所有启用的面板列表
+            const enabledPanels = await this.getEnabledPanels();
+
+            if (enabledPanels.length === 0) {
+                return '【AI记忆增强数据】\n没有启用的面板。';
+            }
+
+            const dataInfoParts = ['【AI记忆增强数据 - 永不遗忘的剧情记忆】'];
+            dataInfoParts.push(`聊天ID: ${metadata.chatId || 'unknown'}`);
+            dataInfoParts.push(`数据覆盖率: ${updateStrategy.dataPercentage}% (${updateStrategy.existingFields}/${updateStrategy.totalFields}个字段)`);
+            dataInfoParts.push(`更新策略: ${updateStrategy.type === 'full' ? '全量更新' : '增量更新'} - ${updateStrategy.reason}`);
+            dataInfoParts.push(`记忆深度: ${metadata.memoryDepth}个历史记录`);
+            dataInfoParts.push('');
+
+            // 1. 当前数据状态
+            dataInfoParts.push('【📊 当前数据状态】');
+            for (const panel of enabledPanels) {
+                const panelId = panel.id;
+                const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+                const panelName = this.getBasicPanelDisplayName(panelId);
+                const panelData = current[panelKey] || current[panelId] || {};
+
+                dataInfoParts.push(`${panelName}面板 (${panelId}): ${Object.keys(panelData).length > 0 ? '有数据' : '待生成'}`);
+
+                if (Object.keys(panelData).length > 0) {
+                    Object.entries(panelData).forEach(([key, value]) => {
+                        const displayValue = this.formatDataValue(value);
+                        dataInfoParts.push(`  ${key}: ${displayValue}`);
+                    });
+                }
+            }
+            dataInfoParts.push('');
+
+            // 2. 历史记忆数据
+            if (Object.keys(historical).length > 0) {
+                dataInfoParts.push('【🧠 历史记忆 - 重要剧情发展】');
+                for (const [panelKey, memoryEntries] of Object.entries(historical)) {
+                    if (Array.isArray(memoryEntries) && memoryEntries.length > 0) {
+                        const panelName = this.getBasicPanelDisplayName(panelKey);
+                        dataInfoParts.push(`${panelName}面板历史:`);
+
+                        // 显示最重要的3个历史记录
+                        const sortedEntries = memoryEntries
+                            .sort((a, b) => b.importance - a.importance)
+                            .slice(0, 3);
+
+                        sortedEntries.forEach((entry, index) => {
+                            const timeAgo = this.formatTimeAgo(entry.timestamp);
+                            dataInfoParts.push(`  ${index + 1}. ${timeAgo} (重要性: ${(entry.importance * 100).toFixed(0)}%)`);
+
+                            // 显示关键数据变化
+                            const keyChanges = Object.entries(entry.data).slice(0, 3);
+                            keyChanges.forEach(([key, value]) => {
+                                const displayValue = this.formatDataValue(value);
+                                dataInfoParts.push(`     ${key}: ${displayValue}`);
+                            });
+                        });
+                    }
+                }
+                dataInfoParts.push('');
+            }
+
+            // 3. 持久化记忆数据
+            if (Object.keys(persistent).length > 0) {
+                dataInfoParts.push('【🔒 持久化记忆 - 跨对话永久记忆】');
+                for (const [panelKey, persistentData] of Object.entries(persistent)) {
+                    const panelName = this.getBasicPanelDisplayName(panelKey);
+                    dataInfoParts.push(`${panelName}面板持久化数据:`);
+
+                    Object.entries(persistentData).forEach(([key, value]) => {
+                        const displayValue = this.formatDataValue(value);
+                        dataInfoParts.push(`  ${key}: ${displayValue}`);
+                    });
+                }
+                dataInfoParts.push('');
+            }
+
+            // 4. 上下文信息
+            if (Object.keys(context).length > 0) {
+                dataInfoParts.push('【🌐 上下文信息】');
+
+                if (context.character) {
+                    dataInfoParts.push(`角色: ${context.character.name}`);
+                    if (context.character.personality) {
+                        dataInfoParts.push(`性格: ${context.character.personality.substring(0, 100)}...`);
+                    }
+                }
+
+                if (context.recentMessages && context.recentMessages.length > 0) {
+                    dataInfoParts.push('最近对话:');
+                    context.recentMessages.slice(-2).forEach((msg, index) => {
+                        const role = msg.role === 'user' ? '用户' : 'AI';
+                        dataInfoParts.push(`  ${role}: ${msg.content.substring(0, 80)}...`);
+                    });
+                }
+
+                if (context.worldInfo && context.worldInfo.length > 0) {
+                    dataInfoParts.push(`世界书条目: ${context.worldInfo.length}个`);
+                }
+                dataInfoParts.push('');
+            }
+
+            // 5. AI指导说明
+            dataInfoParts.push('【🤖 AI生成指导】');
+            dataInfoParts.push('基于以上完整记忆数据，请：');
+            dataInfoParts.push('1. 参考历史记忆，保持剧情连贯性');
+            dataInfoParts.push('2. 尊重持久化记忆，确保角色设定一致');
+            dataInfoParts.push('3. 结合上下文信息，生成符合当前情境的数据');
+            dataInfoParts.push('4. 如果是增量更新，只修改确实需要变化的字段');
+            dataInfoParts.push('5. 确保生成的数据与历史记忆逻辑一致');
+
+            const result = dataInfoParts.join('\n');
+            console.log(`[SmartPromptSystem] 🧠 记忆增强数据对照信息生成完成，长度: ${result.length}`);
+            return result;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 生成记忆增强数据对照信息失败:', error);
+            // 降级到原有方法
+            return await this.generateCurrentDataInfo(memoryEnhancedData.current || {}, updateStrategy);
+        }
+    }
+
+    /**
+     * 🕒 格式化时间差显示
+     */
+    formatTimeAgo(timestamp) {
+        const now = Date.now();
+        const diff = now - timestamp;
+        const minutes = Math.floor(diff / (1000 * 60));
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+        if (days > 0) return `${days}天前`;
+        if (hours > 0) return `${hours}小时前`;
+        if (minutes > 0) return `${minutes}分钟前`;
+        return '刚刚';
+    }
+
+    /**
      * 🔧 新增：格式化数据值用于显示
      */
     formatDataValue(value) {
@@ -1037,7 +1381,58 @@ world: name="现代都市", type="都市"
     }
 
     /**
-     * 🔧 新增：添加当前数据对照信息到提示词
+     * 🚀 新增：将记忆增强数据添加到提示词最顶部
+     */
+    addMemoryEnhancedDataToTop(memoryEnhancedDataInfo, promptTemplate) {
+        try {
+            console.log('[SmartPromptSystem] 🧠 将AI记忆增强内容添加到提示词顶部...');
+
+            // 构建顶部记忆增强内容
+            const topMemoryContent = [
+                '🧠🧠🧠【AI记忆增强系统 - 最高优先级阅读】🧠🧠🧠',
+                '⚠️ 重要：在开始任何思考和生成之前，必须仔细阅读以下完整记忆内容 ⚠️',
+                '',
+                '┌─────────────────────────────────────────────────────────────┐',
+                '│                    🧠 AI永久记忆数据库 🧠                    │',
+                '│              请基于以下记忆进行剧情思考和生成                │',
+                '└─────────────────────────────────────────────────────────────┘',
+                '',
+                memoryEnhancedDataInfo,
+                '',
+                '┌─────────────────────────────────────────────────────────────┐',
+                '│                    📌 AI思考指导原则 📌                     │',
+                '│                                                             │',
+                '│ 1. 🎯 以上记忆内容是您思考和生成的核心基础                  │',
+                '│ 2. 🔗 请基于这些记忆内容保持剧情连贯性和角色一致性          │',
+                '│ 3. 📚 如果记忆中有相关信息，请优先参考和延续                │',
+                '│ 4. ✅ 确保新生成的内容与历史记忆逻辑一致                    │',
+                '│ 5. 🧠 在thinking阶段就要回忆和分析这些记忆内容              │',
+                '│                                                             │',
+                '└─────────────────────────────────────────────────────────────┘',
+                '',
+                '═══════════════════════════════════════════════════════════════',
+                '                    开始正常提示词内容',
+                '═══════════════════════════════════════════════════════════════',
+                ''
+            ].join('\n');
+
+            // 将记忆增强内容放到提示词最顶部
+            const enhancedPrompt = topMemoryContent + promptTemplate;
+
+            console.log(`[SmartPromptSystem] 🧠 记忆增强内容已添加到顶部，总长度: ${enhancedPrompt.length}`);
+            console.log(`[SmartPromptSystem] 🧠 记忆内容长度: ${memoryEnhancedDataInfo.length}`);
+
+            return enhancedPrompt;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 添加记忆增强内容到顶部失败:', error);
+            // 降级：如果失败，至少将记忆内容添加到开头
+            return memoryEnhancedDataInfo + '\n\n' + promptTemplate;
+        }
+    }
+
+    /**
+     * 🔧 保留：添加当前数据对照信息到提示词（降级使用）
      */
     addCurrentDataInfo(prompt, currentDataInfo) {
         try {
@@ -1135,16 +1530,36 @@ world: name="现代都市", type="都市"
             return `npc0.${subItem.key}="具体${chineseDisplayName}内容"`;
         });
 
-        // 🔥 强化交互对象面板的NPC前缀指令 + 严格限制只输出一个interaction面板
-        const result = `${panelKey}: 🚨 **只能输出一个${panelKey}面板；所有NPC字段必须使用npcX.前缀** 🚨（X为0,1,2...）
-**⚠️ 自定义子项同样必须带npc前缀：npc0.自定义字段**
+        // 🔥🔥🔥 超强化交互对象面板的NPC分离约束 🔥🔥🔥
+        const result = `${panelKey}: 🚨🚨🚨 **严禁将多个NPC信息混合在一个字段中！每个NPC必须有独立的npcX.前缀！** 🚨🚨🚨
+
+🔴 **重要警告：绝对禁止的错误行为** 🔴
+❌ 绝对禁止: name="希娜, 梅, 莉科莉亚" ← 这是严重错误！
+❌ 绝对禁止: type="临时队友/被保护者" ← 多个角色类型混合！
+❌ 绝对禁止: status="受到巨大冲击/感恩/紧张" ← 多个状态混合！
+❌ 绝对禁止: relationship="队友/被保护者/同伴" ← 多个关系混合！
+
+✅ **正确做法：每个NPC独立字段** ✅
+✅ 正确: npc0.name="希娜", npc1.name="梅", npc2.name="莉科莉亚"
+✅ 正确: npc0.type="临时队友", npc1.type="被保护者", npc2.type="同伴"
+✅ 正确: npc0.status="受到巨大冲击", npc1.status="感恩", npc2.status="紧张"
+✅ 正确: npc0.relationship="队友", npc1.relationship="被保护者", npc2.relationship="同伴"
+
+📋 **格式要求** 📋
+- 只能输出一个${panelKey}面板
+- 每个NPC使用独立的npcX.前缀（X为0,1,2,3...）
+- 绝对不能在一个字段中混合多个NPC的信息
+- 如果有3个NPC，必须使用npc0, npc1, npc2分别标识
+
 可用字段: ${availableFields.join(', ')}
-✅ 正确示例（单一面板，多个NPC在同一行内区分）: ${exampleFields.join(', ')}, npc1.name="另一个NPC", npc1.type="类型"
-❌ 错误示例（多个面板）:
-${panelKey}: npc0.name="NPC1"
-${panelKey}: npc1.name="NPC2" ← 错误！${panelKey}面板只能出现一次！
-❌ 错误示例（缺少前缀）: ${panel.subItems.slice(0, 2).map(subItem => `${subItem.key}="内容"`).join(', ')}
-✅ 正确示例（包含前缀）: ${panel.subItems.slice(0, 2).map(subItem => `npc0.${subItem.key}="内容"`).join(', ')}`;
+
+🎯 **标准示例（3个NPC的正确格式）** 🎯
+${exampleFields.join(', ')}, npc1.name="第二个NPC", npc1.type="类型2", npc2.name="第三个NPC", npc2.type="类型3"
+
+🚫 **严禁的错误格式** 🚫
+❌ ${panelKey}: name="NPC1, NPC2, NPC3" ← 严重错误！
+❌ ${panelKey}: type="类型1/类型2/类型3" ← 严重错误！
+❌ ${panelKey}: status="状态1, 状态2, 状态3" ← 严重错误！`;
 
         console.log('[SmartPromptSystem] 🎭 交互对象动态NPC模板生成完成（已强化NPC前缀指令）');
         return result;
@@ -1240,7 +1655,8 @@ ${panelKey}: npc1.name="NPC2" ← 错误！${panelKey}面板只能出现一次�
 
 【📋 增量更新模式约束】
 ⚠️ **只输出发生变化的字段，保持现有字段名格式**
-⚠️ **交互对象面板使用 npcX.字段名 格式（X为0,1,2...）**
+🚨 **交互对象面板严禁信息混合：每个NPC必须使用独立的npcX.字段名格式（X为0,1,2...）**
+🚨 **绝对禁止将多个NPC信息写在一个字段中（如：name="NPC1, NPC2"）**
 ⚠️ **严禁添加未启用的面板或字段**`;
             
             return prompt + simplifiedConstraint;
@@ -1318,7 +1734,9 @@ ${panelKey}: npc1.name="NPC2" ← 错误！${panelKey}面板只能出现一次�
         if (interactionFields.length > 0) {
             constraintText += `
 
-【🎭 交互对象NPC格式规则】
+【🎭 交互对象NPC格式规则 - 严禁信息混合】
+🚨🚨🚨 **最重要规则：绝对禁止将多个NPC信息混合在一个字段中！** 🚨🚨🚨
+
 ⚠️ 重要：交互对象面板只记录NPC角色信息，绝不能填入用户角色信息！
 
 🎭 NPC角色识别指南：
@@ -1330,6 +1748,18 @@ ${panelKey}: npc1.name="NPC2" ← 错误！${panelKey}面板只能出现一次�
 
 📋 数据格式：使用动态NPC格式：npcX.字段名="中文内容"
 其中X为NPC编号(0,1,2,3...)，根据剧情中实际出现的NPC数量动态生成
+
+🔴 **严禁的错误格式（信息混合）** 🔴
+❌ name="角色1, 角色2, 角色3" ← 绝对禁止！
+❌ type="类型1/类型2/类型3" ← 绝对禁止！
+❌ status="状态1, 状态2, 状态3" ← 绝对禁止！
+❌ relationship="关系1/关系2/关系3" ← 绝对禁止！
+
+✅ **正确格式（NPC分离）** ✅
+✅ npc0.name="角色1", npc1.name="角色2", npc2.name="角色3"
+✅ npc0.type="类型1", npc1.type="类型2", npc2.type="类型3"
+✅ npc0.status="状态1", npc1.status="状态2", npc2.status="状态3"
+✅ npc0.relationship="关系1", npc1.relationship="关系2", npc2.relationship="关系3"
 
 可用字段: ${interactionFields.join(', ')}
 

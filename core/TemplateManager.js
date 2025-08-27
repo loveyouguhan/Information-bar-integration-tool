@@ -74,6 +74,18 @@ export class TemplateManager {
                 template: this.getRPGDashboardTemplate(),
                 preview: 'rpg-dashboard-preview.png',
                 dataRequirements: ['name', 'class', 'level', 'health', 'energy', 'items', 'skills']
+            },
+            'field-directive-demo': {
+                id: 'field-directive-demo',
+                name: '字段指令演示',
+                description: '演示新的字段直接读取指令系统，无需复杂数据预处理',
+                category: 'demo',
+                tags: ['字段指令', '演示', '新功能', '简化'],
+                author: 'System',
+                version: '1.0.0',
+                template: this.getFieldDirectiveDemoTemplate(),
+                preview: 'field-directive-demo-preview.png',
+                dataRequirements: [] // 🆕 无需预定义数据要求，可直接读取任意字段
             }
         };
 
@@ -535,6 +547,82 @@ export class TemplateManager {
     }
 
     /**
+     * 获取字段指令演示模板
+     */
+    getFieldDirectiveDemoTemplate() {
+        return `
+            <div class="field-directive-demo" style="
+                background: #f0f8ff; 
+                border: 2px solid #4a90e2; 
+                border-radius: 10px; 
+                padding: 20px; 
+                color: #333;
+                max-width: 100%; 
+                box-sizing: border-box;
+            ">
+                <h4 style="
+                    margin: 0 0 15px 0; 
+                    color: #2c5aa0; 
+                    text-align: center;
+                    font-size: 16px;
+                ">
+                    <i class="fas fa-magic" style="margin-right: 8px;"></i>
+                    字段指令演示
+                </h4>
+                <div class="demo-content" style="
+                    display: grid; 
+                    gap: 12px;
+                    font-size: 14px;
+                    line-height: 1.4;
+                ">
+                    <div class="demo-item" style="
+                        background: white; 
+                        padding: 10px; 
+                        border-radius: 6px; 
+                        border-left: 4px solid #4a90e2;
+                    ">
+                        <strong>个人信息:</strong> {{field:personal.姓名}} - {{field:personal.年龄}}岁
+                    </div>
+                    <div class="demo-item" style="
+                        background: white; 
+                        padding: 10px; 
+                        border-radius: 6px; 
+                        border-left: 4px solid #28a745;
+                    ">
+                        <strong>位置:</strong> {{field:world.地点}} ({{field:world.天气}})
+                    </div>
+                    <div class="demo-item" style="
+                        background: white; 
+                        padding: 10px; 
+                        border-radius: 6px; 
+                        border-left: 4px solid #ffc107;
+                    ">
+                        <strong>状态:</strong> HP {{field:personal.生命值}} / {{field:personal.最大生命值}}
+                    </div>
+                    <div class="demo-item" style="
+                        background: white; 
+                        padding: 10px; 
+                        border-radius: 6px; 
+                        border-left: 4px solid #dc3545;
+                    ">
+                        <strong>任务:</strong> {{field:tasks.当前任务}} ({{field:tasks.进度}})
+                    </div>
+                </div>
+                <div style="
+                    margin-top: 15px; 
+                    padding-top: 15px; 
+                    border-top: 1px solid #ddd; 
+                    font-size: 12px; 
+                    color: #666; 
+                    text-align: center;
+                ">
+                    💡 使用 {{field:面板名.字段名}} 直接读取任意面板字段
+                </div>
+            </div>
+        `;
+    }
+
+    /**
      * 加载用户模板
      */
     async loadUserTemplates() {
@@ -583,6 +671,7 @@ export class TemplateManager {
             { id: 'status', name: '状态', description: '状态显示相关模板' },
             { id: 'inventory', name: '物品', description: '物品和背包相关模板' },
             { id: 'dashboard', name: '仪表板', description: '综合信息仪表板模板' },
+            { id: 'demo', name: '演示', description: '功能演示和示例模板' },
             { id: 'custom', name: '自定义', description: '用户自定义模板' }
         ];
 
