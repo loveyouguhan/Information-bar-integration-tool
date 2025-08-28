@@ -4257,6 +4257,15 @@ export class InfoBarSettings {
                     console.log('[InfoBarSettings] 🔧 打开变量管理器...');
                     this.openVariableManager();
                     break;
+                case 'open-status-bar-editor':
+                    console.log('[InfoBarSettings] 🎨 打开状态栏编辑器...');
+                    this.openStatusBarEditor();
+                    break;
+
+                case 'show-data-info':
+                    console.log('[InfoBarSettings] 📊 显示数据信息...');
+                    this.showDataInfoPanel();
+                    break;
                 default:
                     console.log(`[InfoBarSettings] 🔘 处理操作: ${action}`);
             }
@@ -4500,7 +4509,7 @@ export class InfoBarSettings {
                         <p class="theme-description">选择您喜欢的主题风格，点击预览图即可应用</p>
                     </div>
                     <div class="theme-header-right">
-                        <button class="btn btn-primary html-template-editor-btn" data-action="open-html-editor" style="
+                        <button class="btn btn-primary status-bar-editor-btn" data-action="open-status-bar-editor" style="
                             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                             border: none;
                             padding: 10px 20px;
@@ -4511,7 +4520,7 @@ export class InfoBarSettings {
                             transition: all 0.3s ease;
                             box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
                         " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(102, 126, 234, 0.3)'">
-                            <i class="fas fa-code"></i> HTML模板编辑器
+                            <i class="fas fa-edit"></i> 状态栏编辑
                         </button>
                     </div>
                 </div>
@@ -15385,10 +15394,10 @@ export class InfoBarSettings {
                 includeWorldBook: apiConfig.includeWorldBook
             });
 
-            // 发送自定义API请求（增加重试逻辑）
+            // 发送自定义API请求（增强重试逻辑）
             const cfg = context.extensionSettings['Information bar integration tool']?.apiConfig || {};
-            const maxRetry = Number(cfg.retryCount ?? 3);
-            const retryDelayMs = 1500;
+            const maxRetry = Number(cfg.retryCount ?? 5); // 增加默认重试次数
+            const baseRetryDelayMs = 2000; // 增加基础延迟时间
 
             let attempt = 0;
             let lastError = null;
@@ -15409,6 +15418,9 @@ export class InfoBarSettings {
                         this.showCustomAPIStatus('error', '重试失败: ' + lastError);
                         break;
                     }
+                    // 🔧 指数退避重试策略：每次重试延迟时间递增
+                    const retryDelayMs = baseRetryDelayMs * Math.pow(1.5, attempt - 1);
+                    console.log(`[InfoBarSettings] ⏳ 等待 ${retryDelayMs}ms 后重试...`);
                     await new Promise(r=>setTimeout(r, retryDelayMs));
                 }
             }
@@ -22724,47 +22736,61 @@ tasks: creation="新任务创建", editing="任务编辑中"
     }
 
     /**
-     * 打开HTML模板编辑器
+     * 打开状态栏编辑器
      */
-    openHTMLTemplateEditor() {
+    openStatusBarEditor() {
         try {
-            console.log('[InfoBarSettings] 🎨 打开HTML模板编辑器...');
+            console.log('[InfoBarSettings] 🎨 打开状态栏编辑器...');
 
-            // 创建HTML模板编辑器模态框
-            this.createHTMLTemplateEditorModal();
+            // 创建状态栏编辑器模态框
+            this.createStatusBarEditorModal();
 
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 打开HTML模板编辑器失败:', error);
+            console.error('[InfoBarSettings] ❌ 打开状态栏编辑器失败:', error);
             this.handleError(error);
         }
     }
 
     /**
-     * 创建HTML模板编辑器模态框
+     * @deprecated 保持向后兼容性
      */
-    createHTMLTemplateEditorModal() {
+    openHTMLTemplateEditor() {
+        return this.openStatusBarEditor();
+    }
+
+    /**
+     * 创建状态栏编辑器模态框
+     */
+    createStatusBarEditorModal() {
         try {
             // 移除现有的编辑器模态框
-            const existingModal = document.querySelector('.html-template-editor-modal');
+            const existingModal = document.querySelector('.status-bar-editor-modal');
             if (existingModal) {
                 existingModal.remove();
             }
 
             // 创建模态框HTML
-            const modalHTML = this.createHTMLTemplateEditorHTML();
+            const modalHTML = this.createStatusBarEditorHTML();
 
             // 添加到页面
             document.body.insertAdjacentHTML('beforeend', modalHTML);
 
             // 绑定事件
-            this.bindHTMLTemplateEditorEvents();
+            this.bindStatusBarEditorEvents();
 
-            console.log('[InfoBarSettings] ✅ HTML模板编辑器创建完成');
+            console.log('[InfoBarSettings] ✅ 状态栏编辑器创建完成');
 
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 创建HTML模板编辑器失败:', error);
+            console.error('[InfoBarSettings] ❌ 创建状态栏编辑器失败:', error);
             this.handleError(error);
         }
+    }
+
+    /**
+     * @deprecated 保持向后兼容性
+     */
+    createHTMLTemplateEditorModal() {
+        return this.createStatusBarEditorModal();
     }
 
     /**
@@ -22863,9 +22889,9 @@ tasks: creation="新任务创建", editing="任务编辑中"
     }
 
     /**
-     * 创建HTML模板编辑器HTML - 全新响应式设计
+     * 创建状态栏编辑器HTML - 全新响应式设计
      */
-    createHTMLTemplateEditorHTML() {
+    createStatusBarEditorHTML() {
         // 预先获取所有主题颜色，避免在模板字符串中重复调用
         const themeColors = {
             background: this.getInfoBarThemeColor('background'),
@@ -22877,7 +22903,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
         };
 
         return `
-            <div class="html-template-editor-modal" style="
+            <div class="status-bar-editor-modal" style="
                 position: fixed;
                 top: 0;
                 left: 0;
@@ -22891,7 +22917,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
                 padding: 20px;
                 box-sizing: border-box;
             ">
-                <div class="html-template-editor-container" style="
+                <div class="status-bar-editor-container" style="
                     width: 100%;
                     height: 100%;
                     max-width: 1600px;
@@ -22920,51 +22946,23 @@ tasks: creation="新任务创建", editing="任务编辑中"
                     ">
                         <div class="editor-title" style="flex-grow: 1; min-width: 0;">
                             <h3 style="margin: 0; color: ${themeColors.text}; font-size: 18px; font-weight: 600;">
-                                <i class="fas fa-code" style="margin-right: 8px; color: ${themeColors.accent};"></i> 
-                                HTML模板编辑器
+                                <i class="fas fa-edit" style="margin-right: 8px; color: ${themeColors.accent};"></i>
+                                状态栏编辑
                             </h3>
                             <p style="margin: 4px 0 0 0; color: ${themeColors.textSecondary}; font-size: 13px;">
-                                智能创建和编辑自定义HTML状态栏模板，支持实时预览和语法检查
+                                智能创建和编辑自定义状态栏样式，支持AI创作和实时预览
                             </p>
                         </div>
                         <div class="editor-controls" style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
-                            <button class="btn btn-outline-primary" data-action="format-template" style="
-                                padding: 8px 16px; 
-                                font-size: 13px;
-                                border: 1px solid ${themeColors.accent};
-                                background: transparent;
-                                color: ${themeColors.accent};
-                                border-radius: 6px;
-                                cursor: pointer;
-                                transition: all 0.2s ease;
-                            " onmouseover="this.style.background='${themeColors.accent}'; this.style.color='${themeColors.background}'" 
-                               onmouseout="this.style.background='transparent'; this.style.color='${themeColors.accent}'">
-                                <i class="fas fa-indent"></i> 格式化
-                            </button>
-                            <button class="btn btn-primary ai-modify-btn" data-action="ai-modify-template" style="
-                                padding: 8px 16px; 
-                                font-size: 13px;
-                                background: ${themeColors.accent};
-                                color: ${themeColors.background};
-                                border: none;
-                                border-radius: 6px;
-                                cursor: pointer;
-                                font-weight: 500;
-                                box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
-                                transition: all 0.2s ease;
-                            " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 12px rgba(0, 123, 255, 0.4)'" 
-                               onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0, 123, 255, 0.3)'">
-                                <i class="fas fa-magic"></i> AI优化
-                            </button>
-                            <button class="btn btn-secondary" data-action="close-html-editor" style="
-                                padding: 8px 12px; 
+                            <button class="btn btn-secondary" data-action="close-status-bar-editor" style="
+                                padding: 8px 12px;
                                 background: transparent;
                                 border: 1px solid ${themeColors.border};
                                 color: ${themeColors.textSecondary};
                                 border-radius: 6px;
                                 cursor: pointer;
                                 transition: all 0.2s ease;
-                            " onmouseover="this.style.background='${themeColors.surface}'; this.style.color='${themeColors.text}'" 
+                            " onmouseover="this.style.background='${themeColors.surface}'; this.style.color='${themeColors.text}'"
                                onmouseout="this.style.background='transparent'; this.style.color='${themeColors.textSecondary}'">
                                 <i class="fas fa-times"></i>
                             </button>
@@ -23156,49 +23154,47 @@ tasks: creation="新任务创建", editing="任务编辑中"
                             flex-direction: column;
                             border-left: 1px solid ${themeColors.border};
                         ">
-                            <div class="info-tabs" style="
+                            <!-- 状态栏创作中心 -->
+                            <div class="status-bar-creation-center" style="
                                 display: flex;
                                 background: ${themeColors.background};
                                 border-bottom: 1px solid ${themeColors.border};
+                                padding: 12px 16px;
+                                align-items: center;
+                                gap: 12px;
                                 flex-shrink: 0;
                             ">
-                                <button class="info-tab active" data-info-tab="data-source" style="
-                                    flex: 1;
-                                    padding: 12px 8px;
-                                    background: ${themeColors.accent};
-                                    border: none;
-                                    color: ${themeColors.background};
-                                    cursor: pointer;
-                                    font-size: 11px;
-                                    font-weight: 500;
-                                    transition: all 0.2s ease;
+                                <div class="creation-center-title" style="
+                                    color: ${themeColors.text};
+                                    font-size: 14px;
+                                    font-weight: 600;
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 8px;
                                 ">
-                                    <i class="fas fa-database"></i> 数据源
-                                </button>
-                                <button class="info-tab" data-info-tab="syntax-help" style="
-                                    flex: 1;
-                                    padding: 12px 8px;
-                                    background: transparent;
-                                    border: none;
-                                    color: ${themeColors.textSecondary};
-                                    cursor: pointer;
-                                    font-size: 11px;
-                                    transition: all 0.2s ease;
+                                    <i class="fas fa-magic" style="color: ${themeColors.accent};"></i>
+                                    状态栏创作中心
+                                </div>
+                                <div class="creation-actions" style="
+                                    display: flex;
+                                    gap: 8px;
+                                    margin-left: auto;
                                 ">
-                                    <i class="fas fa-code"></i> 语法
-                                </button>
-                                <button class="info-tab" data-info-tab="templates" style="
-                                    flex: 1;
-                                    padding: 12px 8px;
-                                    background: transparent;
-                                    border: none;
-                                    color: ${themeColors.textSecondary};
-                                    cursor: pointer;
-                                    font-size: 11px;
-                                    transition: all 0.2s ease;
-                                ">
-                                    <i class="fas fa-layer-group"></i> 模板
-                                </button>
+
+                                    <button class="btn btn-sm btn-outline-secondary data-info-btn" data-action="show-data-info" style="
+                                        padding: 6px 12px;
+                                        font-size: 12px;
+                                        border: 1px solid ${themeColors.border};
+                                        background: transparent;
+                                        color: ${themeColors.textSecondary};
+                                        border-radius: 6px;
+                                        cursor: pointer;
+                                        transition: all 0.2s ease;
+                                    " onmouseover="this.style.background='${themeColors.border}'; this.style.color='${themeColors.text}'"
+                                       onmouseout="this.style.background='transparent'; this.style.color='${themeColors.textSecondary}'">
+                                        <i class="fas fa-info-circle"></i> 数据信息
+                                    </button>
+                                </div>
                             </div>
                             <div class="info-content" style="
                                 flex: 1;
@@ -23209,7 +23205,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
                                 line-height: 1.5;
                                 min-height: 0;
                             ">
-                                ${this.createAdvancedDataSourceInfo()}
+                                ${this.createStatusBarPromptEditor()}
                             </div>
                         </div>
                     </div>
@@ -23291,7 +23287,172 @@ tasks: creation="新任务创建", editing="任务编辑中"
     }
 
     /**
-     * 创建高级数据源信息展示
+     * 🚀 创建状态栏提示词编辑器
+     */
+    createStatusBarPromptEditor() {
+        const themeColors = {
+            background: this.getInfoBarThemeColor('background'),
+            surface: this.getInfoBarThemeColor('surface'),
+            border: this.getInfoBarThemeColor('border'),
+            text: this.getInfoBarThemeColor('text'),
+            textSecondary: this.getInfoBarThemeColor('textSecondary'),
+            accent: this.getInfoBarThemeColor('accent')
+        };
+
+        return `
+            <div class="status-bar-prompt-editor">
+                <!-- AI提示词编辑区域 -->
+                <div class="prompt-editor-section" style="
+                    background: ${themeColors.background};
+                    border: 1px solid ${themeColors.border};
+                    border-radius: 8px;
+                    padding: 16px;
+                    margin-bottom: 16px;
+                ">
+                    <h4 style="margin: 0 0 12px 0; color: ${themeColors.accent}; font-size: 14px; font-weight: 600;">
+                        <i class="fas fa-robot"></i> AI创作提示词
+                    </h4>
+                    <textarea class="prompt-textarea" placeholder="描述您想要的状态栏样式，例如：
+• 粉色主题角色卡片，显示头像和基本信息
+• 简约物品栏，网格布局显示道具
+• 技能面板带进度条和等级显示
+• 现代化设计，渐变背景圆角卡片
+• 其他创意需求..." style="
+                        width: 100%;
+                        height: 120px;
+                        background: ${themeColors.surface};
+                        color: ${themeColors.text};
+                        border: 1px solid ${themeColors.border};
+                        border-radius: 6px;
+                        padding: 12px;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        font-size: 13px;
+                        line-height: 1.5;
+                        resize: vertical;
+                        box-sizing: border-box;
+                    "></textarea>
+                    <div class="prompt-actions" style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-top: 12px;
+                    ">
+                        <div class="prompt-templates" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <button class="prompt-template-btn" data-template="character" style="
+                                padding: 4px 8px;
+                                background: transparent;
+                                border: 1px solid ${themeColors.border};
+                                color: ${themeColors.textSecondary};
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 11px;
+                                transition: all 0.2s ease;
+                            " onmouseover="this.style.background='${themeColors.surface}'; this.style.color='${themeColors.text}'"
+                               onmouseout="this.style.background='transparent'; this.style.color='${themeColors.textSecondary}'">
+                                角色卡片
+                            </button>
+                            <button class="prompt-template-btn" data-template="inventory" style="
+                                padding: 4px 8px;
+                                background: transparent;
+                                border: 1px solid ${themeColors.border};
+                                color: ${themeColors.textSecondary};
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 11px;
+                                transition: all 0.2s ease;
+                            " onmouseover="this.style.background='${themeColors.surface}'; this.style.color='${themeColors.text}'"
+                               onmouseout="this.style.background='transparent'; this.style.color='${themeColors.textSecondary}'">
+                                物品栏
+                            </button>
+                            <button class="prompt-template-btn" data-template="stats" style="
+                                padding: 4px 8px;
+                                background: transparent;
+                                border: 1px solid ${themeColors.border};
+                                color: ${themeColors.textSecondary};
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 11px;
+                                transition: all 0.2s ease;
+                            " onmouseover="this.style.background='${themeColors.surface}'; this.style.color='${themeColors.text}'"
+                               onmouseout="this.style.background='transparent'; this.style.color='${themeColors.textSecondary}'">
+                                属性面板
+                            </button>
+                            <button class="prompt-template-btn" data-template="modern" style="
+                                padding: 4px 8px;
+                                background: transparent;
+                                border: 1px solid ${themeColors.border};
+                                color: ${themeColors.textSecondary};
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 11px;
+                                transition: all 0.2s ease;
+                            " onmouseover="this.style.background='${themeColors.surface}'; this.style.color='${themeColors.text}'"
+                               onmouseout="this.style.background='transparent'; this.style.color='${themeColors.textSecondary}'">
+                                现代风格
+                            </button>
+                            <button class="prompt-template-btn" data-template="minimal" style="
+                                padding: 4px 8px;
+                                background: transparent;
+                                border: 1px solid ${themeColors.border};
+                                color: ${themeColors.textSecondary};
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 11px;
+                                transition: all 0.2s ease;
+                            " onmouseover="this.style.background='${themeColors.surface}'; this.style.color='${themeColors.text}'"
+                               onmouseout="this.style.background='transparent'; this.style.color='${themeColors.textSecondary}'">
+                                简约风格
+                            </button>
+                        </div>
+                        <button class="use-prompt-btn" data-action="use-custom-prompt" style="
+                            padding: 6px 12px;
+                            background: ${themeColors.accent};
+                            color: ${themeColors.background};
+                            border: none;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-size: 12px;
+                            font-weight: 500;
+                            transition: all 0.2s ease;
+                        " onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+                            <i class="fas fa-robot"></i> AI生成
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 数据字段参考 -->
+                <div class="data-reference-section" style="
+                    background: ${themeColors.background};
+                    border: 1px solid ${themeColors.border};
+                    border-radius: 8px;
+                    padding: 16px;
+                ">
+                    <h4 style="margin: 0 0 12px 0; color: ${themeColors.accent}; font-size: 14px; font-weight: 600;">
+                        <i class="fas fa-database"></i> 可用数据字段
+                    </h4>
+                    <div class="data-fields-list" style="
+                        max-height: 200px;
+                        overflow-y: auto;
+                        border: 1px solid ${themeColors.border};
+                        border-radius: 6px;
+                        padding: 2px;
+                        background: ${themeColors.surface};
+                    ">
+                        <div class="loading-fields" style="
+                            text-align: center;
+                            padding: 20px;
+                            color: ${themeColors.textSecondary};
+                        ">
+                            <i class="fas fa-spinner fa-spin"></i> 加载数据字段...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * @deprecated 保持向后兼容性
      */
     createAdvancedDataSourceInfo() {
         const themeColors = {
@@ -23360,29 +23521,38 @@ tasks: creation="新任务创建", editing="任务编辑中"
     }
 
     /**
-     * 绑定HTML模板编辑器事件 - 全新响应式版本
+     * 绑定状态栏编辑器事件 - 全新响应式版本
      */
-    bindHTMLTemplateEditorEvents() {
+    bindStatusBarEditorEvents() {
         try {
-            const modal = document.querySelector('.html-template-editor-modal');
+            const modal = document.querySelector('.status-bar-editor-modal');
             if (!modal) return;
 
             // 关闭编辑器
             modal.addEventListener('click', (e) => {
-                if (e.target === modal || e.target.closest('[data-action="close-html-editor"]')) {
+                if (e.target === modal || e.target.closest('[data-action="close-status-bar-editor"]')) {
+                    console.log('[InfoBarSettings] 🔒 关闭状态栏编辑器');
                     modal.remove();
                 }
             });
 
+            // 🔧 修复：直接绑定关闭按钮事件
+            const closeBtn = modal.querySelector('[data-action="close-status-bar-editor"]');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('[InfoBarSettings] 🔒 关闭按钮被点击');
+                    modal.remove();
+                });
+            }
+
             // 阻止点击编辑器容器时关闭模态框
-            modal.querySelector('.html-template-editor-container')?.addEventListener('click', (e) => {
+            modal.querySelector('.status-bar-editor-container')?.addEventListener('click', (e) => {
                 e.stopPropagation();
             });
 
-            // 🚀 新增：格式化按钮
-            modal.querySelector('[data-action="format-template"]')?.addEventListener('click', () => {
-                this.formatTemplate();
-            });
+
 
             // 标签页切换 - 编辑器标签
             modal.querySelectorAll('.editor-tab').forEach(tab => {
@@ -23398,16 +23568,16 @@ tasks: creation="新任务创建", editing="任务编辑中"
                 });
             });
 
-            // 🚀 新增：快速插入按钮
-            modal.querySelectorAll('.quick-insert-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    this.insertTemplateText(btn.dataset.insert);
-                });
-            });
+            // 🚀 新增：状态栏提示词编辑器事件
+            this.bindPromptEditorEvents(modal);
 
-            // AI修改按钮
-            modal.querySelector('[data-action="ai-modify-template"]')?.addEventListener('click', () => {
-                this.handleAIModifyTemplate();
+
+
+
+
+            // 🚀 新增：显示数据信息
+            modal.querySelector('[data-action="show-data-info"]')?.addEventListener('click', () => {
+                this.showDataInfoPanel();
             });
 
             // 其他按钮事件
@@ -23474,11 +23644,21 @@ tasks: creation="新任务创建", editing="任务编辑中"
             // 🚀 新增：初始化语法高亮
             this.initSyntaxHighlight();
 
-            console.log('[InfoBarSettings] ✅ HTML模板编辑器事件绑定完成 (响应式版本)');
+            // 🚀 新增：加载数据字段到提示词编辑器
+            this.loadDataFieldsToPromptEditor();
+
+            console.log('[InfoBarSettings] ✅ 状态栏编辑器事件绑定完成 (响应式版本)');
 
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 绑定HTML模板编辑器事件失败:', error);
+            console.error('[InfoBarSettings] ❌ 绑定状态栏编辑器事件失败:', error);
         }
+    }
+
+    /**
+     * @deprecated 保持向后兼容性
+     */
+    bindHTMLTemplateEditorEvents() {
+        return this.bindStatusBarEditorEvents();
     }
 
     /**
@@ -23813,7 +23993,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
      */
     switchEditorTab(tabName) {
         try {
-            const modal = document.querySelector('.html-template-editor-modal');
+            const modal = document.querySelector('.status-bar-editor-modal');
             if (!modal) return;
 
             const themeColors = {
@@ -23992,7 +24172,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
      */
     updateTemplatePreview() {
         try {
-            const modal = document.querySelector('.html-template-editor-modal');
+            const modal = document.querySelector('.status-bar-editor-modal');
             if (!modal) return;
 
             const textarea = modal.querySelector('.html-template-textarea');
@@ -24017,7 +24197,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 更新模板预览失败:', error);
-            const preview = document.querySelector('.html-template-editor-modal .preview-container');
+            const preview = document.querySelector('.status-bar-editor-modal .preview-container');
             if (preview) {
                 preview.innerHTML = `<div style="color: red; padding: 10px;">预览错误: ${error.message}</div>`;
             }
@@ -24054,24 +24234,129 @@ tasks: creation="新任务创建", editing="任务编辑中"
     }
 
     /**
-     * 简单的模板渲染
+     * 🚀 增强的模板渲染 - 支持复杂数据路径和CSS样式
      */
     simpleTemplateRender(template, data) {
         try {
             let result = template;
 
-            // 简单的数据绑定替换
-            result = result.replace(/\{\{data\.(\w+)\}\}/g, (match, field) => {
-                return data.data[field] || '';
+            // 🔧 修复：支持复杂的数据路径，如 {{data.personal.name}}
+            result = result.replace(/\{\{data\.([^}]+)\}\}/g, (match, path) => {
+                try {
+                    const keys = path.split('.');
+                    let value = data.data;
+
+                    for (const key of keys) {
+                        if (value && typeof value === 'object' && key in value) {
+                            value = value[key];
+                        } else {
+                            return ''; // 如果路径不存在，返回空字符串
+                        }
+                    }
+
+                    return String(value || '');
+                } catch (e) {
+                    console.warn('[InfoBarSettings] 数据路径解析失败:', path, e);
+                    return '';
+                }
             });
 
-            result = result.replace(/\{\{computed\.(\w+)\}\}/g, (match, field) => {
-                return data.computed[field] || '';
+            // 处理计算字段
+            result = result.replace(/\{\{computed\.([^}]+)\}\}/g, (match, field) => {
+                try {
+                    const keys = field.split('.');
+                    let value = data.computed;
+
+                    for (const key of keys) {
+                        if (value && typeof value === 'object' && key in value) {
+                            value = value[key];
+                        } else {
+                            return '';
+                        }
+                    }
+
+                    return String(value || '');
+                } catch (e) {
+                    console.warn('[InfoBarSettings] 计算字段解析失败:', field, e);
+                    return '';
+                }
             });
 
+            // 🚀 新增：处理条件渲染 {{#if condition}}...{{/if}}
+            result = result.replace(/\{\{#if\s+([^}]+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, condition, content) => {
+                try {
+                    // 简单的条件判断
+                    let conditionValue = false;
+
+                    if (condition.startsWith('data.')) {
+                        const path = condition.substring(5).split('.');
+                        let value = data.data;
+                        for (const key of path) {
+                            if (value && typeof value === 'object' && key in value) {
+                                value = value[key];
+                            } else {
+                                value = null;
+                                break;
+                            }
+                        }
+                        conditionValue = Boolean(value);
+                    }
+
+                    return conditionValue ? content : '';
+                } catch (e) {
+                    console.warn('[InfoBarSettings] 条件渲染解析失败:', condition, e);
+                    return '';
+                }
+            });
+
+            // 🚀 新增：处理循环渲染 {{#each array}}...{{/each}}
+            result = result.replace(/\{\{#each\s+([^}]+)\}\}([\s\S]*?)\{\{\/each\}\}/g, (match, arrayPath, itemTemplate) => {
+                try {
+                    let arrayValue = [];
+
+                    if (arrayPath.startsWith('data.')) {
+                        const path = arrayPath.substring(5).split('.');
+                        let value = data.data;
+                        for (const key of path) {
+                            if (value && typeof value === 'object' && key in value) {
+                                value = value[key];
+                            } else {
+                                value = null;
+                                break;
+                            }
+                        }
+                        if (Array.isArray(value)) {
+                            arrayValue = value;
+                        }
+                    }
+
+                    return arrayValue.map((item, index) => {
+                        let itemHtml = itemTemplate;
+                        // 替换 {{this}} 为当前项
+                        itemHtml = itemHtml.replace(/\{\{this\}\}/g, String(item || ''));
+                        // 替换 {{@index}} 为索引
+                        itemHtml = itemHtml.replace(/\{\{@index\}\}/g, String(index));
+                        return itemHtml;
+                    }).join('');
+                } catch (e) {
+                    console.warn('[InfoBarSettings] 循环渲染解析失败:', arrayPath, e);
+                    return '';
+                }
+            });
+
+            // 🔧 修复：确保CSS样式正确保留
+            // 移除可能破坏CSS的转义
+            result = result.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+
+            console.log('[InfoBarSettings] ✅ 模板渲染完成，结果长度:', result.length);
             return result;
+
         } catch (error) {
-            return `<div style="color: red;">渲染错误: ${error.message}</div>`;
+            console.error('[InfoBarSettings] ❌ 模板渲染失败:', error);
+            return `<div style="color: red; padding: 10px; border: 1px solid red; border-radius: 4px; background: #ffe6e6;">
+                <strong>渲染错误:</strong> ${error.message}
+                <br><small>请检查模板语法是否正确</small>
+            </div>`;
         }
     }
 
@@ -24138,7 +24423,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
      */
     async handleAIModifyTemplate() {
         try {
-            const modal = document.querySelector('.html-template-editor-modal');
+            const modal = document.querySelector('.status-bar-editor-modal');
             if (!modal) return;
 
             const textarea = modal.querySelector('.html-template-textarea');
@@ -24228,7 +24513,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
         try {
             console.log('[InfoBarSettings] 📂 加载HTML模板...');
 
-            const modal = document.querySelector('.html-template-editor-modal');
+            const modal = document.querySelector('.status-bar-editor-modal');
             const textarea = modal?.querySelector('.html-template-textarea');
 
             if (!textarea) {
@@ -24500,7 +24785,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
         try {
             console.log('[InfoBarSettings] 💾 保存HTML模板...');
 
-            const modal = document.querySelector('.html-template-editor-modal');
+            const modal = document.querySelector('.status-bar-editor-modal');
             const textarea = modal?.querySelector('.html-template-textarea');
 
             if (!textarea) {
@@ -24526,6 +24811,19 @@ tasks: creation="新任务创建", editing="任务编辑中"
             // 使用正确的保存方法
             context.saveSettingsDebounced();
 
+            // 🔧 验证保存的完整性
+            setTimeout(() => {
+                const savedTemplate = extensionSettings['Information bar integration tool'].customHTMLTemplate;
+                if (savedTemplate && savedTemplate.length === templateContent.length) {
+                    console.log('[InfoBarSettings] ✅ HTML模板保存成功，长度验证通过:', templateContent.length);
+                } else {
+                    console.error('[InfoBarSettings] ❌ HTML模板保存可能不完整:', {
+                        原始长度: templateContent.length,
+                        保存后长度: savedTemplate?.length || 0
+                    });
+                }
+            }, 100);
+
             console.log('[InfoBarSettings] ✅ HTML模板保存成功');
 
         } catch (error) {
@@ -24540,7 +24838,7 @@ tasks: creation="新任务创建", editing="任务编辑中"
         try {
             console.log('[InfoBarSettings] ✅ 应用HTML模板...');
 
-            const modal = document.querySelector('.html-template-editor-modal');
+            const modal = document.querySelector('.status-bar-editor-modal');
             const textarea = modal?.querySelector('.html-template-textarea');
 
             if (!textarea) {
@@ -24815,10 +25113,31 @@ ${userTemplate}
             const apiConfig = this.getAPIConfig();
 
             if (!apiConfig.enabled) {
-                throw new Error('AI API未启用，请在设置中配置API');
+                throw new Error('AI API未启用，请在扩展设置中配置API');
             }
 
-            console.log('[InfoBarSettings] 🤖 调用自定义AI API...');
+            if (!apiConfig.apiKey) {
+                throw new Error('API密钥未配置，请在扩展设置中添加API密钥');
+            }
+
+            if (!apiConfig.endpoint) {
+                throw new Error('API端点未配置，请在扩展设置中配置API端点');
+            }
+
+            console.log('[InfoBarSettings] 🤖 调用自定义AI API...', {
+                provider: apiConfig.provider,
+                model: apiConfig.model,
+                endpoint: apiConfig.endpoint,
+                maxTokens: apiConfig.maxTokens,
+                temperature: apiConfig.temperature,
+                hasApiKey: !!apiConfig.apiKey
+            });
+
+            // 🔧 修复：确保端点正确
+            if (!apiConfig.endpoint) {
+                console.error('[InfoBarSettings] ❌ API端点为空:', apiConfig);
+                throw new Error('API端点未配置，请检查扩展设置');
+            }
 
             let requestBody, headers;
 
@@ -24843,14 +25162,14 @@ ${userTemplate}
                     }
                 };
             } else {
-                // OpenAI格式（默认）
+                // 🔧 修复：OpenAI格式，使用用户配置的参数
                 headers = {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${apiConfig.apiKey}`,
                     ...apiConfig.headers
                 };
                 requestBody = {
-                    model: apiConfig.model,
+                    model: apiConfig.model, // 使用用户配置的模型
                     messages: [
                         {
                             role: 'system',
@@ -24861,19 +25180,69 @@ ${userTemplate}
                             content: prompt
                         }
                     ],
-                    max_tokens: 4000,
-                    temperature: 0.3
+                    max_tokens: Math.min(apiConfig.maxTokens || 4000, 8000), // 🔧 使用用户设置的最大令牌数，最大限制8000
+                    temperature: apiConfig.temperature || 0.7 // 🔧 使用用户设置的温度
                 };
+
+                // 🔧 添加其他可选参数（如果用户配置了）
+                if (apiConfig.topP !== undefined) {
+                    requestBody.top_p = apiConfig.topP;
+                }
+                if (apiConfig.frequencyPenalty !== undefined) {
+                    requestBody.frequency_penalty = apiConfig.frequencyPenalty;
+                }
+                if (apiConfig.presencePenalty !== undefined) {
+                    requestBody.presence_penalty = apiConfig.presencePenalty;
+                }
             }
 
-            const response = await fetch(apiConfig.endpoint, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(requestBody)
-            });
+            // 🔧 修复：添加超时和重试机制
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
 
-            if (!response.ok) {
-                throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+            let response;
+            let retryCount = 0;
+            const maxRetries = apiConfig.retryCount || 2;
+
+            while (retryCount <= maxRetries) {
+                try {
+                    console.log(`[InfoBarSettings] 🌐 发送API请求 (尝试 ${retryCount + 1}/${maxRetries + 1})`);
+
+                    response = await fetch(apiConfig.endpoint, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify(requestBody),
+                        signal: controller.signal
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (response.ok) {
+                        break; // 成功，跳出重试循环
+                    } else if (response.status >= 500 && retryCount < maxRetries) {
+                        // 服务器错误，可以重试
+                        console.warn(`[InfoBarSettings] ⚠️ 服务器错误 ${response.status}，${2 ** retryCount}秒后重试...`);
+                        await new Promise(resolve => setTimeout(resolve, 1000 * (2 ** retryCount)));
+                        retryCount++;
+                        continue;
+                    } else {
+                        // 客户端错误或重试次数用完
+                        throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+                    }
+                } catch (error) {
+                    clearTimeout(timeoutId);
+
+                    if (error.name === 'AbortError') {
+                        throw new Error('API请求超时，请稍后重试');
+                    } else if (retryCount < maxRetries && (error.message.includes('fetch') || error.message.includes('network'))) {
+                        console.warn(`[InfoBarSettings] ⚠️ 网络错误，${2 ** retryCount}秒后重试:`, error.message);
+                        await new Promise(resolve => setTimeout(resolve, 1000 * (2 ** retryCount)));
+                        retryCount++;
+                        continue;
+                    } else {
+                        throw error;
+                    }
+                }
             }
 
             const data = await response.json();
@@ -24998,28 +25367,81 @@ ${userTemplate}
      */
     getAPIConfig() {
         try {
-            // 从SillyTavern的扩展设置获取API配置
-            const context = SillyTavern.getContext();
-            const extensionSettings = context?.extensionSettings || {};
-            const configs = extensionSettings['Information bar integration tool'] || {};
-            const apiConfig = configs.apiConfig || {};
+            // 🔧 修复：正确获取扩展设置
+            let apiConfig = {};
+
+            // 方法1：从全局扩展设置获取
+            if (window.extension_settings && window.extension_settings['Information bar integration tool']) {
+                apiConfig = window.extension_settings['Information bar integration tool'].apiConfig || {};
+            }
+            // 方法2：从SillyTavern上下文获取（备用）
+            else if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) {
+                const context = SillyTavern.getContext();
+                const extensionSettings = context?.extensionSettings || {};
+                const configs = extensionSettings['Information bar integration tool'] || {};
+                apiConfig = configs.apiConfig || {};
+            }
+            // 方法3：从本地存储获取（最后备用）
+            else {
+                try {
+                    const stored = localStorage.getItem('InfoBarSettings_apiConfig');
+                    if (stored) {
+                        apiConfig = JSON.parse(stored);
+                    }
+                } catch (e) {
+                    console.warn('[InfoBarSettings] ⚠️ 从本地存储获取API配置失败:', e);
+                }
+            }
 
             console.log('[InfoBarSettings] 📊 获取API配置:', {
                 enabled: apiConfig.enabled,
                 provider: apiConfig.provider,
                 model: apiConfig.model,
-                maxTokens: apiConfig.maxTokens, // 🔧 添加maxTokens到日志
-                temperature: apiConfig.temperature, // 🔧 添加temperature到日志
-                hasApiKey: !!apiConfig.apiKey
+                maxTokens: apiConfig.maxTokens,
+                temperature: apiConfig.temperature,
+                hasApiKey: !!apiConfig.apiKey,
+                endpoint: apiConfig.endpoint,
+                baseUrl: apiConfig.baseUrl, // 🔧 添加baseUrl调试
+                rawEndpoint: apiConfig.endpoint
             });
 
-            // 构建正确的端点URL
-            let endpoint = apiConfig.endpoint;
-            if (apiConfig.provider === 'gemini' && !endpoint) {
+            // 🔧 修复：构建正确的端点URL，支持baseUrl和endpoint
+            let endpoint = apiConfig.endpoint || apiConfig.baseUrl;
+
+            // 🔧 修复：对于自定义provider，处理baseUrl和endpoint
+            if (apiConfig.provider === 'custom') {
+                if (!endpoint) {
+                    console.warn('[InfoBarSettings] ⚠️ 自定义API提供商未配置端点，将在调用时检查');
+                    // 不在这里抛错，而是在实际调用时检查
+                } else {
+                    // 🔧 修复：构建完整的chat completions端点
+                    if (!endpoint.includes('/chat/completions')) {
+                        // 如果是baseUrl格式，添加chat/completions路径
+                        if (endpoint.endsWith('/v1') || endpoint.endsWith('/v1/')) {
+                            endpoint = endpoint.replace(/\/v1\/?$/, '/v1/chat/completions');
+                        } else if (endpoint.includes('/models')) {
+                            endpoint = endpoint.replace('/models', '/chat/completions');
+                        } else if (!endpoint.includes('/chat/completions')) {
+                            // 如果没有具体路径，添加默认路径
+                            endpoint = endpoint.replace(/\/$/, '') + '/chat/completions';
+                        }
+                        console.log('[InfoBarSettings] 🔧 构建完整端点:', endpoint);
+                    }
+                }
+            } else if (apiConfig.provider === 'gemini') {
+                // 🔧 修复：Gemini需要特殊的端点格式
                 const model = apiConfig.model || 'gemini-pro';
-                endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+                if (!endpoint || endpoint === 'https://generativelanguage.googleapis.com' || !endpoint.includes(':generateContent')) {
+                    endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+                    console.log('[InfoBarSettings] 🔧 构建Gemini端点:', endpoint);
+                }
             } else if (!endpoint) {
-                endpoint = this.getDefaultEndpoint(apiConfig.provider);
+                try {
+                    endpoint = this.getDefaultEndpoint(apiConfig.provider);
+                } catch (e) {
+                    console.warn('[InfoBarSettings] ⚠️ 获取默认端点失败:', e.message);
+                    endpoint = ''; // 设为空，在调用时再检查
+                }
             }
 
             return {
@@ -25037,6 +25459,12 @@ ${userTemplate}
             };
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 获取API配置失败:', error);
+            console.error('[InfoBarSettings] 错误堆栈:', error.stack);
+            console.error('[InfoBarSettings] 错误发生位置，原始配置:', {
+                hasExtensionSettings: !!window.extension_settings,
+                hasInfoBarConfig: !!(window.extension_settings && window.extension_settings['Information bar integration tool']),
+                hasSillyTavern: typeof SillyTavern !== 'undefined'
+            });
             return { enabled: false };
         }
     }
@@ -25048,9 +25476,16 @@ ${userTemplate}
         const endpoints = {
             openai: 'https://api.openai.com/v1/chat/completions',
             anthropic: 'https://api.anthropic.com/v1/messages',
-            gemini: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
-            custom: 'https://api.openai.com/v1/chat/completions'
+            gemini: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
+            // 🔧 修复：移除custom的默认端点，custom必须由用户配置
         };
+
+        // 🔧 修复：custom provider返回空字符串，不抛错
+        if (provider === 'custom') {
+            console.warn('[InfoBarSettings] ⚠️ 自定义provider需要用户配置端点');
+            return ''; // 返回空字符串而不是抛错
+        }
+
         return endpoints[provider] || endpoints.openai;
     }
 
@@ -25633,5 +26068,921 @@ ${userTemplate}
                 </div>
             </div>
         `;
+    }
+
+    /**
+     * 🚀 处理AI创作状态栏
+     */
+    async handleAICreateStatusBar() {
+        try {
+            console.log('[InfoBarSettings] 🤖 开始AI创作状态栏...');
+
+            const modal = document.querySelector('.status-bar-editor-modal');
+            const aiButton = modal?.querySelector('[data-action="ai-create-status-bar"]');
+
+            if (!aiButton) return;
+
+            // 显示加载状态
+            const originalText = aiButton.innerHTML;
+            aiButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI创作中...';
+            aiButton.disabled = true;
+
+            try {
+                // 获取当前启用的面板和数据获取方式
+                const enabledPanels = await this.getEnabledPanelsForAI();
+                const dataAccessMethods = await this.generateDataAccessMethods(enabledPanels);
+
+                // 构建AI创作提示词
+                const prompt = this.buildAICreateStatusBarPrompt(enabledPanels, dataAccessMethods);
+
+                // 调用AI生成状态栏
+                const generatedStatusBar = await this.callAIForStatusBarCreation(prompt);
+
+                // 将生成的状态栏插入到编辑器
+                const textarea = modal?.querySelector('.html-template-textarea');
+                if (textarea && generatedStatusBar) {
+                    textarea.value = generatedStatusBar;
+
+                    // 更新预览
+                    this.updateTemplatePreview();
+                    this.updateEditorStatus();
+
+                    console.log('[InfoBarSettings] ✅ AI状态栏创作完成');
+                    this.showNotification('AI状态栏创作完成！', 'success');
+                }
+
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ AI创作状态栏失败:', error);
+                this.showNotification(`AI创作失败: ${error.message}`, 'error');
+            } finally {
+                // 恢复按钮状态
+                aiButton.innerHTML = originalText;
+                aiButton.disabled = false;
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理AI创作状态栏失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 获取启用的面板信息（用于AI）
+     */
+    async getEnabledPanelsForAI() {
+        try {
+            console.log('[InfoBarSettings] 📊 获取启用面板信息...');
+
+            // 使用SmartPromptSystem的方法获取启用面板
+            const smartPromptSystem = window.SillyTavernInfobar?.modules?.smartPromptSystem;
+            if (smartPromptSystem && typeof smartPromptSystem.getEnabledPanels === 'function') {
+                const panels = await smartPromptSystem.getEnabledPanels();
+                const enabledPanels = panels.map(panel => ({
+                    id: panel.id,
+                    name: panel.name || this.getPanelDisplayName(panel.id),
+                    config: panel,
+                    subItems: (panel.subItems || []).map(subItem => ({
+                        key: subItem.key,
+                        name: subItem.name || this.getSubItemDisplayName(panel.id, subItem.key),
+                        config: subItem
+                    }))
+                }));
+
+                console.log('[InfoBarSettings] ✅ 获取到启用面板:', enabledPanels.length, '个');
+                return enabledPanels;
+            }
+
+            // 🔧 修复：备用方法，使用与SmartPromptSystem相同的逻辑
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings['Information bar integration tool'] || {};
+
+            const enabledPanels = [];
+
+            // 基础面板
+            const basicPanelIds = [
+                'personal', 'world', 'interaction', 'tasks', 'organization',
+                'news', 'inventory', 'abilities', 'plot', 'cultivation',
+                'fantasy', 'modern', 'historical', 'magic', 'training'
+            ];
+
+            for (const panelId of basicPanelIds) {
+                if (configs[panelId]) {
+                    const panel = configs[panelId];
+                    const isEnabled = panel.enabled !== false; // 默认为true，除非明确设置为false
+
+                    if (isEnabled) {
+                        // 🔧 修复：同时处理基础设置复选框和面板管理自定义子项
+                        const allSubItems = [];
+
+                        // 1. 处理基础设置中的复选框配置（panel[key].enabled格式）
+                        const subItemKeys = Object.keys(panel).filter(key =>
+                            key !== 'enabled' &&
+                            key !== 'subItems' &&     // 排除自定义子项数组
+                            key !== 'description' &&  // 排除面板属性
+                            key !== 'icon' &&
+                            key !== 'required' &&
+                            key !== 'memoryInject' &&
+                            key !== 'prompts' &&
+                            typeof panel[key] === 'object' &&
+                            panel[key].enabled !== undefined
+                        );
+                        const enabledSubItems = subItemKeys.filter(key => panel[key].enabled === true);
+
+                        // 添加基础设置的子项
+                        enabledSubItems.forEach(key => {
+                            allSubItems.push({
+                                key: key,
+                                name: panel[key].name || this.getSubItemDisplayName(panelId, key),
+                                enabled: true,
+                                value: panel[key].value || '',
+                                source: 'basicSettings'
+                            });
+                        });
+
+                        // 2. 处理面板管理中的自定义子项（panel.subItems数组格式）
+                        let enabledCustomSubItems = [];
+                        if (panel.subItems && Array.isArray(panel.subItems)) {
+                            enabledCustomSubItems = panel.subItems.filter(subItem => subItem.enabled !== false);
+
+                            // 创建键名集合，避免重复添加
+                            const existingKeys = new Set(allSubItems.map(item => item.key));
+
+                            enabledCustomSubItems.forEach(subItem => {
+                                const key = subItem.key || subItem.name.toLowerCase().replace(/\s+/g, '_');
+
+                                // 检查是否已存在，避免重复
+                                if (!existingKeys.has(key)) {
+                                    allSubItems.push({
+                                        key: key,
+                                        name: subItem.displayName || subItem.name,
+                                        enabled: true,
+                                        value: subItem.value || '',
+                                        source: 'panelManagement'
+                                    });
+                                    existingKeys.add(key);
+                                }
+                            });
+                        }
+
+                        if (allSubItems.length > 0) {
+                            enabledPanels.push({
+                                id: panelId,
+                                name: this.getPanelDisplayName(panelId),
+                                config: panel,
+                                subItems: allSubItems
+                            });
+                        }
+                    }
+                }
+            }
+
+            // 🔧 修复：检查自定义面板，使用与SmartPromptSystem相同的逻辑
+            if (configs.customPanels) {
+                for (const [panelId, panelConfig] of Object.entries(configs.customPanels)) {
+                    if (panelConfig && panelConfig.enabled !== false) { // 默认启用，除非明确设置为false
+                        const allSubItems = panelConfig.subItems || [];
+                        // 只统计启用的子项
+                        const enabledSubItems = allSubItems.filter(subItem => subItem.enabled !== false);
+
+                        // 处理启用的子项
+                        const processedSubItems = enabledSubItems.map(subItem => {
+                            // 处理不同的子项格式
+                            if (typeof subItem === 'string') {
+                                return {
+                                    key: subItem,
+                                    name: subItem,
+                                    enabled: true,
+                                    value: ''
+                                };
+                            } else if (subItem && typeof subItem === 'object') {
+                                return {
+                                    key: subItem.key || subItem.name || subItem.id,
+                                    name: subItem.name || subItem.displayName || subItem.key || subItem.id,
+                                    enabled: subItem.enabled !== false,
+                                    value: subItem.value || ''
+                                };
+                            }
+                            return null;
+                        }).filter(Boolean);
+
+                        enabledPanels.push({
+                            id: panelId,
+                            key: panelConfig.key || panelId, // 添加key属性
+                            type: 'custom',
+                            name: panelConfig.name || '未命名面板',
+                            config: panelConfig,
+                            subItems: processedSubItems
+                        });
+                    }
+                }
+            }
+
+            console.log('[InfoBarSettings] ✅ 获取到启用面板:', enabledPanels.length, '个');
+            return enabledPanels;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取启用面板信息失败:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 🚀 生成数据获取方式说明
+     */
+    async generateDataAccessMethods(enabledPanels) {
+        try {
+            console.log('[InfoBarSettings] 🔧 生成数据获取方式说明...');
+
+            const accessMethods = [];
+
+            enabledPanels.forEach(panel => {
+                const panelAccess = {
+                    panelId: panel.id,
+                    panelName: panel.name,
+                    accessSyntax: `{{data.${panel.id}.fieldName}}`,
+                    availableFields: [],
+                    examples: []
+                };
+
+                // 为每个子项生成访问示例
+                panel.subItems.forEach(subItem => {
+                    panelAccess.availableFields.push({
+                        key: subItem.key,
+                        name: subItem.name,
+                        syntax: `{{data.${panel.id}.${subItem.key}}}`
+                    });
+
+                    // 生成示例
+                    panelAccess.examples.push(
+                        `<span class="${panel.id}-${subItem.key}">{{data.${panel.id}.${subItem.key}}}</span>`
+                    );
+                });
+
+                accessMethods.push(panelAccess);
+            });
+
+            console.log('[InfoBarSettings] ✅ 数据获取方式生成完成');
+            return accessMethods;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 生成数据获取方式失败:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 🚀 构建AI创作状态栏提示词
+     */
+    buildAICreateStatusBarPrompt(enabledPanels, dataAccessMethods) {
+        const panelSummary = enabledPanels.map(panel =>
+            `${panel.name}(${panel.subItems.length}个字段)`
+        ).join('、');
+
+        const dataExamples = dataAccessMethods.map(method => {
+            const fieldExamples = method.availableFields.slice(0, 4).map(field =>
+                `  ${field.syntax} // ${field.name}`
+            ).join('\n');
+
+            return `### ${method.panelName}\n${fieldExamples}`;
+        }).join('\n\n');
+
+        return `# 状态栏HTML生成任务
+
+## 任务目标
+创建一个完整的HTML状态栏，包含CSS样式和数据绑定。
+
+## 启用的数据面板
+${panelSummary}
+
+## 可用数据字段
+${dataExamples}
+
+## HTML格式要求
+1. **完整HTML文档结构**：
+   - 必须包含 <!DOCTYPE html>
+   - 包含 <html>, <head>, <body> 标签
+   - 在 <head> 中定义所有CSS样式
+
+2. **CSS样式规范**：
+   - 所有样式必须写在 <head> 内的 <style> 标签中
+   - 不要使用内联样式 (style="...")
+   - 使用CSS变量定义主题色彩
+   - 支持响应式设计
+
+3. **数据绑定语法**：
+   - 使用 {{data.面板名.字段名}} 格式
+   - 条件显示：{{#if data.字段}}内容{{/if}}
+   - 循环：{{#each data.数组}}{{this}}{{/each}}
+
+## CSS颜色要求
+**重要：必须使用硬编码颜色值，不要使用CSS变量**
+- 背景渐变：linear-gradient(135deg, #fff0f5 0%, #ffe4e1 100%)
+- 卡片背景：rgba(255, 255, 255, 0.6)
+- 主文字色：#5c2a52
+- 强调色：#d9538d
+- 阴影：0 8px 32px 0 rgba(240, 128, 128, 0.3)
+
+## 设计风格
+- 现代化卡片式布局，16px圆角
+- 粉色主题：使用粉色系渐变和半透明效果
+- 响应式网格布局
+- 悬停效果：transform: translateY(-8px)
+- 不要使用var(--变量名)，直接写具体颜色值
+
+## 输出格式
+直接输出完整的HTML代码，不要任何解释文字。代码必须包含：
+1. 完整的HTML文档结构
+2. <head> 中的CSS样式定义
+3. <body> 中的内容结构
+4. 所有启用面板的数据绑定`;
+    }
+
+    /**
+     * 🚀 调用AI进行状态栏创作
+     */
+    async callAIForStatusBarCreation(prompt) {
+        try {
+            console.log('[InfoBarSettings] 🤖 调用AI进行状态栏创作...');
+
+            // 复用现有的AI调用逻辑
+            const result = await this.callCustomAI(prompt);
+
+            // 清理AI返回的内容
+            const cleanedResult = this.cleanAIResponse(result);
+
+            console.log('[InfoBarSettings] ✅ AI状态栏创作完成');
+            return cleanedResult;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ AI状态栏创作失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🚀 显示数据信息面板
+     */
+    async showDataInfoPanel() {
+        try {
+            console.log('[InfoBarSettings] 📊 显示数据信息面板...');
+
+            // 获取启用的面板信息
+            const enabledPanels = await this.getEnabledPanelsForAI();
+
+            // 创建数据信息弹窗
+            const dataInfoHTML = this.createDataInfoPopup(enabledPanels);
+
+            // 添加到页面
+            document.body.insertAdjacentHTML('beforeend', dataInfoHTML);
+
+            // 绑定关闭事件
+            const popup = document.querySelector('.data-info-popup');
+            if (popup) {
+                // 点击外部关闭
+                popup.addEventListener('click', (e) => {
+                    if (e.target === popup) {
+                        popup.remove();
+                    }
+                });
+
+                // 关闭按钮
+                const closeBtn = popup.querySelector('.popup-close-btn');
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', () => {
+                        popup.remove();
+                    });
+                }
+
+                // ESC键关闭
+                const handleKeyDown = (e) => {
+                    if (e.key === 'Escape') {
+                        popup.remove();
+                        document.removeEventListener('keydown', handleKeyDown);
+                    }
+                };
+                document.addEventListener('keydown', handleKeyDown);
+            }
+
+            console.log('[InfoBarSettings] ✅ 数据信息面板显示完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示数据信息面板失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 创建数据信息弹窗
+     */
+    createDataInfoPopup(enabledPanels) {
+        const themeColors = {
+            background: this.getInfoBarThemeColor('background'),
+            surface: this.getInfoBarThemeColor('surface'),
+            border: this.getInfoBarThemeColor('border'),
+            text: this.getInfoBarThemeColor('text'),
+            textSecondary: this.getInfoBarThemeColor('textSecondary'),
+            accent: this.getInfoBarThemeColor('accent')
+        };
+
+        // 生成面板信息内容
+        let panelsHTML = '';
+        if (enabledPanels.length === 0) {
+            panelsHTML = `
+                <div style="text-align: center; padding: 40px; color: ${themeColors.textSecondary};">
+                    <i class="fas fa-info-circle" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
+                    <p>当前没有启用的面板</p>
+                    <p style="font-size: 12px;">请先在设置中启用一些面板</p>
+                </div>
+            `;
+        } else {
+            panelsHTML = enabledPanels.map(panel => {
+                const subItemsHTML = panel.subItems.map(subItem => `
+                    <div class="data-field-item" style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 8px 12px;
+                        background: ${themeColors.surface};
+                        border-radius: 6px;
+                        margin-bottom: 6px;
+                        border: 1px solid ${themeColors.border};
+                    ">
+                        <div class="field-info">
+                            <div class="field-name" style="color: ${themeColors.text}; font-weight: 500;">
+                                ${subItem.name}
+                            </div>
+                            <div class="field-syntax" style="
+                                color: ${themeColors.textSecondary};
+                                font-size: 11px;
+                                font-family: 'Consolas', 'Monaco', monospace;
+                                margin-top: 2px;
+                            ">
+                                {{data.${panel.id}.${subItem.key}}}
+                            </div>
+                        </div>
+                        <button class="copy-syntax-btn" data-syntax="{{data.${panel.id}.${subItem.key}}}" style="
+                            background: ${themeColors.accent};
+                            color: ${themeColors.background};
+                            border: none;
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                            font-size: 10px;
+                            cursor: pointer;
+                            transition: all 0.2s ease;
+                        " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                `).join('');
+
+                return `
+                    <div class="panel-section" style="margin-bottom: 24px;">
+                        <div class="panel-header" style="
+                            display: flex;
+                            align-items: center;
+                            margin-bottom: 12px;
+                            padding-bottom: 8px;
+                            border-bottom: 1px solid ${themeColors.border};
+                        ">
+                            <h4 style="
+                                margin: 0;
+                                color: ${themeColors.text};
+                                font-size: 16px;
+                                font-weight: 600;
+                            ">
+                                <i class="fas fa-database" style="margin-right: 8px; color: ${themeColors.accent};"></i>
+                                ${panel.name}
+                            </h4>
+                            <span style="
+                                margin-left: auto;
+                                background: ${themeColors.accent};
+                                color: ${themeColors.background};
+                                padding: 2px 8px;
+                                border-radius: 12px;
+                                font-size: 11px;
+                                font-weight: 500;
+                            ">
+                                ${panel.subItems.length} 个字段
+                            </span>
+                        </div>
+                        <div class="panel-fields">
+                            ${subItemsHTML}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        return `
+            <div class="data-info-popup" style="
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.8);
+                backdrop-filter: blur(5px);
+                z-index: 10001;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+                box-sizing: border-box;
+            ">
+                <div class="popup-container" style="
+                    width: 100%;
+                    max-width: 800px;
+                    max-height: 80vh;
+                    background: ${themeColors.background};
+                    border-radius: 12px;
+                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                    border: 1px solid ${themeColors.border};
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                ">
+                    <div class="popup-header" style="
+                        padding: 20px 24px;
+                        background: ${themeColors.surface};
+                        border-bottom: 1px solid ${themeColors.border};
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <div>
+                            <h3 style="margin: 0; color: ${themeColors.text}; font-size: 18px; font-weight: 600;">
+                                <i class="fas fa-info-circle" style="margin-right: 8px; color: ${themeColors.accent};"></i>
+                                数据字段信息
+                            </h3>
+                            <p style="margin: 4px 0 0 0; color: ${themeColors.textSecondary}; font-size: 13px;">
+                                当前启用的面板和可用数据字段
+                            </p>
+                        </div>
+                        <button class="popup-close-btn" style="
+                            background: transparent;
+                            border: 1px solid ${themeColors.border};
+                            color: ${themeColors.textSecondary};
+                            padding: 8px 12px;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            transition: all 0.2s ease;
+                        " onmouseover="this.style.background='${themeColors.surface}'; this.style.color='${themeColors.text}'"
+                           onmouseout="this.style.background='transparent'; this.style.color='${themeColors.textSecondary}'">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="popup-body" style="
+                        flex: 1;
+                        padding: 20px 24px;
+                        overflow-y: auto;
+                    ">
+                        ${panelsHTML}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 🚀 获取子项显示名称
+     */
+    getSubItemDisplayName(panelId, subItemKey) {
+        // 使用现有的字段映射逻辑
+        const fieldMappings = this.getFieldMappings();
+        const panelMappings = fieldMappings[panelId];
+
+        if (panelMappings && panelMappings[subItemKey]) {
+            return panelMappings[subItemKey];
+        }
+
+        // 如果没有映射，返回格式化的key
+        return subItemKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+    }
+
+    /**
+     * 🚀 绑定状态栏提示词编辑器事件
+     */
+    bindPromptEditorEvents(modal) {
+        try {
+            // 🔧 修复：防止重复绑定事件
+            if (modal.dataset.promptEventsbound === 'true') {
+                console.log('[InfoBarSettings] ⚠️ 提示词编辑器事件已绑定，跳过重复绑定');
+                return;
+            }
+
+            // 提示词模板按钮
+            modal.querySelectorAll('.prompt-template-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.insertPromptTemplate(btn.dataset.template);
+                });
+            });
+
+            // 🔧 修复：使用自定义提示词按钮 - 添加防重复点击
+            const usePromptBtn = modal.querySelector('[data-action="use-custom-prompt"]');
+            if (usePromptBtn) {
+                usePromptBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    // 🔧 防止重复点击
+                    if (usePromptBtn.disabled || usePromptBtn.dataset.processing === 'true') {
+                        console.log('[InfoBarSettings] ⚠️ AI生成正在进行中，忽略重复点击');
+                        return;
+                    }
+
+                    await this.useCustomPrompt();
+                });
+            }
+
+            // 标记事件已绑定
+            modal.dataset.promptEventsbound = 'true';
+            console.log('[InfoBarSettings] ✅ 状态栏提示词编辑器事件绑定完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 绑定状态栏提示词编辑器事件失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 插入提示词模板
+     */
+    insertPromptTemplate(templateType) {
+        try {
+            const modal = document.querySelector('.status-bar-editor-modal');
+            const textarea = modal?.querySelector('.prompt-textarea');
+            if (!textarea) return;
+
+            const templates = {
+                character: '创建角色状态栏：头像、姓名、等级、生命值，使用粉色渐变背景#fff0f5到#ffe4e1，卡片背景rgba(255,255,255,0.6)，文字色#5c2a52',
+                inventory: '设计物品栏界面：网格布局显示物品图标、名称、数量，使用具体颜色值不用CSS变量，粉色主题',
+                stats: '制作属性面板：力量、敏捷、智力等数值，带进度条，使用硬编码颜色值#d9538d作为强调色',
+                modern: '现代化状态栏：渐变背景linear-gradient(135deg,#fff0f5,#ffe4e1)，圆角16px，阴影rgba(240,128,128,0.3)，不使用var()变量',
+                minimal: '简约状态栏：清爽布局，直接使用具体颜色值，背景#fff0f5，文字#5c2a52，强调色#d9538d'
+            };
+
+            const template = templates[templateType];
+            if (template) {
+                textarea.value = template;
+                textarea.focus();
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 插入提示词模板失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 使用自定义提示词进行AI创作
+     */
+    async useCustomPrompt() {
+        try {
+            const modal = document.querySelector('.status-bar-editor-modal');
+            const promptTextarea = modal?.querySelector('.prompt-textarea');
+            const usePromptBtn = modal?.querySelector('[data-action="use-custom-prompt"]');
+
+            if (!promptTextarea || !usePromptBtn) {
+                console.warn('[InfoBarSettings] ⚠️ 未找到必要的DOM元素');
+                return;
+            }
+
+            // 🔧 修复：强化防重复点击机制
+            if (usePromptBtn.disabled || usePromptBtn.dataset.processing === 'true') {
+                console.log('[InfoBarSettings] ⚠️ AI生成正在进行中，忽略重复调用');
+                return;
+            }
+
+            const customPrompt = promptTextarea.value.trim();
+            if (!customPrompt) {
+                this.showNotification('请输入提示词内容', 'warning');
+                return;
+            }
+
+            // 🔧 修复：设置处理状态标记
+            usePromptBtn.dataset.processing = 'true';
+
+            // 显示加载状态
+            const originalText = usePromptBtn.innerHTML;
+            usePromptBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI生成中...';
+            usePromptBtn.disabled = true;
+
+            console.log('[InfoBarSettings] 🚀 开始AI生成，提示词长度:', customPrompt.length);
+
+            try {
+                // 获取启用的面板信息
+                const enabledPanels = await this.getEnabledPanelsForAI();
+                const dataAccessMethods = await this.generateDataAccessMethods(enabledPanels);
+
+                // 构建增强的AI提示词
+                const enhancedPrompt = this.buildEnhancedAIPrompt(customPrompt, enabledPanels, dataAccessMethods);
+
+                // 调用AI生成状态栏
+                const generatedStatusBar = await this.callAIForStatusBarCreation(enhancedPrompt);
+
+                // 将生成的状态栏插入到编辑器
+                const htmlTextarea = modal?.querySelector('.html-template-textarea');
+                if (htmlTextarea && generatedStatusBar) {
+                    htmlTextarea.value = generatedStatusBar;
+
+                    // 更新预览
+                    this.updateTemplatePreview();
+                    this.updateEditorStatus();
+
+                    console.log('[InfoBarSettings] ✅ 自定义提示词AI创作完成');
+                    this.showNotification('AI状态栏创作完成！', 'success');
+                }
+
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 自定义提示词AI创作失败:', error);
+
+                // 🔧 修复：提供更详细的错误信息
+                let errorMessage = error.message;
+                if (error.message.includes('API请求失败')) {
+                    errorMessage = '网络请求失败，请检查网络连接和API配置';
+                } else if (error.message.includes('未启用') || error.message.includes('未配置')) {
+                    errorMessage = '请先在扩展设置中配置AI API';
+                }
+
+                this.showNotification(`AI生成失败: ${errorMessage}`, 'error');
+            } finally {
+                // 🔧 修复：确保状态完全恢复
+                if (usePromptBtn) {
+                    usePromptBtn.innerHTML = originalText;
+                    usePromptBtn.disabled = false;
+                    usePromptBtn.dataset.processing = 'false';
+                }
+                console.log('[InfoBarSettings] 🔄 AI生成流程结束，按钮状态已恢复');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 使用自定义提示词失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 构建增强的AI提示词
+     */
+    buildEnhancedAIPrompt(userPrompt, enabledPanels, dataAccessMethods) {
+        const panelSummary = enabledPanels.map(panel =>
+            `${panel.name}(${panel.subItems.length}个字段)`
+        ).join('、');
+
+        const dataExamples = dataAccessMethods.map(method => {
+            const fieldExamples = method.availableFields.slice(0, 4).map(field =>
+                `  ${field.syntax} // ${field.name}`
+            ).join('\n');
+
+            return `### ${method.panelName}\n${fieldExamples}`;
+        }).join('\n\n');
+
+        return `# 自定义状态栏HTML生成
+
+## 用户需求
+${userPrompt}
+
+## 可用数据面板
+${panelSummary}
+
+## 数据字段语法
+${dataExamples}
+
+## HTML结构要求
+1. **完整HTML文档**：
+   - 包含 <!DOCTYPE html>, <html>, <head>, <body>
+   - 所有CSS写在 <head> 的 <style> 标签内
+   - 不使用内联样式
+
+2. **CSS颜色规范**：
+   **禁止使用CSS变量，必须使用硬编码颜色值**
+   - 背景：linear-gradient(135deg, #fff0f5 0%, #ffe4e1 100%)
+   - 卡片：rgba(255, 255, 255, 0.6)
+   - 文字：#5c2a52
+   - 强调：#d9538d
+   - 阴影：rgba(240, 128, 128, 0.3)
+
+3. **数据绑定**：
+   - {{data.面板名.字段名}}
+   - {{#if data.字段}}条件内容{{/if}}
+
+## 设计风格
+- 粉色主题卡片布局，16px圆角
+- 直接使用具体颜色值，不用var()
+- 响应式网格布局
+- 悬停效果：translateY(-8px)
+
+直接输出完整HTML代码，无需解释。
+
+## 🔧 技术规范
+- 使用内联CSS样式
+- 数据绑定语法: {{data.panelId.fieldName}}
+- 条件显示: {{#if data.field}}内容{{/if}}
+- 循环渲染: {{#each data.array}}{{this}}{{/each}}
+- 图标类名: fas fa-icon-name
+
+## 📝 输出要求
+请直接输出完整的HTML代码，包含：
+- 完整的HTML结构
+- 内联CSS样式
+- 所有启用面板的数据绑定
+- 现代化的视觉设计
+- 响应式布局
+
+不要包含任何解释文字，直接输出HTML代码。`;
+    }
+
+    /**
+     * 🚀 加载数据字段到提示词编辑器
+     */
+    async loadDataFieldsToPromptEditor() {
+        try {
+            const modal = document.querySelector('.status-bar-editor-modal');
+            const fieldsList = modal?.querySelector('.data-fields-list');
+            if (!fieldsList) return;
+
+            // 获取启用的面板信息
+            const enabledPanels = await this.getEnabledPanelsForAI();
+
+            if (enabledPanels.length === 0) {
+                fieldsList.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: var(--theme-text-secondary, #aaa);">
+                        <i class="fas fa-info-circle" style="margin-bottom: 8px; opacity: 0.5;"></i>
+                        <p>当前没有启用的面板</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // 生成字段列表HTML
+            const fieldsHTML = enabledPanels.map(panel => {
+                const fieldsItems = panel.subItems.map(subItem => `
+                    <div class="field-item" style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 0px 4px;
+                        margin-bottom: 0px;
+                        border-radius: 2px;
+                        background: var(--theme-surface, #2a2a2a);
+                        border: 1px solid var(--theme-border, #444);
+                        min-height: 16px;
+                        line-height: 1.0;
+                        height: 16px;
+                    ">
+                        <span style="color: var(--theme-text, #fff); font-size: 9px; line-height: 1.0;">
+                            ${subItem.name}
+                        </span>
+                        <code style="
+                            color: var(--theme-accent, #007bff);
+                            font-size: 8px;
+                            font-family: 'Consolas', 'Monaco', monospace;
+                            line-height: 1.0;
+                        ">
+                            {{data.${panel.id}.${subItem.key}}}
+                        </code>
+                    </div>
+                `).join('');
+
+                return `
+                    <div class="panel-group" style="margin-bottom: 1px;">
+                        <div class="panel-title" style="
+                            color: var(--theme-accent, #007bff);
+                            font-size: 10px;
+                            font-weight: 600;
+                            margin-bottom: 0px;
+                            padding: 0px 4px;
+                            background: var(--theme-background, #1a1a1a);
+                            border-radius: 3px;
+                            line-height: 1.1;
+                            height: 16px;
+                            display: flex;
+                            align-items: center;
+                        ">
+                            <i class="fas fa-database" style="margin-right: 3px; font-size: 10px;"></i>
+                            ${panel.name}
+                        </div>
+                        ${fieldsItems}
+                    </div>
+                `;
+            }).join('');
+
+            fieldsList.innerHTML = fieldsHTML;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载数据字段到提示词编辑器失败:', error);
+            const fieldsList = document.querySelector('.data-fields-list');
+            if (fieldsList) {
+                fieldsList.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: var(--theme-text-secondary, #aaa);">
+                        <i class="fas fa-exclamation-triangle" style="margin-bottom: 8px; color: #ff6b6b;"></i>
+                        <p>加载数据字段失败</p>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    /**
+     * @deprecated 保持向后兼容性
+     */
+    createHTMLTemplateEditorHTML() {
+        return this.createStatusBarEditorHTML();
     }
 }

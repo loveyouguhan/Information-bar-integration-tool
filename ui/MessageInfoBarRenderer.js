@@ -1128,9 +1128,10 @@ export class MessageInfoBarRenderer {
                 renderedHTML = this.simpleTemplateRender(customTemplate, templateData);
             }
 
-            // 包装在容器中
+            // 🔧 修复：包装在容器中，不强制应用SillyTavern主题样式
+            // 自定义HTML应该使用自己的CSS样式，而不是被SillyTavern主题覆盖
             return `
-                <div class="infobar-container infobar-style-custom-html" data-message-id="${messageId}" ${this.getThemeStyles()}>
+                <div class="infobar-container infobar-style-custom-html" data-message-id="${messageId}">
                     <div class="custom-html-wrapper">
                         ${renderedHTML}
                     </div>
@@ -1159,6 +1160,24 @@ export class MessageInfoBarRenderer {
 
             if (customHTMLTemplate && customHTMLTemplate.trim()) {
                 console.log('[MessageInfoBarRenderer] ✅ 找到保存的自定义HTML模板');
+
+                // 🔧 验证模板完整性
+                const templateLength = customHTMLTemplate.length;
+                const hasStyleTag = customHTMLTemplate.includes('<style>');
+                const hasBodyTag = customHTMLTemplate.includes('<body>');
+                const hasDoctype = customHTMLTemplate.includes('<!DOCTYPE');
+
+                console.log('[MessageInfoBarRenderer] 🔍 模板完整性检查:', {
+                    长度: templateLength,
+                    包含样式: hasStyleTag,
+                    包含主体: hasBodyTag,
+                    包含文档类型: hasDoctype
+                });
+
+                if (templateLength < 1000 || !hasStyleTag || !hasBodyTag) {
+                    console.warn('[MessageInfoBarRenderer] ⚠️ 模板可能不完整，但仍尝试使用');
+                }
+
                 return customHTMLTemplate;
             }
 
@@ -2206,6 +2225,138 @@ export class MessageInfoBarRenderer {
     }
 
     /**
+     * 🔧 新增：从HTML中提取所有样式内容
+     * 解决Shadow DOM中CSS样式隔离导致的样式失效问题
+     */
+    extractStylesFromHTML(html) {
+        try {
+            console.log('[MessageInfoBarRenderer] 🎨 提取HTML中的样式...');
+
+            let extractedStyles = '';
+
+            // 1. 提取<style>标签中的内容
+            const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+            let styleMatch;
+            while ((styleMatch = styleRegex.exec(html)) !== null) {
+                extractedStyles += styleMatch[1] + '\n';
+            }
+
+            // 2. 提取<link>标签中的CSS（转换为@import）
+            const linkRegex = /<link[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
+            let linkMatch;
+            while ((linkMatch = linkRegex.exec(html)) !== null) {
+                const href = linkMatch[1];
+                // 只处理外部CSS链接，避免本地文件路径问题
+                if (href.startsWith('http') || href.startsWith('//')) {
+                    extractedStyles += `@import url("${href}");\n`;
+                }
+            }
+
+            // 3. 提取内联样式（将内联样式转换为CSS规则）
+            const inlineStyleRegex = /style=["']([^"']+)["']/gi;
+            let inlineMatch;
+            let inlineCounter = 0;
+            while ((inlineMatch = inlineStyleRegex.exec(html)) !== null) {
+                const inlineStyle = inlineMatch[1];
+                // 为内联样式创建唯一的类名
+                const className = `inline-style-${inlineCounter++}`;
+                extractedStyles += `.${className} { ${inlineStyle} }\n`;
+            }
+
+            console.log('[MessageInfoBarRenderer] ✅ 样式提取完成，长度:', extractedStyles.length);
+
+            // 🔧 修复CSS选择器兼容性问题
+            if (extractedStyles.length > 0) {
+                // 将body选择器替换为.custom-root，确保样式能在Shadow DOM中正确应用
+                extractedStyles = extractedStyles.replace(/\bbody\s*\{/g, '.custom-root {');
+                extractedStyles = extractedStyles.replace(/\bbody\s*,/g, '.custom-root,');
+                extractedStyles = extractedStyles.replace(/,\s*body\s*\{/g, ', .custom-root {');
+
+                // 确保html选择器也能正确应用
+                extractedStyles = extractedStyles.replace(/\bhtml\s*\{/g, ':host {');
+                extractedStyles = extractedStyles.replace(/\bhtml\s*,/g, ':host,');
+
+                // 🔧 移除可能导致透明背景的CSS规则
+                extractedStyles = extractedStyles.replace(/background:\s*transparent\s*;/g, '/* background: transparent removed */');
+                extractedStyles = extractedStyles.replace(/background-color:\s*transparent\s*;/g, '/* background-color: transparent removed */');
+
+                console.log('[MessageInfoBarRenderer] 🔧 CSS选择器修复完成');
+
+                // 详细的样式提取日志
+                const stylePreview = extractedStyles.substring(0, 300);
+                console.log('[MessageInfoBarRenderer] 📋 修复后样式预览:', stylePreview + '...');
+
+                // 检查关键CSS变量和选择器
+                const hasRootVars = extractedStyles.includes(':root');
+                const hasBgGradient = extractedStyles.includes('--bg-gradient') || extractedStyles.includes('#fff0f5');
+                const hasCardBg = extractedStyles.includes('--card-bg') || extractedStyles.includes('rgba(255, 255, 255');
+                const hasTextAccent = extractedStyles.includes('--text-accent') || extractedStyles.includes('#d9538d');
+                const hasBodyReplaced = extractedStyles.includes('.custom-root {');
+
+                console.log('[MessageInfoBarRenderer] 🎨 CSS修复检查:', {
+                    根变量: hasRootVars,
+                    背景渐变: hasBgGradient,
+                    卡片背景: hasCardBg,
+                    强调色: hasTextAccent,
+                    body选择器已替换: hasBodyReplaced
+                });
+
+                if (!hasBgGradient || !hasCardBg) {
+                    console.warn('[MessageInfoBarRenderer] ⚠️ 关键CSS样式可能缺失，这可能导致样式问题');
+                }
+            } else {
+                console.warn('[MessageInfoBarRenderer] ⚠️ 未提取到任何CSS样式');
+            }
+
+            return extractedStyles;
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 提取样式失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 🔧 新增：清理HTML内容用于Shadow DOM
+     * 移除<head>、<style>、<link>等标签，只保留<body>内容
+     */
+    cleanHTMLForShadowDOM(html) {
+        try {
+            console.log('[MessageInfoBarRenderer] 🧹 清理HTML内容用于Shadow DOM...');
+
+            let cleanedHTML = html;
+
+            // 1. 移除<!DOCTYPE>声明
+            cleanedHTML = cleanedHTML.replace(/<!DOCTYPE[^>]*>/gi, '');
+
+            // 2. 移除<html>标签，保留内容
+            cleanedHTML = cleanedHTML.replace(/<html[^>]*>/gi, '').replace(/<\/html>/gi, '');
+
+            // 3. 移除整个<head>部分
+            cleanedHTML = cleanedHTML.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '');
+
+            // 4. 移除<body>标签，保留内容
+            cleanedHTML = cleanedHTML.replace(/<body[^>]*>/gi, '').replace(/<\/body>/gi, '');
+
+            // 5. 移除剩余的<style>和<link>标签
+            cleanedHTML = cleanedHTML.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+            cleanedHTML = cleanedHTML.replace(/<link[^>]*>/gi, '');
+
+            // 6. 移除<script>标签（保留内容供后续处理）
+            // 注意：不移除script标签，因为executeCustomHTMLScripts方法需要处理它们
+
+            console.log('[MessageInfoBarRenderer] ✅ HTML清理完成');
+            console.log('[MessageInfoBarRenderer] 📋 清理前长度:', html.length, '清理后长度:', cleanedHTML.length);
+
+            return cleanedHTML.trim();
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 清理HTML失败:', error);
+            return html; // 返回原始HTML作为备用
+        }
+    }
+
+    /**
      * 将自定义HTML封装到Shadow DOM中并应用比例缩放，避免样式外溢与布局溢出
      */
     setupCustomHTMLContainer(container) {
@@ -2219,28 +2370,38 @@ export class MessageInfoBarRenderer {
         // 附加Shadow Root
         const shadowRoot = wrapper.attachShadow({ mode: 'open' });
 
-        // 注入安全样式（仅作用于Shadow范围内）
+        // 🔧 修复：提取并注入原HTML中的所有样式到Shadow DOM
+        const extractedStyles = this.extractStylesFromHTML(originalHTML);
+
+        // 🔧 清理HTML内容：移除<head>、<style>、<link>标签，只保留<body>内容
+        const cleanedHTML = this.cleanHTMLForShadowDOM(originalHTML);
+
+        // 注入提取的样式和安全样式（仅作用于Shadow范围内）
         const style = document.createElement('style');
         style.textContent = `
-            :host { 
-                display: block; 
-                max-width: 100%; 
+            /* 🎨 注入原HTML中的所有样式 */
+            ${extractedStyles}
+
+            /* Shadow DOM容器样式 */
+            :host {
+                display: block;
+                max-width: 100%;
                 /* 🔥 大幅增加容器尺寸，优先保证内容显示 */
                 min-height: 120px; /* 从40px增加到120px */
                 min-width: 300px; /* 从200px增加到300px */
                 max-height: none; /* 移除最大高度限制 */
             }
-            .custom-root { 
-                position: relative; 
-                display: block; 
-                max-width: 100%; 
+            .custom-root {
+                position: relative;
+                display: block;
+                max-width: 100%;
                 overflow: visible; /* 从hidden改为visible，允许内容显示 */
                 /* 🔥 更大的布局控制，优先内容显示 */
                 min-height: 120px; /* 确保足够高度 */
-                background: transparent;
+                /* 🔧 移除background: transparent，避免覆盖用户自定义背景 */
             }
-            .scale-inner { 
-                transform-origin: top left; 
+            .scale-inner {
+                transform-origin: top left;
                 will-change: transform;
                 /* 🎨 确保内容可见和可交互 */
                 pointer-events: auto;
@@ -2249,8 +2410,8 @@ export class MessageInfoBarRenderer {
                 z-index: 1;
             }
             /* 限制影子内部滚动，尽量由外层容器管理高度 */
-            .custom-root * { 
-                box-sizing: border-box; 
+            .custom-root * {
+                box-sizing: border-box;
             }
             /* 🚀 增强交互性：确保按钮和链接可点击 */
             .custom-root button,
@@ -2285,7 +2446,7 @@ export class MessageInfoBarRenderer {
         root.className = 'custom-root';
         const scaleInner = document.createElement('div');
         scaleInner.className = 'scale-inner';
-        scaleInner.innerHTML = originalHTML;
+        scaleInner.innerHTML = cleanedHTML; // 🔧 使用清理后的HTML
         root.appendChild(scaleInner);
         shadowRoot.appendChild(root);
 
@@ -3047,99 +3208,68 @@ export class MessageInfoBarRenderer {
     }
 
     /**
-     * 按容器宽度与最大高度对自定义HTML进行比例缩放，防止溢出
+     * 🔧 简化的自定义HTML缩放逻辑 - 修复显示不全问题
      */
     applyCustomHTMLScaling(container, wrapper, root, inner) {
         if (!container || !wrapper || !root || !inner) return;
 
-        // 🚀 移除高度限制，让内容自由显示
+        console.log('[MessageInfoBarRenderer] 🎯 开始简化缩放逻辑...');
+
         const containerWidth = container.clientWidth || 0;
-        const computed = getComputedStyle(container);
-        // 不再限制最大高度，让内容完全展示
-        const scaleMode = (computed.getPropertyValue('--infobar-custom-scale-mode') || 'readable').trim() || 'readable';
+        if (containerWidth <= 0) return;
 
-        // 重置缩放以获取自然尺寸
-        inner.style.transform = 'scale(1)';
-        inner.style.width = '';
-        inner.style.height = '';
+        // 🔧 重置所有样式，获取自然尺寸
+        inner.style.transform = 'none';
+        inner.style.width = 'auto';
+        inner.style.height = 'auto';
 
-        // 让浏览器完成布局
+        // 强制重新布局
+        inner.offsetHeight;
+
         const naturalWidth = inner.scrollWidth || inner.offsetWidth || 0;
         const naturalHeight = inner.scrollHeight || inner.offsetHeight || 0;
-        if (containerWidth <= 0 || naturalWidth <= 0 || naturalHeight <= 0) return;
 
-        // 🚀 仅基于宽度的缩放策略：完全显示内容，无高度限制
-        const scaleW = containerWidth / naturalWidth;
-        // 不再基于高度进行缩放限制
-        
-        let scale;
-        if (scaleMode === 'readable') {
-            // 🚀 可读性优先模式：尽可能保持大尺寸
-            // 🚀 仅基于宽度缩放：让内容完全显示，不限制高度
-            if (naturalWidth <= containerWidth) {
-                // 内容宽度适配，保持原始比例
-                scale = 1.0;
-            } else {
-                // 内容过宽，缩放到适配宽度
-                scale = scaleW;
-            }
+        console.log('[MessageInfoBarRenderer] 📏 尺寸信息:', {
+            容器宽度: containerWidth,
+            内容自然宽度: naturalWidth,
+            内容自然高度: naturalHeight
+        });
+
+        if (naturalWidth <= 0 || naturalHeight <= 0) return;
+
+        // 🎯 简单的缩放策略：只考虑宽度适配
+        let scale = 1.0;
+
+        if (naturalWidth > containerWidth) {
+            // 内容过宽，需要缩放
+            scale = (containerWidth - 20) / naturalWidth; // 留20px边距
+            console.log('[MessageInfoBarRenderer] 📐 内容过宽，计算缩放比例:', scale.toFixed(3));
         } else {
-            // 所有其他模式都只基于宽度缩放
-            scale = scaleW;
+            // 内容宽度合适，保持原始大小
+            console.log('[MessageInfoBarRenderer] ✅ 内容宽度合适，保持原始大小');
         }
-        
-        // 🚀 移除缩放范围限制，让内容自由缩放
-        // 不限制缩放范围，完全基于内容和容器宽度
 
-        // 应用缩放及外层尺寸
+        // 🔧 限制缩放范围，避免过小或过大
+        scale = Math.max(0.3, Math.min(1.0, scale));
+
+        // 应用缩放
         inner.style.transform = `scale(${scale})`;
-        inner.style.width = naturalWidth + 'px';
-        inner.style.height = naturalHeight + 'px';
+        inner.style.transformOrigin = 'top left';
 
-        // 🔥 新策略：允许适度溢出以保证可读性，减少回退
-        // 🚀 完全移除高度限制，让内容自由显示
+        // 🎯 设置容器样式，确保内容完全显示
         wrapper.style.width = '100%';
-        wrapper.style.height = 'auto'; // 自动高度，无限制
-        wrapper.style.maxHeight = 'none'; // 移除最大高度限制
-        wrapper.style.overflowX = 'hidden';
-        wrapper.style.overflowY = 'visible'; // 允许内容完全显示
-        console.log('[MessageInfoBarRenderer] 🚀 完全移除高度限制，内容自由显示');
+        wrapper.style.height = 'auto';
+        wrapper.style.maxHeight = 'none';
+        wrapper.style.overflow = 'visible';
 
-        // 🎯 二次校准：仅调整宽度适配，不限制高度
-        const rect = inner.getBoundingClientRect();
-        const currentWidth = rect.width || 0;
-        if (currentWidth > 0 && Math.abs(currentWidth - containerWidth) > 2) {
-            const fix = containerWidth / currentWidth;
-            let newScale = scale * fix;
-            inner.style.transform = `scale(${newScale})`;
-            // 不再设置高度限制和滚动条
-            console.log('[MessageInfoBarRenderer] 🎯 二次校准完成，新缩放比例:', newScale.toFixed(3));
-        }
+        // 🔧 调整容器高度以适应缩放后的内容
+        const scaledHeight = naturalHeight * scale;
+        wrapper.style.minHeight = scaledHeight + 'px';
 
-        // 🚀 三次校准：仅调整宽度，完全移除高度限制
-        const laterCalibrate = () => {
-            try {
-                const rect2 = inner.getBoundingClientRect();
-                const w2 = rect2.width || 0;
-                if (w2 > 0 && Math.abs(w2 - containerWidth) > 2) {
-                    const adjust = containerWidth / w2;
-                    const prevScale = parseFloat((inner.style.transform.match(/scale\(([^)]+)\)/) || [])[1] || '1');
-                    let finalScale = prevScale * adjust;
-                    inner.style.transform = `scale(${finalScale})`;
-                    // 🚀 完全移除高度设置，让内容自由显示
-                    console.log('[MessageInfoBarRenderer] 🎯 三次校准完成，最终缩放比例:', finalScale.toFixed(3));
-                }
-            } catch (e) {
-                // 忽略
-            }
-        };
-        // 无条件执行校准，确保宽度适配
-        if (typeof requestAnimationFrame === 'function') {
-            requestAnimationFrame(() => {
-                laterCalibrate();
-                setTimeout(laterCalibrate, 100);
-            });
-        }
+        console.log('[MessageInfoBarRenderer] ✅ 缩放应用完成:', {
+            最终缩放比例: scale.toFixed(3),
+            缩放后高度: scaledHeight.toFixed(1) + 'px'
+        });
     }
 
     /**
@@ -3740,6 +3870,12 @@ export class MessageInfoBarRenderer {
             // 🔧 增强调试：详细记录主题状态
             if (!infoBarElement) {
                 console.warn('[MessageInfoBarRenderer] ⚠️ 信息栏元素为空，无法应用主题');
+                return;
+            }
+
+            // 🔧 修复：跳过自定义HTML样式的容器，避免覆盖用户自定义CSS
+            if (infoBarElement.classList.contains('infobar-style-custom-html')) {
+                console.log('[MessageInfoBarRenderer] 🎨 跳过自定义HTML容器的主题应用，保留用户自定义样式');
                 return;
             }
 
