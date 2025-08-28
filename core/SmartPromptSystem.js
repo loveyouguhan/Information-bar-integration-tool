@@ -387,31 +387,152 @@ world: name="现代都市", type="都市"
      */
     async registerAPIInjection() {
         console.log('[SmartPromptSystem] 🔗 注册API注入钩子...');
-        
+
         try {
             // 获取SillyTavern的事件源
             const eventSource = this.context.eventSource;
-            
+
             if (eventSource) {
                 // 监听生成开始事件
                 eventSource.on('generation_started', async (data) => {
                     await this.handleGenerationStarted(data);
                 });
-                
+
                 // 监听消息接收事件
                 eventSource.on('message_received', async (data) => {
                     await this.handleMessageReceived(data);
                 });
-                
+
                 console.log('[SmartPromptSystem] ✅ API注入钩子注册成功');
             } else {
                 console.warn('[SmartPromptSystem] ⚠️ 无法获取事件源，使用备用注入方式');
                 this.registerFallbackInjection();
             }
-            
+
+            // 🚀 新增：注册全局对话拦截钩子，确保记忆增强内容在整个对话最顶部
+            await this.registerGlobalChatInterception();
+
         } catch (error) {
             console.error('[SmartPromptSystem] ❌ 注册API注入钩子失败:', error);
             this.registerFallbackInjection();
+        }
+    }
+
+    /**
+     * 🚀 注册全局对话拦截钩子，确保记忆增强内容在整个对话最顶部
+     */
+    async registerGlobalChatInterception() {
+        try {
+            console.log('[SmartPromptSystem] 🌐 注册全局对话拦截钩子...');
+
+            // 拦截SillyTavern的聊天发送函数
+            if (window.Generate && typeof window.Generate.generateQuietPrompt === 'function') {
+                const originalGenerateQuietPrompt = window.Generate.generateQuietPrompt;
+
+                window.Generate.generateQuietPrompt = async (...args) => {
+                    try {
+                        // 在生成前注入记忆增强内容到系统消息
+                        await this.injectMemoryToSystemMessage();
+                    } catch (error) {
+                        console.error('[SmartPromptSystem] ❌ 注入记忆到系统消息失败:', error);
+                    }
+
+                    return originalGenerateQuietPrompt.apply(window.Generate, args);
+                };
+
+                console.log('[SmartPromptSystem] ✅ 已拦截generateQuietPrompt函数');
+            }
+
+            // 拦截聊天发送函数
+            if (window.sendSystemMessage && typeof window.sendSystemMessage === 'function') {
+                const originalSendSystemMessage = window.sendSystemMessage;
+
+                window.sendSystemMessage = async (...args) => {
+                    try {
+                        // 在发送前注入记忆增强内容
+                        await this.injectMemoryToSystemMessage();
+                    } catch (error) {
+                        console.error('[SmartPromptSystem] ❌ 注入记忆到系统消息失败:', error);
+                    }
+
+                    return originalSendSystemMessage.apply(window, args);
+                };
+
+                console.log('[SmartPromptSystem] ✅ 已拦截sendSystemMessage函数');
+            }
+
+            console.log('[SmartPromptSystem] ✅ 全局对话拦截钩子注册完成');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 注册全局对话拦截钩子失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 注入记忆增强内容到系统消息
+     */
+    async injectMemoryToSystemMessage() {
+        try {
+            console.log('[SmartPromptSystem] 🧠 开始注入记忆增强内容到系统消息...');
+
+            // 获取启用的面板配置
+            const enabledPanels = await this.getEnabledPanels();
+
+            if (enabledPanels.length === 0) {
+                console.log('[SmartPromptSystem] ℹ️ 没有启用的面板，跳过记忆注入');
+                return;
+            }
+
+            // 获取AI记忆增强数据
+            const memoryEnhancedData = await this.getAIMemoryEnhancedData(enabledPanels);
+            const updateStrategy = await this.analyzeUpdateStrategy(enabledPanels, memoryEnhancedData.current);
+
+            // 生成记忆增强数据信息
+            const currentDataInfo = await this.generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy);
+
+            // 构建记忆增强内容
+            const memoryContent = [
+                '🧠🧠🧠【AI记忆增强系统 - 最高优先级阅读】🧠🧠🧠',
+                '⚠️ 重要：在开始任何思考和生成之前，必须仔细阅读以下完整记忆内容 ⚠️',
+                '',
+                '┌─────────────────────────────────────────────────────────────┐',
+                '│                    🧠 AI永久记忆数据库 🧠                    │',
+                '│              请基于以下记忆进行剧情思考和生成                │',
+                '└─────────────────────────────────────────────────────────────┘',
+                '',
+                '【AI记忆增强数据 - 永不遗忘的剧情记忆】',
+                currentDataInfo,
+                '',
+                '┌─────────────────────────────────────────────────────────────┐',
+                '│                    📌 AI思考指导原则 📌                     │',
+                '│                                                             │',
+                '│ 1. 🎯 以上记忆内容是您思考和生成的核心基础                  │',
+                '│ 2. 🔗 请基于这些记忆内容保持剧情连贯性和角色一致性          │',
+                '│ 3. 📚 如果记忆中有相关信息，请优先参考和延续                │',
+                '│ 4. ✅ 确保新生成的内容与历史记忆逻辑一致                    │',
+                '│ 5. 🧠 在thinking阶段就要回忆和分析这些记忆内容              │',
+                '│                                                             │',
+                '└─────────────────────────────────────────────────────────────┘',
+                '',
+                '═══════════════════════════════════════════════════════════════',
+                '                    开始正常对话内容',
+                '═══════════════════════════════════════════════════════════════'
+            ].join('\n');
+
+            // 使用最高优先级注入到系统消息
+            if (typeof this.context.setExtensionPrompt === 'function') {
+                this.context.setExtensionPrompt(
+                    'Information bar integration tool - Memory Enhancement',
+                    memoryContent,
+                    0, // 最高优先级
+                    0, // 最前面的位置
+                    true // 强制在最前面
+                );
+                console.log('[SmartPromptSystem] ✅ 记忆增强内容已注入到系统消息最顶部');
+            }
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 注入记忆增强内容到系统消息失败:', error);
         }
     }
 

@@ -268,11 +268,21 @@ export class HTMLTemplateParser {
             const token = tokens[i];
 
             if (token.type === 'text') {
+                // 🔧 修复：文本内容直接添加，不进行HTML转义，保留CSS样式
                 result += token.content;
                 i++;
             } else if (token.type === 'expression') {
                 const value = this.evaluateExpression(token.expression, data);
-                result += this.escapeHtml(String(value || ''));
+                // 🔧 修复：只对用户数据进行转义，不转义HTML结构
+                // 如果值看起来像HTML（包含标签），则不转义；否则转义以防XSS
+                const stringValue = String(value || '');
+                if (this.looksLikeHtml(stringValue)) {
+                    // 看起来像HTML，直接使用（用于支持富文本内容）
+                    result += stringValue;
+                } else {
+                    // 普通文本，进行转义防止XSS
+                    result += this.escapeHtml(stringValue);
+                }
                 i++;
             } else if (token.expression && token.expression.startsWith('#if ')) {
                 // 处理条件渲染
@@ -655,6 +665,25 @@ export class HTMLTemplateParser {
             default:
                 return '';
         }
+    }
+
+    /**
+     * 🔧 新增：检查字符串是否看起来像HTML
+     * @param {string} text - 文本
+     * @returns {boolean} 是否看起来像HTML
+     */
+    looksLikeHtml(text) {
+        if (!text || typeof text !== 'string') return false;
+
+        // 检查是否包含HTML标签
+        const htmlTagPattern = /<[^>]+>/;
+        if (htmlTagPattern.test(text)) return true;
+
+        // 检查是否包含HTML实体
+        const htmlEntityPattern = /&[a-zA-Z0-9#]+;/;
+        if (htmlEntityPattern.test(text)) return true;
+
+        return false;
     }
 
     /**
