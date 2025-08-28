@@ -1801,7 +1801,7 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 
 .infobar-modal-new .content-panel {
     display: none;
-    padding: 25px;
+    padding: 12px; /* 🔧 大幅减少内容面板内边距，从25px改为12px */
     height: 100%;
 }
 
@@ -3578,7 +3578,7 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 
 .cell-edit-dialog .dialog-body,
 .cell-history-dialog .dialog-body {
-    padding: 24px;
+    padding: 12px; /* 🔧 大幅减少内边距，从24px改为12px */
     max-height: 60vh;
     overflow-y: auto;
 }
@@ -6388,8 +6388,9 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 0;
+    padding: 6px 0; /* 🔧 统一减少垂直间距 */
     border-bottom: 1px solid var(--theme-border-light, #e9ecef);
+    min-height: 32px; /* 🔧 设置最小高度，确保紧凑布局 */
 }
 
 .demo-field:last-child {
@@ -6399,11 +6400,17 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 .demo-field .field-label {
     color: var(--theme-text-secondary, #6c757d);
     font-weight: 500;
+    font-size: 13px; /* 🔧 统一字体大小 */
+    flex: 0 0 auto; /* 🔧 防止标签被压缩 */
+    margin-right: 12px; /* 🔧 添加右边距 */
 }
 
 .demo-field .field-value {
     color: var(--theme-text-primary, #212529);
     font-weight: 600;
+    font-size: 13px; /* 🔧 统一字体大小 */
+    text-align: right; /* 🔧 右对齐值 */
+    flex: 1; /* 🔧 允许值区域伸缩 */
 }
 
 /* 添加面板菜单样式 */
@@ -6795,7 +6802,7 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 }
 
 .panel-popup .popup-body {
-    padding: 20px 24px;
+    padding: 12px 16px; /* 🔧 大幅减少内边距，从20px 24px改为12px 16px */
 }
 
 .panel-popup .panel-data {
@@ -6806,25 +6813,29 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 16px;
-    margin: 8px 0;
+    padding: 8px 12px; /* 🔧 减少内边距，从12px 16px改为8px 12px */
+    margin: 4px 0; /* 🔧 减少外边距，从8px改为4px */
     background: var(--theme-bg-secondary, rgba(255, 255, 255, 0.05));
-    border-radius: 8px;
+    border-radius: 6px; /* 🔧 稍微减小圆角 */
     border-left: 3px solid var(--theme-accent, #007bff);
-    min-height: 40px;
+    min-height: 32px; /* 🔧 减少最小高度，从40px改为32px */
 }
 
 .panel-popup .data-label {
     font-weight: 600;
     color: var(--theme-text-primary, #ffffff);
-    min-width: 100px;
+    font-size: 13px; /* 🔧 统一字体大小 */
+    min-width: 80px; /* 🔧 减少最小宽度，从100px改为80px */
+    flex: 0 0 auto; /* 🔧 防止标签被压缩 */
 }
 
 .panel-popup .data-value {
     color: var(--theme-text-secondary, #ccc);
+    font-size: 13px; /* 🔧 统一字体大小 */
     text-align: right;
     flex: 1;
-    margin-left: 12px;
+    margin-left: 8px; /* 🔧 减少左边距，从12px改为8px */
+    word-break: break-word; /* 🔧 处理长文本 */
 }
 
 .panel-popup .chat-info {
@@ -7242,7 +7253,7 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 }
 
 .popup-body {
-    padding: 24px;
+    padding: 16px; /* 🔧 减少内边距，从24px改为16px */
     max-height: 60vh;
     overflow-y: auto;
 }
@@ -7251,8 +7262,9 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 0;
+    padding: 6px 0; /* 🔧 减少垂直间距，从12px改为6px */
     border-bottom: 1px solid var(--theme-border-light, #e9ecef);
+    min-height: 32px; /* 🔧 设置最小高度，确保紧凑布局 */
 }
 
 .data-field:last-child {
@@ -7262,20 +7274,25 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 .data-field .field-label {
     color: var(--theme-text-secondary, #6c757d);
     font-weight: 500;
-    font-size: 14px;
+    font-size: 13px; /* 🔧 稍微减小字体，从14px改为13px */
+    flex: 0 0 auto; /* 🔧 防止标签被压缩 */
+    margin-right: 12px; /* 🔧 添加右边距 */
 }
 
 .data-field .field-value {
     color: var(--theme-text-primary, #212529);
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px; /* 🔧 稍微减小字体，从14px改为13px */
+    text-align: right; /* 🔧 右对齐值 */
+    flex: 1; /* 🔧 允许值区域伸缩 */
+    word-break: break-word; /* 🔧 处理长文本 */
 }
 
 .no-data {
     text-align: center;
     color: var(--theme-text-secondary, #6c757d);
     font-style: italic;
-    padding: 40px 20px;
+    padding: 20px 12px; /* 🔧 减少空状态的内边距，从40px 20px改为20px 12px */
 }
 
 /* 响应式适配 */
@@ -7330,7 +7347,7 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     }
 
     .popup-body {
-        padding: 20px;
+        padding: 12px; /* 🔧 移动端也减少内边距 */
     }
 
     .embedded-panels-container {
