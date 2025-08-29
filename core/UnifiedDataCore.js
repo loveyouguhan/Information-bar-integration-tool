@@ -976,21 +976,29 @@ export class UnifiedDataCore {
                     }
                 }
             }
-            
+
+            console.log('[UnifiedDataCore] 🎯 面板数据合并循环完成，准备触发事件...');
+
             // 触发数据更新事件
+            console.log('[UnifiedDataCore] 🚀 准备触发data:updated事件...');
             if (this.eventSystem) {
+                console.log('[UnifiedDataCore] 📡 触发data:updated事件，数据条目:', dataEntry.messageId);
                 this.eventSystem.emit('data:updated', {
                     dataEntry: dataEntry,
                     totalCount: chatData.length,
                     timestamp: Date.now()
                 });
-                
+
                 // 🔧 修复：同时触发data:changed事件以通知DataTable
+                console.log('[UnifiedDataCore] 📡 触发data:changed事件');
                 this.eventSystem.emit('data:changed', {
                     key: 'xml_parsed_data',
                     value: dataEntry,
                     timestamp: Date.now()
                 });
+                console.log('[UnifiedDataCore] ✅ 事件触发完成');
+            } else {
+                console.warn('[UnifiedDataCore] ⚠️ 事件系统不可用，无法触发data:updated事件');
             }
             
             // 同步到聊天元数据（合并，不覆盖）

@@ -1,21 +1,21 @@
 /**
  * XML数据解析器
- * 
+ *
  * 负责解析SillyTavern消息中的infobar_data XML标签：
  * - 提取<infobar_data>标签内容
  * - 解析XML注释格式的面板数据
  * - 转换为结构化的JavaScript对象
  * - 验证数据完整性和格式正确性
- * 
+ *
  * @class XMLDataParser
  */
 
 export class XMLDataParser {
     constructor(eventSystem = null) {
         console.log('[XMLDataParser] 🔧 XML数据解析器初始化开始');
-        
+
         this.eventSystem = eventSystem;
-        
+
         // 解析统计
         this.parseStats = {
             totalParsed: 0,
@@ -23,10 +23,10 @@ export class XMLDataParser {
             errors: 0,
             lastParseTime: 0
         };
-        
+
         // 🔧 修复：动态获取支持的面板类型，包括自定义面板和自定义子项
         this.updateSupportedPanels();
-        
+
         // 初始化状态
         this.initialized = false;
         this.errorCount = 0;
@@ -52,12 +52,12 @@ export class XMLDataParser {
                 'news', 'inventory', 'abilities', 'plot', 'cultivation',
                 'fantasy', 'modern', 'historical', 'magic', 'training'
             ]);
-            
+
             // 🔧 修复：添加中文名称到英文ID的映射表
             this.panelNameMapping = {
                 // 中文名称到英文ID的映射
                 '个人信息': 'personal',
-                '世界信息': 'world', 
+                '世界信息': 'world',
                 '交互对象': 'interaction',
                 '任务系统': 'tasks',
                 '组织架构': 'organization',
@@ -80,7 +80,7 @@ export class XMLDataParser {
                 '训练系统': 'training',
                 '调教系统': 'training' // 备用映射
             };
-            
+
             // 反向映射：英文ID到中文名称
             this.panelIdMapping = {};
             Object.entries(this.panelNameMapping).forEach(([chineseName, englishId]) => {
@@ -99,9 +99,9 @@ export class XMLDataParser {
 
             // 获取基础面板的自定义子项信息
             this.customSubItems = new Map();
-            
+
             const basicPanelIds = ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
-            
+
             basicPanelIds.forEach(panelId => {
                 if (configs[panelId] && configs[panelId].subItems && Array.isArray(configs[panelId].subItems)) {
                     const customSubItems = configs[panelId].subItems.map(subItem => ({
@@ -109,7 +109,7 @@ export class XMLDataParser {
                         name: subItem.displayName || subItem.name,
                         enabled: subItem.enabled !== false
                     }));
-                    
+
                     if (customSubItems.length > 0) {
                         this.customSubItems.set(panelId, customSubItems);
                         console.log(`[XMLDataParser] 📊 基础面板 ${panelId} 包含 ${customSubItems.length} 个自定义子项`);
@@ -164,7 +164,7 @@ export class XMLDataParser {
 
             console.log('[XMLDataParser] 🔍 开始解析infobar_data...');
             this.parseStats.totalParsed++;
-            
+
             if (!messageContent || typeof messageContent !== 'string') {
                 console.warn('[XMLDataParser] ⚠️ 消息内容为空或格式无效');
                 return null;
@@ -172,28 +172,28 @@ export class XMLDataParser {
 
             // 🔧 修复：在每次解析前更新支持的面板类型
             this.updateSupportedPanels();
-            
+
             // 提取infobar_data标签内容
             const infobarContent = this.extractInfobarDataContent(messageContent);
             if (!infobarContent) {
                 console.log('[XMLDataParser] ℹ️ 消息中未找到infobar_data标签');
                 return null;
             }
-            
+
             // 首先尝试解析XML注释格式的数据
             let parsedData = this.parseXMLCommentData(infobarContent);
-            
+
             // 如果XML注释格式解析失败，尝试直接解析面板数据格式
             if (!parsedData) {
                 console.log('[XMLDataParser] ℹ️ XML注释格式解析失败，尝试直接面板格式解析...');
                 parsedData = this.parseDirectPanelFormat(infobarContent);
             }
-            
+
             if (!parsedData) {
                 console.warn('[XMLDataParser] ⚠️ 所有格式的数据解析都失败');
                 return null;
             }
-            
+
             // 验证和清理数据
             const validatedData = this.validateAndCleanData(parsedData);
 
@@ -221,7 +221,7 @@ export class XMLDataParser {
             }
 
             return fixedData;
-            
+
         } catch (error) {
             console.error('[XMLDataParser] ❌ 解析infobar_data失败:', error);
             this.parseStats.errors++;
@@ -240,15 +240,15 @@ export class XMLDataParser {
             // 使用正则表达式提取infobar_data标签内容
             const regex = /<infobar_data>([\s\S]*?)<\/infobar_data>/;
             const match = content.match(regex);
-            
+
             if (match && match[1]) {
                 const extractedContent = match[1].trim();
                 console.log('[XMLDataParser] 📄 提取到infobar_data内容，长度:', extractedContent.length);
                 return extractedContent;
             }
-            
+
             return null;
-            
+
         } catch (error) {
             console.error('[XMLDataParser] ❌ 提取infobar_data内容失败:', error);
             return null;
@@ -267,49 +267,49 @@ export class XMLDataParser {
                 console.log('[XMLDataParser] ℹ️ 内容不包含XML注释格式，跳过解析');
                 return null;
             }
-            
+
             // 🔧 严格提取：只提取XML注释内容，忽略其他文本
             const commentMatches = content.match(/<!--([\s\S]*?)-->/g);
             if (!commentMatches || commentMatches.length === 0) {
                 console.log('[XMLDataParser] ℹ️ 未找到有效的XML注释，跳过解析');
                 return null;
             }
-            
+
             let totalParsed = {};
             let hasValidData = false;
-            
+
             // 🔧 遍历所有XML注释，只解析包含面板数据的注释
             for (const commentMatch of commentMatches) {
                 const match = commentMatch.match(/<!--([\s\S]*?)-->/);
                 if (!match || !match[1]) continue;
-                
+
                 const dataContent = match[1].trim();
-                
+
                 // 🔧 严格验证：检查注释内容是否像面板数据格式
                 if (!this.isValidPanelDataFormat(dataContent)) {
                     console.log('[XMLDataParser] ℹ️ 跳过非面板数据格式的注释内容');
                     continue;
                 }
-                
+
                 console.log('[XMLDataParser] 📝 提取到面板数据内容，长度:', dataContent.length);
-                
+
                 // 🔧 修复：解析面板数据，如果返回null说明格式不正确
                 const parseResult = this.parsePanelData(dataContent);
-                
+
                 if (parseResult && typeof parseResult === 'object' && Object.keys(parseResult).length > 0) {
                     // 合并解析结果
                     Object.assign(totalParsed, parseResult);
                     hasValidData = true;
                 }
             }
-            
+
             if (!hasValidData) {
                 console.log('[XMLDataParser] ℹ️ 所有XML注释都不包含有效的面板数据格式');
                 return null;
             }
-            
+
             return totalParsed;
-            
+
         } catch (error) {
             console.error('[XMLDataParser] ❌ 解析XML注释数据失败:', error);
             return null;
@@ -324,23 +324,23 @@ export class XMLDataParser {
     parseDirectPanelFormat(content) {
         try {
             console.log('[XMLDataParser] 🔍 开始直接面板格式解析...');
-            
+
             if (!content || typeof content !== 'string') {
                 console.log('[XMLDataParser] ℹ️ 内容为空或格式不正确');
                 return null;
             }
-            
+
             // 检查是否包含面板数据的基本特征
             if (!this.isValidPanelDataFormat(content)) {
                 console.log('[XMLDataParser] ℹ️ 内容不符合面板数据格式');
                 return null;
             }
-            
+
             console.log('[XMLDataParser] 📝 开始解析直接面板数据，长度:', content.length);
-            
+
             // 直接解析面板数据
             const parseResult = this.parsePanelData(content);
-            
+
             if (parseResult && typeof parseResult === 'object' && Object.keys(parseResult).length > 0) {
                 console.log('[XMLDataParser] ✅ 直接面板格式解析成功，包含', Object.keys(parseResult).length, '个面板');
                 return parseResult;
@@ -348,7 +348,7 @@ export class XMLDataParser {
                 console.log('[XMLDataParser] ℹ️ 直接面板格式解析未返回有效数据');
                 return null;
             }
-            
+
         } catch (error) {
             console.error('[XMLDataParser] ❌ 直接面板格式解析失败:', error);
             return null;
@@ -362,38 +362,43 @@ export class XMLDataParser {
      */
     isValidPanelDataFormat(content) {
         if (!content || typeof content !== 'string') return false;
-        
-        // 🔧 严格检查：必须包含面板格式的基本特征
+
+        // 🔧 修复：放宽面板格式检查，支持更多格式变体
         const hasColonAndEquals = content.includes(':') && content.includes('=');
-        const hasPanelPattern = /\w+:\s*\w+\s*=/.test(content);
+
+        // 🔧 修复：更灵活的面板模式匹配，支持中文字段名和复杂值
+        const hasPanelPattern = /\w+:\s*[\w\u4e00-\u9fff]+.*?=/.test(content) || // 支持中文
+                               /\w+:\s*npc\d+\.\w+\s*=/.test(content) || // 支持NPC格式
+                               /\w+:\s*\w+\s*=/.test(content); // 原始格式
+
         const isNotPureNarrative = !this.isPureNarrativeContent(content);
-        
+
+        console.log('[XMLDataParser] 🔍 格式验证详情:');
+        console.log('  包含冒号和等号:', hasColonAndEquals);
+        console.log('  匹配面板模式:', hasPanelPattern);
+        console.log('  非纯叙述内容:', isNotPureNarrative);
+        console.log('  内容预览:', content.substring(0, 100));
+
         return hasColonAndEquals && hasPanelPattern && isNotPureNarrative;
     }
-    
+
     /**
      * 检查是否是纯叙述性内容
      * @param {string} content - 内容
      * @returns {boolean} 是否是纯叙述性内容
      */
     isPureNarrativeContent(content) {
-        // 🔧 修复：更严格的叙述性内容检测
-        
+        // 🔧 修复：更准确的叙述性内容检测
+
         // 先检查是否明显是面板数据格式
-        const hasPanelStructure = /\w+:\s*\w+\s*=/.test(content);
+        const hasPanelStructure = /\w+:\s*[\w\u4e00-\u9fff]+.*?=/.test(content) ||
+                                 /\w+:\s*npc\d+\.\w+\s*=/.test(content) ||
+                                 /\w+:\s*\w+\s*=/.test(content);
         if (hasPanelStructure) {
-            // 如果有面板结构，进一步检查是否是纯叙述
-            // 只有当包含明显的叙述性句式时才判定为叙述性内容
-            const strongNarrativePatterns = [
-                /^[a-zA-Z]+:\s*\([^)]+\)/, // consider: (内容) 格式
-                /感到.*的|心中.*的|情绪.*的/, // 情感描述句式
-                /享受着|保持着|期待着/, // 动作描述
-                /她.*地|他.*地|弥生.*地/, // 人物动作描述
-            ];
-            
-            return strongNarrativePatterns.some(pattern => pattern.test(content));
+            console.log('[XMLDataParser] 🔍 检测到面板结构，非纯叙述内容');
+            return false; // 有面板结构，不是纯叙述
         }
-        
+
         // 如果没有面板结构，检查常见的叙述性词汇或句式
         const narrativePatterns = [
             /感到|心中|情绪|享受|保持|开放|期待/,  // 情感描述
@@ -401,7 +406,7 @@ export class XMLDataParser {
             /温柔|愉悦|沉静|专注|理解|被回应/, // 描述性词汇
             /她.*，|他.*，|弥生.*，/, // 人物描述句式
         ];
-        
+
         return narrativePatterns.some(pattern => pattern.test(content));
     }
 
@@ -413,25 +418,25 @@ export class XMLDataParser {
     parsePanelData(dataContent) {
         try {
             const result = {};
-            
+
             // 🔧 修复：检查数据格式是否有效
             if (!dataContent || typeof dataContent !== 'string') {
                 console.warn('[XMLDataParser] ⚠️ 数据内容无效或为空');
                 return null; // 返回null而不是空对象，表示解析失败
             }
-            
+
             // 🔧 严格验证：检查是否包含有效的面板数据格式
             if (!this.isValidPanelDataFormat(dataContent)) {
                 console.warn('[XMLDataParser] ⚠️ 数据内容不符合面板格式，内容:', dataContent.substring(0, 200));
                 console.warn('[XMLDataParser] 🔍 预期格式: panelName: field1="value1", field2="value2"');
                 return null; // 返回null表示格式不正确
             }
-            
+
             // 按行分割数据
             const lines = dataContent.split('\n').filter(line => line.trim());
-            
+
             console.log('[XMLDataParser] 📊 开始解析', lines.length, '行面板数据');
-            
+
             lines.forEach((line, index) => {
                 try {
                     const trimmedLine = line.trim();
@@ -439,39 +444,39 @@ export class XMLDataParser {
                         console.log('[XMLDataParser] ℹ️ 跳过第', index + 1, '行（无冒号）:', trimmedLine.substring(0, 50));
                         return;
                     }
-                    
+
                     // 分割面板名和数据
                     const colonIndex = trimmedLine.indexOf(':');
                     const panelName = trimmedLine.substring(0, colonIndex).trim();
                     const panelDataStr = trimmedLine.substring(colonIndex + 1).trim();
-                    
+
                     if (!panelName || !panelDataStr) {
                         console.warn('[XMLDataParser] ⚠️ 第', index + 1, '行格式无效:', trimmedLine);
                         return;
                     }
-                    
+
                     // 解析面板字段
                     const panelData = this.parseFieldData(panelDataStr);
                     if (panelData && Object.keys(panelData).length > 0) {
                         result[panelName] = panelData;
                         console.log('[XMLDataParser] ✅ 解析面板:', panelName, '包含', Object.keys(panelData).length, '个字段');
                     }
-                    
+
                 } catch (error) {
                     console.error('[XMLDataParser] ❌ 解析第', index + 1, '行失败:', error);
                 }
             });
-            
+
             console.log('[XMLDataParser] 📋 面板数据解析完成，共', Object.keys(result).length, '个面板');
-            
+
             // 🔧 修复：如果没有解析出任何面板，返回null而不是空对象
             if (Object.keys(result).length === 0) {
                 console.warn('[XMLDataParser] ⚠️ 未解析出任何有效面板数据');
                 return null;
             }
-            
+
             return result;
-            
+
         } catch (error) {
             console.error('[XMLDataParser] ❌ 解析面板数据失败:', error);
             return null; // 返回null表示解析失败
@@ -795,7 +800,7 @@ export class XMLDataParser {
             // 过滤面板数据，仅保留启用子项
             Object.keys(panelData).forEach(field => {
                 let shouldInclude = false;
-                
+
                 if (panelId === 'interaction') {
                     // 🔧 特殊处理：交互对象面板的动态NPC字段格式 (npcX.fieldName)
                     const npcFieldMatch = field.match(/^npc\d+\.(.+)$/);
@@ -816,7 +821,7 @@ export class XMLDataParser {
                     // 其他面板使用直接匹配
                     shouldInclude = enabledKeys.has(field);
                 }
-                
+
                 if (shouldInclude) {
                     result[field] = panelData[field];
                 }
@@ -837,7 +842,7 @@ export class XMLDataParser {
     validateAndCleanData(data) {
         try {
             const cleanedData = {};
-            
+
             Object.keys(data).forEach(panelName => {
                 const panelData = data[panelName];
 
@@ -857,10 +862,10 @@ export class XMLDataParser {
                     console.warn('[XMLDataParser] ⚠️ 面板数据验证失败:', panelName);
                 }
             });
-            
+
             console.log('[XMLDataParser] 🧹 数据验证和清理完成，保留', Object.keys(cleanedData).length, '个有效面板');
             return cleanedData;
-            
+
         } catch (error) {
             console.error('[XMLDataParser] ❌ 验证和清理数据失败:', error);
             return data; // 返回原始数据作为降级处理
@@ -879,12 +884,12 @@ export class XMLDataParser {
             if (!panelName || typeof panelName !== 'string') {
                 return false;
             }
-            
+
             // 检查面板数据
             if (!panelData || typeof panelData !== 'object') {
                 return false;
             }
-            
+
             // 检查是否有字段
             if (Object.keys(panelData).length === 0) {
                 return false;
@@ -893,7 +898,7 @@ export class XMLDataParser {
             // 🔧 修复：动态验证面板是否受支持（包括自定义面板和自定义子项）
             const englishPanelId = this.panelNameMapping?.[panelName] || panelName;
             const isSupported = this.supportedPanels.has(englishPanelId) || this.supportedPanels.has(panelName);
-            
+
             if (!isSupported) {
                 console.warn(`[XMLDataParser] ⚠️ 不支持的面板类型: ${panelName} (英文ID: ${englishPanelId})`);
                 // 不再直接返回false，而是记录警告但仍然处理数据
@@ -901,9 +906,9 @@ export class XMLDataParser {
             } else {
                 console.log(`[XMLDataParser] ✅ 面板类型验证通过: ${panelName} -> ${englishPanelId}`);
             }
-            
+
             return true;
-            
+
         } catch (error) {
             console.error('[XMLDataParser] ❌ 验证面板数据失败:', error);
             return false;
@@ -918,7 +923,7 @@ export class XMLDataParser {
     cleanPanelData(panelData) {
         try {
             const cleaned = {};
-            
+
             Object.keys(panelData).forEach(fieldName => {
                 const fieldValue = panelData[fieldName];
 
@@ -930,9 +935,9 @@ export class XMLDataParser {
                     cleaned[cleanedFieldName] = cleanedFieldValue;
                 }
             });
-            
+
             return cleaned;
-            
+
         } catch (error) {
             console.error('[XMLDataParser] ❌ 清理面板数据失败:', error);
             return panelData;
@@ -946,7 +951,7 @@ export class XMLDataParser {
     getStats() {
         return {
             ...this.parseStats,
-            successRate: this.parseStats.totalParsed > 0 ? 
+            successRate: this.parseStats.totalParsed > 0 ?
                 (this.parseStats.successfulParsed / this.parseStats.totalParsed * 100).toFixed(2) + '%' : '0%'
         };
     }
@@ -970,7 +975,7 @@ export class XMLDataParser {
     handleError(error) {
         this.errorCount++;
         console.error(`[XMLDataParser] ❌ 错误 #${this.errorCount}:`, error);
-        
+
         // 触发错误事件
         if (this.eventSystem) {
             this.eventSystem.emit('xml:parser:error', {
@@ -1097,6 +1102,44 @@ export class XMLDataParser {
     fixInteractionNpcMixing(interactionData) {
         try {
             console.log('[XMLDataParser] 🔍 分析交互面板字段:', Object.keys(interactionData));
+
+                // 预规范化：将未带 npc 前缀的字段统一归一到 npc0.<field>
+                try {
+                    const normalized = {};
+                    const keys = Object.keys(interactionData || {});
+                    // 是否存在任何已带前缀的键，用作参考（不直接决定逻辑，仅用于调试）
+                    const hasPrefixed = keys.some(k => /^npc\d+\./.test(k));
+                    if (hasPrefixed) {
+                        console.log('[XMLDataParser] 🧭 已检测到带前缀字段，进行规范化合并');
+                    } else {
+                        console.log('[XMLDataParser] 🧭 未检测到带前缀字段，将非前缀字段归到 npc0');
+                    }
+
+                    for (const [k, v] of Object.entries(interactionData)) {
+                        if (/^npc\d+\./.test(k)) {
+                            // 已是标准格式，直接保留
+                            normalized[k] = v;
+                            continue;
+                        }
+                        const baseKey = String(k).trim();
+                        // 如果已存在 npcX.baseKey 的键，优先保留显式带前缀的数据，避免覆盖
+                        const existsPrefixed = keys.some(x => new RegExp(`^npc\\d+\\.${baseKey}$`).test(x));
+                        if (!existsPrefixed) {
+                            normalized[`npc0.${baseKey}`] = v;
+                            console.log(`[XMLDataParser] 🔧 规范化交互字段: ${k} -> npc0.${baseKey}`);
+                        } else {
+                            console.log(`[XMLDataParser] ↪ 跳过非前缀字段(已有前缀版本): ${k}`);
+                        }
+                    }
+
+                    // 若规范化后有内容，则用其继续后续分析
+                    if (Object.keys(normalized).length > 0) {
+                        interactionData = normalized;
+                    }
+                } catch (e) {
+                    console.warn('[XMLDataParser] ⚠️ 交互字段规范化失败（降级继续）:', e);
+                }
+
 
             // 第一步：检测所有字段中的混合信息，确定NPC数量
             const fieldAnalysis = {};

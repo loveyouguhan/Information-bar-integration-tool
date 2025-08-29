@@ -145,32 +145,42 @@ export class SmartPromptSystem {
 ❌ 不要生成未在模板中出现的面板数据
 ❌ 不要添加、创建或推测新的面板类型
 
-【🎭 角色识别核心规则】
-在生成面板数据时，必须严格区分以下两个角色身份：
+【🚨 身份识别检查（必须首先进行）】
+在生成任何面板数据之前，必须严格执行以下身份识别检查：
 
-🙋 个人信息面板 = 用户角色(User)
-- 指代：对话中的用户本人，即玩家操纵的主角
-- 人称识别：
-  * 第一人称："我"、"我的" = 用户角色
-  * 第二人称："你"、"你的" = 当AI对用户说话时，指用户角色
-  * 第三人称：明确提到的用户角色名称
-- 数据来源：用户的行为、状态、属性、经历
+🔍 **第一步：识别用户角色**
+- 谁是<user>用户角色？→ 记录到个人信息面板
+- 识别标志：
+  * 第一人称："我"、"我的"、"我在"、"我想"
+  * 当AI对话时的第二人称："你"、"你的"、"你在"
+  * 明确的用户角色名称或称谓
+  * 玩家操控的主角身份
 
-🎭 交互对象面板 = NPC角色
-- 指代：与用户交互的其他角色，包括对话中的NPC、敌人、伙伴等
-- 人称识别：
-  * 第一人称：当NPC自称时的"我" = NPC角色  
-  * 第二人称：当用户对NPC说"你"时 = NPC角色
-  * 第三人称：明确提到的NPC名称或称谓
-- 数据来源：NPC的行为、状态、属性、关系
+🔍 **第二步：识别NPC角色**
+- 谁是NPC角色？→ 记录到交互对象面板
+- 识别标志：
+  * NPC自称时的第一人称："我"（在NPC对话中）
+  * 用户对NPC说话时的第二人称："你"（用户→NPC）
+  * 明确的NPC名称、称谓或角色描述
+  * 所有非用户的其他角色
 
-⚠️ 关键识别要点：
-- 在对话中，要根据语境判断"我"和"你"具体指代谁
-- 用户设置的User信息 ≠ 交互对象NPC信息
-- 个人信息面板只记录用户角色的信息
-- 交互对象面板只记录NPC角色的信息
-- 绝不能将NPC信息错误地填入个人信息面板
-- 绝不能将用户信息错误地填入交互对象面板
+🚨 **严格分离原则**
+- ✅ 个人信息面板 = 仅限用户角色信息
+- ✅ 交互对象面板 = 仅限NPC角色信息
+- ❌ 绝不能将用户信息填入交互对象面板
+- ❌ 绝不能将NPC信息填入个人信息面板
+- ❌ 绝不能混合用户和NPC的信息
+
+🎯 **识别示例**
+✅ 正确识别：
+- "我今天很开心" → 用户情绪 → 个人信息面板
+- "小明对我说话" → 小明是NPC → 交互对象面板
+- "你看起来很累" → AI对用户说 → 用户状态 → 个人信息面板
+
+❌ 错误识别：
+- 将"小明很开心"记录到个人信息面板
+- 将"我的心情"记录到交互对象面板
+- 混合用户和NPC信息在同一面板
 
 【数据面板要求】
 您需要为所有启用的面板生成完整数据。以下指引说明每个面板的数据要求：
@@ -186,7 +196,13 @@ export class SmartPromptSystem {
 ⚠️ 请避免使用"未知"、"N/A"、"待补全"等占位符
 ⚠️ 请使用模板中的确切字段名和中文显示名称
 ⚠️ 正确格式是将注释符号<!--和-->放在标签内部，而不是外部
-⚠️ NPC数据格式请使用npc索引和紧凑格式：npc0.姓名="NPC1", npc0.关系="关系", npc0.态度="态度", npc0.情绪="情绪"
+
+🚨🚨🚨 【NPC数据格式严格要求 - 必须遵守】🚨🚨🚨
+🚨 **绝对禁止使用错误格式！系统已移除兼容性处理！**
+🚨 **必须使用NPC前缀格式：npc0.姓名="NPC1", npc0.关系="关系", npc0.态度="态度", npc0.情绪="情绪"**
+🚨 **严禁使用无前缀格式：姓名="NPC1", 关系="关系", 态度="态度", 情绪="情绪"**
+🚨 **系统将拒绝处理任何没有NPC前缀的交互对象数据！**
+🚨 **如果你输出错误格式，数据将被完全忽略，不会有任何兼容性处理！**
 
 🚨 **必须严格按照以下顺序输出** 🚨
 
@@ -279,6 +295,15 @@ personal: name="张三", age="25"
 -->
 </infobar_data>
 
+🚨🚨🚨 错误格式示例6 - NPC数据没有使用前缀（系统将拒绝处理）：
+<infobar_data>
+<!--
+interaction: 姓名="小雨", 关系="朋友", 态度="友好", 情绪="开心"
+-->
+</infobar_data>
+
+🚨 **以上格式是错误的！系统已移除兼容性处理，将完全拒绝处理！**
+
 ✅ 正确格式示例 - 严格遵守输出顺序和注释包裹格式：
 
 **第一步：必须先输出五步思考（注意：内容必须被<!--和-->包裹）**
@@ -299,9 +324,14 @@ personal: name="张三", age="25"
 <!--
 personal: name="张三", age="25", occupation="程序员"
 world: name="现代都市", type="都市", time="2024年"
+interaction: npc0.姓名="小雨", npc0.关系="朋友", npc0.态度="友好", npc0.情绪="开心"
 tasks: creation="新任务创建", editing="任务编辑中"
 -->
 </infobar_data>
+
+🚨 **注意：interaction面板必须使用NPC前缀格式！**
+✅ 正确：interaction: npc0.姓名="小雨", npc0.关系="朋友"
+❌ 错误：interaction: 姓名="小雨", 关系="朋友" （系统将拒绝处理）
 
 ❌ **错误格式示例（严禁使用）**：
 <aiThinkProcess>
@@ -1598,18 +1628,26 @@ world: name="现代都市", type="都市"
                 // 其他面板使用原有逻辑
                 console.log(`[SmartPromptSystem] 🔍 面板 ${panelKey} 子项详情:`, panel.subItems);
                 const subItemTemplates = panel.subItems.map(subItem => {
-                    // 🔧 修复：为personal面板提供正确的字段示例，不包含跨面板字段
+                    // 🔧 优化：为personal面板提供用户角色相关的字段示例
                     if (panel.id === 'personal') {
-                        // personal面板使用正确的字段示例，只包含实际启用的字段
+                        // 🚨 个人信息面板 = 用户角色专用字段示例
                         const personalExamples = {
-                            'name': 'name="张三"',
-                            'age': 'age="25"',
+                            'name': 'name="李明"',
+                            'age': 'age="28"',
                             'gender': 'gender="男"',
-                            'occupation': 'occupation="程序员"',
-                            'appearance': 'appearance="中等身材，黑发"',
-                            'personality': 'personality="开朗，友善"'
+                            'occupation': 'occupation="软件工程师"',
+                            'appearance': 'appearance="中等身材，戴眼镜"',
+                            'personality': 'personality="内向，细心"',
+                            'status': 'status="工作中"',
+                            'mood': 'mood="专注"',
+                            'location': 'location="办公室"',
+                            'health': 'health="良好"',
+                            'energy': 'energy="充沛"',
+                            'skills': 'skills="编程，设计"',
+                            'goals': 'goals="完成项目"',
+                            'background': 'background="计算机专业毕业"'
                         };
-                        return personalExamples[subItem.key] || `${subItem.key}="具体内容"`;
+                        return personalExamples[subItem.key] || `${subItem.key}="用户相关内容"`;
                     } else {
                         return `${subItem.key}="具体内容"`;
                     }
@@ -1645,37 +1683,64 @@ world: name="现代都市", type="都市"
             return `${subItem.key}="具体内容"`;
         });
 
-        // 🔧 修复：生成正确的示例格式
+        // 🔧 优化：生成NPC角色专用的示例格式
         const exampleFields = panel.subItems.slice(0, 5).map(subItem => {
-            const chineseDisplayName = this.getInteractionFieldDisplayName(subItem.key);
-            return `npc0.${subItem.key}="具体${chineseDisplayName}内容"`;
+            const npcExamples = {
+                'name': 'npc0.name="小雨"',
+                'type': 'npc0.type="朋友"',
+                'status': 'npc0.status="开心"',
+                'location': 'npc0.location="咖啡厅"',
+                'mood': 'npc0.mood="愉快"',
+                'relationship': 'npc0.relationship="好友"',
+                'activity': 'npc0.activity="聊天"',
+                'attitude': 'npc0.attitude="友善"',
+                'emotion': 'npc0.emotion="兴奋"'
+            };
+            return npcExamples[subItem.key] || `npc0.${subItem.key}="NPC相关内容"`;
         });
 
-        // 🔥🔥🔥 超强化交互对象面板的NPC分离约束 🔥🔥🔥
-        const result = `${panelKey}: 🚨🚨🚨 **严禁将多个NPC信息混合在一个字段中！每个NPC必须有独立的npcX.前缀！** 🚨🚨🚨
+        // 🚨🚨🚨 超强化交互对象面板的NPC身份识别约束 🚨🚨🚨
+        const result = `${panelKey}: 🚨🚨🚨 **交互对象面板专用于NPC角色！严禁填入用户信息！每个NPC必须有独立的npcX.前缀！** 🚨🚨🚨
 
-🔴 **重要警告：绝对禁止的错误行为** 🔴
-❌ 绝对禁止: name="希娜, 梅, 莉科莉亚" ← 这是严重错误！
-❌ 绝对禁止: type="临时队友/被保护者" ← 多个角色类型混合！
-❌ 绝对禁止: status="受到巨大冲击/感恩/紧张" ← 多个状态混合！
-❌ 绝对禁止: relationship="队友/被保护者/同伴" ← 多个关系混合！
+🚨 **身份识别警告：严禁角色混淆** 🚨
+❌ 绝对禁止将用户信息填入交互对象面板！
+❌ 绝对禁止将NPC信息填入个人信息面板！
+❌ 绝对禁止: name="我, 小明" ← 用户和NPC混合！
+❌ 绝对禁止: status="我很开心, 小明很累" ← 角色状态混合！
+
+🔴 **NPC信息混合警告：绝对禁止的错误行为** 🔴
+❌ 绝对禁止: name="小雨, 张经理, 李医生" ← 多个NPC混合！
+❌ 绝对禁止: type="朋友/同事/医生" ← 多个NPC类型混合！
+❌ 绝对禁止: status="开心/忙碌/专业" ← 多个NPC状态混合！
+❌ 绝对禁止: relationship="朋友/同事/医患" ← 多个NPC关系混合！
 
 ✅ **正确做法：每个NPC独立字段** ✅
-✅ 正确: npc0.name="希娜", npc1.name="梅", npc2.name="莉科莉亚"
-✅ 正确: npc0.type="临时队友", npc1.type="被保护者", npc2.type="同伴"
-✅ 正确: npc0.status="受到巨大冲击", npc1.status="感恩", npc2.status="紧张"
-✅ 正确: npc0.relationship="队友", npc1.relationship="被保护者", npc2.relationship="同伴"
+✅ 正确: npc0.name="小雨", npc1.name="张经理", npc2.name="李医生"
+✅ 正确: npc0.type="朋友", npc1.type="同事", npc2.type="医生"
+✅ 正确: npc0.status="开心", npc1.status="忙碌", npc2.status="专业"
+✅ 正确: npc0.relationship="好友", npc1.relationship="上下级", npc2.relationship="医患"
+
+🎭 **NPC角色识别指南**
+- 对话中除用户外的所有其他角色
+- 用户交互的对象（朋友、同事、陌生人等）
+- 剧情中出现的非玩家角色
+- 当用户说"你"时指代的对象（用户→NPC）
+- 当其他角色自称"我"时的角色（NPC自述）
 
 📋 **格式要求** 📋
 - 只能输出一个${panelKey}面板
 - 每个NPC使用独立的npcX.前缀（X为0,1,2,3...）
 - 绝对不能在一个字段中混合多个NPC的信息
 - 如果有3个NPC，必须使用npc0, npc1, npc2分别标识
+- 如果只有一个主要交互对象，强烈建议使用npc0.前缀
 
 可用字段: ${availableFields.join(', ')}
 
 🎯 **标准示例（3个NPC的正确格式）** 🎯
 ${exampleFields.join(', ')}, npc1.name="第二个NPC", npc1.type="类型2", npc2.name="第三个NPC", npc2.type="类型3"
+
+🎯 **单个NPC的推荐格式** 🎯
+${panelKey}: npc0.name="主要角色", npc0.status="当前状态", npc0.mood="情绪"
 
 🚫 **严禁的错误格式** 🚫
 ❌ ${panelKey}: name="NPC1, NPC2, NPC3" ← 严重错误！
@@ -1690,28 +1755,36 @@ ${exampleFields.join(', ')}, npc1.name="第二个NPC", npc1.type="类型2", npc2
      * 获取交互对象字段的中文显示名称
      */
     getInteractionFieldDisplayName(fieldKey) {
+        // 🎭 交互对象面板 = NPC角色专用字段映射
         const interactionFieldMapping = {
-            'name': '姓名',
-            'type': '类型',
-            'status': '状态',
-            'location': '位置',
-            'mood': '心情',
-            'activity': '活动',
-            'availability': '可用性',
-            'priority': '优先级',
-            'relationship': '关系',
+            'name': 'NPC姓名',
+            'type': 'NPC类型',
+            'status': 'NPC状态',
+            'location': 'NPC位置',
+            'mood': 'NPC心情',
+            'activity': 'NPC活动',
+            'availability': 'NPC可用性',
+            'priority': 'NPC优先级',
+            'relationship': '与用户关系',
             'intimacy': '亲密度',
-            'history': '历史',
+            'history': '交互历史',
             'autoRecord': '自动记录',
-            'trust': '信任度',
-            'friendship': '友谊',
-            'romance': '浪漫',
-            'respect': '尊重',
-            'dependency': '依赖',
-            'conflict': '冲突'
+            'trust': '对用户信任度',
+            'friendship': '友谊程度',
+            'romance': '浪漫关系',
+            'respect': '对用户尊重',
+            'dependency': '依赖程度',
+            'conflict': '冲突状态',
+            'attitude': 'NPC态度',
+            'emotion': 'NPC情绪',
+            'appearance': 'NPC外貌',
+            'personality': 'NPC性格',
+            'occupation': 'NPC职业',
+            'age': 'NPC年龄',
+            'gender': 'NPC性别'
         };
 
-        return interactionFieldMapping[fieldKey] || fieldKey;
+        return interactionFieldMapping[fieldKey] || `NPC${fieldKey}`;
     }
 
     /**
@@ -1858,14 +1931,21 @@ ${exampleFields.join(', ')}, npc1.name="第二个NPC", npc1.type="类型2", npc2
 【🎭 交互对象NPC格式规则 - 严禁信息混合】
 🚨🚨🚨 **最重要规则：绝对禁止将多个NPC信息混合在一个字段中！** 🚨🚨🚨
 
-⚠️ 重要：交互对象面板只记录NPC角色信息，绝不能填入用户角色信息！
+🚨 **重要：交互对象面板专用于NPC角色，绝不能填入用户角色信息！** 🚨
 
-🎭 NPC角色识别指南：
-- 对话中的其他角色（非用户本人）
-- 用户交互的对象（朋友、敌人、路人等）
+🎭 **NPC角色识别指南（必须严格遵守）**：
+- 对话中除用户外的所有其他角色
+- 用户交互的对象（朋友、同事、陌生人、敌人等）
 - 剧情中出现的所有非玩家角色
-- 当用户说"你"时指代的对象
-- 当其他角色自称"我"时的角色
+- 当用户说"你"时指代的对象（用户→NPC方向）
+- 当其他角色自称"我"时的角色（NPC自述）
+- 任何不是用户本人的角色都属于NPC
+
+🙋 **用户角色识别指南（绝不能填入交互对象面板）**：
+- 对话中的用户本人，即玩家操控的主角
+- 第一人称："我"、"我的"、"我在"（用户自述）
+- 当AI对用户说话时的第二人称："你"、"你的"（AI→用户方向）
+- 明确的用户角色名称或用户设定的角色身份
 
 📋 数据格式：使用动态NPC格式：npcX.字段名="中文内容"
 其中X为NPC编号(0,1,2,3...)，根据剧情中实际出现的NPC数量动态生成
@@ -2167,6 +2247,17 @@ ${exampleFields.join(', ')}, npc1.name="第二个NPC", npc1.type="类型2", npc2
 
             if (!dataContent) {
                 console.log('[SmartPromptSystem] ℹ️ 未找到infobar_data标签');
+                return null;
+            }
+
+            // 🚨 新增：严格格式验证
+            const formatValidation = this.validateDataFormat(dataContent);
+            if (!formatValidation.isValid) {
+                console.error('[SmartPromptSystem] ❌ 数据格式验证失败!');
+                console.error('[SmartPromptSystem] ❌ 错误详情:', formatValidation.errors);
+                console.error('[SmartPromptSystem] 🚨 系统拒绝处理错误格式的数据!');
+
+                // 🚨 重要：直接返回null，不进行任何兼容性处理
                 return null;
             }
 
@@ -3150,5 +3241,87 @@ infobar_data标签（独立输出，必须后输出）
             updateStrategy: this.updateStrategy,
             hasFieldRuleManager: !!this.fieldRuleManager
         };
+    }
+
+    /**
+     * 🚨 严格验证数据格式，拒绝处理错误格式
+     */
+    validateDataFormat(dataContent) {
+        const errors = [];
+        const warnings = [];
+
+        try {
+            console.log('[SmartPromptSystem] 🔍 开始严格格式验证...');
+
+            // 检查是否包含interaction面板数据
+            const lines = dataContent.split('\n').filter(line => line.trim());
+            let hasInteractionPanel = false;
+            let interactionErrors = [];
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine || trimmedLine.startsWith('//') || trimmedLine.startsWith('#')) {
+                    continue;
+                }
+
+                const colonIndex = trimmedLine.indexOf(':');
+                if (colonIndex === -1) continue;
+
+                const panelId = trimmedLine.substring(0, colonIndex).trim();
+                const fieldsStr = trimmedLine.substring(colonIndex + 1).trim();
+
+                // 🚨 重点检查interaction面板
+                if (panelId === 'interaction') {
+                    hasInteractionPanel = true;
+                    console.log('[SmartPromptSystem] 🔍 检测到interaction面板，验证NPC前缀格式...');
+
+                    // 检查是否使用了正确的NPC前缀格式
+                    const npcPrefixPattern = /npc\d+\./;
+                    const hasNpcPrefix = npcPrefixPattern.test(fieldsStr);
+
+                    if (!hasNpcPrefix) {
+                        // 🚨 严重错误：没有使用NPC前缀
+                        interactionErrors.push(`interaction面板必须使用NPC前缀格式！`);
+                        interactionErrors.push(`当前格式: ${fieldsStr}`);
+                        interactionErrors.push(`正确格式: npc0.姓名="NPC名称", npc0.关系="关系", npc0.态度="态度"`);
+                        interactionErrors.push(`错误格式: 姓名="NPC名称", 关系="关系", 态度="态度"`);
+                    } else {
+                        console.log('[SmartPromptSystem] ✅ interaction面板使用了正确的NPC前缀格式');
+                    }
+                }
+            }
+
+            // 🚨 如果有interaction面板但格式错误，直接拒绝
+            if (hasInteractionPanel && interactionErrors.length > 0) {
+                errors.push(...interactionErrors);
+                errors.push('🚨 系统已移除对错误格式的兼容性处理！');
+                errors.push('🚨 请确保AI输出正确的NPC前缀格式！');
+            }
+
+            const isValid = errors.length === 0;
+
+            if (!isValid) {
+                console.error('[SmartPromptSystem] ❌ 格式验证失败，发现以下错误:');
+                errors.forEach(error => console.error(`  - ${error}`));
+            } else {
+                console.log('[SmartPromptSystem] ✅ 格式验证通过');
+            }
+
+            return {
+                isValid,
+                errors,
+                warnings,
+                hasInteractionPanel
+            };
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 格式验证过程出错:', error);
+            return {
+                isValid: false,
+                errors: [`格式验证过程出错: ${error.message}`],
+                warnings: [],
+                hasInteractionPanel: false
+            };
+        }
     }
 }
