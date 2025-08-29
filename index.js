@@ -1,13 +1,13 @@
 /**
  * Information Bar Integration Tool - SillyTavern第三方扩展插件
- * 
+ *
  * 功能特性:
  * - 信息栏设置界面
  * - 数据表格管理
  * - 自定义API配置
  * - 智能数据管理
  * - 界面定制功能
- * 
+ *
  * @version 1.0.0
  * @author Information Bar Integration Tool Developer
  */
@@ -28,6 +28,8 @@ import { HTMLTemplateParser } from './core/HTMLTemplateParser.js';
 import { AITemplateAssistant } from './core/AITemplateAssistant.js';
 import { TemplateManager } from './core/TemplateManager.js';
 import { VariableSystemPrompt } from './core/VariableSystemPrompt.js';
+import { NPCDatabaseManager } from './core/NPCDatabaseManager.js';
+import { NPCManagementPanel } from './ui/NPCManagementPanel.js';
 
 // 导入UI组件
 import { InfoBarSettings } from './ui/InfoBarSettings.js';
@@ -83,11 +85,11 @@ import { FrontendDisplayManager } from './ui/FrontendDisplayManager.js';
 class InformationBarIntegrationTool {
     constructor() {
         console.log('[InfoBarTool] 🚀 Information Bar Integration Tool 初始化开始');
-        
+
         // 扩展标识
         this.MODULE_NAME = 'information_bar_integration_tool';
         this.VERSION = '1.0.0';
-        
+
         // 核心模块
         this.dataCore = null;
         this.eventSystem = null;
@@ -114,20 +116,20 @@ class InformationBarIntegrationTool {
 
         // 前端显示功能
         this.frontendDisplayManager = null;
-        
+
         // 功能模块 (将在后续版本中添加)
         // this.contentManager = null;
         // this.panelManager = null;
         // this.dataManager = null;
-        
+
         // SillyTavern上下文
         this.context = null;
-        
+
         // 初始化状态
         this.initialized = false;
         this.errorCount = 0;
         this.version = '1.0.0';
-        
+
         // 绑定方法
         this.init = this.init.bind(this);
         this.onAppReady = this.onAppReady.bind(this);
@@ -141,26 +143,26 @@ class InformationBarIntegrationTool {
     async init() {
         try {
         console.log('[InfoBarTool] 📊 开始初始化核心模块...');
-            
+
             // 获取SillyTavern上下文
             this.context = SillyTavern.getContext();
-            
+
             if (!this.context) {
                 throw new Error('无法获取SillyTavern上下文');
             }
-            
+
             // 初始化核心模块
             await this.initCoreModules();
-            
+
             // 初始化UI组件
             await this.initUIComponents();
-            
+
             // 初始化功能模块
             await this.initFunctionModules();
-            
+
             // 监听SillyTavern事件
             this.bindSillyTavernEvents();
-            
+
             // 创建用户界面
             this.createUI();
 
@@ -175,7 +177,7 @@ class InformationBarIntegrationTool {
                 version: this.VERSION,
                 timestamp: Date.now()
             });
-            
+
         } catch (error) {
             console.error('[InfoBarTool] ❌ 初始化失败:', error);
             this.handleError(error);
@@ -187,21 +189,21 @@ class InformationBarIntegrationTool {
      */
     async initCoreModules() {
         console.log('[InfoBarTool] 🔧 初始化核心模块...');
-        
+
         // 初始化事件系统
         this.eventSystem = new EventSystem();
-        
+
         // 初始化数据核心
         this.dataCore = new UnifiedDataCore(this.eventSystem);
         await this.dataCore.init();
 
         // 🔧 修复：设置全局InfoBarData引用
         window.InfoBarData = this.dataCore;
-        
+
         // 初始化配置管理器
         this.configManager = new ConfigManager(this.dataCore);
         await this.configManager.init();
-        
+
         // 初始化API集成
         this.apiIntegration = new APIIntegration(this.configManager);
         await this.apiIntegration.init();
@@ -246,6 +248,14 @@ class InformationBarIntegrationTool {
             htmlTemplateParser: this.htmlTemplateParser
         });
         await this.templateManager.init();
+
+        // 初始化NPC数据库管理器
+        this.npcDatabaseManager = new NPCDatabaseManager({
+            unifiedDataCore: this.dataCore,
+            eventSystem: this.eventSystem,
+        });
+        await this.npcDatabaseManager.init();
+
 
         // 初始化智能提示词系统（需要在fieldRuleManager和panelRuleManager之后）
         this.smartPromptSystem = new SmartPromptSystem(this.configManager, this.eventSystem, this.dataCore, this.fieldRuleManager, this.panelRuleManager);
@@ -294,7 +304,7 @@ class InformationBarIntegrationTool {
      */
     async initUIComponents() {
         console.log('[InfoBarTool] 🎨 初始化UI组件...');
-        
+
         // 初始化信息栏设置界面
         this.infoBarSettings = new InfoBarSettings(
             this.configManager,
@@ -350,6 +360,14 @@ class InformationBarIntegrationTool {
         // 启动前端显示管理器
         await this.frontendDisplayManager.init();
 
+        // 初始化NPC管理面板（懒显示）
+        this.npcManagementPanel = new NPCManagementPanel({
+            npcDatabaseManager: this.npcDatabaseManager,
+            unifiedDataCore: this.dataCore,
+            eventSystem: this.eventSystem,
+        });
+
+
         // 🔧 新增：应用已保存主题到全局（无需打开设置界面）
         await this.applySavedThemeAtStartup();
 
@@ -374,7 +392,9 @@ class InformationBarIntegrationTool {
             panelRuleManager: this.panelRuleManager,
             htmlTemplateParser: this.htmlTemplateParser,
             aiTemplateAssistant: this.aiTemplateAssistant,
-            templateManager: this.templateManager
+            templateManager: this.templateManager,
+            npcDatabaseManager: this.npcDatabaseManager,
+            npcManagementPanel: this.npcManagementPanel
         };
 
         // 🔧 修复：更新全局对象以使用正确初始化的模块
@@ -504,21 +524,21 @@ class InformationBarIntegrationTool {
      */
     bindSillyTavernEvents() {
         const { eventSource, event_types } = this.context;
-        
+
         // 监听应用就绪事件
         eventSource.on(event_types.APP_READY, this.onAppReady);
-        
+
         // 监听聊天切换事件
         eventSource.on(event_types.CHAT_CHANGED, (data) => {
             this.eventSystem.emit('chat:changed', data);
         });
-        
+
         // 🔧 修复：移除直接转发，让EventSystem完全负责消息事件处理
         // EventSystem已经在bindMessageEvents()中监听了这些事件并进行智能过滤
         // 直接转发会绕过EventSystem的过滤机制，导致时序问题
 
         console.log('[InfoBarTool] ℹ️ 消息事件由EventSystem统一处理，不再直接转发');
-        
+
         console.log('[InfoBarTool] 🔗 SillyTavern事件绑定完成');
     }
 
@@ -535,7 +555,7 @@ class InformationBarIntegrationTool {
      */
     createUI() {
         console.log('[InfoBarTool] 🖼️ 创建用户界面...');
-        
+
         try {
             // 获取正确的扩展菜单按钮容器
             const extensionContainer = document.querySelector('#extensionsMenuButton');
@@ -545,7 +565,7 @@ class InformationBarIntegrationTool {
             }
 
             console.log('[InfoBarTool] 📍 使用扩展容器:', extensionContainer.id || extensionContainer.className);
-            
+
             // 查找或创建扩展菜单下拉列表
             let extensionMenu = extensionContainer.nextElementSibling;
             if (!extensionMenu || !extensionMenu.classList.contains('dropdown-menu')) {
@@ -599,9 +619,9 @@ class InformationBarIntegrationTool {
             // 添加菜单项到扩展菜单
             extensionMenu.appendChild(settingsMenuItem);
             extensionMenu.appendChild(tableMenuItem);
-            
+
             console.log('[InfoBarTool] ✅ 用户界面创建完成');
-            
+
         } catch (error) {
             console.error('[InfoBarTool] ❌ 创建用户界面失败:', error);
             this.handleError(error);
@@ -614,7 +634,7 @@ class InformationBarIntegrationTool {
     handleError(error) {
         this.errorCount++;
         console.error(`[InfoBarTool] ❌ 错误 #${this.errorCount}:`, error);
-        
+
         // 触发错误事件
         if (this.eventSystem) {
             this.eventSystem.emit('tool:error', {
@@ -623,7 +643,7 @@ class InformationBarIntegrationTool {
                 timestamp: Date.now()
             });
         }
-        
+
         // 如果错误过多，禁用扩展
         if (this.errorCount >= 5) {
             console.error('[InfoBarTool] ⚠️ 错误过多，禁用扩展');
@@ -671,7 +691,9 @@ class InformationBarIntegrationTool {
                 htmlTemplateParser: this.htmlTemplateParser,
                 aiTemplateAssistant: this.aiTemplateAssistant,
                 templateManager: this.templateManager,
-                variableSystemPrompt: this.variableSystemPrompt
+                variableSystemPrompt: this.variableSystemPrompt,
+                npcDatabaseManager: this.npcDatabaseManager,
+                npcManagementPanel: this.npcManagementPanel
             };
 
             // 确保eventSource也被设置
