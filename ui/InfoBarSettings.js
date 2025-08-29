@@ -732,7 +732,11 @@ export class InfoBarSettings {
                             <i class="fa fa-code"></i>
                             变量管理器
                         </button>
-                        <div class="tool-desc">管理全局变量、宏定义和自定义函数</div>
+                        <button class="btn btn-secondary" id="npc-management-btn" data-action="open-npc-management" style="margin-left:8px;">
+                            <i class="fa fa-users"></i>
+                            NPC管理
+                        </button>
+                        <div class="tool-desc">管理全局变量、宏定义和自定义函数；打开NPC数据库管理界面</div>
                     </div>
                 </div>
             </div>
@@ -4265,6 +4269,19 @@ export class InfoBarSettings {
                 case 'show-data-info':
                     console.log('[InfoBarSettings] 📊 显示数据信息...');
                     this.showDataInfoPanel();
+                    break;
+                case 'open-npc-management':
+                    console.log('[InfoBarSettings] 🧑‍🤝‍🧑 打开NPC管理面板...');
+                    try {
+                        const panel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
+                        if (panel && typeof panel.show === 'function') {
+                            panel.show();
+                        } else {
+                            console.warn('[InfoBarSettings] ⚠️ 未找到NPC管理面板实例');
+                        }
+                    } catch (e) {
+                        console.error('[InfoBarSettings] ❌ 打开NPC管理面板失败:', e);
+                    }
                     break;
                 default:
                     console.log(`[InfoBarSettings] 🔘 处理操作: ${action}`);
