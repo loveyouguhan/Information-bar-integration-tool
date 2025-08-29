@@ -1678,9 +1678,9 @@ world: name="现代都市", type="都市"
     generateInteractionPanelTemplate(panel, panelKey) {
         console.log('[SmartPromptSystem] 🎭 生成交互对象面板动态NPC模板');
 
-        // 🔧 修复：生成正确的字段列表，避免显示中文显示名称误导AI
+        // 🔧 修复：生成正确的字段列表，对于interaction面板使用NPC前缀格式
         const availableFields = panel.subItems.map(subItem => {
-            return `${subItem.key}="具体内容"`;
+            return `npc0.${subItem.key}="具体内容"`;
         });
 
         // 🔧 优化：生成NPC角色专用的示例格式

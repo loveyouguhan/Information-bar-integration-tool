@@ -15,7 +15,8 @@ export class NPCDatabaseManager {
         this.dataCore = unifiedDataCore || window.SillyTavernInfobar?.modules?.dataCore;
         this.eventSystem = eventSystem || window.SillyTavernInfobar?.eventSource;
 
-        this.DB_KEY = 'npcDatabase';
+        this.DB_KEY_PREFIX = 'npcDatabase';
+        this.currentChatId = null; // 当前聊天ID
         this.db = {
             version: 1,
             nextId: 0,
@@ -35,6 +36,48 @@ export class NPCDatabaseManager {
         this.search = this.search.bind(this);
         this.export = this.export.bind(this);
         this.import = this.import.bind(this);
+        this.getCurrentChatId = this.getCurrentChatId.bind(this);
+        this.getCurrentDbKey = this.getCurrentDbKey.bind(this);
+    }
+
+    /**
+     * 获取当前聊天ID
+     * @returns {string|null} 当前聊天ID
+     */
+    getCurrentChatId() {
+        try {
+            // 实时获取SillyTavern上下文
+            const context = SillyTavern?.getContext?.();
+            if (!context) {
+                console.warn('[NPCDB] ⚠️ 无法获取SillyTavern上下文');
+                return null;
+            }
+
+            const chatId = context.chatId;
+            if (!chatId) {
+                console.warn('[NPCDB] ⚠️ 当前没有活动聊天');
+                return null;
+            }
+
+            return chatId;
+
+        } catch (error) {
+            console.error('[NPCDB] ❌ 获取当前聊天ID失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 获取当前聊天的数据库键
+     * @returns {string} 数据库键
+     */
+    getCurrentDbKey() {
+        const chatId = this.getCurrentChatId();
+        if (!chatId) {
+            // 如果没有聊天ID，使用默认键（向后兼容）
+            return this.DB_KEY_PREFIX;
+        }
+        return `${this.DB_KEY_PREFIX}_${chatId}`;
     }
 
     async init() {
@@ -46,6 +89,11 @@ export class NPCDatabaseManager {
                 this.eventSystem.on('data:updated', async (payload) => {
                     try { await this.handleDataUpdated(payload); } catch (e) { console.error('[NPCDB] 处理data:updated失败', e); }
                 });
+
+                // 🔧 新增：监听聊天切换事件
+                this.eventSystem.on('chat:changed', async (data) => {
+                    try { await this.handleChatSwitch(data); } catch (e) { console.error('[NPCDB] 处理聊天切换失败', e); }
+                });
             }
 
             this.initialized = true;
@@ -56,24 +104,66 @@ export class NPCDatabaseManager {
         }
     }
 
+    /**
+     * 🔧 新增：处理聊天切换事件
+     * @param {Object} data - 聊天切换事件数据
+     */
+    async handleChatSwitch(data) {
+        try {
+            const newChatId = this.getCurrentChatId();
+            if (newChatId && newChatId !== this.currentChatId) {
+                console.log('[NPCDB] 🔄 检测到聊天切换:', this.currentChatId, '->', newChatId);
+
+                // 保存当前聊天的数据
+                if (this.currentChatId) {
+                    await this.save();
+                }
+
+                // 切换到新聊天的数据
+                this.currentChatId = newChatId;
+                await this.load();
+
+                console.log('[NPCDB] ✅ 已切换到新聊天的NPC数据库:', Object.keys(this.db.npcs).length, '个NPC');
+            }
+        } catch (error) {
+            console.error('[NPCDB] ❌ 处理聊天切换失败:', error);
+        }
+    }
+
     async load() {
         try {
             if (!this.dataCore) return;
-            const loaded = await this.dataCore.getData(this.DB_KEY, 'global');
+
+            // 🔧 修复：使用聊天隔离存储
+            const currentChatId = this.getCurrentChatId();
+            this.currentChatId = currentChatId;
+
+            const dbKey = this.getCurrentDbKey();
+            console.log('[NPCDB] 📥 加载聊天NPC数据库:', dbKey, '聊天ID:', currentChatId);
+
+            // 从聊天范围加载数据
+            const loaded = await this.dataCore.getData(dbKey, 'chat');
+
             if (loaded && typeof loaded === 'object') {
-                // 兼容旧结构
+                // 加载现有数据
                 this.db = {
                     version: 1,
                     nextId: loaded.nextId || 0,
                     nameToId: loaded.nameToId || {},
                     npcs: loaded.npcs || {}
                 };
+            } else {
+                // 🔧 数据迁移：尝试从全局存储迁移数据（仅首次）
+                await this.migrateFromGlobalStorage();
             }
+
             // 反向构建 nameToId，确保一致性
             Object.values(this.db.npcs).forEach((npc) => {
                 if (npc?.name && !this.db.nameToId[npc.name]) this.db.nameToId[npc.name] = npc.id;
             });
-            console.log('[NPCDB] 📥 已加载数据库: ', Object.keys(this.db.npcs).length, '个NPC');
+
+            console.log('[NPCDB] ✅ 已加载聊天NPC数据库:', Object.keys(this.db.npcs).length, '个NPC');
+
         } catch (error) {
             console.error('[NPCDB] ❌ 加载数据库失败:', error);
             this.errorCount++;
@@ -83,12 +173,75 @@ export class NPCDatabaseManager {
     async save() {
         try {
             if (!this.dataCore) return;
-            await this.dataCore.setData(this.DB_KEY, this.db, 'global');
+
+            // 🔧 修复：使用聊天隔离存储
+            const dbKey = this.getCurrentDbKey();
+            await this.dataCore.setData(dbKey, this.db, 'chat');
+
+            console.log('[NPCDB] 💾 已保存聊天NPC数据库:', dbKey, Object.keys(this.db.npcs).length, '个NPC');
+
             // 广播事件
-            this.eventSystem?.emit('npc:db:saved', { count: Object.keys(this.db.npcs).length, timestamp: Date.now() });
+            this.eventSystem?.emit('npc:db:saved', {
+                chatId: this.currentChatId,
+                count: Object.keys(this.db.npcs).length,
+                timestamp: Date.now()
+            });
+
         } catch (error) {
             console.error('[NPCDB] ❌ 保存数据库失败:', error);
             this.errorCount++;
+        }
+    }
+
+    /**
+     * 🔧 数据迁移：从全局存储迁移到聊天隔离存储
+     */
+    async migrateFromGlobalStorage() {
+        try {
+            console.log('[NPCDB] 🔄 检查是否需要从全局存储迁移数据...');
+
+            // 检查全局存储中是否有旧数据
+            const globalData = await this.dataCore.getData(this.DB_KEY_PREFIX, 'global');
+
+            if (globalData && typeof globalData === 'object' && Object.keys(globalData.npcs || {}).length > 0) {
+                console.log('[NPCDB] 📦 发现全局存储中的旧数据，开始迁移...', Object.keys(globalData.npcs).length, '个NPC');
+
+                // 迁移数据到当前聊天
+                this.db = {
+                    version: 1,
+                    nextId: globalData.nextId || 0,
+                    nameToId: globalData.nameToId || {},
+                    npcs: globalData.npcs || {}
+                };
+
+                // 保存到聊天隔离存储
+                await this.save();
+
+                console.log('[NPCDB] ✅ 数据迁移完成，已迁移', Object.keys(this.db.npcs).length, '个NPC到当前聊天');
+
+                // 可选：清理全局存储中的旧数据（注释掉以保持向后兼容）
+                // await this.dataCore.deleteData(this.DB_KEY_PREFIX, 'global');
+
+            } else {
+                console.log('[NPCDB] 📝 无需迁移，初始化空数据库');
+                // 初始化空数据库
+                this.db = {
+                    version: 1,
+                    nextId: 0,
+                    nameToId: {},
+                    npcs: {}
+                };
+            }
+
+        } catch (error) {
+            console.error('[NPCDB] ❌ 数据迁移失败:', error);
+            // 迁移失败时初始化空数据库
+            this.db = {
+                version: 1,
+                nextId: 0,
+                nameToId: {},
+                npcs: {}
+            };
         }
     }
 
