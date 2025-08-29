@@ -572,12 +572,12 @@ export class DataTable {
                 { name: '文化特色', key: 'culture', value: '中西融合' }
             ],
             interaction: [
-                { name: '小雨', key: 'xiaoyu', value: '朋友' },
-                { name: '张经理', key: 'zhangjingli', value: '同事' },
-                { name: '李医生', key: 'liyisheng', value: '医患关系' },
-                { name: '王老师', key: 'wanglaoshi', value: '师生关系' },
-                { name: '陈同学', key: 'chentongxue', value: '同学' },
-                { name: '刘邻居', key: 'liulinju', value: '邻居' }
+                { name: 'NPC姓名', key: 'npc0.name', value: '小雨' },
+                { name: 'NPC类型', key: 'npc0.type', value: '朋友' },
+                { name: 'NPC状态', key: 'npc0.status', value: '开心' },
+                { name: 'NPC关系', key: 'npc0.relationship', value: '好友' },
+                { name: 'NPC心情', key: 'npc0.mood', value: '愉快' },
+                { name: 'NPC位置', key: 'npc0.location', value: '咖啡厅' }
             ]
         };
 
