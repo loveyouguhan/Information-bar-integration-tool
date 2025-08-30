@@ -698,7 +698,16 @@ export class AIDataExposure {
 
                 // 字段数据
                 for (const [fieldName, fieldData] of Object.entries(panelData.fields)) {
-                    result += `  ${fieldName}: ${fieldData.value}`;
+                    // 🔧 修复：对交互面板字段进行格式规范化显示
+                    let displayFieldName = fieldName;
+                    if (panelName === 'interaction') {
+                        if (!fieldName.match(/^npc\d+\./)) {
+                            // 错误格式，规范化为 npc0 前缀
+                            displayFieldName = `npc0.${fieldName} (已规范化)`;
+                        }
+                    }
+
+                    result += `  ${displayFieldName}: ${fieldData.value}`;
                     if (options.includeRules && fieldData.rule) {
                         result += ` (规则: ${fieldData.rule})`;
                     }

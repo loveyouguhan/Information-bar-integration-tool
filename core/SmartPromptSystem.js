@@ -1335,11 +1335,32 @@ world: name="现代都市", type="都市"
 
                 const dataEntries = Object.entries(panelData);
                 if (dataEntries.length > 0) {
-                    // 显示现有数据（限制显示长度）
-                    dataEntries.forEach(([key, value]) => {
-                        const displayValue = this.formatDataValue(value);
-                        dataInfoParts.push(`${key}: ${displayValue}`);
-                    });
+                    // 🔧 修复：显示现有数据时，对交互面板进行格式规范化
+                    if (panelId === 'interaction') {
+                        // 对交互面板数据进行格式检查和规范化显示
+                        const normalizedEntries = [];
+                        dataEntries.forEach(([key, value]) => {
+                            const displayValue = this.formatDataValue(value);
+                            // 检查是否已经是正确的 npc 前缀格式
+                            if (key.match(/^npc\d+\./)) {
+                                // 已经是正确格式，直接显示
+                                normalizedEntries.push(`${key}: ${displayValue}`);
+                            } else {
+                                // 错误格式，规范化为 npc0 前缀并添加警告
+                                normalizedEntries.push(`npc0.${key}: ${displayValue} (已规范化格式)`);
+                            }
+                        });
+                        normalizedEntries.forEach(entry => dataInfoParts.push(entry));
+
+                        // 添加格式提醒
+                        dataInfoParts.push('🚨 注意：交互面板必须使用 npc0.字段名="值" 格式！');
+                    } else {
+                        // 非交互面板，正常显示
+                        dataEntries.forEach(([key, value]) => {
+                            const displayValue = this.formatDataValue(value);
+                            dataInfoParts.push(`${key}: ${displayValue}`);
+                        });
+                    }
                 } else {
                     dataInfoParts.push(`(无现有数据，需要根据剧情生成${panel.subItems.length}个字段)`);
                 }
@@ -1402,10 +1423,26 @@ world: name="现代都市", type="都市"
                 dataInfoParts.push(`${panelName}面板 (${panelId}): ${Object.keys(panelData).length > 0 ? '有数据' : '待生成'}`);
 
                 if (Object.keys(panelData).length > 0) {
-                    Object.entries(panelData).forEach(([key, value]) => {
-                        const displayValue = this.formatDataValue(value);
-                        dataInfoParts.push(`  ${key}: ${displayValue}`);
-                    });
+                    // 🔧 修复：对交互面板进行格式规范化显示
+                    if (panelId === 'interaction') {
+                        Object.entries(panelData).forEach(([key, value]) => {
+                            const displayValue = this.formatDataValue(value);
+                            // 检查是否已经是正确的 npc 前缀格式
+                            if (key.match(/^npc\d+\./)) {
+                                // 已经是正确格式，直接显示
+                                dataInfoParts.push(`  ${key}: ${displayValue}`);
+                            } else {
+                                // 错误格式，规范化为 npc0 前缀
+                                dataInfoParts.push(`  npc0.${key}: ${displayValue} (已规范化)`);
+                            }
+                        });
+                    } else {
+                        // 非交互面板，正常显示
+                        Object.entries(panelData).forEach(([key, value]) => {
+                            const displayValue = this.formatDataValue(value);
+                            dataInfoParts.push(`  ${key}: ${displayValue}`);
+                        });
+                    }
                 }
             }
             dataInfoParts.push('');
@@ -1431,7 +1468,19 @@ world: name="现代都市", type="都市"
                             const keyChanges = Object.entries(entry.data).slice(0, 3);
                             keyChanges.forEach(([key, value]) => {
                                 const displayValue = this.formatDataValue(value);
-                                dataInfoParts.push(`     ${key}: ${displayValue}`);
+                                // 🔧 修复：对交互面板历史数据进行格式规范化
+                                if (panelKey === 'interaction') {
+                                    if (key.match(/^npc\d+\./)) {
+                                        // 已经是正确格式
+                                        dataInfoParts.push(`     ${key}: ${displayValue}`);
+                                    } else {
+                                        // 错误格式，规范化显示
+                                        dataInfoParts.push(`     npc0.${key}: ${displayValue} (历史数据已规范化)`);
+                                    }
+                                } else {
+                                    // 非交互面板，正常显示
+                                    dataInfoParts.push(`     ${key}: ${displayValue}`);
+                                }
                             });
                         });
                     }
@@ -1448,7 +1497,19 @@ world: name="现代都市", type="都市"
 
                     Object.entries(persistentData).forEach(([key, value]) => {
                         const displayValue = this.formatDataValue(value);
-                        dataInfoParts.push(`  ${key}: ${displayValue}`);
+                        // 🔧 修复：对交互面板持久化数据进行格式规范化
+                        if (panelKey === 'interaction') {
+                            if (key.match(/^npc\d+\./)) {
+                                // 已经是正确格式
+                                dataInfoParts.push(`  ${key}: ${displayValue}`);
+                            } else {
+                                // 错误格式，规范化显示
+                                dataInfoParts.push(`  npc0.${key}: ${displayValue} (持久化数据已规范化)`);
+                            }
+                        } else {
+                            // 非交互面板，正常显示
+                            dataInfoParts.push(`  ${key}: ${displayValue}`);
+                        }
                     });
                 }
                 dataInfoParts.push('');

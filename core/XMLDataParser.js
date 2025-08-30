@@ -1151,14 +1151,20 @@ export class XMLDataParser {
                     return;
                 }
 
-                const hasMixedInfo = this.detectMixedNpcInfo(value);
+                // 🔧 修复：只检测name相关字段中的多NPC情况
+                const isNameField = this.isNameField(key);
+                const hasMixedInfo = isNameField ? this.detectMixedNpcInfo(value) : false;
+
                 if (hasMixedInfo) {
                     const separatedValues = this.separateNpcInfo(value);
                     fieldAnalysis[key] = { hasMixed: true, values: separatedValues };
                     maxNpcCount = Math.max(maxNpcCount, separatedValues.length);
-                    console.log(`[XMLDataParser] 🚨 检测到混合NPC信息: ${key} = "${value}" -> ${separatedValues.length}个值`);
+                    console.log(`[XMLDataParser] 🚨 检测到混合NPC名称: ${key} = "${value}" -> ${separatedValues.length}个NPC`);
                 } else {
                     fieldAnalysis[key] = { hasMixed: false, values: [value] };
+                    if (isNameField) {
+                        console.log(`[XMLDataParser] ✅ 单一NPC名称: ${key} = "${value}"`);
+                    }
                 }
             });
 
@@ -1198,6 +1204,23 @@ export class XMLDataParser {
             console.error('[XMLDataParser] ❌ 修复交互面板NPC混合失败:', error);
             return interactionData;
         }
+    }
+
+    /**
+     * 🔧 判断字段是否为名称字段
+     * @param {string} fieldKey - 字段键名
+     * @returns {boolean} 是否为名称字段
+     */
+    isNameField(fieldKey) {
+        // 移除npc前缀后检查字段名
+        const cleanFieldKey = fieldKey.replace(/^npc\d+\./, '');
+        const nameFields = [
+            'name', '姓名', 'npc_name', 'npcName',
+            '名字', '名称', '角色名', '角色名称',
+            'character_name', 'characterName',
+            'person_name', 'personName'
+        ];
+        return nameFields.includes(cleanFieldKey.toLowerCase()) || nameFields.includes(cleanFieldKey);
     }
 
     /**

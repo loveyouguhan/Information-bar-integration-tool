@@ -38,6 +38,7 @@ export class NPCDatabaseManager {
         this.import = this.import.bind(this);
         this.getCurrentChatId = this.getCurrentChatId.bind(this);
         this.getCurrentDbKey = this.getCurrentDbKey.bind(this);
+        this.deleteNpc = this.deleteNpc.bind(this);
     }
 
     /**
@@ -90,17 +91,97 @@ export class NPCDatabaseManager {
                     try { await this.handleDataUpdated(payload); } catch (e) { console.error('[NPCDB] 处理data:updated失败', e); }
                 });
 
-                // 🔧 新增：监听聊天切换事件
+                // 🔧 修复：监听聊天切换事件，同时监听多个可能的事件
                 this.eventSystem.on('chat:changed', async (data) => {
                     try { await this.handleChatSwitch(data); } catch (e) { console.error('[NPCDB] 处理聊天切换失败', e); }
                 });
+
+                // 🔧 新增：直接监听SillyTavern的聊天切换事件作为备用
+                const context = SillyTavern?.getContext?.();
+                if (context?.eventSource && context?.event_types) {
+                    context.eventSource.on(context.event_types.CHAT_CHANGED, async (data) => {
+                        try {
+                            console.log('[NPCDB] 🔄 直接收到SillyTavern聊天切换事件');
+                            await this.handleChatSwitch(data);
+                        } catch (e) {
+                            console.error('[NPCDB] 处理SillyTavern聊天切换失败', e);
+                        }
+                    });
+                    console.log('[NPCDB] 🔗 已绑定SillyTavern聊天切换事件');
+                }
             }
 
             this.initialized = true;
             console.log('[NPCDB] ✅ NPC数据库管理器初始化完成，NPC数量:', Object.keys(this.db.npcs).length);
+
+            // 🔧 修复：在初始化完成后再次确保事件监听器已注册
+            this.ensureEventListeners();
         } catch (error) {
             console.error('[NPCDB] ❌ 初始化失败:', error);
             this.errorCount++;
+        }
+    }
+
+    /**
+     * 🔧 新增：确保事件监听器已注册
+     */
+    ensureEventListeners() {
+        try {
+            if (!this.eventSystem) {
+                console.warn('[NPCDB] ⚠️ 事件系统不可用，无法注册事件监听器');
+                return;
+            }
+
+            // 检查是否已经注册了聊天切换事件监听器
+            const listeners = this.eventSystem._events?.['chat:changed'];
+            const hasNpcListener = listeners?.some(listener =>
+                listener.toString().includes('handleChatSwitch')
+            );
+
+            if (!hasNpcListener) {
+                console.log('[NPCDB] 🔗 注册聊天切换事件监听器...');
+
+                this.eventSystem.on('chat:changed', async (data) => {
+                    try {
+                        await this.handleChatSwitch(data);
+                    } catch (e) {
+                        console.error('[NPCDB] 处理聊天切换失败', e);
+                    }
+                });
+
+                console.log('[NPCDB] ✅ 聊天切换事件监听器注册成功');
+            } else {
+                console.log('[NPCDB] ℹ️ 聊天切换事件监听器已存在');
+            }
+
+            // 同时注册SillyTavern的直接事件监听
+            const context = SillyTavern?.getContext?.();
+            if (context?.eventSource && context?.event_types) {
+                const stListeners = context.eventSource._events?.[context.event_types.CHAT_CHANGED];
+                const hasStListener = stListeners?.some(listener =>
+                    listener.toString().includes('NPCDB')
+                );
+
+                if (!hasStListener) {
+                    console.log('[NPCDB] 🔗 注册SillyTavern直接事件监听器...');
+
+                    context.eventSource.on(context.event_types.CHAT_CHANGED, async (data) => {
+                        try {
+                            console.log('[NPCDB] 🔄 直接收到SillyTavern聊天切换事件');
+                            await this.handleChatSwitch(data);
+                        } catch (e) {
+                            console.error('[NPCDB] 处理SillyTavern聊天切换失败', e);
+                        }
+                    });
+
+                    console.log('[NPCDB] ✅ SillyTavern直接事件监听器注册成功');
+                } else {
+                    console.log('[NPCDB] ℹ️ SillyTavern直接事件监听器已存在');
+                }
+            }
+
+        } catch (error) {
+            console.error('[NPCDB] ❌ 确保事件监听器失败:', error);
         }
     }
 
@@ -153,8 +234,16 @@ export class NPCDatabaseManager {
                     npcs: loaded.npcs || {}
                 };
             } else {
-                // 🔧 数据迁移：尝试从全局存储迁移数据（仅首次）
-                await this.migrateFromGlobalStorage();
+                // 🔧 修复：不再从全局存储迁移数据，保持聊天隔离
+                console.log('[NPCDB] 📝 当前聊天没有NPC数据，创建空数据库');
+                this.db = {
+                    version: 1,
+                    nextId: 0,
+                    nameToId: {},
+                    npcs: {}
+                };
+                // 保存空数据库到当前聊天
+                await this.save();
             }
 
             // 反向构建 nameToId，确保一致性
@@ -204,17 +293,19 @@ export class NPCDatabaseManager {
             const globalData = await this.dataCore.getData(this.DB_KEY_PREFIX, 'global');
 
             if (globalData && typeof globalData === 'object' && Object.keys(globalData.npcs || {}).length > 0) {
-                console.log('[NPCDB] 📦 发现全局存储中的旧数据，开始迁移...', Object.keys(globalData.npcs).length, '个NPC');
+                console.log('[NPCDB] 📦 发现全局存储中的旧数据，但为了保证聊天隔离，不进行自动迁移');
+                console.log('[NPCDB] ℹ️ 如需迁移数据，请使用导入/导出功能手动操作');
 
-                // 迁移数据到当前聊天
+                // 🔧 修复：不自动迁移全局数据，保持聊天隔离
+                // 为当前聊天创建空的数据库
                 this.db = {
                     version: 1,
-                    nextId: globalData.nextId || 0,
-                    nameToId: globalData.nameToId || {},
-                    npcs: globalData.npcs || {}
+                    nextId: 0,
+                    nameToId: {},
+                    npcs: {}
                 };
 
-                // 保存到聊天隔离存储
+                // 保存空数据库到当前聊天
                 await this.save();
 
                 console.log('[NPCDB] ✅ 数据迁移完成，已迁移', Object.keys(this.db.npcs).length, '个NPC到当前聊天');
@@ -324,13 +415,21 @@ export class NPCDatabaseManager {
     // 处理 data:updated 事件，从 interaction 面板提取NPC并更新数据库
     async handleDataUpdated(payload) {
         try {
-            const chatId = payload?.chatId || this.dataCore?.getCurrentChatId?.();
+            // 🔧 修复：始终使用当前聊天ID，不信任payload中的chatId
+            const currentChatId = this.getCurrentChatId();
             const messageId = payload?.dataEntry?.messageId || payload?.dataEntry?.index || null;
             const panelsData = payload?.dataEntry?.data || payload?.panelFields || payload?.data || {};
+
             if (!panelsData || typeof panelsData !== 'object') return;
+            if (!currentChatId) {
+                console.warn('[NPCDB] ⚠️ 无法获取当前聊天ID，跳过NPC数据更新');
+                return;
+            }
 
             const npcs = this.extractNpcsFromPanels(panelsData.interaction || {});
             if (npcs.length === 0) return;
+
+            console.log('[NPCDB] 📝 处理NPC数据更新，当前聊天:', currentChatId);
 
             let updated = 0;
             npcs.forEach(n => {
@@ -340,7 +439,7 @@ export class NPCDatabaseManager {
                 npc.appearCount = (npc.appearCount || 0) + 1;
                 npc.lastSeen = Date.now();
                 npc.lastMessageId = messageId;
-                npc.lastChatId = chatId;
+                npc.lastChatId = currentChatId; // 🔧 修复：使用当前聊天ID
                 npc.updatedAt = Date.now();
                 updated += (before !== JSON.stringify(npc.fields)) ? 1 : 0;
                 this.eventSystem?.emit('npc:updated', { id: npc.id, npc });
@@ -494,6 +593,58 @@ export class NPCDatabaseManager {
         } catch (error) {
             console.error('[NPCDB] ❌ 导入失败:', error);
             throw error;
+        }
+    }
+
+    /**
+     * 🆕 删除NPC
+     * @param {string} npcId - NPC ID
+     * @returns {boolean} 是否删除成功
+     */
+    async deleteNpc(npcId) {
+        try {
+            if (!npcId || !this.db.npcs[npcId]) {
+                console.warn('[NPCDB] ⚠️ NPC不存在:', npcId);
+                return false;
+            }
+
+            const npc = this.db.npcs[npcId];
+            const npcName = npc.name;
+
+            // 从数据库中删除NPC
+            delete this.db.npcs[npcId];
+
+            // 从名称映射中删除
+            if (npcName && this.db.nameToId[npcName] === npcId) {
+                delete this.db.nameToId[npcName];
+            }
+
+            // 保存数据库
+            await this.save();
+
+            console.log('[NPCDB] ✅ 已删除NPC:', npcId, npcName);
+
+            // 触发事件
+            this.eventSystem?.emit('npc:deleted', {
+                id: npcId,
+                name: npcName,
+                chatId: this.currentChatId,
+                timestamp: Date.now()
+            });
+
+            this.eventSystem?.emit('npc:db:updated', {
+                action: 'delete',
+                npcId: npcId,
+                count: Object.keys(this.db.npcs).length,
+                timestamp: Date.now()
+            });
+
+            return true;
+
+        } catch (error) {
+            console.error('[NPCDB] ❌ 删除NPC失败:', error);
+            this.errorCount++;
+            return false;
         }
     }
 }

@@ -317,7 +317,24 @@ export class AITemplateAssistant {
             const panels = (chatData && chatData.infobar_data && chatData.infobar_data.panels) ? chatData.infobar_data.panels : {};
 
             Object.entries(panels).forEach(([panelId, panelData]) => {
-                fields[panelId] = Object.keys(panelData || {});
+                const fieldKeys = Object.keys(panelData || {});
+
+                // 🔧 修复：对交互面板字段进行格式规范化
+                if (panelId === 'interaction') {
+                    const normalizedKeys = fieldKeys.map(key => {
+                        if (key.match(/^npc\d+\./)) {
+                            // 已经是正确格式
+                            return key;
+                        } else {
+                            // 错误格式，规范化为 npc0 前缀
+                            return `npc0.${key}`;
+                        }
+                    });
+                    fields[panelId] = normalizedKeys;
+                } else {
+                    // 非交互面板，正常处理
+                    fields[panelId] = fieldKeys;
+                }
             });
 
             return fields;

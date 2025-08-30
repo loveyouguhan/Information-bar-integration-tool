@@ -133,9 +133,15 @@ export class EventSystem {
             
             if (context) {
                 this.sillyTavernEventSource = context.eventSource;
-                this.sillyTavernEventTypes = context.event_types;
-                
+                // 🔧 修复：使用正确的事件类型属性名
+                this.sillyTavernEventTypes = context.event_types || context.eventTypes;
+
                 console.log('[EventSystem] 🔗 SillyTavern事件系统绑定成功');
+                console.log('[EventSystem] 📋 可用事件类型:', this.sillyTavernEventTypes ? Object.keys(this.sillyTavernEventTypes) : '无');
+
+                // 立即设置事件代理
+                this.setupEventProxies();
+                this.bindMessageEvents();
             } else {
                 console.warn('[EventSystem] ⚠️ 无法获取SillyTavern事件系统，将在稍后重试');
                 
