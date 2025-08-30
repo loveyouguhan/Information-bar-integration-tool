@@ -22,6 +22,11 @@ export class InfoBarSettings {
         // 🔧 注入数据核心引用，供数据导出/导入使用
         this.unifiedDataCore = this.configManager?.dataCore || window.SillyTavernInfobar?.modules?.dataCore || null;
 
+        // 🆕 世界书管理器引用
+        this.worldBookManager = null;
+        this.worldBookConfigPanel = null;
+        this.worldBookConfigPanelInitialized = false;
+
         // 全局并发/去重控制标记
         this._customAPIProcessing = false; // 自定义API处理进行中
         this._boundHandlers = {}; // 存放已绑定的事件处理器引用，避免重复绑定
@@ -4841,6 +4846,17 @@ export class InfoBarSettings {
                     </div>
                 </div>
 
+                <!-- 🆕 世界书配置面板 -->
+                <div class="settings-group worldbook-config-section" style="display: none;">
+                    <h4>📚 世界书管理配置</h4>
+                    <div id="worldbook-config-container">
+                        <!-- 世界书配置面板将在这里动态加载 -->
+                        <div style="padding: 20px; text-align: center; color: var(--theme-text-secondary, #aaa);">
+                            正在加载世界书配置...
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 连接状态显示 -->
                 <div class="settings-group">
                     <h4>10. 连接状态</h4>
@@ -5952,6 +5968,8 @@ export class InfoBarSettings {
                 this.initAllBasicPanelCustomSubItems();
                 // 刷新已保存配置下拉
                 this.refreshProfilesSelect();
+                // 🆕 初始化世界书配置面板
+                this.initWorldBookConfigPanel();
                 // 应用调试级别到控制台
                 const enabled = this.modal.querySelector('[name="debug.enabled"]')?.checked;
                 const level = this.modal.querySelector('[name="debug.logLevel"]').value || 'info';
@@ -27366,5 +27384,164 @@ ${dataExamples}
      */
     createHTMLTemplateEditorHTML() {
         return this.createStatusBarEditorHTML();
+    }
+
+    // ==================== 🆕 世界书配置相关方法 ====================
+
+    /**
+     * 初始化世界书配置面板
+     */
+    async initWorldBookConfigPanel() {
+        try {
+            console.log('[InfoBarSettings] 📚 初始化世界书配置面板...');
+
+            // 🔧 修复：检查是否已经初始化过
+            if (this.worldBookConfigPanelInitialized) {
+                console.log('[InfoBarSettings] ⚠️ 世界书配置面板已初始化，跳过重复初始化');
+                return;
+            }
+
+            // 获取世界书管理器引用
+            this.worldBookManager = window.SillyTavernInfobar?.modules?.worldBookManager;
+            this.worldBookConfigPanel = window.SillyTavernInfobar?.modules?.worldBookConfigPanel;
+
+            if (!this.worldBookManager || !this.worldBookConfigPanel) {
+                console.warn('[InfoBarSettings] ⚠️ 世界书管理器或配置面板未找到');
+                return;
+            }
+
+            // 获取世界书配置容器
+            const container = this.modal.querySelector('#worldbook-config-container');
+            if (!container) {
+                console.warn('[InfoBarSettings] ⚠️ 世界书配置容器未找到');
+                return;
+            }
+
+            // 🔧 修复：清理容器内容，避免重复渲染
+            container.innerHTML = '';
+
+            // 渲染世界书配置面板
+            await this.worldBookConfigPanel.render(container);
+
+            // 绑定世界书复选框事件
+            this.bindWorldBookEvents();
+
+            // 标记为已初始化
+            this.worldBookConfigPanelInitialized = true;
+
+            console.log('[InfoBarSettings] ✅ 世界书配置面板初始化完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化世界书配置面板失败:', error);
+        }
+    }
+
+    /**
+     * 绑定世界书相关事件
+     */
+    bindWorldBookEvents() {
+        try {
+            // 绑定世界书启用复选框事件
+            const worldBookCheckbox = this.modal.querySelector('#api-include-worldbook');
+            if (worldBookCheckbox) {
+                worldBookCheckbox.addEventListener('change', (e) => {
+                    this.handleWorldBookToggle(e.target.checked);
+                });
+
+                // 初始状态检查
+                this.handleWorldBookToggle(worldBookCheckbox.checked);
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 绑定世界书事件失败:', error);
+        }
+    }
+
+    /**
+     * 处理世界书启用/禁用切换
+     */
+    handleWorldBookToggle(enabled) {
+        try {
+            console.log('[InfoBarSettings] 📚 世界书功能', enabled ? '启用' : '禁用');
+
+            // 显示/隐藏世界书配置面板
+            const configSection = this.modal.querySelector('.worldbook-config-section');
+            if (configSection) {
+                configSection.style.display = enabled ? 'block' : 'none';
+            }
+
+            // 如果启用世界书，确保配置面板已初始化
+            if (enabled && this.worldBookConfigPanel) {
+                this.worldBookConfigPanel.show();
+            } else if (this.worldBookConfigPanel) {
+                this.worldBookConfigPanel.hide();
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理世界书切换失败:', error);
+        }
+    }
+
+    /**
+     * 获取世界书配置状态
+     */
+    getWorldBookConfigStatus() {
+        try {
+            if (!this.worldBookManager || !this.worldBookConfigPanel) {
+                return {
+                    available: false,
+                    enabled: false,
+                    error: '世界书管理器未初始化'
+                };
+            }
+
+            const worldBookCheckbox = this.modal.querySelector('#api-include-worldbook');
+            const enabled = worldBookCheckbox ? worldBookCheckbox.checked : false;
+
+            return {
+                available: true,
+                enabled: enabled,
+                config: this.worldBookManager.config,
+                panelStatus: this.worldBookConfigPanel.getStatus()
+            };
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取世界书配置状态失败:', error);
+            return {
+                available: false,
+                enabled: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * 更新世界书配置
+     */
+    async updateWorldBookConfig(config) {
+        try {
+            console.log('[InfoBarSettings] 📚 更新世界书配置...');
+
+            if (!this.worldBookManager) {
+                throw new Error('世界书管理器未初始化');
+            }
+
+            // 更新配置
+            Object.assign(this.worldBookManager.config, config);
+
+            // 保存配置
+            await this.worldBookManager.saveConfig();
+
+            // 刷新配置面板
+            if (this.worldBookConfigPanel) {
+                await this.worldBookConfigPanel.refreshData();
+            }
+
+            console.log('[InfoBarSettings] ✅ 世界书配置更新完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新世界书配置失败:', error);
+            throw error;
+        }
     }
 }
