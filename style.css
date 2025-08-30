@@ -1682,11 +1682,11 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     transition: all 0.3s ease !important;
     border-left: 3px solid transparent !important;
     
-    /* 🚨 终极强制颜色统一 - 覆盖所有可能的主题系统 */
-    color: rgb(240, 230, 255) !important; 
-    background-color: rgb(26, 13, 26) !important; 
+    /* 🚨 终极强制颜色统一 - 使用与普通面板相同的主题变量 */
+    color: var(--theme-text-primary, #ffffff) !important;
+    background-color: var(--theme-bg-primary, #ffffff) !important;
     background-image: none !important;
-    background: rgb(26, 13, 26) !important;
+    background: var(--theme-bg-primary, #ffffff) !important;
     
     /* 消除任何可能的分层和视觉差异 */
     position: static !important;
@@ -1712,14 +1712,14 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     background-size: initial !important;
 }
 
-/* 🚨 桌面端额外的自定义面板样式强制 */
+/* 🚨 桌面端额外的自定义面板样式强制 - 使用主题变量 */
 @media (min-width: 769px) {
     html body .infobar-modal-new .sidebar-nav .nav-item[data-custom="true"],
     html body .infobar-modal-new .nav-item[data-custom="true"] {
         padding: 12px 20px !important;
-        color: rgb(240, 230, 255) !important;
-        background: rgb(26, 13, 26) !important;
-        background-color: rgb(26, 13, 26) !important;
+        color: var(--theme-text-primary, #ffffff) !important;
+        background: var(--theme-bg-primary, #ffffff) !important;
+        background-color: var(--theme-bg-primary, #ffffff) !important;
     }
 }
 
@@ -2331,11 +2331,11 @@ body .infobar-modal-new .nav-item[data-custom="true"],
         border-left: none !important; /* 与基础导航项一致 */
         border-bottom: 2px solid transparent !important; /* 与基础导航项一致 */
         
-        /* 🚨 终极强制使用与基础导航相同的RGB颜色值 */
-        background-color: rgb(26, 13, 26) !important; 
+        /* 🚨 终极强制使用主题变量与基础导航保持一致 */
+        background-color: var(--theme-bg-primary, #ffffff) !important;
         background-image: none !important;
-        background: rgb(26, 13, 26) !important;
-        color: rgb(240, 230, 255) !important; 
+        background: var(--theme-bg-primary, #ffffff) !important;
+        color: var(--theme-text-primary, #ffffff) !important;
         
         /* 完全消除移动端分层效果 */
         position: static !important;

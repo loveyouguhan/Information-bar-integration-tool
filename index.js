@@ -30,6 +30,8 @@ import { TemplateManager } from './core/TemplateManager.js';
 import { VariableSystemPrompt } from './core/VariableSystemPrompt.js';
 import { NPCDatabaseManager } from './core/NPCDatabaseManager.js';
 import { NPCManagementPanel } from './ui/NPCManagementPanel.js';
+import { WorldBookManager } from './core/WorldBookManager.js';
+import { WorldBookConfigPanel } from './ui/WorldBookConfigPanel.js';
 
 // 导入UI组件
 import { InfoBarSettings } from './ui/InfoBarSettings.js';
@@ -256,6 +258,12 @@ class InformationBarIntegrationTool {
         });
         await this.npcDatabaseManager.init();
 
+        // 🆕 新增：初始化世界书管理器
+        this.worldBookManager = new WorldBookManager(this.configManager, this.eventSystem, this.dataCore);
+        await this.worldBookManager.init();
+
+        // 🆕 新增：初始化世界书配置面板
+        this.worldBookConfigPanel = new WorldBookConfigPanel(this.worldBookManager, this.configManager, this.eventSystem);
 
         // 初始化智能提示词系统（需要在fieldRuleManager和panelRuleManager之后）
         this.smartPromptSystem = new SmartPromptSystem(this.configManager, this.eventSystem, this.dataCore, this.fieldRuleManager, this.panelRuleManager);
@@ -693,7 +701,9 @@ class InformationBarIntegrationTool {
                 templateManager: this.templateManager,
                 variableSystemPrompt: this.variableSystemPrompt,
                 npcDatabaseManager: this.npcDatabaseManager,
-                npcManagementPanel: this.npcManagementPanel
+                npcManagementPanel: this.npcManagementPanel,
+                worldBookManager: this.worldBookManager,
+                worldBookConfigPanel: this.worldBookConfigPanel
             };
 
             // 确保eventSource也被设置
