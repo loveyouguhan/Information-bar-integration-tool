@@ -830,7 +830,7 @@ export class DataTable {
                         const fieldValue = this.findFieldValue(panelData, item);
                         if (fieldValue !== undefined && fieldValue !== null) {
                             console.log(`[DataTable] 🔍 找到字段值: ${panel.id}.${item.key || item.name} = "${fieldValue}"`);
-                            return String(fieldValue);
+                            return this.formatFieldValue(fieldValue);
                         }
                     }
                 }
@@ -880,7 +880,8 @@ export class DataTable {
 
             if (fieldValue !== undefined && fieldValue !== null) {
                 console.log(`[DataTable] 🔍 找到字段值: ${panel.id}.${item.key || item.name} = "${fieldValue}"`);
-                return String(fieldValue);
+                // 🔧 修复：正确处理对象类型的字段值，避免显示[object Object]
+                return this.formatFieldValue(fieldValue);
             }
 
             // 如果没有找到数据，返回默认值
@@ -890,6 +891,62 @@ export class DataTable {
         } catch (error) {
             console.error(`[DataTable] ❌ 获取面板项值失败 (${panel.name} - ${item.name}):`, error);
             return item.value || '';
+        }
+    }
+
+    /**
+     * 🔧 新增：格式化字段值，正确处理对象类型
+     */
+    formatFieldValue(value) {
+        try {
+            // 处理null和undefined
+            if (value === null || value === undefined) {
+                return '';
+            }
+
+            // 处理数组类型
+            if (Array.isArray(value)) {
+                if (value.length === 0) {
+                    return '';
+                }
+                // 如果数组元素都是简单类型，用逗号分隔
+                if (value.every(item => typeof item !== 'object' || item === null)) {
+                    return value.filter(item => item !== null && item !== undefined).join(', ');
+                }
+                // 如果数组包含对象，格式化为JSON
+                return JSON.stringify(value, null, 2);
+            }
+
+            // 处理对象类型
+            if (typeof value === 'object') {
+                // 🔧 修复：对于对象类型，格式化为可读的JSON字符串
+                try {
+                    // 检查是否是简单的键值对对象
+                    const keys = Object.keys(value);
+                    if (keys.length <= 3) {
+                        // 简单对象，格式化为 key: value 形式
+                        return keys.map(key => `${key}: ${value[key]}`).join(', ');
+                    } else {
+                        // 复杂对象，格式化为JSON
+                        return JSON.stringify(value, null, 2);
+                    }
+                } catch (e) {
+                    console.warn('[DataTable] 对象格式化失败，使用toString:', e);
+                    return String(value);
+                }
+            }
+
+            // 处理字符串类型
+            if (typeof value === 'string') {
+                return value;
+            }
+
+            // 处理其他基本类型
+            return String(value);
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 格式化字段值失败:', error);
+            return String(value);
         }
     }
 
@@ -1362,55 +1419,12 @@ export class DataTable {
     bindNewEvents() {
         if (!this.modal) return;
 
-        // 工具栏按钮事件（包括展开/收起）
-        this.modal.addEventListener('click', (e) => {
-            const actionElement = e.target.closest('[data-action]');
-            if (actionElement) {
-                e.preventDefault();
-                e.stopPropagation();
-                const action = actionElement.getAttribute('data-action');
-                this.handleToolbarAction(action, e);
-                return;
-            }
+        // 🔧 修复：移除重复的事件监听器绑定
+        // 这些事件已经在 bindEvents() 中绑定，避免重复绑定导致多次触发
+        console.log('[DataTable] 🔧 跳过重复的事件绑定，事件已在 bindEvents() 中处理');
 
-            // 🆕 重新填表按钮点击事件
-            const refillDataBtn = e.target.closest('#refill-data-btn');
-            if (refillDataBtn) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.handleRefillData(e);
-                return;
-            }
-
-            // 🆕 生成变量按钮点击事件
-            const generateVarsBtn = e.target.closest('#generate-variables-btn');
-            if (generateVarsBtn) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.handleGenerateVariables(e);
-                return;
-            }
-
-            // 🆕 表格单元格点击事件
-            const cellElement = e.target.closest('.cell-value');
-            if (cellElement) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.handleCellClick(cellElement, e);
-                return;
-            }
-
-            // 🆕 表格字段名称点击事件
-            const headerElement = e.target.closest('.col-property');
-            if (headerElement) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.handleHeaderClick(headerElement, e);
-                return;
-            }
-        });
-
-        // 复选框事件已删除 - 不再需要复选框功能
+        // 如果需要重新绑定特定事件，应该先移除旧的监听器
+        // 但目前所有必要的事件都已在 bindEvents() 中正确绑定
     }
 
     /**
@@ -3599,8 +3613,54 @@ export class DataTable {
      * 处理点击事件
      */
     handleClick(e) {
+        // 🔧 修复：处理重新填表按钮点击事件
+        const refillDataBtn = e.target.closest('#refill-data-btn');
+        if (refillDataBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.handleRefillData(e);
+            return;
+        }
+
+        // 🔧 修复：处理生成变量按钮点击事件
+        const generateVarsBtn = e.target.closest('#generate-variables-btn');
+        if (generateVarsBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.handleGenerateVariables(e);
+            return;
+        }
+
+        // 🔧 修复：处理表格单元格点击事件
+        const cellElement = e.target.closest('.cell-value');
+        if (cellElement) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.handleCellClick(cellElement, e);
+            return;
+        }
+
+        // 🔧 修复：处理表格字段名称点击事件
+        const headerElement = e.target.closest('.col-property');
+        if (headerElement) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.handleHeaderClick(headerElement, e);
+            return;
+        }
+
+        // 处理工具栏按钮事件
+        const actionElement = e.target.closest('[data-action]');
+        if (actionElement) {
+            e.preventDefault();
+            e.stopPropagation();
+            const action = actionElement.getAttribute('data-action');
+            this.handleToolbarAction(action, e);
+            return;
+        }
+
         const action = e.target.dataset.action;
-        
+
         switch (action) {
             case 'close':
                 this.hide();
@@ -4487,6 +4547,9 @@ export class DataTable {
             } else {
                 // 更新面板数据
                 await this.dataCore.updatePanelField(cellInfo.panelId, cellInfo.property, newValue);
+
+                // 🔧 修复：如果是自定义子项，同时更新面板配置中的子项数据
+                await this.updateCustomSubItemValue(cellInfo, newValue);
             }
 
             console.log('[DataTable] ✅ 数据已同步到核心');
@@ -4494,6 +4557,75 @@ export class DataTable {
         } catch (error) {
             console.error('[DataTable] ❌ 同步数据到核心失败:', error);
             throw error;
+        }
+    }
+
+    /**
+     * 🔧 新增：更新自定义子项的值到面板配置
+     */
+    async updateCustomSubItemValue(cellInfo, newValue) {
+        try {
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings['Information bar integration tool'] || {};
+
+            // 检查是否是基础面板的自定义子项
+            const panelConfig = configs[cellInfo.panelId];
+            if (panelConfig && panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
+                // 查找匹配的自定义子项
+                const subItem = panelConfig.subItems.find(item => {
+                    const itemKey = item.key || item.name?.toLowerCase().replace(/\s+/g, '_');
+                    const itemName = item.displayName || item.name;
+
+                    // 匹配字段名
+                    return itemKey === cellInfo.property ||
+                           itemName === cellInfo.property ||
+                           item.name === cellInfo.property;
+                });
+
+                if (subItem) {
+                    // 更新子项的值
+                    subItem.value = newValue;
+
+                    // 保存配置
+                    context.saveSettingsDebounced();
+
+                    console.log(`[DataTable] ✅ 已更新自定义子项值: ${cellInfo.panelId}.${cellInfo.property} = "${newValue}"`);
+                    return true;
+                }
+            }
+
+            // 检查是否是自定义面板的子项
+            const customPanelConfig = configs.customPanels?.[cellInfo.panelId];
+            if (customPanelConfig && customPanelConfig.subItems && Array.isArray(customPanelConfig.subItems)) {
+                // 查找匹配的自定义子项
+                const subItem = customPanelConfig.subItems.find(item => {
+                    const itemKey = item.key || item.name?.toLowerCase().replace(/\s+/g, '_');
+                    const itemName = item.displayName || item.name;
+
+                    // 匹配字段名
+                    return itemKey === cellInfo.property ||
+                           itemName === cellInfo.property ||
+                           item.name === cellInfo.property;
+                });
+
+                if (subItem) {
+                    // 更新子项的值
+                    subItem.value = newValue;
+
+                    // 保存配置
+                    context.saveSettingsDebounced();
+
+                    console.log(`[DataTable] ✅ 已更新自定义面板子项值: ${cellInfo.panelId}.${cellInfo.property} = "${newValue}"`);
+                    return true;
+                }
+            }
+
+            return false;
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 更新自定义子项值失败:', error);
+            return false;
         }
     }
 

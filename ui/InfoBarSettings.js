@@ -22,6 +22,10 @@ export class InfoBarSettings {
         // 🔧 注入数据核心引用，供数据导出/导入使用
         this.unifiedDataCore = this.configManager?.dataCore || window.SillyTavernInfobar?.modules?.dataCore || null;
 
+        // 全局并发/去重控制标记
+        this._customAPIProcessing = false; // 自定义API处理进行中
+        this._boundHandlers = {}; // 存放已绑定的事件处理器引用，避免重复绑定
+
         // UI元素引用
         this.container = null;
         this.modal = null;
@@ -611,6 +615,9 @@ export class InfoBarSettings {
             // 绑定新的事件
             this.bindNewEvents();
 
+            // 🔧 修复：添加按钮点击区域修复样式
+            this.addButtonClickFixStyles();
+
             console.log('[InfoBarSettings] 🎨 新UI界面创建完成');
 
         } catch (error) {
@@ -883,6 +890,93 @@ export class InfoBarSettings {
     }
 
     /**
+     * 🔧 新增：添加按钮点击区域修复样式
+     */
+    addButtonClickFixStyles() {
+        try {
+            // 检查是否已经添加过样式
+            if (document.getElementById('infobar-button-click-fix-styles')) {
+                return;
+            }
+
+            const style = document.createElement('style');
+            style.id = 'infobar-button-click-fix-styles';
+            style.textContent = `
+                /* 🔧 修复按钮点击区域问题 */
+                .info-bar-settings-modal button {
+                    position: relative;
+                    cursor: pointer;
+                    user-select: none;
+                }
+
+                .info-bar-settings-modal button * {
+                    pointer-events: none;
+                    user-select: none;
+                }
+
+                .info-bar-settings-modal button:disabled {
+                    pointer-events: none;
+                    cursor: not-allowed;
+                }
+
+                .info-bar-settings-modal button:not(:disabled) {
+                    pointer-events: auto;
+                }
+
+                /* 确保按钮内容不会阻止点击事件 */
+                .info-bar-settings-modal .btn-icon,
+                .info-bar-settings-modal .btn-text {
+                    pointer-events: none !important;
+                    display: inline-block;
+                }
+
+                /* 模态框按钮样式修复 */
+                .delete-confirm-dialog button,
+                .save-confirm-dialog button {
+                    position: relative;
+                    cursor: pointer;
+                    user-select: none;
+                    pointer-events: auto;
+                }
+
+                .delete-confirm-dialog button *,
+                .save-confirm-dialog button * {
+                    pointer-events: none;
+                    user-select: none;
+                }
+
+                /* 🔧 修复：自定义子项删除按钮样式修复 */
+                .info-bar-settings-modal .btn-remove-sub-item {
+                    position: relative;
+                    cursor: pointer;
+                    user-select: none;
+                    pointer-events: auto !important;
+                    background: none;
+                    border: none;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    transition: background-color 0.2s;
+                }
+
+                .info-bar-settings-modal .btn-remove-sub-item:hover {
+                    background-color: rgba(255, 0, 0, 0.1);
+                }
+
+                .info-bar-settings-modal .btn-remove-sub-item * {
+                    pointer-events: none !important;
+                    user-select: none;
+                }
+            `;
+
+            document.head.appendChild(style);
+            console.log('[InfoBarSettings] ✅ 按钮点击区域修复样式已添加');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 添加按钮点击区域修复样式失败:', error);
+        }
+    }
+
+    /**
      * 处理提示词位置模式变更
      */
     handlePromptPositionModeChange(mode) {
@@ -941,7 +1035,22 @@ export class InfoBarSettings {
                 // 🔧 修复：使用closest查找具有data-action属性的父元素，解决按钮内子元素点击问题
                 const actionElement = e.target.closest('[data-action]');
                 const action = actionElement?.dataset?.action;
+
+                // 🔧 新增：详细的点击事件调试信息
+                if (e.target.closest('button') || actionElement) {
+                    console.log('[InfoBarSettings] 🖱️ 按钮点击事件:', {
+                        target: e.target.tagName + (e.target.className ? '.' + e.target.className : ''),
+                        actionElement: actionElement?.tagName + (actionElement?.className ? '.' + actionElement.className : ''),
+                        action: action,
+                        targetText: e.target.textContent?.trim(),
+                        targetParent: e.target.parentElement?.tagName
+                    });
+                }
+
                 if (action) {
+                    // 🔧 修复：阻止事件冒泡，防止重复触发
+                    e.preventDefault();
+                    e.stopPropagation();
                     this.handleAction(action, e);
                 }
 
@@ -1048,13 +1157,22 @@ export class InfoBarSettings {
             if (panelListItem) {
                 const panelId = panelListItem.dataset.panelId;
                 const panelType = panelListItem.dataset.panelType;
-                this.selectPanelForEdit(panelId, panelType);
+
+                console.log('[InfoBarSettings] 🎯 面板列表项点击:', { panelId, panelType });
+
+                // 🔧 修复：验证面板数据有效性
+                if (panelId && panelType) {
+                    this.selectPanelForEdit(panelId, panelType);
+                } else {
+                    console.error('[InfoBarSettings] ❌ 面板列表项数据无效:', { panelId, panelType });
+                }
                 return;
             }
 
-            // 面板管理按钮事件
-            const action = e.target.dataset.action;
-            const panelId = e.target.dataset.panelId;
+            // 🔧 修复：面板管理按钮事件，使用closest查找按钮元素
+            const actionButton = e.target.closest('[data-action]');
+            const action = actionButton?.dataset?.action;
+            const panelId = actionButton?.dataset?.panelId;
 
             switch (action) {
                 case 'add-custom-panel':
@@ -1088,7 +1206,7 @@ export class InfoBarSettings {
                     this.addSubItem();
                     break;
                 case 'remove-sub-item':
-                    this.removeSubItem(event?.target?.closest('[data-action="remove-sub-item"]') || event?.target);
+                    this.removeSubItem(e?.target?.closest('[data-action="remove-sub-item"]') || e?.target);
                     break;
             }
 
@@ -1559,6 +1677,30 @@ export class InfoBarSettings {
      */
     async selectPanelForEdit(panelId, panelType) {
         try {
+            console.log(`[InfoBarSettings] 🎯 开始选择面板: ${panelId} (${panelType})`);
+
+            // 🔧 修复：验证面板ID和类型的有效性
+            if (!panelId || !panelType) {
+                console.error('[InfoBarSettings] ❌ 面板ID或类型无效:', { panelId, panelType });
+                return;
+            }
+
+            // 🔧 修复：检查面板是否真实存在
+            let panelExists = false;
+            if (panelType === 'basic') {
+                const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+                panelExists = basicPanelIds.includes(panelId);
+            } else if (panelType === 'custom') {
+                const customPanels = this.getCustomPanels();
+                panelExists = customPanels.hasOwnProperty(panelId);
+            }
+
+            if (!panelExists) {
+                console.error('[InfoBarSettings] ❌ 面板不存在:', panelId, panelType);
+                this.showMessage(`面板 ${panelId} 不存在`, 'error');
+                return;
+            }
+
             // 🔧 修复：切换面板前自动保存当前正在编辑的面板，避免勾选状态丢失（静默保存，不弹确认框）
             if (this.currentEditingPanel && this.modal?.querySelector('.panel-properties-form')) {
                 try {
@@ -1574,18 +1716,29 @@ export class InfoBarSettings {
                     console.warn('[InfoBarSettings] ⚠️ 自动保存当前面板失败，将继续切换:', e);
                 }
             }
-            // 更新面板列表项选中状态
+
+            // 🔧 修复：更新面板列表项选中状态，使用更精确的选择器
             this.modal.querySelectorAll('.panel-list-item').forEach(item => {
-                item.classList.toggle('selected', item.dataset.panelId === panelId);
+                const itemPanelId = item.dataset.panelId;
+                const itemPanelType = item.dataset.panelType;
+                const shouldSelect = (itemPanelId === panelId && itemPanelType === panelType);
+
+                if (shouldSelect) {
+                    item.classList.add('selected');
+                    console.log('[InfoBarSettings] ✅ 选中面板项:', itemPanelId, itemPanelType);
+                } else {
+                    item.classList.remove('selected');
+                }
             });
 
             // 显示面板属性表单
             this.showPanelProperties(panelId, panelType);
 
-            console.log(`[InfoBarSettings] 📝 选择面板进行编辑: ${panelId} (${panelType})`);
+            console.log(`[InfoBarSettings] ✅ 面板选择完成: ${panelId} (${panelType})`);
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 选择面板失败:', error);
+            this.showMessage('选择面板失败: ' + error.message, 'error');
         }
     }
 
@@ -1986,18 +2139,44 @@ export class InfoBarSettings {
                 return;
             }
 
+            console.log('[InfoBarSettings] 🔄 开始刷新面板列表...');
+
+            // 🔧 修复：保存当前选中的面板ID，刷新后恢复选中状态
+            const currentSelectedPanel = this.modal.querySelector('.panel-list-item.selected');
+            const currentSelectedPanelId = currentSelectedPanel?.dataset?.panelId;
+            const currentSelectedPanelType = currentSelectedPanel?.dataset?.panelType;
+
+            console.log('[InfoBarSettings] 📊 当前选中面板:', currentSelectedPanelId, currentSelectedPanelType);
+
             // 重新生成面板列表
             const panelListContainers = this.modal.querySelectorAll('.panel-list');
 
             panelListContainers.forEach(container => {
                 const category = container.dataset.category;
-                container.innerHTML = this.createPanelListItems(category);
+                const newContent = this.createPanelListItems(category);
+                console.log(`[InfoBarSettings] 🔄 刷新${category}分类面板列表`);
+                container.innerHTML = newContent;
             });
+
+            // 🔧 修复：刷新后恢复选中状态
+            if (currentSelectedPanelId) {
+                setTimeout(() => {
+                    const newSelectedPanel = this.modal.querySelector(`[data-panel-id="${currentSelectedPanelId}"]`);
+                    if (newSelectedPanel) {
+                        newSelectedPanel.classList.add('selected');
+                        console.log('[InfoBarSettings] ✅ 已恢复面板选中状态:', currentSelectedPanelId);
+                    } else {
+                        console.warn('[InfoBarSettings] ⚠️ 刷新后未找到之前选中的面板:', currentSelectedPanelId);
+                        // 清空面板属性表单
+                        this.clearPanelProperties();
+                    }
+                }, 100);
+            }
 
             // 更新面板数量
             this.updatePanelCountsDisplay();
 
-            console.log('[InfoBarSettings] 🔄 面板列表已刷新');
+            console.log('[InfoBarSettings] ✅ 面板列表刷新完成');
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 刷新面板列表失败:', error);
@@ -3066,10 +3245,151 @@ export class InfoBarSettings {
                 return;
             }
 
-            // 获取基础面板数据，包含用户添加的子项
-            const panelData = this.getBasicPanelData(panelId);
-            if (!panelData || !panelData.subItems || panelData.subItems.length === 0) {
+            // 🔧 修复：直接从配置中获取该面板的自定义子项，避免交叉污染
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const savedConfig = extensionSettings['Information bar integration tool']?.[panelId];
+
+            // 🔧 修复：只获取当前面板的自定义子项
+            const customSubItems = savedConfig?.subItems || [];
+
+            if (customSubItems.length === 0) {
                 console.log(`[InfoBarSettings] ℹ️ 基础面板 ${panelId} 没有自定义子项，跳过刷新`);
+                // 🔧 修复：清理可能存在的旧自定义子项区域
+                const existingCustomArea = contentPanel.querySelector('.custom-sub-items-area');
+                if (existingCustomArea) {
+                    existingCustomArea.remove();
+                    console.log(`[InfoBarSettings] 🧹 已清理基础面板 ${panelId} 的旧自定义子项区域`);
+                }
+                return;
+            }
+
+            // 查找子项容器
+            let subItemsContainer = contentPanel.querySelector('.sub-items');
+            if (!subItemsContainer) {
+                console.log(`[InfoBarSettings] ⚠️ 基础面板 ${panelId} 没有子项容器`);
+                return;
+            }
+
+            // 🔧 修复：验证自定义子项是否真的属于当前面板
+            const validCustomSubItems = customSubItems.filter(subItem => {
+                // 检查子项是否有明确的面板归属标记
+                if (subItem.panelId && subItem.panelId !== panelId) {
+                    console.warn(`[InfoBarSettings] ⚠️ 发现错误归属的自定义子项: ${subItem.name} 属于 ${subItem.panelId}，但被添加到 ${panelId}`);
+                    return false;
+                }
+                return true;
+            });
+
+            // 创建自定义子项的HTML
+            let customSubItemsHTML = '';
+            validCustomSubItems.forEach((subItem, index) => {
+                const checkboxId = `${panelId}-custom-${index}`;
+                const fieldName = `${panelId}.${subItem.key || subItem.name.toLowerCase().replace(/\s+/g, '_')}.enabled`;
+
+                customSubItemsHTML += `
+                    <div class="sub-item">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox"
+                                   id="${checkboxId}"
+                                   name="${fieldName}"
+                                   ${subItem.enabled !== false ? 'checked' : ''} />
+                            <label for="${checkboxId}" class="checkbox-label">${subItem.displayName || subItem.name}</label>
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (customSubItemsHTML) {
+                // 🔧 修复：先清理所有可能存在的自定义子项区域，避免重复添加
+                const existingCustomAreas = contentPanel.querySelectorAll('.custom-sub-items-area');
+                existingCustomAreas.forEach(area => area.remove());
+
+                // 创建自定义子项区域
+                const customArea = document.createElement('div');
+                customArea.className = 'custom-sub-items-area';
+                customArea.setAttribute('data-panel-id', panelId); // 🔧 修复：添加面板ID标记
+                customArea.innerHTML = `
+                    <div class="sub-item-section">
+                        <h4 class="section-title">🔧 自定义子项</h4>
+                        <div class="sub-item-row">
+                            ${customSubItemsHTML}
+                        </div>
+                    </div>
+                `;
+
+                // 插入到子项容器的末尾
+                subItemsContainer.appendChild(customArea);
+
+                // 🔧 修复：应用当前主题样式到自定义子项区域
+                this.applyThemeToCustomSubItems(customArea, panelId);
+
+                console.log(`[InfoBarSettings] ✅ 已为基础面板 ${panelId} 添加 ${validCustomSubItems.length} 个自定义子项`);
+
+                // 更新面板计数
+                this.updatePanelConfigCount(panelId);
+            } else {
+                console.log(`[InfoBarSettings] ℹ️ 基础面板 ${panelId} 没有有效的自定义子项`);
+            }
+
+        } catch (error) {
+            console.error(`[InfoBarSettings] ❌ 刷新基础面板 ${panelId} 内容失败:`, error);
+        }
+    }
+
+    /**
+     * 🔧 新增：刷新所有基础面板内容，确保新增子项立即显示
+     */
+    refreshAllBasicPanelContent() {
+        try {
+            console.log('[InfoBarSettings] 🔄 开始刷新所有基础面板内容...');
+
+            const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+
+            let refreshedCount = 0;
+            basicPanelIds.forEach(panelId => {
+                const panelData = this.getBasicPanelData(panelId);
+                if (panelData && panelData.subItems && panelData.subItems.length > 0) {
+                    // 临时移除modal可见性检查，强制刷新
+                    this.forceRefreshBasicPanelContent(panelId);
+                    refreshedCount++;
+                }
+            });
+
+            console.log(`[InfoBarSettings] ✅ 已刷新 ${refreshedCount} 个基础面板的内容`);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 刷新所有基础面板内容失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：强制刷新基础面板内容（忽略modal可见性检查）
+     */
+    forceRefreshBasicPanelContent(panelId) {
+        try {
+            if (!this.modal) {
+                console.log('[InfoBarSettings] ⚠️ Modal不存在，跳过强制刷新基础面板内容');
+                return;
+            }
+
+            // 获取对应的内容面板
+            const contentPanel = this.modal.querySelector(`[data-content="${panelId}"]`);
+            if (!contentPanel) {
+                console.log(`[InfoBarSettings] ⚠️ 未找到基础面板 ${panelId} 的内容面板`);
+                return;
+            }
+
+            // 🔧 修复：直接从配置中获取该面板的自定义子项，避免交叉污染
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const savedConfig = extensionSettings['Information bar integration tool']?.[panelId];
+
+            // 🔧 修复：只获取当前面板的自定义子项
+            const customSubItems = savedConfig?.subItems || [];
+
+            if (customSubItems.length === 0) {
+                console.log(`[InfoBarSettings] ℹ️ 基础面板 ${panelId} 没有自定义子项，跳过强制刷新`);
                 return;
             }
 
@@ -3124,14 +3444,14 @@ export class InfoBarSettings {
                 // 🔧 修复：应用当前主题样式到自定义子项区域
                 this.applyThemeToCustomSubItems(customArea, panelId);
 
-                console.log(`[InfoBarSettings] ✅ 已为基础面板 ${panelId} 添加 ${panelData.subItems.length} 个自定义子项`);
+                console.log(`[InfoBarSettings] ✅ 已强制为基础面板 ${panelId} 添加 ${panelData.subItems.length} 个自定义子项`);
 
                 // 更新面板计数
                 this.updatePanelConfigCount(panelId);
             }
 
         } catch (error) {
-            console.error(`[InfoBarSettings] ❌ 刷新基础面板 ${panelId} 内容失败:`, error);
+            console.error(`[InfoBarSettings] ❌ 强制刷新基础面板 ${panelId} 内容失败:`, error);
         }
     }
 
@@ -3655,6 +3975,14 @@ export class InfoBarSettings {
     collectSubItemsData() {
         try {
             const subItems = [];
+
+            // 🔧 修复：获取当前正在编辑的面板ID，确保子项归属正确
+            const currentPanelId = this.currentEditingPanel?.id;
+            if (!currentPanelId) {
+                console.warn('[InfoBarSettings] ⚠️ 无法确定当前编辑的面板ID，跳过子项收集');
+                return [];
+            }
+
             const subItemElements = this.modal.querySelectorAll('.sub-item-form');
 
             subItemElements.forEach(element => {
@@ -3662,16 +3990,16 @@ export class InfoBarSettings {
                 if (name.trim()) { // 只有名称不为空才添加
                     const subItemId = element.dataset.subItemId;
                     const subItemName = name.trim();
-                    
+
                     // 🔧 修复：正确获取自定义面板子项的启用状态
                     // 自定义面板子项的复选框name就是子项名称本身
                     const checkbox = this.modal.querySelector(`input[name="${subItemName}"]`);
                     const isEnabled = checkbox ? checkbox.checked : true; // 如果找不到复选框，默认启用
-                    
+
                     // 🆕 获取多行数据配置
                     const multiRowCheckbox = this.modal.querySelector(`input[name="${subItemName}_multirow"]`);
                     const isMultiRow = multiRowCheckbox ? multiRowCheckbox.checked : false;
-                    
+
                     const subItem = {
                         id: subItemId,
                         name: subItemName,
@@ -3679,50 +4007,63 @@ export class InfoBarSettings {
                         displayName: subItemName, // 保存用户输入的显示名称
                         enabled: isEnabled, // 🔧 修复：使用复选框的真实状态
                         multiRow: isMultiRow, // 🆕 添加多行数据配置
-                        value: '' // 添加默认值字段
+                        value: '', // 添加默认值字段
+                        panelId: currentPanelId // 🔧 修复：添加面板归属标记
                     };
-                    
-                    console.log(`[InfoBarSettings] 📊 收集子项: ${subItemName} enabled=${isEnabled} multiRow=${isMultiRow}`);
+
+                    console.log(`[InfoBarSettings] 📊 收集子项: ${subItemName} enabled=${isEnabled} multiRow=${isMultiRow} panelId=${currentPanelId}`);
                     subItems.push(subItem);
                 }
             });
 
-            // 🆕 同时从现有的子项配置中收集多行数据设置
-            const existingSubItems = this.modal.querySelectorAll('.sub-item');
-            existingSubItems.forEach(subItemElement => {
-                const checkbox = subItemElement.querySelector('input[type="checkbox"]:not(.multirow-checkbox)');
-                const multiRowCheckbox = subItemElement.querySelector('.multirow-checkbox');
-                
-                if (checkbox && multiRowCheckbox) {
-                    const fieldName = checkbox.getAttribute('name');
-                    const isEnabled = checkbox.checked;
-                    const isMultiRow = multiRowCheckbox.checked;
-                    
-                    // 查找是否已在subItems中存在
-                    let existingSubItem = subItems.find(item => 
-                        item.name === fieldName || item.key === fieldName
-                    );
-                    
-                    if (existingSubItem) {
-                        // 更新已存在的子项
-                        existingSubItem.multiRow = isMultiRow;
-                        existingSubItem.enabled = isEnabled;
-                    } else {
-                        // 添加来自现有配置的子项（可能是基础面板的子项）
-                        const subItem = {
-                            id: `existing_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                            name: fieldName,
-                            key: fieldName.toLowerCase().replace(/\s+/g, '_'),
-                            displayName: fieldName,
-                            enabled: isEnabled,
-                            multiRow: isMultiRow,
-                            value: ''
-                        };
-                        subItems.push(subItem);
-                        console.log(`[InfoBarSettings] 📊 收集现有子项多行配置: ${fieldName} enabled=${isEnabled} multiRow=${isMultiRow}`);
-                    }
+            // 🔧 修复：只从当前面板的自定义子项区域收集多行数据设置
+            const currentPanelContent = this.modal.querySelector(`[data-content="${currentPanelId}"]`);
+            if (currentPanelContent) {
+                const customSubItemsArea = currentPanelContent.querySelector('.custom-sub-items-area');
+                if (customSubItemsArea) {
+                    const existingSubItems = customSubItemsArea.querySelectorAll('.sub-item');
+                    existingSubItems.forEach(subItemElement => {
+                        const checkbox = subItemElement.querySelector('input[type="checkbox"]:not(.multirow-checkbox)');
+                        const multiRowCheckbox = subItemElement.querySelector('.multirow-checkbox');
+
+                        if (checkbox && multiRowCheckbox) {
+                            const fieldName = checkbox.getAttribute('name');
+                            const isEnabled = checkbox.checked;
+                            const isMultiRow = multiRowCheckbox.checked;
+
+                            // 🔧 修复：提取子项名称，去除面板前缀
+                            const subItemName = fieldName.replace(`${currentPanelId}.`, '').replace('.enabled', '');
+
+                            // 查找是否已在subItems中存在
+                            let existingSubItem = subItems.find(item =>
+                                item.name === subItemName || item.key === subItemName
+                            );
+
+                            if (existingSubItem) {
+                                // 更新已存在的子项
+                                existingSubItem.multiRow = isMultiRow;
+                                existingSubItem.enabled = isEnabled;
+                            } else {
+                                // 🔧 修复：只添加属于当前面板的子项
+                                if (fieldName.startsWith(`${currentPanelId}.`)) {
+                                    const subItem = {
+                                        id: `existing_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                        name: subItemName,
+                                        key: subItemName.toLowerCase().replace(/\s+/g, '_'),
+                                        displayName: subItemName,
+                                        enabled: isEnabled,
+                                        multiRow: isMultiRow,
+                                        value: '',
+                                        panelId: currentPanelId // 🔧 修复：添加面板归属标记
+                                    };
+                                    subItems.push(subItem);
+                                    console.log(`[InfoBarSettings] 📊 收集现有子项多行配置: ${subItemName} enabled=${isEnabled} multiRow=${isMultiRow} panelId=${currentPanelId}`);
+                                }
+                            }
+                        }
+                    });
                 }
-            });
+            }
 
             console.log('[InfoBarSettings] 📊 收集到的子项数据详情:', subItems);
             return subItems;
@@ -4667,13 +5008,13 @@ export class InfoBarSettings {
                         <div class="properties-header">
                             <h4>面板属性</h4>
                             <div class="properties-actions">
-                                <button class="btn-small btn-save" data-action="save-panel-properties" disabled>
-                                    <span class="btn-icon">💾</span>
-                                    <span class="btn-text">保存</span>
+                                <button class="btn-small btn-save" data-action="save-panel-properties" disabled style="pointer-events: auto;">
+                                    <span class="btn-icon" style="pointer-events: none;">💾</span>
+                                    <span class="btn-text" style="pointer-events: none;">保存</span>
                                 </button>
-                                <button class="btn-small btn-delete" data-action="delete-panel" disabled>
-                                    <span class="btn-icon">🗑️</span>
-                                    <span class="btn-text">删除</span>
+                                <button class="btn-small btn-delete" data-action="delete-panel" disabled style="pointer-events: auto;">
+                                    <span class="btn-icon" style="pointer-events: none;">🗑️</span>
+                                    <span class="btn-text" style="pointer-events: none;">删除</span>
                                 </button>
                             </div>
                         </div>
@@ -5977,6 +6318,9 @@ export class InfoBarSettings {
 
             // 触发 SillyTavern 保存设置
             context.saveSettingsDebounced();
+
+            // 🔧 修复：在隐藏界面前先刷新面板内容，确保新增子项立即显示
+            this.refreshAllBasicPanelContent();
 
             // 触发面板配置变更事件，通知数据表格更新
             if (this.eventSystem) {
@@ -14805,14 +15149,24 @@ export class InfoBarSettings {
             // 注册消息接收事件监听器
             const context = SillyTavern.getContext();
             if (context && context.eventSource) {
-                // 移除可能存在的旧监听器
-                context.eventSource.removeListener('message_received', this.handleMessageReceived);
-                context.eventSource.removeListener('generation_ended', this.handleGenerationEnded);
+                // 使用稳定的绑定引用，确保removeListener生效
+                if (!this._boundHandlers.handleGenerationEnded) {
+                    this._boundHandlers.handleGenerationEnded = this.handleGenerationEnded.bind(this);
+                }
+                if (!this._boundHandlers.handleMessageReceived) {
+                    this._boundHandlers.handleMessageReceived = this.handleMessageReceived.bind(this);
+                }
 
-                // 添加生成结束事件监听器（确保主API完成后才处理）
-                context.eventSource.on('generation_ended', this.handleGenerationEnded.bind(this));
+                // 移除可能存在的旧监听器（使用相同引用）
+                context.eventSource.removeListener('message_received', this._boundHandlers.handleMessageReceived);
+                context.eventSource.removeListener('generation_ended', this._boundHandlers.handleGenerationEnded);
 
-                console.log('[InfoBarSettings] ✅ 自定义API生成结束监听器已注册');
+                // 添加监听器（仅添加一次）
+                context.eventSource.on('generation_ended', this._boundHandlers.handleGenerationEnded);
+                // 按需：如果也需要在message_received时触发，则打开下一行
+                // context.eventSource.on('message_received', this._boundHandlers.handleMessageReceived);
+
+                console.log('[InfoBarSettings] ✅ 自定义API事件监听器已注册');
             }
 
             console.log('[InfoBarSettings] ✅ 自定义API处理初始化完成');
@@ -15292,6 +15646,14 @@ export class InfoBarSettings {
      */
     async processWithCustomAPI(plotContent) {
         try {
+            // 并发保护：防止重复触发
+            if (this._customAPIProcessing) {
+                console.warn('[InfoBarSettings] ⚠️ 自定义API处理已在进行中，忽略重复调用');
+                this.showNotification('⏳ 自定义API处理中，请勿重复触发', 'warning');
+                return;
+            }
+            this._customAPIProcessing = true;
+
             console.log('[InfoBarSettings] 🚀 开始使用自定义API处理剧情内容...');
 
             // 🔧 新增：显示自定义API生成中提示
@@ -15446,6 +15808,9 @@ export class InfoBarSettings {
             console.error('[InfoBarSettings] ❌ 使用自定义API处理失败:', error);
             // 🔧 新增：显示自定义API错误提示
             this.showCustomAPIStatus('error', error.message);
+        } finally {
+            // 复位并发标记
+            this._customAPIProcessing = false;
         }
     }
 

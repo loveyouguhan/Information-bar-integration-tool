@@ -60,6 +60,13 @@ export class NPCManagementPanel {
             if (exportBtn) { this.exportDB(); return; }
             const importBtn = e.target.closest('[data-action="import"]');
             if (importBtn) { this.importDB(); return; }
+            // 🆕 删除NPC按钮
+            const deleteBtn = e.target.closest('[data-action="delete-npc"]');
+            if (deleteBtn) {
+                const npcId = deleteBtn.dataset.npcId;
+                this.deleteNpc(npcId);
+                return;
+            }
             const row = e.target.closest('.npc-row');
             if (row) {
                 const id = row.dataset.id;
@@ -82,6 +89,22 @@ export class NPCManagementPanel {
         this.eventSystem?.on?.('npc:db:updated', () => this.renderList());
         this.eventSystem?.on?.('npc:db:saved', () => this.renderList());
         this.eventSystem?.on?.('npc:updated', () => this.renderList());
+
+        // 🔧 修复：监听聊天切换事件，确保数据隔离
+        this.eventSystem?.on?.('chat:changed', () => {
+            console.log('[NPCPanel] 🔄 检测到聊天切换，刷新NPC列表');
+            if (this.visible) {
+                this.render(); // 重新渲染整个界面
+            }
+        });
+
+        // 🔧 修复：监听NPC数据库重新加载事件
+        this.eventSystem?.on?.('npc:db:reloaded', () => {
+            console.log('[NPCPanel] 🔄 NPC数据库已重新加载，刷新界面');
+            if (this.visible) {
+                this.render();
+            }
+        });
     }
 
     buildHTML() {
@@ -109,11 +132,11 @@ export class NPCManagementPanel {
                             <option value="asc">升序</option>
                         </select>
                     </div>
-                    <div class="list" style="background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #111)); color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd)); border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333)); border-radius:6px; overflow:auto; max-height: 60vh;"></div>
+                    <div class="list" style="background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #111)); color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd)); border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333)); border-radius:6px;"></div>
                 </div>
-                <div class="right" style="flex:1; border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333)); border-radius: 6px; min-height: 240px; padding: 8px; background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #111)); color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));">
-                    <div class="detail-placeholder" style="opacity:.7; font-size:12px; padding: 10px; color: var(--SmartThemeTextColor, #ddd);">选择左侧NPC以查看详情</div>
-                    <div class="details" style="display:none; color: var(--SmartThemeTextColor, #ddd);"></div>
+                <div class="right" style="flex:1; border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333)); border-radius: 6px; min-height: 240px; max-height: 60vh; padding: 8px; background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #111)); color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd)); overflow-y: auto; display: flex; flex-direction: column;">
+                    <div class="detail-placeholder" style="opacity:.7; font-size:12px; padding: 10px; color: var(--SmartThemeTextColor, #ddd); flex: 1; display: flex; align-items: center; justify-content: center;">选择左侧NPC以查看详情</div>
+                    <div class="details" style="display:none; color: var(--SmartThemeTextColor, #ddd); overflow-y: auto;"></div>
                 </div>
             </div>
             <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-top:1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333)); background: var(--theme-bg-primary, var(--SmartThemeBodyColor, #1e1e1e)); color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));">
@@ -134,13 +157,73 @@ export class NPCManagementPanel {
         style.textContent = `
         .npc-management-modal { position: fixed; inset: 0; z-index: 999999; }
         .npc-management-modal .modal-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.35); }
-        .npc-management-modal .modal-container { position: relative; width: 960px; max-width: 95vw; margin: 8vh auto; border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,.5); }
+        .npc-management-modal .modal-container {
+            position: relative;
+            width: 960px;
+            max-width: 95vw;
+            max-height: 90vh;
+            margin: 5vh auto;
+            border-radius: 8px;
+            box-shadow: 0 8px 40px rgba(0,0,0,.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .npc-management-modal .modal-body {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            gap: 12px;
+            padding: 12px;
+            min-height: 0;
+        }
+        .npc-management-modal .left {
+            flex: 0 0 360px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-height: 0;
+        }
+        .npc-management-modal .list {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 200px;
+        }
+        .npc-management-modal .right {
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
         .npc-management-modal .list .npc-row { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333)); cursor: pointer; color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd)); }
         .npc-management-modal .list .npc-row:hover { background: var(--theme-bg-hover, var(--SmartThemeQuoteColor, rgba(255,255,255,.03))); }
         .npc-management-modal .list .npc-name { font-weight:600; color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd)); }
         .npc-management-modal .list .npc-meta { opacity:.7; font-size: 12px; color: var(--theme-text-secondary, var(--SmartThemeTextSecondaryColor, #aaa)); }
         .npc-management-modal .kv { display:grid; grid-template-columns: 120px 1fr; gap: 6px 10px; }
         .npc-management-modal .badge { display:inline-block; padding: 2px 6px; border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor,#333)); border-radius: 10px; font-size: 11px; opacity:.8; color: var(--theme-text-primary, var(--SmartThemeTextColor,#ddd)); background: var(--theme-bg-primary, transparent); }
+
+        /* 🔧 移动端适配 */
+        @media (max-width: 768px) {
+            .npc-management-modal .modal-container {
+                width: 100vw;
+                height: 100vh;
+                margin: 0;
+                border-radius: 0;
+                max-height: 100vh;
+            }
+            .npc-management-modal .modal-body {
+                flex-direction: column;
+                gap: 8px;
+                padding: 8px;
+            }
+            .npc-management-modal .left {
+                flex: 0 0 auto;
+                max-height: 40vh;
+            }
+            .npc-management-modal .right {
+                flex: 1;
+                min-height: 200px;
+            }
+        }
         `;
         document.head.appendChild(style);
     }
@@ -236,7 +319,28 @@ export class NPCManagementPanel {
             panel.innerHTML = `
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                     <div style="font-weight:700;">${this.escape(npc.name)} <span class="badge" title="唯一ID">${npc.id}</span></div>
-                    <div style="font-size:12px; opacity:.8;">最后出现: ${this.formatTime(npc.lastSeen)}</div>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <div style="font-size:12px; opacity:.8;">最后出现: ${this.formatTime(npc.lastSeen)}</div>
+                        <button
+                            data-action="delete-npc"
+                            data-npc-id="${npc.id}"
+                            class="delete-npc-btn"
+                            style="
+                                background: var(--theme-bg-danger, #dc3545);
+                                color: white;
+                                border: none;
+                                padding: 4px 8px;
+                                border-radius: 4px;
+                                font-size: 11px;
+                                cursor: pointer;
+                                opacity: 0.8;
+                                transition: opacity 0.2s;
+                            "
+                            onmouseover="this.style.opacity='1'"
+                            onmouseout="this.style.opacity='0.8'"
+                            title="删除此NPC"
+                        >删除</button>
+                    </div>
                 </div>
                 <div style="display:flex; gap: 16px; margin-bottom: 10px;">
                     <div class="badge">出现次数 ${npc.appearCount || 0}</div>
@@ -279,6 +383,150 @@ export class NPCManagementPanel {
             console.error('[NPCPanel] 导入失败', e);
             this.toast('导入失败: ' + e.message);
         }
+    }
+
+    /**
+     * 🆕 删除NPC
+     * @param {string} npcId - NPC ID
+     */
+    async deleteNpc(npcId) {
+        try {
+            if (!npcId || !this.npcDB) {
+                console.error('[NPCPanel] ❌ 无效的NPC ID或数据库管理器');
+                return;
+            }
+
+            const npc = this.npcDB.db?.npcs?.[npcId];
+            if (!npc) {
+                console.error('[NPCPanel] ❌ NPC不存在:', npcId);
+                return;
+            }
+
+            // 显示确认对话框
+            const confirmed = await this.showDeleteConfirmDialog(npc);
+            if (!confirmed) {
+                console.log('[NPCPanel] ℹ️ 用户取消删除操作');
+                return;
+            }
+
+            // 执行删除
+            const success = await this.npcDB.deleteNpc(npcId);
+            if (success) {
+                console.log('[NPCPanel] ✅ NPC删除成功:', npcId);
+
+                // 刷新界面
+                this.renderList();
+                this.renderDetails(null); // 清空详情面板
+
+                // 显示成功提示
+                this.toast(`NPC "${npc.name}" 已成功删除`);
+            } else {
+                console.error('[NPCPanel] ❌ NPC删除失败:', npcId);
+                this.toast('删除失败，请重试');
+            }
+
+        } catch (error) {
+            console.error('[NPCPanel] ❌ 删除NPC时发生错误:', error);
+            this.toast('删除失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 🆕 显示删除确认对话框
+     * @param {Object} npc - NPC对象
+     * @returns {Promise<boolean>} 用户是否确认删除
+     */
+    async showDeleteConfirmDialog(npc) {
+        return new Promise((resolve) => {
+            // 创建确认对话框
+            const dialog = document.createElement('div');
+            dialog.className = 'delete-confirm-dialog';
+            dialog.style.cssText = `
+                position: fixed;
+                inset: 0;
+                z-index: 1000000;
+                background: rgba(0,0,0,0.5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+
+            dialog.innerHTML = `
+                <div style="
+                    background: var(--theme-bg-primary, var(--SmartThemeBodyColor, #1e1e1e));
+                    border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
+                    border-radius: 8px;
+                    padding: 20px;
+                    max-width: 400px;
+                    width: 90%;
+                    color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                ">
+                    <h3 style="margin: 0 0 16px 0; color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));">
+                        确认删除NPC
+                    </h3>
+                    <p style="margin: 0 0 20px 0; line-height: 1.5;">
+                        您确定要删除NPC "<strong>${this.escape(npc.name)}</strong>" (ID: ${npc.id}) 吗？
+                        <br><br>
+                        <span style="color: var(--theme-text-warning, #ffc107); font-size: 14px;">
+                            ⚠️ 此操作不可撤销，将永久删除该NPC的所有数据。
+                        </span>
+                    </p>
+                    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                        <button class="cancel-btn" style="
+                            background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #111));
+                            color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                            border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
+                            padding: 8px 16px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                        ">取消</button>
+                        <button class="confirm-btn" style="
+                            background: var(--theme-bg-danger, #dc3545);
+                            color: white;
+                            border: none;
+                            padding: 8px 16px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                        ">确认删除</button>
+                    </div>
+                </div>
+            `;
+
+            // 事件处理
+            const cleanup = () => {
+                document.body.removeChild(dialog);
+            };
+
+            dialog.querySelector('.cancel-btn').addEventListener('click', () => {
+                cleanup();
+                resolve(false);
+            });
+
+            dialog.querySelector('.confirm-btn').addEventListener('click', () => {
+                cleanup();
+                resolve(true);
+            });
+
+            // 点击背景关闭
+            dialog.addEventListener('click', (e) => {
+                if (e.target === dialog) {
+                    cleanup();
+                    resolve(false);
+                }
+            });
+
+            // ESC键关闭
+            const handleKeyDown = (e) => {
+                if (e.key === 'Escape') {
+                    cleanup();
+                    document.removeEventListener('keydown', handleKeyDown);
+                    resolve(false);
+                }
+            };
+            document.addEventListener('keydown', handleKeyDown);
+
+            document.body.appendChild(dialog);
+        });
     }
 
     toast(msg) {
