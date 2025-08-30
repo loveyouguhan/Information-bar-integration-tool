@@ -240,11 +240,27 @@ export class APIIntegration {
                 ...options
             };
             
+            // 🚀 新增：获取SmartPromptSystem的智能提示词（包含NPC格式要求）
+            const smartPrompt = await this.getSmartPromptSystemPrompt();
+            if (smartPrompt && smartPrompt.length > 0) {
+                console.log('[APIIntegration] 🧠 添加SmartPromptSystem智能提示词，字符数:', smartPrompt.length);
+                prompt = `${smartPrompt}\n\n${prompt}`;
+            }
+
             // 添加额外提示词
             if (this.apiConfig.extraPrompt) {
                 prompt = `${this.apiConfig.extraPrompt}\n\n${prompt}`;
             }
-            
+
+            // 🆕 添加世界书内容
+            if (this.apiConfig.includeWorldBook) {
+                const worldBookContent = await this.getWorldBookContent();
+                if (worldBookContent && worldBookContent.length > 0) {
+                    console.log('[APIIntegration] 📚 添加世界书内容到请求中，字符数:', worldBookContent.length);
+                    prompt = `${worldBookContent}\n\n${prompt}`;
+                }
+            }
+
             console.log('[APIIntegration] 🚀 开始生成文本...');
             
             // 执行生成请求（带重试）
@@ -974,6 +990,166 @@ export class APIIntegration {
             currentProvider: this.currentProvider?.name || null,
             stats: this.getStats()
         };
+    }
+
+    // ==================== 🆕 世界书集成方法 ====================
+
+    /**
+     * 获取SmartPromptSystem的智能提示词（包含NPC格式要求）
+     */
+    async getSmartPromptSystemPrompt() {
+        try {
+            console.log('[APIIntegration] 🧠 获取SmartPromptSystem智能提示词...');
+
+            // 获取SmartPromptSystem实例
+            const smartPromptSystem = window.SillyTavernInfobar?.modules?.smartPromptSystem;
+            if (!smartPromptSystem) {
+                console.warn('[APIIntegration] ⚠️ SmartPromptSystem未找到');
+                return '';
+            }
+
+            // 检查SmartPromptSystem是否已初始化
+            if (!smartPromptSystem.initialized) {
+                console.warn('[APIIntegration] ⚠️ SmartPromptSystem未初始化');
+                return '';
+            }
+
+            // 生成智能提示词
+            const smartPrompt = await smartPromptSystem.generateSmartPrompt();
+            if (!smartPrompt || smartPrompt.length === 0) {
+                console.log('[APIIntegration] 📝 SmartPromptSystem返回空提示词');
+                return '';
+            }
+
+            console.log('[APIIntegration] ✅ SmartPromptSystem智能提示词获取成功:', {
+                length: smartPrompt.length,
+                preview: smartPrompt.substring(0, 200) + '...'
+            });
+
+            return smartPrompt;
+
+        } catch (error) {
+            console.error('[APIIntegration] ❌ 获取SmartPromptSystem智能提示词失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 获取世界书内容用于API注入
+     */
+    async getWorldBookContent() {
+        try {
+            console.log('[APIIntegration] 📚 获取世界书内容...');
+
+            // 获取世界书管理器
+            const worldBookManager = window.SillyTavernInfobar?.modules?.worldBookManager;
+            if (!worldBookManager) {
+                console.warn('[APIIntegration] ⚠️ 世界书管理器未找到');
+                return '';
+            }
+
+            // 获取选中的世界书内容
+            const worldBookData = await worldBookManager.getSelectedWorldBookContent();
+            if (!worldBookData || !worldBookData.entries || worldBookData.entries.length === 0) {
+                console.log('[APIIntegration] 📚 没有可用的世界书内容');
+                return '';
+            }
+
+            // 构建世界书内容字符串
+            const worldBookSections = [];
+
+            // 添加世界书标题
+            worldBookSections.push('=== 世界书信息 ===');
+
+            // 按来源分组条目
+            const entriesBySource = {};
+            worldBookData.entries.forEach(entry => {
+                if (!entriesBySource[entry.source]) {
+                    entriesBySource[entry.source] = [];
+                }
+                entriesBySource[entry.source].push(entry);
+            });
+
+            // 为每个来源添加内容
+            for (const [source, entries] of Object.entries(entriesBySource)) {
+                worldBookSections.push(`\n--- ${source} ---`);
+
+                entries.forEach(entry => {
+                    if (entry.key && entry.content) {
+                        worldBookSections.push(`关键词: ${entry.key}`);
+                        worldBookSections.push(`内容: ${entry.content}`);
+                        worldBookSections.push(''); // 空行分隔
+                    }
+                });
+            }
+
+            // 添加统计信息
+            worldBookSections.push(`\n=== 世界书统计 ===`);
+            worldBookSections.push(`总条目数: ${worldBookData.entries.length}`);
+            worldBookSections.push(`总字符数: ${worldBookData.totalCharacters}`);
+            if (worldBookData.truncated) {
+                worldBookSections.push(`注意: 内容已根据字符限制进行截断`);
+            }
+            worldBookSections.push('===================\n');
+
+            const finalContent = worldBookSections.join('\n');
+
+            console.log('[APIIntegration] ✅ 世界书内容构建完成:', {
+                entries: worldBookData.entries.length,
+                characters: finalContent.length,
+                truncated: worldBookData.truncated
+            });
+
+            return finalContent;
+
+        } catch (error) {
+            console.error('[APIIntegration] ❌ 获取世界书内容失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 检查世界书功能是否可用
+     */
+    isWorldBookAvailable() {
+        try {
+            const worldBookManager = window.SillyTavernInfobar?.modules?.worldBookManager;
+            return !!(worldBookManager && worldBookManager.initialized);
+        } catch (error) {
+            console.error('[APIIntegration] ❌ 检查世界书可用性失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 获取世界书配置状态
+     */
+    getWorldBookStatus() {
+        try {
+            const worldBookManager = window.SillyTavernInfobar?.modules?.worldBookManager;
+            if (!worldBookManager) {
+                return {
+                    available: false,
+                    enabled: false,
+                    error: '世界书管理器未找到'
+                };
+            }
+
+            return {
+                available: true,
+                enabled: this.apiConfig.includeWorldBook || false,
+                config: worldBookManager.config,
+                status: worldBookManager.getStatus()
+            };
+
+        } catch (error) {
+            console.error('[APIIntegration] ❌ 获取世界书状态失败:', error);
+            return {
+                available: false,
+                enabled: false,
+                error: error.message
+            };
+        }
     }
 }
 

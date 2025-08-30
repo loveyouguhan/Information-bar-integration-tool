@@ -50,7 +50,14 @@ export class ConfigManager {
             'apiConfig.extraPrompt': { type: 'string', default: '' },
             'apiConfig.mergeMessages': { type: 'boolean', default: true },
             'apiConfig.includeWorldBook': { type: 'boolean', default: false },
-            
+
+            // 🆕 世界书配置验证
+            'worldBook.source': { type: 'string', enum: ['default', 'manual'], default: 'default' },
+            'worldBook.maxCharacters': { type: 'number', min: 0, max: 200000, default: 50000 },
+            'worldBook.selectedBooks': { type: 'array', default: [] },
+            'worldBook.enabledEntries': { type: 'object', default: {} },
+            'worldBook.autoUpdate': { type: 'boolean', default: true },
+
             // 主题配置验证
             'theme.current': { type: 'string', default: 'default' },
             'theme.custom': { type: 'object', default: {} },

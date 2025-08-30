@@ -1797,16 +1797,22 @@ world: name="现代都市", type="都市"
 
 可用字段: ${availableFields.join(', ')}
 
-🎯 **标准示例（3个NPC的正确格式）** 🎯
-${exampleFields.join(', ')}, npc1.name="第二个NPC", npc1.type="类型2", npc2.name="第三个NPC", npc2.type="类型3"
+🎯 **标准示例（3个NPC的正确格式 - 每个NPC都有完整字段）** 🎯
+${panelKey}: ${exampleFields.join(', ')}, npc1.name="第二个NPC", npc1.type="类型2", npc1.status="状态2", npc1.relationship="关系2", npc2.name="第三个NPC", npc2.type="类型3", npc2.status="状态3", npc2.relationship="关系3"
+
+🚨🚨🚨 **关键要求：数据完整性** 🚨🚨🚨
+⚠️ **每个NPC都必须包含所有相关字段！**
+⚠️ **绝对禁止只为第一个NPC输出完整数据，其他NPC数据不完整！**
+⚠️ **如果某个NPC缺少信息，使用"未知"、"暂无"或"待确认"填充，不能省略字段！**
 
 🎯 **单个NPC的推荐格式** 🎯
-${panelKey}: npc0.name="主要角色", npc0.status="当前状态", npc0.mood="情绪"
+${panelKey}: npc0.name="主要角色", npc0.type="角色类型", npc0.status="当前状态", npc0.relationship="与用户关系", npc0.intimacy="亲密度", npc0.history="交互历史"
 
 🚫 **严禁的错误格式** 🚫
 ❌ ${panelKey}: name="NPC1, NPC2, NPC3" ← 严重错误！
 ❌ ${panelKey}: type="类型1/类型2/类型3" ← 严重错误！
-❌ ${panelKey}: status="状态1, 状态2, 状态3" ← 严重错误！`;
+❌ ${panelKey}: status="状态1, 状态2, 状态3" ← 严重错误！
+❌ ${panelKey}: npc0.name="NPC1", npc0.type="类型1", npc1.name="NPC2" ← 严重错误！npc1缺少type字段！`;
 
         console.log('[SmartPromptSystem] 🎭 交互对象动态NPC模板生成完成（已强化NPC前缀指令）');
         return result;
@@ -2011,24 +2017,33 @@ ${panelKey}: npc0.name="主要角色", npc0.status="当前状态", npc0.mood="�
 📋 数据格式：使用动态NPC格式：npcX.字段名="中文内容"
 其中X为NPC编号(0,1,2,3...)，根据剧情中实际出现的NPC数量动态生成
 
+🚨🚨🚨 **关键要求：每个NPC必须输出完整的字段数据！** 🚨🚨🚨
+⚠️ **绝对禁止只为第一个NPC输出完整数据，其他NPC输出不完整数据！**
+⚠️ **每个NPC都必须包含所有相关的字段信息！**
+⚠️ **如果某个NPC缺少某个字段的信息，请输出"未知"或"暂无"，不能省略字段！**
+
 🔴 **严禁的错误格式（信息混合）** 🔴
 ❌ name="角色1, 角色2, 角色3" ← 绝对禁止！
 ❌ type="类型1/类型2/类型3" ← 绝对禁止！
 ❌ status="状态1, 状态2, 状态3" ← 绝对禁止！
 ❌ relationship="关系1/关系2/关系3" ← 绝对禁止！
 
-✅ **正确格式（NPC分离）** ✅
-✅ npc0.name="角色1", npc1.name="角色2", npc2.name="角色3"
-✅ npc0.type="类型1", npc1.type="类型2", npc2.type="类型3"
-✅ npc0.status="状态1", npc1.status="状态2", npc2.status="状态3"
-✅ npc0.relationship="关系1", npc1.relationship="关系2", npc2.relationship="关系3"
+🔴 **严禁的错误格式（数据不完整）** 🔴
+❌ npc0.name="角色1", npc0.type="类型1", npc0.status="状态1", npc1.name="角色2" ← 错误！npc1缺少type和status字段！
+❌ 只为第一个NPC输出完整字段，其他NPC字段不完整 ← 严重错误！
+
+✅ **正确格式（NPC分离且数据完整）** ✅
+✅ npc0.name="角色1", npc0.type="类型1", npc0.status="状态1", npc1.name="角色2", npc1.type="类型2", npc1.status="状态2"
+✅ 每个NPC都必须包含相同的字段集合，确保数据完整性
 
 可用字段: ${interactionFields.join(', ')}
 
-✅ 正确示例（NPC角色信息）:
-- npc0.name="奥兰多教授", npc0.relationship="导师", npc0.status="友善", npc0.type="教授"
-- npc1.name="马尔科姆", npc1.relationship="同学", npc1.status="冷淡", npc1.type="学生"
-- npc2.name="瓦里安血棘", npc2.relationship="敌人", npc2.status="敌对", npc2.type="战士"
+✅ 正确示例（NPC角色信息 - 每个NPC都有完整字段）:
+- npc0.name="奥兰多教授", npc0.type="教授", npc0.status="友善", npc0.relationship="导师", npc0.intimacy="尊敬", npc0.history="长期指导学习"
+- npc1.name="马尔科姆", npc1.type="学生", npc1.status="冷淡", npc1.relationship="同学", npc1.intimacy="疏远", npc1.history="课堂上有过争执"
+- npc2.name="瓦里安血棘", npc2.type="战士", npc2.status="敌对", npc2.relationship="敌人", npc2.intimacy="仇恨", npc2.history="多次战斗冲突"
+
+🚨 **注意：每个NPC都必须包含相同的字段集合！如果某个字段没有信息，使用"未知"或"暂无"填充！**
 
 ❌ 错误示例（用户角色信息误填入交互对象）:
 - npc0.name="用户角色名", npc0.relationship="自己" ← 这是错误的！
