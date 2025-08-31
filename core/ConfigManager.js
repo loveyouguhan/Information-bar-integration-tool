@@ -39,7 +39,7 @@ export class ConfigManager {
             
             // API配置验证
             'apiConfig.enabled': { type: 'boolean', default: false },
-            'apiConfig.provider': { type: 'string', enum: ['gemini', 'openai'], default: 'gemini' },
+            'apiConfig.provider': { type: 'string', enum: ['gemini', 'openai', 'localproxy'], default: 'gemini' },
             'apiConfig.format': { type: 'string', enum: ['native', 'compatible'], default: 'native' },
             'apiConfig.endpoint': { type: 'string', default: '' },
             'apiConfig.apiKey': { type: 'string', default: '' },

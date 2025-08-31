@@ -28,8 +28,14 @@ export class APIIntegration {
         // API提供商
         this.providers = {
             gemini: new GeminiProvider(this),
-            openai: new OpenAIProvider(this)
+            openai: new OpenAIProvider(this),
+            localproxy: new LocalProxyProvider(this)
         };
+
+        // 🚀 CSRF令牌缓存
+        this.cachedCsrfToken = null;
+        this.csrfTokenCacheTime = 0;
+        this.CSRF_CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
         
         // 当前提供商
         this.currentProvider = null;
@@ -995,6 +1001,32 @@ export class APIIntegration {
     // ==================== 🆕 世界书集成方法 ====================
 
     /**
+     * 获取CSRF令牌 (带缓存优化)
+     */
+    async getCsrfToken() {
+        const now = Date.now();
+
+        // 如果缓存有效，直接返回缓存的令牌
+        if (this.cachedCsrfToken && (now - this.csrfTokenCacheTime) < this.CSRF_CACHE_DURATION) {
+            return this.cachedCsrfToken;
+        }
+
+        try {
+            const response = await fetch('/csrf-token');
+            const data = await response.json();
+
+            // 更新缓存
+            this.cachedCsrfToken = data.token;
+            this.csrfTokenCacheTime = now;
+
+            return data.token;
+        } catch (error) {
+            console.error('[APIIntegration] 获取CSRF令牌失败:', error);
+            throw error;
+        }
+    }
+
+    /**
      * 获取SmartPromptSystem的智能提示词（包含NPC格式要求）
      */
     async getSmartPromptSystemPrompt() {
@@ -1287,6 +1319,218 @@ class GeminiProvider {
             }
             
             throw error;
+        }
+    }
+}
+
+/**
+ * 本地反代提供商 (基于SillyTavern后端代理)
+ */
+class LocalProxyProvider {
+    constructor(apiIntegration) {
+        this.name = 'localproxy';
+        this.apiIntegration = apiIntegration;
+    }
+
+    async init(config) {
+        this.config = config;
+        this.apiKey = config.apiKey; // 这里是反代密码
+        this.endpoint = config.endpoint; // 本地反代端点
+
+        // 获取当前页面的基础URL
+        this.baseUrl = window.location.origin;
+        console.log('[LocalProxyProvider] 📊 初始化本地反代提供商');
+        console.log('[LocalProxyProvider] 📊 反代端点:', this.endpoint);
+        console.log('[LocalProxyProvider] 📊 基础URL:', this.baseUrl);
+    }
+
+    async testConnection() {
+        try {
+            console.log('[LocalProxyProvider] 🔍 开始测试本地反代连接...');
+
+            // 获取CSRF令牌
+            const csrfToken = await this.apiIntegration.getCsrfToken();
+
+            // 构建状态检查请求
+            const statusUrl = `${this.baseUrl}/api/backends/chat-completions/status`;
+            const requestBody = {
+                reverse_proxy: this.endpoint,
+                proxy_password: this.apiKey,
+                chat_completion_source: "custom",
+                custom_url: this.endpoint,
+                custom_include_headers: ""
+            };
+
+            console.log('[LocalProxyProvider] 📊 状态检查URL:', statusUrl);
+            console.log('[LocalProxyProvider] 📊 请求参数:', requestBody);
+
+            const response = await fetch(statusUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('[LocalProxyProvider] ✅ 本地反代连接成功');
+                console.log('[LocalProxyProvider] 📊 状态响应:', data);
+                return { success: true, details: '本地反代连接正常', data };
+            } else {
+                console.error('[LocalProxyProvider] ❌ 本地反代连接失败:', response.status);
+                return { success: false, error: `HTTP ${response.status}: ${response.statusText}` };
+            }
+        } catch (error) {
+            console.error('[LocalProxyProvider] ❌ 本地反代连接异常:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async generateText(prompt, options) {
+        try {
+            console.log('[LocalProxyProvider] 🚀 开始生成文本...');
+            console.log('[LocalProxyProvider] 📊 使用模型:', options.model);
+
+            // 获取CSRF令牌
+            const csrfToken = await this.apiIntegration.getCsrfToken();
+
+            // 构建生成请求
+            const generateUrl = `${this.baseUrl}/api/backends/chat-completions/generate`;
+            const requestBody = {
+                messages: [{ role: 'user', content: prompt }],
+                model: options.model,
+                temperature: options.temperature,
+                frequency_penalty: 0,
+                presence_penalty: 0.12,
+                top_p: options.topP || 1.0,
+                max_tokens: options.maxTokens,
+                stream: false,
+                chat_completion_source: "openai",
+                group_names: [],
+                include_reasoning: false,
+                reasoning_effort: "medium",
+                enable_web_search: false,
+                request_images: false,
+                custom_prompt_post_processing: "strict",
+                reverse_proxy: this.endpoint,
+                proxy_password: this.apiKey
+            };
+
+            console.log('[LocalProxyProvider] 📝 请求参数:', {
+                endpoint: generateUrl,
+                model: requestBody.model,
+                temperature: requestBody.temperature,
+                max_tokens: requestBody.max_tokens,
+                promptLength: prompt.length
+            });
+
+            const response = await fetch(generateUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            console.log('[LocalProxyProvider] 📊 生成响应状态:', response.status);
+
+            if (!response.ok) {
+                throw new Error(`本地反代API错误: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            const generatedText = data.choices?.[0]?.message?.content || '';
+
+            console.log(`[LocalProxyProvider] ✅ 文本生成成功，长度: ${generatedText.length} 字符`);
+
+            return {
+                success: true,
+                text: generatedText,
+                usage: data.usage
+            };
+
+        } catch (error) {
+            console.error('[LocalProxyProvider] ❌ 生成文本异常:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    async loadModels() {
+        try {
+            console.log('[LocalProxyProvider] 📋 开始加载本地反代模型列表...');
+
+            // 获取CSRF令牌
+            const csrfToken = await this.apiIntegration.getCsrfToken();
+
+            // 构建模型列表请求
+            const statusUrl = `${this.baseUrl}/api/backends/chat-completions/status`;
+            const requestBody = {
+                reverse_proxy: this.endpoint,
+                proxy_password: this.apiKey,
+                chat_completion_source: "custom",
+                custom_url: this.endpoint,
+                custom_include_headers: ""
+            };
+
+            const response = await fetch(statusUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                throw new Error(`加载模型失败: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // 解析模型列表
+            let models = [];
+            if (data.data && Array.isArray(data.data)) {
+                models = data.data.map(model => ({
+                    id: model.id || model.model || 'unknown',
+                    name: model.id || model.model || model.name || 'Unknown Model',
+                    description: model.description || model.id || model.model || ''
+                }));
+            } else if (data.models && Array.isArray(data.models)) {
+                models = data.models.map(model => ({
+                    id: model.id || model.model || model.name || 'unknown',
+                    name: model.name || model.id || model.model || 'Unknown Model',
+                    description: model.description || model.id || ''
+                }));
+            } else {
+                // 提供默认模型列表
+                models = [
+                    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: '默认模型' },
+                    { id: 'gpt-4', name: 'GPT-4', description: '高级模型' }
+                ];
+            }
+
+            console.log(`[LocalProxyProvider] ✅ 成功加载 ${models.length} 个本地反代模型`);
+            return models;
+
+        } catch (error) {
+            console.error('[LocalProxyProvider] ❌ 加载本地反代模型失败:', error);
+
+            // 提供降级模型列表
+            const fallbackModels = [
+                { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo (降级)', description: '连接失败时的默认模型' },
+                { id: 'gpt-4', name: 'GPT-4 (降级)', description: '连接失败时的默认模型' }
+            ];
+
+            const enhancedError = new Error(`${error.message} - 已提供降级模型列表`);
+            enhancedError.fallbackModels = fallbackModels;
+            enhancedError.originalError = error;
+            throw enhancedError;
         }
     }
 }

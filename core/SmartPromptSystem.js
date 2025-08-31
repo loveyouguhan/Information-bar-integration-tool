@@ -110,7 +110,28 @@ export class SmartPromptSystem {
      * 获取默认提示词模板
      */
     getDefaultPromptTemplate() {
-        return `🚨【信息栏数据格式规范】🚨
+        return `🚨🚨🚨🚨🚨 【CRITICAL: NPC前缀格式强制要求】 🚨🚨🚨🚨🚨
+
+⚠️⚠️⚠️ **MANDATORY REQUIREMENT - NO EXCEPTIONS** ⚠️⚠️⚠️
+🚨 **interaction面板必须使用NPC前缀格式！系统将拒绝处理任何错误格式！**
+🚨 **正确格式: interaction: npc0.name="江琳", npc0.type="朋友", npc0.status="开心"**
+🚨 **错误格式: interaction: [WRONG_FORMAT_REMOVED] ← 系统将完全忽略！**
+🚨 **如果你输出错误格式，数据将被完全拒绝，不会有任何兼容性处理！**
+
+🔴🔴🔴 **ABSOLUTE PROHIBITION - 绝对禁止** 🔴🔴🔴
+❌ **绝对禁止**: interaction: [WRONG_FORMAT] ← 没有npc前缀！
+❌ **绝对禁止**: interaction: [WRONG_FORMAT] ← 没有npc前缀！
+❌ **绝对禁止**: interaction: [WRONG_FORMAT] ← 没有npc前缀！
+❌ **绝对禁止**: interaction: [WRONG_FORMAT] ← 没有npc前缀！
+
+✅✅✅ **CORRECT FORMAT - 正确格式** ✅✅✅
+✅ **必须使用**: interaction: npc0.name="江琳" ← 有npc前缀！
+✅ **必须使用**: interaction: npc0.type="朋友" ← 有npc前缀！
+✅ **必须使用**: interaction: npc0.status="开心" ← 有npc前缀！
+
+🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+
+🚨【信息栏数据格式规范】🚨
 
 📋 数据格式要求：
 在正常的角色扮演和剧情发展之外，请同时提供结构化的信息栏数据：
@@ -136,8 +157,17 @@ export class SmartPromptSystem {
 ✅ 正确格式：personal: name="张三", age="25", occupation="程序员"
 ✅ 正确格式：world: name="现代都市", type="都市", time="2024年"
 ✅ 正确格式：tasks: creation="新任务创建", editing="任务编辑中"
-❌ 错误格式：<personal><name>张三</name><age>25</age></personal>
-❌ 错误格式：{"personal": {"name": "张三", "age": "25"}}
+
+🔥🔥🔥 系统将完全拒绝以下格式（导致数据解析失败）：🔥🔥🔥
+❌ 绝对禁止JSON格式：{"角色": "我", "时间": "下午"}
+❌ 绝对禁止对象格式：{ "角色": "我", "时间": "下午（光线无变化）", "地点": "古董店" }
+❌ 绝对禁止嵌套XML：<personal><name>张三</name><age>25</age></personal>
+❌ 绝对禁止Markdown格式：- **个人信息**
+❌ 绝对禁止分类标题：**人物**、**环境**、**当前目标**
+❌ 绝对禁止列表符号：- **状态**: 值
+❌ 绝对禁止粗体标记：**任何粗体文本**
+
+⚠️⚠️⚠️ 如果输出上述错误格式，系统将无法解析数据，导致功能完全失效！⚠️⚠️⚠️
 
 📋 数据范围约束：
 只为已启用的面板生成数据：
@@ -211,17 +241,28 @@ export class SmartPromptSystem {
 <!--
 [输出模式: {{OUTPUT_MODE}}]
 
+🚨🚨🚨 CRITICAL: 严格按照以下五步进行分析，禁止自创步骤！🚨🚨🚨
+
 五步分析过程：
-0. 更新策略:全量/增量更新
-1. 剧情分析：当前发生什么事件？角色在哪里？在做什么？
-2. 数据变化识别：哪些信息发生了变化？哪些是新信息？
-3. 更新策略判断：需要新增哪些字段？需要更新哪些字段？哪些保持不变？
-4. 数据完整性检查：确保所有启用面板都有完整数据
-5. 质量验证：确认数据逻辑一致性和合理性
+0. 更新策略:全量/增量更新 （禁止修改此步骤名称！）
+1. 剧情分析：当前发生什么事件？角色在哪里？在做什么？（禁止修改此步骤名称！）
+2. 数据变化识别：哪些信息发生了变化？哪些是新信息？（禁止修改此步骤名称！）
+3. 更新策略判断：需要新增哪些字段？需要更新哪些字段？哪些保持不变？（禁止修改此步骤名称！）
+4. 数据完整性检查：确保所有启用面板都有完整数据（禁止修改此步骤名称！）
+5. 质量验证：确认数据逻辑一致性和合理性（禁止修改此步骤名称！）
+
+❌❌❌ 严禁自创步骤如："识别核心需求"、"解析剧情文本" 等！❌❌❌
+✅✅✅ 必须完全按照上述五步进行分析！✅✅✅
 -->
 </aiThinkProcess>
 
 **第二步：再输出面板数据（内容必须被<!--和-->包裹，必须严格遵循上述五步思考的分析结果）**
+
+🚨🚨🚨 **CRITICAL REMINDER: interaction面板NPC前缀格式** 🚨🚨🚨
+⚠️ **如果输出interaction面板，必须使用npc0.前缀！**
+⚠️ **正确: interaction: npc0.name="江琳", npc0.type="朋友"**
+⚠️ **错误: interaction: [WRONG_FORMAT_REMOVED] ← 系统将拒绝！**
+
 <infobar_data>
 <!--
 {PANEL_DATA_TEMPLATE}
@@ -232,12 +273,17 @@ export class SmartPromptSystem {
 <aiThinkProcess>
 五步分析过程：（内容没有被注释符号包裹）
 0. 更新策略:全量更新
-1. 剧情分析：...
+1. 剧情分析：用户角色李明在现代都市的咖啡厅与朋友小王聊天，讨论最近的工作情况
+2. 数据变化识别：场景从家中转移到咖啡厅，心情轻松，出现交互对象小王
+3. 更新策略判断：需要更新个人位置信息，世界场景信息，新增交互对象数据
+4. 数据完整性检查：个人信息、世界状态、交互对象面板都需要完整数据
+5. 质量验证：确保数据与咖啡厅聊天场景逻辑一致
 </aiThinkProcess>
 
 <infobar_data>
-personal: name="张三"（内容没有被注释符号包裹）
-world: name="现代都市"
+personal: name="李明", age="28", location="咖啡厅", mood="轻松"（内容没有被注释符号包裹）
+world: name="现代都市", location="市中心咖啡厅", atmosphere="温馨"
+interaction: npc0.姓名="小王", npc0.关系="朋友", npc0.态度="友好", npc0.情绪="开心"
 </infobar_data>
 
 🚨【重要提醒】🚨
@@ -295,10 +341,47 @@ personal: name="张三", age="25"
 -->
 </infobar_data>
 
-🚨🚨🚨 错误格式示例6 - NPC数据没有使用前缀（系统将拒绝处理）：
+🔥🔥🔥 错误格式示例6 - 使用了JSON格式（系统将完全拒绝处理）：
 <infobar_data>
 <!--
-interaction: 姓名="小雨", 关系="朋友", 态度="友好", 情绪="开心"
+{
+  "角色": "我",
+  "时间": "下午（光线无变化）",
+  "地点": ""遗忘角落"古董店，货架前",
+  "核心物件": {
+    "名称": "黑色的罗盘",
+    "状态": "指针顺时针旋转"
+  }
+}
+-->
+</infobar_data>
+
+🔥🔥🔥 错误格式示例7 - 使用了Markdown格式（系统将完全拒绝处理）：
+<infobar_data>
+<!--
+- **个人信息**
+    - **姓名**: 张三
+    - **年龄**: 25
+- **世界信息**  
+    - **地点**: 现代都市
+-->
+</infobar_data>
+
+🔥🔥🔥 错误格式示例8 - 使用了分类标题格式（系统将完全拒绝处理）：
+<infobar_data>
+<!--
+**人物**
+    状态: 存在轻微生理应激反应
+    姿态: 站立在柜台前
+**环境**
+    地点: 古董店
+-->
+</infobar_data>
+
+🚨🚨🚨 错误格式示例9 - NPC数据没有使用前缀（系统将拒绝处理）：
+<infobar_data>
+<!--
+interaction: npc0.姓名="小雨", npc0.关系="朋友", npc0.态度="友好", npc0.情绪="开心"
 -->
 </infobar_data>
 
@@ -309,40 +392,50 @@ interaction: 姓名="小雨", 关系="朋友", 态度="友好", 情绪="开心"
 **第一步：必须先输出五步思考（注意：内容必须被<!--和-->包裹）**
 <aiThinkProcess>
 <!--
+🚨 必须严格按照以下五步名称进行分析，禁止自创步骤名称！🚨
+
 五步分析过程：
-0. 更新策略:增量更新
-1. 剧情分析：张三正在现代都市的办公室里工作，处理编程任务
-2. 数据变化识别：位置从家里变为办公室，状态从休息变为工作，新增了任务信息
-3. 更新策略判断：需要更新location为"办公室"，occupation保持"程序员"，新增tasks相关字段
-4. 数据完整性检查：personal、world、tasks面板都有完整数据
-5. 质量验证：数据与当前剧情一致，张三作为程序员在办公室工作符合逻辑
+0. 更新策略:增量更新（步骤名称禁止修改）
+1. 剧情分析：张三正在现代都市的办公室里工作，处理编程任务，同事小雨过来询问项目进度，两人进行了友好的工作交流（步骤名称禁止修改）
+2. 数据变化识别：位置从家里变为办公室，状态从休息变为工作，新增了任务信息，出现了新的交互对象小雨（步骤名称禁止修改）
+3. 更新策略判断：需要更新personal的location为"办公室"，world保持"现代都市"，新增interaction面板记录与小雨的交互，新增tasks相关字段（步骤名称禁止修改）
+4. 数据完整性检查：personal、world、interaction、tasks面板都有完整数据，确保NPC信息完整（步骤名称禁止修改）
+5. 质量验证：数据与当前剧情一致，张三作为程序员在办公室工作，与同事小雨的交互符合工作场景逻辑（步骤名称禁止修改）
+
+❌ 严禁使用："识别核心需求"、"解析剧情文本"、"输出格式分析"等自创步骤
+✅ 必须使用："剧情分析"、"数据变化识别"、"更新策略判断"等指定步骤
 -->
 </aiThinkProcess>
 
 **第二步：基于上述分析输出面板数据（注意：内容必须被<!--和-->包裹）**
 <infobar_data>
 <!--
-personal: name="张三", age="25", occupation="程序员"
-world: name="现代都市", type="都市", time="2024年"
-interaction: npc0.姓名="小雨", npc0.关系="朋友", npc0.态度="友好", npc0.情绪="开心"
-tasks: creation="新任务创建", editing="任务编辑中"
+personal: name="张三", age="25", occupation="程序员", location="办公室", status="工作中"
+world: name="现代都市", type="都市", time="2024年", location="办公大楼"
+interaction: npc0.姓名="小雨", npc0.关系="同事", npc0.态度="友好", npc0.情绪="关心", npc0.活动="询问项目进度"
+tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
 -->
 </infobar_data>
 
 🚨 **注意：interaction面板必须使用NPC前缀格式！**
 ✅ 正确：interaction: npc0.姓名="小雨", npc0.关系="朋友"
-❌ 错误：interaction: 姓名="小雨", 关系="朋友" （系统将拒绝处理）
+❌ 错误：interaction: [WRONG_FORMAT] （系统将拒绝处理）
 
 ❌ **错误格式示例（严禁使用）**：
 <aiThinkProcess>
 五步分析过程：（内容没有被注释符号包裹）
 0. 更新策略:增量更新
-1. 剧情分析：...
+1. 剧情分析：张三在办公室与同事小雨讨论项目，气氛轻松友好
+2. 数据变化识别：工作状态变化，新增交互对象
+3. 更新策略判断：需要更新工作状态和交互信息
+4. 数据完整性检查：确保所有面板数据完整
+5. 质量验证：数据与剧情逻辑一致
 </aiThinkProcess>
 
 <infobar_data>
-personal: name="张三", age="25"（内容没有被注释符号包裹）
-world: name="现代都市", type="都市"
+personal: name="张三", age="25", occupation="程序员", status="工作中"（内容没有被注释符号包裹）
+world: name="现代都市", type="都市", location="办公大楼"
+interaction: npc0.姓名="小雨", npc0.关系="同事", npc0.态度="友好"
 </infobar_data>
 
 【⚠️ 数据格式要求】
@@ -357,7 +450,32 @@ world: name="现代都市", type="都市"
 ❌ **严禁**：先输出infobar_data再输出aiThinkProcess
 ❌ **严禁**：内容不被注释符号<!--和-->包裹
 
-⭐ 重要：这些要求只适用于数据标签部分，不影响你的正常角色扮演和剧情创作`;
+⭐ 重要：这些要求只适用于数据标签部分，不影响你的正常角色扮演和剧情创作
+
+🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+🔥🔥🔥 **SYSTEM WILL CRASH IF YOU USE WRONG FORMAT** 🔥🔥🔥
+🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+
+⚠️⚠️⚠️ **MANDATORY - NO EXCEPTIONS - SYSTEM BREAKING CHANGE** ⚠️⚠️⚠️
+
+🔴 **interaction面板格式已变更为STRICT MODE！**
+🔴 **任何不使用npc前缀的格式都会导致系统崩溃！**
+🔴 **兼容性处理已完全移除！错误格式=系统错误！**
+
+✅ **ONLY CORRECT FORMAT ACCEPTED:**
+✅ interaction: npc0.name="江琳", npc0.type="朋友", npc0.status="开心"
+
+❌ **THESE FORMATS WILL CRASH THE SYSTEM:**
+❌ interaction: [WRONG_FORMAT] ← SYSTEM CRASH!
+❌ interaction: [WRONG_FORMAT] ← SYSTEM CRASH!
+❌ interaction: [WRONG_FORMAT] ← SYSTEM CRASH!
+
+🚨 **WARNING: 如果你输出错误格式，整个信息栏系统将停止工作！**
+🚨 **WARNING: 用户将看到错误信息而不是你的回复！**
+🚨 **WARNING: 这是系统级别的强制要求，无法绕过！**
+
+🔥🔥🔥 **REMEMBER: npc0. PREFIX IS MANDATORY FOR ALL INTERACTION FIELDS** 🔥🔥🔥
+🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨`;
     }
 
     /**
@@ -1761,7 +1879,10 @@ world: name="现代都市", type="都市"
         });
 
         // 🚨🚨🚨 超强化交互对象面板的NPC身份识别约束 🚨🚨🚨
-        const result = `${panelKey}: 🚨🚨🚨 **交互对象面板专用于NPC角色！严禁填入用户信息！每个NPC必须有独立的npcX.前缀！** 🚨🚨🚨
+        // 🚀 检查是否为自定义API模式，需要加强格式约束
+        const isCustomAPIMode = this.getOutputMode() === '自定义API';
+
+        let result = `${panelKey}: 🚨🚨🚨 **交互对象面板专用于NPC角色！严禁填入用户信息！每个NPC必须有独立的npcX.前缀！** 🚨🚨🚨
 
 🚨 **身份识别警告：严禁角色混淆** 🚨
 ❌ 绝对禁止将用户信息填入交互对象面板！
@@ -1786,7 +1907,31 @@ world: name="现代都市", type="都市"
 - 用户交互的对象（朋友、同事、陌生人等）
 - 剧情中出现的非玩家角色
 - 当用户说"你"时指代的对象（用户→NPC）
-- 当其他角色自称"我"时的角色（NPC自述）
+- 当其他角色自称"我"时的角色（NPC自述）`;
+
+        // 🚀 自定义API模式下加强NPC格式约束
+        if (isCustomAPIMode) {
+            console.log('[SmartPromptSystem] 🔥 自定义API模式，为交互面板加强NPC格式约束');
+            result += `
+
+🔥🔥🔥 **自定义API模式 - 交互面板超级严格要求** 🔥🔥🔥
+⚠️ **重要提醒：自定义API模式下，系统对格式要求极其严格！**
+
+❌ **绝对禁止的错误格式示例**：
+❌ ${panelKey}: name="小雨", type="朋友", status="开心" (缺少npc前缀)
+❌ ${panelKey}: npc0.name="小雨", type="朋友" (部分缺少前缀)
+❌ ${panelKey}: name="小雨, 张三", type="朋友, 同事" (多NPC混合)
+
+✅ **必须使用的正确格式**：
+✅ ${panelKey}: npc0.name="小雨", npc0.type="朋友", npc0.status="开心"
+✅ ${panelKey}: npc0.name="小雨", npc0.type="朋友", npc1.name="张三", npc1.type="同事"
+
+🚨 **系统将完全拒绝处理任何没有npc前缀的交互对象数据！**
+🚨 **如果输出错误格式，数据将被完全忽略，不会有任何兼容性处理！**
+🚨 **自定义API模式下，格式错误将导致整个交互面板数据丢失！**`;
+        }
+
+        result += `
 
 📋 **格式要求** 📋
 - 只能输出一个${panelKey}面板
@@ -1809,9 +1954,9 @@ ${panelKey}: ${exampleFields.join(', ')}, npc1.name="第二个NPC", npc1.type="�
 ${panelKey}: npc0.name="主要角色", npc0.type="角色类型", npc0.status="当前状态", npc0.relationship="与用户关系", npc0.intimacy="亲密度", npc0.history="交互历史"
 
 🚫 **严禁的错误格式** 🚫
-❌ ${panelKey}: name="NPC1, NPC2, NPC3" ← 严重错误！
-❌ ${panelKey}: type="类型1/类型2/类型3" ← 严重错误！
-❌ ${panelKey}: status="状态1, 状态2, 状态3" ← 严重错误！
+❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
+❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
+❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
 ❌ ${panelKey}: npc0.name="NPC1", npc0.type="类型1", npc1.name="NPC2" ← 严重错误！npc1缺少type字段！`;
 
         console.log('[SmartPromptSystem] 🎭 交互对象动态NPC模板生成完成（已强化NPC前缀指令）');
@@ -1907,19 +2052,37 @@ ${panelKey}: npc0.name="主要角色", npc0.type="角色类型", npc0.status="�
 
         // 🔧 新增：检查是否为增量更新模式
         const isIncrementalUpdate = updateStrategy && updateStrategy.type === 'incremental';
-        
+
+        // 🚀 新增：检查是否为自定义API模式，需要加强格式约束
+        const isCustomAPIMode = this.getOutputMode() === '自定义API';
+
         if (isIncrementalUpdate) {
             // 增量更新模式：输出简化的约束说明
             console.log('[SmartPromptSystem] 🔄 增量更新模式，使用简化字段约束');
-            
-            const simplifiedConstraint = `
+
+            let simplifiedConstraint = `
 
 【📋 增量更新模式约束】
 ⚠️ **只输出发生变化的字段，保持现有字段名格式**
 🚨 **交互对象面板严禁信息混合：每个NPC必须使用独立的npcX.字段名格式（X为0,1,2...）**
 🚨 **绝对禁止将多个NPC信息写在一个字段中（如：name="NPC1, NPC2"）**
 ⚠️ **严禁添加未启用的面板或字段**`;
-            
+
+            // 🚀 自定义API模式下加强NPC格式约束
+            if (isCustomAPIMode) {
+                console.log('[SmartPromptSystem] 🔥 自定义API模式，加强NPC格式约束');
+                simplifiedConstraint += `
+
+🔥🔥🔥 **自定义API模式 - 超级严格NPC格式要求** 🔥🔥🔥
+❌ **绝对禁止错误格式**: interaction: name="小雨", type="朋友" (缺少npc前缀)
+✅ **必须使用正确格式**: interaction: npc0.name="小雨", npc0.type="朋友"
+❌ **绝对禁止混合格式**: interaction: npc0.name="小雨", type="朋友" (部分缺少前缀)
+✅ **每个NPC都要前缀**: interaction: npc0.name="小雨", npc0.type="朋友", npc1.name="张三", npc1.type="同事"
+
+🚨 **系统将完全拒绝处理任何没有npc前缀的交互对象数据！**
+🚨 **如果输出错误格式，数据将被完全忽略，不会有任何兼容性处理！**`;
+            }
+
             return prompt + simplifiedConstraint;
         }
 
@@ -2023,10 +2186,10 @@ ${panelKey}: npc0.name="主要角色", npc0.type="角色类型", npc0.status="�
 ⚠️ **如果某个NPC缺少某个字段的信息，请输出"未知"或"暂无"，不能省略字段！**
 
 🔴 **严禁的错误格式（信息混合）** 🔴
-❌ name="角色1, 角色2, 角色3" ← 绝对禁止！
-❌ type="类型1/类型2/类型3" ← 绝对禁止！
-❌ status="状态1, 状态2, 状态3" ← 绝对禁止！
-❌ relationship="关系1/关系2/关系3" ← 绝对禁止！
+❌ [WRONG_FORMAT_MIXING] ← 绝对禁止！
+❌ [WRONG_FORMAT_MIXING] ← 绝对禁止！
+❌ [WRONG_FORMAT_MIXING] ← 绝对禁止！
+❌ [WRONG_FORMAT_MIXING] ← 绝对禁止！
 
 🔴 **严禁的错误格式（数据不完整）** 🔴
 ❌ npc0.name="角色1", npc0.type="类型1", npc0.status="状态1", npc1.name="角色2" ← 错误！npc1缺少type和status字段！
@@ -2648,8 +2811,9 @@ ${panelKey}: npc0.name="主要角色", npc0.type="角色类型", npc0.status="�
 ⚠️ 规则：
 1. 仅补充上述缺失字段，不修改已存在字段
 2. 生成内容需与当前剧情一致，具体、可用
-3. 这些字段属于“新增启用”，即使增量模式也必须输出
+3. 这些字段属于"新增启用"，即使增量模式也必须输出
 4. 交互对象面板字段必须使用npcX.前缀（例如：npc0.${missingFields?.[0]?.missingSubItems?.[0]?.key || 'name'}="...")
+5. 🔥🔥🔥 **严禁使用Markdown格式**：禁止 - **标题**、**粗体**、列表符号
 
 `;
 
@@ -2749,6 +2913,7 @@ ${prefilledTemplate.trim()}
 - 即使是增量更新，这些缺失面板也必须无条件输出！
 - 请使用上方提供的预设模板，将【请填写...】替换为具体内容！
 - 不要跳过任何预设的面板或字段！
+- 🔥🔥🔥 **严禁使用Markdown格式**：禁止 - **标题**、**粗体**、列表符号
 
 `;
 
@@ -3091,13 +3256,17 @@ plot: exposition="剧情推进到清晨，……"
    - 在每次回复的最后部分，必须首先包含 <aiThinkProcess> 标签
    - **强制注释包裹格式**：<aiThinkProcess><!--五步分析思考--></aiThinkProcess>
    - **严禁格式**：<aiThinkProcess>五步分析思考</aiThinkProcess>（缺少注释符号）
-   - **必须包含完整的五步分析过程**：
-     * 0. 更新策略：全量/增量更新
-     * 1. 剧情分析：当前发生什么事件？角色在哪里？在做什么？
-     * 2. 数据变化识别：哪些信息发生了变化？哪些是新信息？
-     * 3. 更新策略判断：需要新增哪些字段？需要更新哪些字段？
-     * 4. 数据完整性检查：确保所有启用面板都有完整数据
-     * 5. 质量验证：确认数据逻辑一致性和合理性
+   
+   🚨🚨🚨 **CRITICAL：必须包含完整的五步分析过程，严禁自创步骤名称** 🚨🚨🚨
+   **必须完全按照以下步骤名称进行分析，一个字都不能改：**
+     * 0. 更新策略：全量/增量更新 ✅（禁止改为"识别核心需求"❌）
+     * 1. 剧情分析：当前发生什么事件？角色在哪里？在做什么？ ✅（禁止改为"解析剧情文本"❌）
+     * 2. 数据变化识别：哪些信息发生了变化？哪些是新信息？ ✅（禁止改为"输出格式分析"❌）
+     * 3. 更新策略判断：需要新增哪些字段？需要更新哪些字段？ ✅
+     * 4. 数据完整性检查：确保所有启用面板都有完整数据 ✅
+     * 5. 质量验证：确认数据逻辑一致性和合理性 ✅
+   
+   ❌❌❌ **如果你使用自创的步骤名称，系统将完全拒绝处理你的输出！** ❌❌❌
 
 2. **第二步：必须后输出 infobar_data 标签**：
    - 在aiThinkProcess标签之后，必须包含 <infobar_data> 标签
@@ -3105,9 +3274,22 @@ plot: exposition="剧情推进到清晨，……"
    - **严禁格式**：<infobar_data>面板数据</infobar_data>（缺少注释符号）
    - **必须根据【信息栏数据格式规范】生成具体内容**
    - **必须严格遵循上述aiThinkProcess中五步分析的结果**
-   - 使用XML紧凑格式：面板名: 字段="值", 字段="值"
-   - 示例：personal: name="张三", age="25", occupation="程序员"
-   - **禁止只输出空标签或占位符**
+   
+   🚨🚨🚨 **CRITICAL：必须使用XML紧凑格式，系统将拒绝所有其他格式** 🚨🚨🚨
+   
+   ✅ **正确格式（唯一可接受）**：
+   - personal: name="张三", age="25", occupation="程序员"
+   - world: name="现代都市", type="都市", time="2024年"
+   
+   ❌❌❌ **系统将完全拒绝以下格式（导致数据解析失败）** ❌❌❌：
+   - ❌ JSON格式：{"角色": "我", "时间": "下午"}
+   - ❌ 对象格式：{ "角色": "我", "地点": "古董店" }
+   - ❌ Markdown格式：- **人物** 或 **状态**: 值
+   - ❌ 分类标题：**人物**、**环境**、**当前目标**
+   - ❌ 列表符号：- **任何内容**
+   - ❌ 粗体标记：**任何粗体文本**
+   
+   ⚠️⚠️⚠️ **如果使用错误格式，数据将无法解析，扩展功能将完全失效！** ⚠️⚠️⚠️
 
 **⚠️ 严禁先输出infobar_data再输出aiThinkProcess！**
 **⚠️ 严禁内容不被<!--和-->注释符号包裹！**
@@ -3115,6 +3297,7 @@ plot: exposition="剧情推进到清晨，……"
 3. **格式规范要求**：
    - **严格遵循【信息栏数据格式规范】**
    - 使用正确的XML紧凑格式，不要使用JSON或嵌套XML
+   - 🔥🔥🔥 **严禁使用Markdown格式**：禁止 - **标题**、**粗体**、列表符号
    - 生成真实、具体的数据内容，避免"未知"、"N/A"等占位符
    - 确保数据与当前剧情和角色状态一致
 
@@ -3124,32 +3307,39 @@ plot: exposition="剧情推进到清晨，……"
    <aiThinkProcess>
    <!--
    0. 更新策略：增量更新
-   1. 剧情分析：艾莉丝正在魔法学院图书馆研究古老的魔法书籍，寻找关于传送法术的信息
-   2. 数据变化识别：位置从宿舍变更为图书馆，心情从疲惫变为专注，正在进行魔法研究活动
-   3. 更新策略判断：需要更新location字段为"魔法学院图书馆"，mood字段为"专注"，添加当前活动信息
-   4. 数据完整性检查：个人信息、状态、物品清单都已包含完整数据
-   5. 质量验证：数据与当前剧情一致，艾莉丝作为魔法师在图书馆研究符合角色设定
+   1. 剧情分析：艾莉丝正在魔法学院图书馆研究古老的魔法书籍，寻找关于传送法术的信息，图书管理员老师马克教授为她推荐了几本珍贵的魔法典籍
+   2. 数据变化识别：位置从宿舍变更为图书馆，心情从疲惫变为专注，正在进行魔法研究活动，出现了新的交互对象马克教授
+   3. 更新策略判断：需要更新personal的location和mood，更新world的当前场景，新增interaction面板记录与教授的交互，更新tasks面板记录研究进展
+   4. 数据完整性检查：personal、world、interaction、inventory、tasks面板都有完整数据，确保NPC信息完整
+   5. 质量验证：数据与当前剧情一致，艾莉丝作为魔法师在图书馆研究，与教授的学术交流符合魔法学院设定
    -->
    </aiThinkProcess>
 
    **第二步：infobar_data标签示例（必须后输出，基于上述分析，注意注释包裹）：**
    <infobar_data>
    <!--
-   personal: name="艾莉丝", age="23", occupation="魔法师", appearance="红发，绿眼"
-   world: name="魔法学院", locations="图书馆", type="奇幻"
-   inventory: storage="法杖、魔法袍", retrieval="便捷", organization="有序", capacity="充足"
+   personal: name="艾莉丝", age="23", occupation="魔法师", appearance="红发，绿眼", location="魔法学院图书馆", mood="专注"
+   world: name="魔法学院", location="图书馆", type="奇幻", time="下午", atmosphere="安静学术"
+   interaction: npc0.姓名="马克教授", npc0.关系="导师", npc0.态度="乐于助人", npc0.情绪="耐心", npc0.活动="推荐魔法典籍"
+   inventory: storage="法杖、魔法袍、古老魔法书", retrieval="便捷", organization="有序", capacity="充足"
+   tasks: research="传送法术研究", progress="查阅资料中", priority="高", status="进行中"
    -->
    </infobar_data>
 
    **❌ 错误格式示例（严禁使用）：**
    <aiThinkProcess>
    0. 更新策略：增量更新（内容没有被<!--和-->包裹）
-   1. 剧情分析：艾莉丝正在图书馆...
+   1. 剧情分析：艾莉丝正在图书馆研究魔法，与教授讨论传送法术
+   2. 数据变化识别：位置变更，心情变化，新增交互对象
+   3. 更新策略判断：需要更新相关字段
+   4. 数据完整性检查：确保数据完整
+   5. 质量验证：数据逻辑一致
    </aiThinkProcess>
 
    <infobar_data>
-   personal: name="艾莉丝", age="23"（内容没有被<!--和-->包裹）
-   world: time="上午", weather="晴朗"
+   personal: name="艾莉丝", age="23", location="图书馆"（内容没有被<!--和-->包裹）
+   world: name="魔法学院", time="下午", atmosphere="安静"
+   interaction: npc0.姓名="马克教授", npc0.关系="导师", npc0.态度="友善"
    </infobar_data>
 
 5. **🚨 关键输出位置要求 🚨**：
@@ -3356,11 +3546,16 @@ infobar_data标签（独立输出，必须后输出）
                     const hasNpcPrefix = npcPrefixPattern.test(fieldsStr);
 
                     if (!hasNpcPrefix) {
-                        // 🚨 严重错误：没有使用NPC前缀
-                        interactionErrors.push(`interaction面板必须使用NPC前缀格式！`);
-                        interactionErrors.push(`当前格式: ${fieldsStr}`);
-                        interactionErrors.push(`正确格式: npc0.姓名="NPC名称", npc0.关系="关系", npc0.态度="态度"`);
-                        interactionErrors.push(`错误格式: 姓名="NPC名称", 关系="关系", 态度="态度"`);
+                        // 🚨🚨🚨 CRITICAL ERROR：直接拒绝错误格式
+                        const errorMsg = `🚨🚨🚨 CRITICAL FORMAT ERROR: interaction面板必须使用NPC前缀格式！
+❌ 当前错误格式: ${fieldsStr}
+✅ 正确格式示例: npc0.name="江琳", npc0.type="朋友", npc0.status="开心"
+🚨 系统已完全移除兼容性处理！AI必须输出正确格式！`;
+
+                        console.error('[SmartPromptSystem] 🚨 CRITICAL FORMAT ERROR:', errorMsg);
+
+                        // 🔥 激进措施：直接抛出错误，阻止继续处理
+                        throw new Error(errorMsg);
                     } else {
                         console.log('[SmartPromptSystem] ✅ interaction面板使用了正确的NPC前缀格式');
                     }

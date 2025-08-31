@@ -870,13 +870,27 @@ export class DataSnapshotManager {
                 return bestSnapshot.messageFloor;
             }
 
-            // 🔧 策略3: 如果没有找到合适的快照，回溯到最早的快照
-            const earliestSnapshot = chatSnapshots
-                .sort((a, b) => a.messageFloor - b.messageFloor)[0];
+            // 🔧 策略3: 如果没有找到合适的快照，检查是否有更早的快照（楼层号更小）
+            const earlierSnapshots = chatSnapshots
+                .filter(snapshot => snapshot.messageFloor < currentFloor)
+                .sort((a, b) => b.messageFloor - a.messageFloor); // 降序排列，优先选择最接近的
 
-            if (earliestSnapshot) {
-                console.log('[DataSnapshotManager] ⚠️ 使用最早的快照作为回溯目标:', earliestSnapshot.messageFloor);
-                return earliestSnapshot.messageFloor;
+            if (earlierSnapshots.length > 0) {
+                const bestEarlierSnapshot = earlierSnapshots[0];
+                console.log('[DataSnapshotManager] ✅ 找到更早的快照作为回溯目标:', bestEarlierSnapshot.messageFloor);
+                return bestEarlierSnapshot.messageFloor;
+            }
+
+            // 🔧 策略4: 如果没有更早的快照，但有更晚的快照，说明数据状态异常
+            const laterSnapshots = chatSnapshots
+                .filter(snapshot => snapshot.messageFloor > currentFloor);
+
+            if (laterSnapshots.length > 0) {
+                console.warn('[DataSnapshotManager] ⚠️ 检测到异常：只有更晚的快照存在，可能是楼层计算错误');
+                console.warn('[DataSnapshotManager] ⚠️ 当前楼层:', currentFloor, '可用快照楼层:', chatSnapshots.map(s => s.messageFloor));
+                // 在这种异常情况下，不进行回溯，避免数据混乱
+                console.log('[DataSnapshotManager] 🚫 跳过回溯以避免数据混乱');
+                return currentFloor; // 返回当前楼层，不进行回溯
             }
 
             // 🔧 策略4: 最后的降级方案

@@ -197,8 +197,9 @@ export class XMLDataParser {
             // 验证和清理数据
             const validatedData = this.validateAndCleanData(parsedData);
 
-            // 🔧 新增：检测并修复交互面板的NPC信息混合问题
-            const fixedData = this.fixNpcDataMixing(validatedData);
+            // 🚨 移除兼容性处理：不再自动修复错误格式，让AI学会输出正确格式
+            // const fixedData = this.fixNpcDataMixing(validatedData);
+            const fixedData = validatedData; // 直接使用验证后的数据，不进行格式修复
 
             this.parseStats.successfulParsed++;
             this.parseStats.lastParseTime = Date.now();

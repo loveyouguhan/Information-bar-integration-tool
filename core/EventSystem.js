@@ -886,31 +886,80 @@ export class EventSystem {
                 }
             }
             
-            // 策略3：尝试从聊天数组末尾推断（最后删除的消息）
+            // 策略3：智能推断被删除的消息类型
             if (!deletedMessageInfo && chat.length > 0) {
-                detectionStrategy = 'last_message_fallback';
-                console.log('[EventSystem] 🔍 调试：策略3 - 末尾推断，检查最后几条消息');
-                
-                // 检查最后3条消息，看是否能找到合理的删除目标
-                for (let i = Math.max(0, chat.length - 3); i < chat.length; i++) {
+                detectionStrategy = 'smart_inference';
+                console.log('[EventSystem] 🔍 调试：策略3 - 智能推断，分析消息模式');
+
+                // 检查最后几条消息的模式
+                const recentMessages = [];
+                for (let i = Math.max(0, chat.length - 5); i < chat.length; i++) {
                     const message = chat[i];
+                    recentMessages.push({
+                        index: i,
+                        is_user: message?.is_user,
+                        hasInfobar: message?.mes?.includes('<infobar_data>') || false,
+                        preview: message?.mes?.substring(0, 30) + '...'
+                    });
                     console.log('[EventSystem] 🔍 调试：检查消息', i, ':', {
                         is_user: message?.is_user,
+                        hasInfobar: message?.mes?.includes('<infobar_data>') || false,
                         mes: message?.mes?.substring(0, 30) + '...'
                     });
                 }
-                
-                // 默认选择最后一条消息
-                const lastIndex = chat.length - 1;
-                const lastMessage = chat[lastIndex];
-                
-                deletedMessageInfo = {
-                    index: lastIndex,
-                    isUser: lastMessage?.is_user || false,
-                    message: lastMessage
-                };
-                
-                console.log('[EventSystem] 🔍 调试：使用最后一条消息作为删除目标:', deletedMessageInfo);
+
+                // 🔧 修复：智能推断被删除消息的类型
+                let inferredDeletedMessage = null;
+
+                // 优先级1：如果最后一条是用户消息，很可能删除的是AI消息（重新生成场景）
+                if (chat.length > 0) {
+                    const lastMessage = chat[chat.length - 1];
+                    if (lastMessage?.is_user) {
+                        console.log('[EventSystem] 🧠 推断：最后一条是用户消息，可能删除的是AI消息（重新生成场景）');
+                        inferredDeletedMessage = {
+                            index: chat.length, // 被删除的AI消息原本应该在这个位置
+                            isUser: false, // 推断为AI消息
+                            message: null, // 已被删除，无法获取原消息
+                            inference: 'ai_message_after_user'
+                        };
+                    } else {
+                        console.log('[EventSystem] 🧠 推断：最后一条是AI消息，可能删除的也是AI消息（编辑/删除场景）');
+                        inferredDeletedMessage = {
+                            index: chat.length, // 被删除的消息原本在末尾
+                            isUser: false, // 推断为AI消息
+                            message: null,
+                            inference: 'ai_message_deletion'
+                        };
+                    }
+                }
+
+                // 优先级2：查找最近的AI消息模式
+                if (!inferredDeletedMessage) {
+                    const lastAIMessageIndex = recentMessages.findLastIndex(msg => !msg.is_user);
+                    if (lastAIMessageIndex !== -1) {
+                        console.log('[EventSystem] 🧠 推断：基于最近的AI消息模式');
+                        inferredDeletedMessage = {
+                            index: recentMessages[lastAIMessageIndex].index,
+                            isUser: false,
+                            message: chat[recentMessages[lastAIMessageIndex].index],
+                            inference: 'recent_ai_pattern'
+                        };
+                    }
+                }
+
+                // 优先级3：默认推断为AI消息（因为用户消息删除通常不需要数据回溯）
+                if (!inferredDeletedMessage) {
+                    console.log('[EventSystem] 🧠 推断：默认推断为AI消息删除');
+                    inferredDeletedMessage = {
+                        index: -1,
+                        isUser: false, // 默认推断为AI消息
+                        message: null,
+                        inference: 'default_ai_assumption'
+                    };
+                }
+
+                deletedMessageInfo = inferredDeletedMessage;
+                console.log('[EventSystem] 🔍 调试：智能推断结果:', deletedMessageInfo);
             }
 
             console.log('[EventSystem] 🔍 调试：检测策略:', detectionStrategy);
@@ -926,7 +975,8 @@ export class EventSystem {
                 index: deletedMessageInfo.index,
                 isUser: deletedMessageInfo.isUser,
                 messageType: deletedMessageInfo.isUser ? '用户消息' : 'AI消息',
-                detectionStrategy: detectionStrategy
+                detectionStrategy: detectionStrategy,
+                inference: deletedMessageInfo.inference || 'none'
             });
 
             // 🔧 新增：只有在删除AI消息时才进行数据回溯
