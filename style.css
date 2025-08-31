@@ -7204,7 +7204,10 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     animation: fadeIn 0.3s ease;
 }
 
-.popup-content {
+/* 🔧 修复：限制popup-content样式仅应用于信息栏相关弹窗，避免影响SillyTavern原生弹窗 */
+.infobar-popup .popup-content,
+.panel-popup .popup-content,
+.demo-popup .popup-content {
     background: var(--theme-bg-primary, #ffffff);
     border-radius: 16px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -7215,7 +7218,10 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     animation: slideUp 0.4s ease;
 }
 
-.popup-header {
+/* 🔧 修复：限制popup-header样式仅应用于信息栏相关弹窗 */
+.infobar-popup .popup-header,
+.panel-popup .popup-header,
+.demo-popup .popup-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -7224,14 +7230,20 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     border-bottom: 1px solid var(--theme-border-color, #dee2e6);
 }
 
-.popup-header h3 {
+/* 🔧 修复：限制popup-header h3样式仅应用于信息栏相关弹窗 */
+.infobar-popup .popup-header h3,
+.panel-popup .popup-header h3,
+.demo-popup .popup-header h3 {
     margin: 0;
     color: var(--theme-text-primary, #212529);
     font-size: 18px;
     font-weight: 600;
 }
 
-.popup-close-btn {
+/* 🔧 修复：限制popup-close-btn样式仅应用于信息栏相关弹窗 */
+.infobar-popup .popup-close-btn,
+.panel-popup .popup-close-btn,
+.demo-popup .popup-close-btn {
     background: none;
     border: none;
     font-size: 24px;
@@ -7247,12 +7259,18 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     justify-content: center;
 }
 
-.popup-close-btn:hover {
+/* 🔧 修复：限制popup-close-btn:hover样式仅应用于信息栏相关弹窗 */
+.infobar-popup .popup-close-btn:hover,
+.panel-popup .popup-close-btn:hover,
+.demo-popup .popup-close-btn:hover {
     color: var(--theme-text-primary, #212529);
     background: var(--theme-bg-hover, #e9ecef);
 }
 
-.popup-body {
+/* 🔧 修复：限制popup-body样式仅应用于信息栏相关弹窗 */
+.infobar-popup .popup-body,
+.panel-popup .popup-body,
+.demo-popup .popup-body {
     padding: 16px; /* 🔧 减少内边距，从24px改为16px */
     max-height: 60vh;
     overflow-y: auto;
@@ -7337,16 +7355,24 @@ body .infobar-modal-new .nav-item[data-custom="true"],
         max-width: 90vw;
     }
 
-    .popup-content {
+    /* 🔧 修复：限制popup-content样式仅应用于信息栏相关弹窗 */
+    .infobar-popup .popup-content,
+    .panel-popup .popup-content,
+    .demo-popup .popup-content {
         width: 95%;
         max-height: 85vh;
     }
 
-    .popup-header {
+    /* 🔧 修复：限制移动端popup样式仅应用于信息栏相关弹窗 */
+    .infobar-popup .popup-header,
+    .panel-popup .popup-header,
+    .demo-popup .popup-header {
         padding: 16px 20px;
     }
 
-    .popup-body {
+    .infobar-popup .popup-body,
+    .panel-popup .popup-body,
+    .demo-popup .popup-body {
         padding: 12px; /* 🔧 移动端也减少内边距 */
     }
 
