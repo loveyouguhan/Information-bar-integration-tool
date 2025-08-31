@@ -4733,6 +4733,7 @@ export class InfoBarSettings {
                         <select id="api-provider" name="apiConfig.provider">
                             <option value="">请选择提供商</option>
                             <option value="gemini">Google Gemini</option>
+                            <option value="localproxy">本地反代 (SillyTavern后端)</option>
                             <option value="custom">自定义API</option>
                         </select>
                         <small>选择您要使用的AI模型提供商</small>
@@ -14577,6 +14578,7 @@ export class InfoBarSettings {
                 // Gemini原生接口
                 models = await this.loadGeminiNativeModels(baseUrl, apiKey);
             } else if ((provider === 'gemini' && interfaceType === 'openai-compatible') ||
+                       (provider === 'localproxy' && interfaceType === 'openai-compatible') ||
                        (provider === 'custom' && interfaceType === 'openai-compatible')) {
                 // OpenAI兼容接口
                 models = await this.loadOpenAICompatibleModels(baseUrl, apiKey, provider);
@@ -14691,6 +14693,94 @@ export class InfoBarSettings {
     }
 
     /**
+     * 加载本地反代模型 (通过SillyTavern后端)
+     */
+    async loadLocalProxyModels(baseUrl, apiKey) {
+        try {
+            console.log('[InfoBarSettings] 🔄 通过SillyTavern后端加载本地反代模型...');
+
+            // 获取CSRF令牌
+            const csrfResponse = await fetch('/csrf-token');
+            const csrfData = await csrfResponse.json();
+            const csrfToken = csrfData.token;
+
+            // 构建状态检查请求
+            const statusUrl = `${window.location.origin}/api/backends/chat-completions/status`;
+            const requestBody = {
+                reverse_proxy: baseUrl,
+                proxy_password: apiKey,
+                chat_completion_source: "custom",
+                custom_url: baseUrl,
+                custom_include_headers: ""
+            };
+
+            console.log('[InfoBarSettings] 📊 本地反代状态检查:', {
+                statusUrl,
+                reverseProxy: baseUrl,
+                hasPassword: !!apiKey
+            });
+
+            const response = await fetch(statusUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                throw new Error(`本地反代状态检查失败: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log('[InfoBarSettings] 📊 本地反代状态响应:', data);
+
+            // 解析模型列表
+            let models = [];
+            if (data.data && Array.isArray(data.data)) {
+                models = data.data.map(model => ({
+                    id: model.id || model.model || 'unknown',
+                    name: model.id || model.model || model.name || 'Unknown Model',
+                    description: model.description || `本地反代模型: ${model.id || model.model}`
+                }));
+            } else if (data.models && Array.isArray(data.models)) {
+                models = data.models.map(model => ({
+                    id: model.id || model.model || model.name || 'unknown',
+                    name: model.name || model.id || model.model || 'Unknown Model',
+                    description: model.description || `本地反代模型: ${model.id}`
+                }));
+            } else {
+                // 提供默认模型列表
+                console.log('[InfoBarSettings] ⚠️ 未获取到模型列表，使用默认模型');
+                models = [
+                    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: '本地反代默认模型' },
+                    { id: 'gpt-4', name: 'GPT-4', description: '本地反代高级模型' },
+                    { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', description: '本地反代Claude模型' }
+                ];
+            }
+
+            console.log(`[InfoBarSettings] ✅ 成功加载 ${models.length} 个本地反代模型`);
+            return models;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载本地反代模型失败:', error);
+
+            // 提供降级模型列表
+            const fallbackModels = [
+                { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo (降级)', description: '连接失败时的默认模型' },
+                { id: 'gpt-4', name: 'GPT-4 (降级)', description: '连接失败时的默认模型' },
+                { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet (降级)', description: '连接失败时的默认模型' }
+            ];
+
+            const enhancedError = new Error(`${error.message} - 已提供降级模型列表`);
+            enhancedError.fallbackModels = fallbackModels;
+            enhancedError.originalError = error;
+            throw enhancedError;
+        }
+    }
+
+    /**
      * 加载OpenAI兼容接口模型
      */
     async loadOpenAICompatibleModels(baseUrl, apiKey, provider) {
@@ -14707,6 +14797,10 @@ export class InfoBarSettings {
                 'Authorization': `Bearer ${apiKey}`,
                 'User-Agent': 'SillyTavern-InfoBar/1.0'
             };
+        } else if (provider === 'localproxy') {
+            // 本地反代接口 - 使用SillyTavern后端代理
+            console.log('[InfoBarSettings] 🔄 使用本地反代模式加载模型...');
+            return await this.loadLocalProxyModels(baseUrl, apiKey);
         } else {
             // 自定义OpenAI兼容接口
             modelsUrl = `${baseUrl}/models`;
@@ -14946,6 +15040,15 @@ export class InfoBarSettings {
                 <option value="native">Gemini原生接口</option>
                 <option value="openai-compatible">OpenAI兼容接口</option>
             `;
+        } else if (provider === 'localproxy') {
+            // 本地反代提供商的接口类型
+            interfaceTypeSelect.innerHTML = `
+                <option value="">请选择接口类型</option>
+                <option value="openai-compatible">OpenAI兼容接口</option>
+            `;
+            // 设置默认端点
+            baseUrlInput.value = 'http://127.0.0.1:7861/v1';
+            baseUrlInput.placeholder = 'http://127.0.0.1:7861/v1';
         } else if (provider === 'custom') {
             // 自定义提供商的接口类型
             interfaceTypeSelect.innerHTML = `
@@ -14973,11 +15076,92 @@ export class InfoBarSettings {
             } else if (interfaceType === 'openai-compatible') {
                 baseUrlInput.value = 'https://generativelanguage.googleapis.com/v1beta/openai';
             }
+        } else if (provider === 'localproxy') {
+            if (interfaceType === 'openai-compatible') {
+                baseUrlInput.value = 'http://127.0.0.1:7861/v1';
+                baseUrlInput.placeholder = 'http://127.0.0.1:7861/v1';
+            }
         } else if (provider === 'custom') {
             if (interfaceType === 'openai-compatible') {
                 baseUrlInput.value = '';
                 baseUrlInput.placeholder = 'https://your-api.com/v1';
             }
+        }
+    }
+
+    /**
+     * 测试本地反代连接 (通过SillyTavern后端)
+     */
+    async testLocalProxyConnection(baseUrl, apiKey, connectionStatus) {
+        try {
+            console.log('[InfoBarSettings] 🔄 测试本地反代连接...');
+
+            // 获取CSRF令牌
+            const csrfResponse = await fetch('/csrf-token');
+            const csrfData = await csrfResponse.json();
+            const csrfToken = csrfData.token;
+
+            // 构建状态检查请求
+            const statusUrl = `${window.location.origin}/api/backends/chat-completions/status`;
+            const requestBody = {
+                reverse_proxy: baseUrl,
+                proxy_password: apiKey,
+                chat_completion_source: "custom",
+                custom_url: baseUrl,
+                custom_include_headers: ""
+            };
+
+            console.log('[InfoBarSettings] 📊 本地反代连接测试:', {
+                statusUrl,
+                reverseProxy: baseUrl,
+                hasPassword: !!apiKey
+            });
+
+            const response = await fetch(statusUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                throw new Error(`本地反代连接测试失败: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log('[InfoBarSettings] 📊 本地反代连接测试响应:', data);
+
+            // 检查是否有错误
+            if (data.error) {
+                throw new Error(`本地反代错误: ${data.error.message || data.error}`);
+            }
+
+            // 连接成功
+            if (connectionStatus) {
+                connectionStatus.textContent = '✅ 本地反代连接成功';
+                connectionStatus.style.color = '#10b981';
+            }
+
+            let modelCount = 0;
+            if (data.data && Array.isArray(data.data)) {
+                modelCount = data.data.length;
+            } else if (data.models && Array.isArray(data.models)) {
+                modelCount = data.models.length;
+            }
+
+            this.showNotification(`本地反代连接测试成功！检测到 ${modelCount} 个可用模型`, 'success');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 本地反代连接测试失败:', error);
+
+            if (connectionStatus) {
+                connectionStatus.textContent = '❌ 本地反代连接失败';
+                connectionStatus.style.color = '#ef4444';
+            }
+
+            throw new Error(`本地反代连接测试失败: ${error.message}`);
         }
     }
 
@@ -15007,12 +15191,19 @@ export class InfoBarSettings {
             }
 
             // 执行连接测试
+            if (provider === 'localproxy') {
+                // 本地反代使用专用的测试逻辑
+                console.log('[InfoBarSettings] 🔄 使用本地反代专用测试逻辑...');
+                await this.testLocalProxyConnection(baseUrl, apiKey, connectionStatus);
+                return;
+            }
+
             let testUrl;
             let headers;
 
             if (provider === 'gemini' && interfaceType === 'native') {
                 testUrl = `${baseUrl}/v1beta/models?key=${apiKey}`;
-                headers = { 
+                headers = {
                     'Content-Type': 'application/json',
                     'User-Agent': 'SillyTavern-InfoBar/1.0'
                 };
@@ -15686,30 +15877,9 @@ export class InfoBarSettings {
 
             console.log('[InfoBarSettings] 📝 剧情内容长度:', plotContent.length);
 
-            // 使用完整的SmartPromptSystem生成智能提示词
-            let smartPrompt = '';
-            try {
-                const infoBarExtension = window.SillyTavernInfobar;
-                if (infoBarExtension && infoBarExtension.smartPromptSystem) {
-                    console.log('[InfoBarSettings] 🔄 使用SmartPromptSystem生成自定义API智能提示词');
-
-                    // 直接调用SmartPromptSystem的generateSmartPrompt方法
-                    // 由于我们只拦截了注入流程，生成功能仍然完整
-                    smartPrompt = await infoBarExtension.smartPromptSystem.generateSmartPrompt();
-
-                    if (smartPrompt) {
-                        console.log('[InfoBarSettings] ✅ 自定义API智能提示词生成完成，长度:', smartPrompt.length);
-                    }
-                }
-            } catch (error) {
-                console.warn('[InfoBarSettings] ⚠️ 生成智能提示词失败，使用备用方案:', error);
-            }
-
-            // 如果智能提示词生成失败，使用备用系统提示词
-            if (!smartPrompt) {
-                console.log('[InfoBarSettings] 📝 使用备用系统提示词');
-                smartPrompt = this.getBackupSystemPrompt();
-            }
+            // 🔧 修复：移除重复的智能提示词处理
+            // 智能提示词会在enhanceMessagesWithSystemPrompt()中统一处理
+            console.log('[InfoBarSettings] ✅ 智能提示词将在消息增强阶段统一处理');
 
             // 🔧 修复：正确调用变量系统提示词生成方法
             let variablePrompt = '';
@@ -15742,8 +15912,8 @@ export class InfoBarSettings {
                 }
             }
 
-            // 构建完整的系统提示词
-            let fullSystemPrompt = smartPrompt;
+            // 🔧 修复：智能提示词现在在消息增强阶段处理，这里不再需要
+            let fullSystemPrompt = '';
             
             // 🔧 修复：手动处理变量替换，然后添加变量系统读取提示词
             if (variablePrompt) {
@@ -15782,7 +15952,7 @@ export class InfoBarSettings {
             console.log('[InfoBarSettings] 📊 请求详情:', {
                 messagesCount: messages.length,
                 systemPromptLength: fullSystemPrompt.length,
-                smartPromptLength: smartPrompt.length,
+
                 variablePromptLength: variablePrompt.length,
                 worldBookLength: worldBookContent.length,
                 userPromptLength: plotContent.length,
@@ -16871,22 +17041,38 @@ export class InfoBarSettings {
      * 获取备用系统提示词
      */
     getBackupSystemPrompt() {
-        return `你是一个专业的信息栏数据生成助手。请根据用户提供的剧情内容，生成结构化的信息栏数据。
-请严格按照以下格式输出：
+        return `🔥🔥🔥🔥🔥 **CRITICAL: 绝对禁止表格格式！** 🔥🔥🔥🔥🔥
 
+❌❌❌ **SYSTEM WILL CRASH IF YOU USE TABLE FORMAT** ❌❌❌
+❌ **绝对禁止**: | 类别 | 内容 | ← TABLE = CRASH!
+❌ **绝对禁止**: ### **场景信息栏** ← MARKDOWN = CRASH!
+❌ **绝对禁止**: | :--- | :--- | ← ANY TABLE SYMBOL = CRASH!
+
+你是一个专业的信息栏数据生成助手。请根据用户提供的剧情内容，生成结构化的信息栏数据。
+
+🚨🚨🚨 **MANDATORY OUTPUT FORMAT - 强制输出格式** 🚨🚨🚨
+
+**必须按照以下顺序输出两个标签：**
+
+1. **FIRST**: <aiThinkProcess><!--五步分析思考--></aiThinkProcess>
+2. **SECOND**: <infobar_data><!--XML紧凑格式数据--></infobar_data>
+
+✅ **XML紧凑格式示例（唯一正确格式）**：
 <infobar_data>
 <!--
-personal: name="角色名", age="年龄", gender="性别", occupation="职业", status="状态", emotion="情绪"
+personal: name="角色名", age="年龄", gender="性别", occupation="职业", status="状态"
 world: time="时间", location="地点", weather="天气", season="季节"
-interaction: target="交互对象", relationship="关系", mood="心情", action="行动"
+interaction: npc0.name="交互对象", npc0.relationship="关系", npc0.mood="心情"
 -->
 </infobar_data>
 
-要求：
-1. 必须使用 <infobar_data> 标签包围
+🚨 **严格要求**：
+1. 必须先输出aiThinkProcess，再输出infobar_data
 2. 内容必须在 <!-- --> 注释中
-3. 每个字段都要填写具体内容，不能为空
-4. 基于剧情合理推断信息`;
+3. 必须使用XML紧凑格式：面板名: 字段="值", 字段="值"
+4. 绝对禁止使用表格格式 | 符号
+5. 绝对禁止使用### 标题格式
+6. interaction面板必须使用npc0.前缀格式`;
     }
 
     /**
@@ -16938,6 +17124,8 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             // 根据提供商和接口类型发送请求
             if (apiConfig.provider === 'gemini' && apiConfig.format === 'native') {
                 return await this.sendGeminiNativeRequest(enhancedMessages, apiConfig);
+            } else if (apiConfig.provider === 'localproxy') {
+                return await this.sendLocalProxyRequest(enhancedMessages, apiConfig);
             } else {
                 return await this.sendOpenAICompatibleRequest(enhancedMessages, apiConfig);
             }
@@ -16977,6 +17165,20 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
                 console.log('[InfoBarSettings] 🔧 已添加新的系统消息');
             }
 
+            // 🔧 新增：在用户消息末尾添加格式提醒，确保输出正确格式
+            const lastUserMessageIndex = messages.map(msg => msg.role).lastIndexOf('user');
+            if (lastUserMessageIndex !== -1) {
+                const formatReminder = `
+
+🚨🚨🚨 **CRITICAL REMINDER: 必须输出以下两个标签** 🚨🚨🚨
+1. <aiThinkProcess><!--五步分析思考--></aiThinkProcess>  
+2. <infobar_data><!--面板数据--></infobar_data>
+⚠️ **严禁颠倒顺序！严禁内容不被注释符号包裹！**`;
+                
+                messages[lastUserMessageIndex].content += formatReminder;
+                console.log('[InfoBarSettings] 🔥 已在用户消息末尾添加格式提醒');
+            }
+
             console.log('[InfoBarSettings] ✅ 系统提示词增强完成，消息数量:', messages.length);
             return messages;
 
@@ -17001,8 +17203,14 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
             // 获取当前数据状态（用于增量更新判断）
             const currentDataInfo = await this.getCurrentDataInfo();
 
-            // 构建完整的系统提示词
-            const systemPrompt = `🚨【信息栏数据格式规范 - 自定义API专用】🚨
+            // 🔧 重要修复：确保智能提示词被强化置于系统消息最前面
+            console.log('[InfoBarSettings] 🔥 已将强化格式约束置于系统消息最前面');
+            console.log('[InfoBarSettings] 🧠 智能提示词即将注入，长度:', enabledPanelsInfo.length);
+            
+            // 构建完整的系统提示词，智能提示词放在最前面
+            const systemPrompt = `${enabledPanelsInfo}
+
+🚨【信息栏数据格式规范 - 自定义API专用】🚨
 
 🌟 **重要说明：您正在使用自定义API模式处理信息栏数据** 🌟
 
@@ -17028,7 +17236,7 @@ interaction: target="交互对象", relationship="关系", mood="心情", action
 <infobar_data>
 <!--
 [根据上述五步分析，输出具体的面板数据，使用XML紧凑格式]
-${enabledPanelsInfo}
+[面板数据基于上方的智能提示词模板生成]
 -->
 </infobar_data>
 
@@ -17058,20 +17266,29 @@ ${currentDataInfo}
 
 <infobar_data>
 <!--
-personal: name="张三", age="25", occupation="程序员"
-world: name="现代都市", type="都市", time="2024年"
-tasks: creation="新任务创建", editing="任务编辑中"
+personal: name="张三", age="25", occupation="程序员", location="办公室", status="工作中"
+world: name="现代都市", type="都市", time="2024年", location="办公大楼"
+interaction: npc0.name="李文静", npc0.type="同事", npc0.status="友好", npc0.relationship="合作伙伴", npc0.activity="讨论项目"
+tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
 -->
 </infobar_data>
+
+🚨🚨🚨 **CRITICAL: interaction面板NPC前缀格式强制要求** 🚨🚨🚨
+🔴 **如果输出interaction面板，必须使用npc0.前缀格式！**
+🔴 **错误格式将导致系统完全拒绝，不会有任何兼容性处理！**
+🔴 **正确: interaction: npc0.name="江琳", npc0.type="朋友"**
+🔴 **错误: interaction: name="江琳", type="朋友" ← 系统拒绝！**
 
 ⚠️ **严禁格式错误**：
 ❌ 错误：<aiThinkProcess>内容不被注释包裹</aiThinkProcess>
 ❌ 错误：先输出infobar_data再输出aiThinkProcess
 ❌ 错误：使用英文内容或占位符
+❌ 错误：interaction面板不使用npc前缀 ← 系统崩溃！
 
 ✅ **必须使用中文进行思考和数据生成**
 ✅ **必须基于具体剧情生成真实数据**
-✅ **必须遵循上述输出顺序和格式要求**`;
+✅ **必须遵循上述输出顺序和格式要求**
+✅ **interaction面板必须使用npc0.前缀格式**`;
 
             console.log('[InfoBarSettings] ✅ 自定义API系统提示词生成完成');
             return systemPrompt;
@@ -17084,38 +17301,43 @@ tasks: creation="新任务创建", editing="任务编辑中"
     }
 
     /**
-     * 🔧 新增：获取启用面板信息（用于系统提示词）
+     * 🔧 修复：获取完整的智能提示词（用于系统提示词）
      */
     async getEnabledPanelsInfo() {
         try {
-            // 获取SmartPromptSystem来获取启用面板信息
+            console.log('[InfoBarSettings] 🧠 获取完整的智能提示词...');
+
+            // 🚨 关键修复：直接调用SmartPromptSystem的generateSmartPrompt方法
+            // 这样可以获取完整的智能提示词，而不是简短的面板概述
             const smartPromptSystem = window.SillyTavernInfobar?.modules?.smartPromptSystem;
             if (!smartPromptSystem) {
+                console.warn('[InfoBarSettings] ⚠️ SmartPromptSystem不可用');
                 return '请根据用户设置的面板生成对应数据';
             }
 
-            const enabledPanels = await smartPromptSystem.getEnabledPanels();
-            if (!enabledPanels || enabledPanels.length === 0) {
-                return '没有启用的面板';
+            // 检查SmartPromptSystem是否已初始化
+            if (!smartPromptSystem.initialized) {
+                console.warn('[InfoBarSettings] ⚠️ SmartPromptSystem未初始化');
+                return '请根据用户设置的面板生成对应数据';
             }
 
-            let panelInfo = `当前启用的面板 (${enabledPanels.length}个)：\n`;
+            // 🚀 关键：调用generateSmartPrompt获取完整的智能提示词
+            const fullSmartPrompt = await smartPromptSystem.generateSmartPrompt();
+            if (!fullSmartPrompt || fullSmartPrompt.length === 0) {
+                console.warn('[InfoBarSettings] ⚠️ SmartPromptSystem返回空的智能提示词');
+                return '请根据用户设置的面板生成对应数据';
+            }
+
+            console.log(`[InfoBarSettings] ✅ 成功获取完整智能提示词，长度: ${fullSmartPrompt.length} 字符`);
             
-            for (const panel of enabledPanels) {
-                const panelName = panel.name || panel.id;
-                const subItemCount = panel.subItems ? panel.subItems.length : 0;
-                panelInfo += `- ${panelName}面板 (${panel.id}): ${subItemCount}个字段\n`;
-                
-                if (panel.subItems && panel.subItems.length > 0) {
-                    const fieldList = panel.subItems.map(item => item.key || item.name).join(', ');
-                    panelInfo += `  字段: ${fieldList}\n`;
-                }
-            }
-
-            return panelInfo;
+            // 🔧 新增：强化智能提示词日志，确保可以看到智能提示词是否正确获取
+            console.log('[InfoBarSettings] 🧠 获取到智能提示词，长度:', fullSmartPrompt.length);
+            console.log('[InfoBarSettings] 🧠 智能提示词前200字符预览:', fullSmartPrompt.substring(0, 200));
+            
+            return fullSmartPrompt;
 
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 获取启用面板信息失败:', error);
+            console.error('[InfoBarSettings] ❌ 获取完整智能提示词失败:', error);
             return '请根据用户设置的面板生成对应数据';
         }
     }
@@ -17180,6 +17402,201 @@ tasks: creation="新任务创建", editing="任务编辑中"
 - 避免使用占位符，生成具体内容
 
 **严禁颠倒输出顺序或省略任何标签**`;
+    }
+
+    /**
+     * 获取SmartPromptSystem的智能提示词
+     */
+    async getSmartPromptSystemPrompt() {
+        try {
+            console.log('[InfoBarSettings] 🧠 获取SmartPromptSystem智能提示词...');
+
+            // 获取SmartPromptSystem实例
+            const smartPromptSystem = window.SillyTavernInfobar?.modules?.smartPromptSystem;
+            if (!smartPromptSystem) {
+                console.warn('[InfoBarSettings] ⚠️ SmartPromptSystem未找到');
+                return '';
+            }
+
+            // 检查SmartPromptSystem是否已初始化
+            if (!smartPromptSystem.initialized) {
+                console.warn('[InfoBarSettings] ⚠️ SmartPromptSystem未初始化');
+                return '';
+            }
+
+            // 生成智能提示词
+            const smartPrompt = await smartPromptSystem.generateSmartPrompt();
+            if (!smartPrompt || smartPrompt.length === 0) {
+                console.log('[InfoBarSettings] 📝 SmartPromptSystem返回空提示词');
+                return '';
+            }
+
+            console.log('[InfoBarSettings] ✅ 成功获取智能提示词，长度:', smartPrompt.length);
+            return smartPrompt;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取智能提示词失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 发送本地反代请求 (通过SillyTavern后端)
+     */
+    async sendLocalProxyRequest(messages, apiConfig) {
+        try {
+            console.log('[InfoBarSettings] 🚀 发送本地反代请求...');
+
+            // 🚨 重要修复：本地反代不需要重复添加智能提示词！
+            // 因为消息已经通过enhanceMessagesWithSystemPrompt方法添加了正确的系统提示词
+            console.log('[InfoBarSettings] ℹ️ 本地反代使用已增强的消息（包含系统提示词）');
+
+            // 获取CSRF令牌
+            const csrfResponse = await fetch('/csrf-token');
+            const csrfData = await csrfResponse.json();
+            const csrfToken = csrfData.token;
+
+            // 构建生成请求
+            const generateUrl = `${window.location.origin}/api/backends/chat-completions/generate`;
+            const requestBody = {
+                messages: messages,
+                model: apiConfig.model,
+                temperature: apiConfig.temperature || 0.7,
+                frequency_penalty: 0,
+                presence_penalty: 0.12,
+                top_p: 1.0,
+                max_tokens: apiConfig.maxTokens || 2000,
+                stream: false,
+                chat_completion_source: "custom",
+                custom_url: apiConfig.endpoint || apiConfig.baseUrl,
+                custom_include_headers: "",
+                group_names: [],
+                include_reasoning: false,
+                reasoning_effort: "medium",
+                enable_web_search: false,
+                request_images: false,
+                custom_prompt_post_processing: "strict",
+                reverse_proxy: apiConfig.endpoint || apiConfig.baseUrl,
+                proxy_password: apiConfig.apiKey
+            };
+
+            console.log('[InfoBarSettings] 📝 本地反代请求参数:', {
+                endpoint: generateUrl,
+                model: requestBody.model,
+                temperature: requestBody.temperature,
+                max_tokens: requestBody.max_tokens,
+                reverse_proxy: requestBody.reverse_proxy,
+                hasPassword: !!requestBody.proxy_password,
+                messagesCount: messages.length
+            });
+
+            const response = await fetch(generateUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            console.log('[InfoBarSettings] 📊 本地反代响应状态:', response.status);
+            
+            // 🔧 新增：检查响应头信息，帮助诊断长度问题
+            const contentLength = response.headers.get('content-length');
+            const contentType = response.headers.get('content-type');
+            console.log('[InfoBarSettings] 📊 响应头信息:', {
+                contentLength: contentLength,
+                contentType: contentType,
+                status: response.status,
+                statusText: response.statusText
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[InfoBarSettings] ❌ 本地反代请求失败:', response.status, errorText);
+                throw new Error(`本地反代API错误: ${response.status} ${response.statusText} - ${errorText}`);
+            }
+
+            // 🔧 增强响应处理：先获取原始文本，然后解析JSON
+            const rawResponseText = await response.text();
+            console.log('[InfoBarSettings] 📊 原始响应文本长度:', rawResponseText.length);
+            console.log('[InfoBarSettings] 📊 原始响应前500字符:', rawResponseText.substring(0, 500));
+            console.log('[InfoBarSettings] 📊 原始响应后500字符:', rawResponseText.substring(Math.max(0, rawResponseText.length - 500)));
+            
+            let data;
+            try {
+                data = JSON.parse(rawResponseText);
+                console.log('[InfoBarSettings] 📊 本地反代响应数据解析成功');
+            } catch (parseError) {
+                console.error('[InfoBarSettings] ❌ JSON解析失败:', parseError);
+                console.error('[InfoBarSettings] ❌ 原始响应内容:', rawResponseText);
+                throw new Error(`本地反代响应JSON解析失败: ${parseError.message}`);
+            }
+
+            // 检查是否有错误
+            if (data.error) {
+                console.error('[InfoBarSettings] ❌ 本地反代API错误:', data.error);
+                const errorMessage = data.error.message || data.error.toString() || '未知错误';
+                throw new Error(`本地反代API错误: ${errorMessage}`);
+            }
+
+            // 🔧 增强响应解析：更详细的内容提取和验证
+            console.log('[InfoBarSettings] 🔍 开始解析生成内容...');
+            console.log('[InfoBarSettings] 📊 响应数据结构:', {
+                hasChoices: !!data.choices,
+                choicesLength: data.choices?.length || 0,
+                firstChoice: data.choices?.[0] ? Object.keys(data.choices[0]) : 'none',
+                hasMessage: !!(data.choices?.[0]?.message),
+                messageKeys: data.choices?.[0]?.message ? Object.keys(data.choices[0].message) : 'none'
+            });
+            
+            // 解析响应 - 多种格式兼容
+            let generatedText = '';
+            
+            if (data.choices && Array.isArray(data.choices) && data.choices.length > 0) {
+                const choice = data.choices[0];
+                
+                if (choice.message && choice.message.content) {
+                    generatedText = choice.message.content;
+                    console.log('[InfoBarSettings] ✅ 使用message.content格式提取内容');
+                } else if (choice.text) {
+                    generatedText = choice.text;
+                    console.log('[InfoBarSettings] ✅ 使用text格式提取内容');
+                } else if (choice.content) {
+                    generatedText = choice.content;
+                    console.log('[InfoBarSettings] ✅ 使用content格式提取内容');
+                }
+            } else if (data.content) {
+                generatedText = data.content;
+                console.log('[InfoBarSettings] ✅ 使用直接content格式提取内容');
+            } else if (data.text) {
+                generatedText = data.text;
+                console.log('[InfoBarSettings] ✅ 使用直接text格式提取内容');
+            }
+
+            if (!generatedText || generatedText.trim().length === 0) {
+                console.error('[InfoBarSettings] ❌ 本地反代返回空内容');
+                console.error('[InfoBarSettings] ❌ 完整响应数据:', JSON.stringify(data, null, 2));
+                throw new Error('本地反代API返回空内容，可能是模型不可用或配置错误');
+            }
+
+            console.log(`[InfoBarSettings] ✅ 本地反代请求成功，生成内容长度: ${generatedText.length} 字符`);
+            console.log('[InfoBarSettings] 📊 生成内容前200字符预览:', generatedText.substring(0, 200));
+            console.log('[InfoBarSettings] 📊 生成内容后200字符预览:', generatedText.substring(Math.max(0, generatedText.length - 200)));
+
+            return {
+                success: true,
+                text: generatedText,
+                usage: data.usage
+            };
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 本地反代请求异常:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
     }
 
     /**
