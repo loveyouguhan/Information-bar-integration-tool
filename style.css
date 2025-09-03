@@ -9964,3 +9964,353 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 }
 
 /* ========== 自定义对话框样式结束 ========== */
+
+/* ========== 删除确认对话框样式 ========== */
+
+/* 删除确认对话框基础样式 */
+.delete-confirmation-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.delete-confirmation-dialog.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.delete-confirmation-dialog .dialog-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+.delete-confirmation-dialog .dialog-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    background: var(--theme-bg-primary, #ffffff);
+    border-radius: 12px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    min-width: 480px;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow: hidden;
+    border: 1px solid var(--theme-border-color, #e2e8f0);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.delete-confirmation-dialog.show .dialog-content {
+    transform: translate(-50%, -50%) scale(1);
+}
+
+/* 对话框头部 */
+.delete-confirmation-dialog .dialog-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--theme-border-color, #e2e8f0);
+    background: var(--theme-bg-secondary, #f7fafc);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.delete-confirmation-dialog .dialog-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--theme-danger-color, #e53e3e);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.delete-confirmation-dialog .dialog-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: var(--theme-text-secondary, #718096);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.delete-confirmation-dialog .dialog-close:hover {
+    background: var(--theme-bg-hover, #edf2f7);
+    color: var(--theme-text-primary, #2d3748);
+}
+
+/* 对话框主体 */
+.delete-confirmation-dialog .dialog-body {
+    padding: 24px;
+    overflow-y: auto;
+    max-height: 50vh;
+}
+
+.delete-confirmation-dialog .warning-message {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: var(--theme-warning-bg, #fffbeb);
+    border: 1px solid var(--theme-warning-border, #f6e05e);
+    border-radius: 8px;
+    color: var(--theme-warning-text, #744210);
+}
+
+.delete-confirmation-dialog .warning-message p {
+    margin: 0;
+    font-weight: 500;
+}
+
+/* 字段信息显示 */
+.delete-confirmation-dialog .field-info {
+    background: var(--theme-bg-secondary, #f7fafc);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    border: 1px solid var(--theme-border-color, #e2e8f0);
+}
+
+.delete-confirmation-dialog .info-row {
+    display: flex;
+    margin-bottom: 8px;
+}
+
+.delete-confirmation-dialog .info-row:last-child {
+    margin-bottom: 0;
+}
+
+.delete-confirmation-dialog .info-label {
+    font-weight: 600;
+    color: var(--theme-text-secondary, #718096);
+    min-width: 80px;
+    margin-right: 12px;
+}
+
+.delete-confirmation-dialog .info-value {
+    color: var(--theme-text-primary, #2d3748);
+    flex: 1;
+    word-break: break-word;
+}
+
+.delete-confirmation-dialog .info-value.current-value {
+    background: var(--theme-bg-primary, #ffffff);
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--theme-border-color, #e2e8f0);
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+/* 行数据预览 */
+.delete-confirmation-dialog .row-data-preview {
+    margin-bottom: 20px;
+}
+
+.delete-confirmation-dialog .row-data-preview h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--theme-text-primary, #2d3748);
+}
+
+.delete-confirmation-dialog .data-preview {
+    background: var(--theme-bg-secondary, #f7fafc);
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid var(--theme-border-color, #e2e8f0);
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.delete-confirmation-dialog .data-item {
+    display: flex;
+    margin-bottom: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--theme-border-light, #f1f5f9);
+}
+
+.delete-confirmation-dialog .data-item:last-child {
+    margin-bottom: 0;
+    border-bottom: none;
+}
+
+.delete-confirmation-dialog .data-key {
+    font-weight: 500;
+    color: var(--theme-text-secondary, #718096);
+    min-width: 100px;
+    margin-right: 12px;
+}
+
+.delete-confirmation-dialog .data-value {
+    color: var(--theme-text-primary, #2d3748);
+    flex: 1;
+    word-break: break-word;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+}
+
+.delete-confirmation-dialog .no-data {
+    text-align: center;
+    color: var(--theme-text-secondary, #718096);
+    font-style: italic;
+    margin: 20px 0;
+}
+
+/* 警告提示 */
+.delete-confirmation-dialog .warning-note {
+    padding: 16px;
+    background: var(--theme-error-bg, #fed7d7);
+    border: 1px solid var(--theme-error-border, #fc8181);
+    border-radius: 8px;
+    margin-bottom: 0;
+}
+
+.delete-confirmation-dialog .warning-note p {
+    margin: 0 0 8px 0;
+    color: var(--theme-error-text, #742a2a);
+    font-size: 14px;
+}
+
+.delete-confirmation-dialog .warning-note p:last-child {
+    margin-bottom: 0;
+}
+
+/* 对话框底部 */
+.delete-confirmation-dialog .dialog-footer {
+    padding: 16px 24px 20px;
+    border-top: 1px solid var(--theme-border-color, #e2e8f0);
+    background: var(--theme-bg-secondary, #f7fafc);
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.delete-confirmation-dialog .btn {
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    min-width: 100px;
+}
+
+.delete-confirmation-dialog .btn-secondary {
+    background: var(--theme-bg-primary, #ffffff);
+    color: var(--theme-text-primary, #2d3748);
+    border-color: var(--theme-border-color, #e2e8f0);
+}
+
+.delete-confirmation-dialog .btn-secondary:hover {
+    background: var(--theme-bg-hover, #edf2f7);
+    border-color: var(--theme-border-hover, #cbd5e0);
+}
+
+.delete-confirmation-dialog .btn-danger {
+    background: var(--theme-danger-color, #e53e3e);
+    color: #ffffff;
+    border-color: var(--theme-danger-color, #e53e3e);
+}
+
+.delete-confirmation-dialog .btn-danger:hover {
+    background: var(--theme-danger-hover, #c53030);
+    border-color: var(--theme-danger-hover, #c53030);
+}
+
+.delete-confirmation-dialog .btn-danger:disabled {
+    background: var(--theme-text-secondary, #718096);
+    border-color: var(--theme-text-secondary, #718096);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* 菜单分隔线样式 */
+.cell-action-menu .menu-separator {
+    height: 1px;
+    background: var(--theme-border-color, #e2e8f0);
+    margin: 8px 0;
+}
+
+/* 删除按钮特殊样式 */
+.cell-action-menu .delete-field-btn,
+.cell-action-menu .delete-row-btn {
+    color: var(--theme-danger-color, #e53e3e);
+}
+
+.cell-action-menu .delete-field-btn:hover,
+.cell-action-menu .delete-row-btn:hover {
+    background: var(--theme-danger-bg, #fed7d7);
+    color: var(--theme-danger-hover, #c53030);
+}
+
+/* 响应式设计 */
+@media (max-width: 600px) {
+    .delete-confirmation-dialog .dialog-content {
+        min-width: 90vw;
+        max-width: 90vw;
+        margin: 20px;
+    }
+    
+    .delete-confirmation-dialog .dialog-header,
+    .delete-confirmation-dialog .dialog-body,
+    .delete-confirmation-dialog .dialog-footer {
+        padding: 15px 20px;
+    }
+    
+    .delete-confirmation-dialog .dialog-footer {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .delete-confirmation-dialog .btn {
+        width: 100%;
+    }
+    
+    .delete-confirmation-dialog .info-row {
+        flex-direction: column;
+        gap: 4px;
+    }
+    
+    .delete-confirmation-dialog .info-label {
+        min-width: unset;
+        margin-right: 0;
+    }
+}
+
+/* 深色主题下的特殊调整 */
+[data-theme="dark"] .delete-confirmation-dialog {
+    --theme-bg-primary: #1a1a1a;
+    --theme-bg-secondary: #2d3748;
+    --theme-bg-hover: #4a5568;
+    --theme-text-primary: #ffffff;
+    --theme-text-secondary: #a0aec0;
+    --theme-border-color: #4a5568;
+    --theme-border-light: #2d3748;
+    --theme-border-hover: #718096;
+    --theme-danger-color: #fc8181;
+    --theme-danger-hover: #f56565;
+    --theme-danger-bg: #742a2a;
+    --theme-danger-border: #c53030;
+    --theme-warning-bg: #744210;
+    --theme-warning-border: #d69e2e;
+    --theme-warning-text: #fbd38d;
+    --theme-error-bg: #742a2a;
+    --theme-error-border: #c53030;
+    --theme-error-text: #fed7d7;
+}
+
+/* ========== 删除确认对话框样式结束 ========== */
