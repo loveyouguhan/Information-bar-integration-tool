@@ -5131,6 +5131,28 @@ export class InfoBarSettings {
                             </div>
                         </div>
 
+                        <!-- 🔧 新增：自动隐藏楼层设置 -->
+                        <div class="setting-row">
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-auto-hide-enabled" />
+                                    <span class="checkbox-text">启用自动隐藏已总结楼层</span>
+                                </label>
+                                <div class="setting-hint">自动隐藏已经总结过的楼层内容，减少界面混乱</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row" id="content-auto-hide-threshold-row" style="display: none;">
+                            <div class="setting-group">
+                                <label class="setting-label" for="content-auto-hide-threshold">保留最新楼层数</label>
+                                <div class="input-group">
+                                    <input type="number" id="content-auto-hide-threshold" min="10" max="200" value="30" />
+                                    <span class="input-unit">个楼层</span>
+                                </div>
+                                <div class="setting-hint">保留最新的N个楼层不隐藏</div>
+                            </div>
+                        </div>
+
                         <div class="setting-actions">
                             <button class="btn-primary" id="content-save-settings-btn">
                                 <span class="btn-icon">💾</span>
@@ -18146,6 +18168,18 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
                 summaryWordCount.value = settings.summaryWordCount || 300;
             }
 
+            // 🔧 新增：自动隐藏楼层设置
+            const autoHideEnabled = this.modal.querySelector('#content-auto-hide-enabled');
+            if (autoHideEnabled) {
+                autoHideEnabled.checked = settings.autoHideEnabled || false;
+                this.handleAutoHideEnabledChange(autoHideEnabled.checked);
+            }
+            
+            const autoHideThreshold = this.modal.querySelector('#content-auto-hide-threshold');
+            if (autoHideThreshold) {
+                autoHideThreshold.value = settings.autoHideThreshold || 30;
+            }
+
             console.log('[InfoBarSettings] ✅ 总结设置加载完成');
 
         } catch (error) {
@@ -18455,6 +18489,14 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
                 });
             }
 
+            // 🔧 新增：自动隐藏楼层复选框事件
+            const autoHideEnabledCheckbox = this.modal.querySelector('#content-auto-hide-enabled');
+            if (autoHideEnabledCheckbox) {
+                autoHideEnabledCheckbox.addEventListener('change', (e) => {
+                    this.handleAutoHideEnabledChange(e.target.checked);
+                });
+            }
+
             console.log('[InfoBarSettings] ✅ 总结面板事件绑定完成');
 
         } catch (error) {
@@ -18480,6 +18522,144 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理总结类型变化失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理自动隐藏启用状态变化
+     */
+    handleAutoHideEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🔄 自动隐藏楼层启用状态变化:', enabled);
+            
+            // 显示/隐藏阈值设置
+            const thresholdRow = this.modal.querySelector('#content-auto-hide-threshold-row');
+            if (thresholdRow) {
+                thresholdRow.style.display = enabled ? 'block' : 'none';
+            }
+            
+            // 如果启用了自动隐藏，立即检查是否需要隐藏楼层
+            if (enabled) {
+                this.checkAndExecuteAutoHide();
+            }
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理自动隐藏状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：检查并执行自动隐藏楼层
+     */
+    async checkAndExecuteAutoHide() {
+        try {
+            // 获取设置
+            const autoHideEnabled = this.modal?.querySelector('#content-auto-hide-enabled')?.checked || false;
+            const autoHideThreshold = parseInt(this.modal?.querySelector('#content-auto-hide-threshold')?.value) || 30;
+            
+            if (!autoHideEnabled) {
+                console.log('[InfoBarSettings] ⏸️ 自动隐藏未启用，跳过检查');
+                return;
+            }
+            
+            // 获取当前聊天消息数量
+            const chatLength = this.getChatLength();
+            if (chatLength <= autoHideThreshold) {
+                console.log('[InfoBarSettings] ℹ️ 聊天长度不足，无需隐藏楼层');
+                return;
+            }
+            
+            // 计算需要隐藏的范围：0到(总长度-阈值-1)
+            const hideUntilIndex = chatLength - autoHideThreshold - 1;
+            
+            if (hideUntilIndex > 0) {
+                console.log(`[InfoBarSettings] 🔄 执行自动隐藏：隐藏楼层 0-${hideUntilIndex}`);
+                await this.executeHideCommand(`/hide 0-${hideUntilIndex}`);
+            }
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 自动隐藏楼层失败:', error);
+        }
+    }
+    
+    /**
+     * 获取当前聊天的消息数量
+     */
+    getChatLength() {
+        try {
+            // 使用SillyTavern的getContext获取聊天数据
+            if (typeof getContext === 'function') {
+                const context = getContext();
+                return context?.chat?.length || 0;
+            }
+            
+            // 备用方法：通过DOM查询消息数量
+            const messages = document.querySelectorAll('#chat .mes');
+            return messages.length;
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取聊天长度失败:', error);
+            return 0;
+        }
+    }
+    
+    /**
+     * 执行隐藏命令
+     */
+    async executeHideCommand(command) {
+        try {
+            console.log('[InfoBarSettings] 📋 执行隐藏命令:', command);
+            
+            // 方法1: 尝试使用SillyTavern的斜杠命令解析器
+            if (typeof window.SlashCommandParser !== 'undefined') {
+                const parser = new window.SlashCommandParser();
+                const result = parser.parse(command, false);
+                
+                if (result && typeof result.execute === 'function') {
+                    await result.execute();
+                    console.log('[InfoBarSettings] ✅ 隐藏命令执行成功 (方法1)');
+                    return;
+                }
+            }
+            
+            // 方法2: 尝试直接在聊天输入框执行命令
+            const chatTextarea = document.getElementById('send_textarea');
+            if (chatTextarea) {
+                console.log('[InfoBarSettings] 🔄 尝试通过聊天输入框执行命令');
+                const originalValue = chatTextarea.value;
+                chatTextarea.value = command;
+                
+                // 触发输入事件
+                chatTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                
+                // 等待短暂时间后按回车
+                setTimeout(() => {
+                    chatTextarea.dispatchEvent(new KeyboardEvent('keydown', {
+                        key: 'Enter',
+                        bubbles: true
+                    }));
+                    
+                    // 恢复原始值
+                    setTimeout(() => {
+                        chatTextarea.value = originalValue;
+                    }, 100);
+                }, 100);
+                
+                console.log('[InfoBarSettings] ✅ 隐藏命令已通过聊天输入框发送');
+                return;
+            }
+            
+            // 方法3: 尝试使用SillyTavern的全局命令执行器
+            if (typeof window.executeSlashCommand === 'function') {
+                await window.executeSlashCommand(command);
+                console.log('[InfoBarSettings] ✅ 隐藏命令执行成功 (方法3)');
+                return;
+            }
+            
+            console.warn('[InfoBarSettings] ⚠️ 所有隐藏命令执行方法都失败');
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 执行隐藏命令失败:', error);
         }
     }
 
@@ -18616,7 +18796,10 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
             summaryFloorCount: 20,
             summaryType: 'small',
             summaryWordCount: 300,
-            injectSummaryEnabled: false  // 🔧 新增：注入总结设置
+            injectSummaryEnabled: false,  // 🔧 新增：注入总结设置
+            // 🔧 新增：自动隐藏楼层设置
+            autoHideEnabled: false,
+            autoHideThreshold: 30
         };
 
         try {
@@ -18644,6 +18827,17 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
             const injectSummaryEnabled = this.modal.querySelector('#content-inject-summary-enabled');
             if (injectSummaryEnabled) {
                 settings.injectSummaryEnabled = injectSummaryEnabled.checked;
+            }
+
+            // 🔧 新增：获取自动隐藏楼层设置
+            const autoHideEnabled = this.modal.querySelector('#content-auto-hide-enabled');
+            if (autoHideEnabled) {
+                settings.autoHideEnabled = autoHideEnabled.checked;
+            }
+            
+            const autoHideThreshold = this.modal.querySelector('#content-auto-hide-threshold');
+            if (autoHideThreshold) {
+                settings.autoHideThreshold = parseInt(autoHideThreshold.value) || 30;
             }
 
         } catch (error) {

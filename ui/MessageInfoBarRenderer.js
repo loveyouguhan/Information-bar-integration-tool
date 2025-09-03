@@ -1852,6 +1852,15 @@ export class MessageInfoBarRenderer {
                 return result;
             }
 
+            // 特殊处理组织架构面板
+            if (panelKey === 'organization') {
+                console.log('[MessageInfoBarRenderer] 🔍 开始渲染组织架构面板');
+                console.log('[MessageInfoBarRenderer] 🔍 组织面板数据:', filteredData);
+                const result = this.renderOrganizationPanel(filteredData, panelConfig, globalDefaultCollapsed);
+                console.log('[MessageInfoBarRenderer] 🔍 组织面板渲染结果长度:', result.length);
+                return result;
+            }
+
             // 获取面板信息
             const panelInfo = this.getPanelInfo(panelKey);
             const defaultCollapsed = globalDefaultCollapsed || panelConfig?.defaultCollapsed || false;
@@ -1983,6 +1992,92 @@ export class MessageInfoBarRenderer {
 
         } catch (error) {
             console.error('[MessageInfoBarRenderer] ❌ 渲染交互对象面板失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 渲染组织架构面板
+     */
+    renderOrganizationPanel(organizationData, panelConfig, globalDefaultCollapsed = false) {
+        try {
+            if (!organizationData || Object.keys(organizationData).length === 0) {
+                return '';
+            }
+
+            const defaultCollapsed = globalDefaultCollapsed || panelConfig?.defaultCollapsed || false;
+
+            let html = `
+                <div class="infobar-panel" data-panel="organization">
+                    <div class="infobar-panel-header">
+                        <div class="infobar-panel-title">
+                            <span class="infobar-panel-arrow">${defaultCollapsed ? '▶' : '▼'}</span>
+                            <i class="fa-solid fa-building"></i> 组织架构
+                        </div>
+                    </div>
+                    <div class="infobar-panel-content ${defaultCollapsed ? '' : 'expanded'}"
+                         style="display: ${defaultCollapsed ? 'none' : 'block'};">
+            `;
+
+            // 按组织分组数据
+            const orgGroups = this.groupOrgData(organizationData);
+            const orgList = Object.entries(orgGroups);
+
+            console.log('[MessageInfoBarRenderer] 🔍 组织分组结果:', orgGroups);
+            console.log('[MessageInfoBarRenderer] 🔍 组织列表长度:', orgList.length);
+
+            if (orgList.length > 0) {
+                // 添加组织选择器（始终显示）
+                console.log('[MessageInfoBarRenderer] ✅ 开始生成组织选择器');
+                html += '<div class="infobar-org-selector-wrapper">';
+                html += '<select class="infobar-org-selector">';
+
+                orgList.forEach(([orgId, orgData], index) => {
+                    const orgName = this.getOrgDisplayName(orgId, orgData);
+                    console.log(`[MessageInfoBarRenderer] 🔍 添加组织选项: ${orgId} -> ${orgName}`);
+                    html += `<option value="${orgId}" ${index === 0 ? 'selected' : ''}>${this.escapeHtml(orgName)}</option>`;
+                });
+
+                html += '</select></div>';
+                console.log('[MessageInfoBarRenderer] ✅ 组织选择器生成完成');
+
+                // 为每个组织创建详情面板
+                html += '<div class="infobar-org-details-container">';
+
+                orgList.forEach(([orgId, orgData], index) => {
+                    const displayStyle = index === 0 ? 'block' : 'none';
+                    html += `<div class="infobar-org-details" data-org-id="${orgId}" style="display: ${displayStyle};">`;
+
+                    Object.entries(orgData).forEach(([fieldName, value]) => {
+                        if (this.isValidDataValue(value)) {
+                            // 优先从面板配置中获取displayName
+                            let displayLabel = this.getFieldDisplayNameFromConfig('organization', fieldName, panelConfig);
+                            if (!displayLabel) {
+                                displayLabel = this.FIELD_LABELS[fieldName] || fieldName;
+                            }
+
+                            html += `
+                                <div class="infobar-item">
+                                    <span class="infobar-item-label">${this.escapeHtml(displayLabel)}:</span>
+                                    <span class="infobar-item-value">${this.escapeHtml(String(value))}</span>
+                                </div>
+                            `;
+                        }
+                    });
+
+                    html += `</div>`;
+                });
+
+                html += '</div>';
+            } else {
+                html += '<div class="infobar-item">暂无组织数据</div>';
+            }
+
+            html += `</div></div>`;
+            return html;
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 渲染组织架构面板失败:', error);
             return '';
         }
     }
@@ -3335,6 +3430,28 @@ export class MessageInfoBarRenderer {
                 });
             }
 
+            // 绑定组织选择器事件
+            const orgSelector = container.querySelector('.infobar-org-selector');
+            if (orgSelector) {
+                orgSelector.addEventListener('change', function() {
+                    const selectedOrgId = this.value;
+                    console.log('[MessageInfoBarRenderer] 🔄 组织选择器变更:', selectedOrgId);
+
+                    // 隐藏所有组织详情面板
+                    const allOrgDetails = container.querySelectorAll('.infobar-org-details');
+                    allOrgDetails.forEach(detail => {
+                        detail.style.display = 'none';
+                    });
+
+                    // 显示选中的组织详情面板
+                    const selectedDetail = container.querySelector(`.infobar-org-details[data-org-id="${selectedOrgId}"]`);
+                    if (selectedDetail) {
+                        selectedDetail.style.display = 'block';
+                        console.log('[MessageInfoBarRenderer] ✅ 已切换到组织:', selectedOrgId);
+                    }
+                });
+            }
+
             console.log('[MessageInfoBarRenderer] ✅ 信息栏事件绑定完成');
 
         } catch (error) {
@@ -3604,6 +3721,76 @@ export class MessageInfoBarRenderer {
         };
 
         return panelInfoMap[panelKey] || { name: panelKey, icon: 'fa-solid fa-info' };
+    }
+
+    /**
+     * 按组织分组数据 - 用于处理多组织架构面板数据
+     */
+    groupOrgData(organizationData) {
+        const orgGroups = {};
+        const globalFields = {}; // 存储全局字段
+
+        console.log('[MessageInfoBarRenderer] 🔍 开始组织数据分组，原始字段数:', Object.keys(organizationData).length);
+
+        // 第一遍：收集所有组织特定字段和全局字段
+        Object.entries(organizationData).forEach(([key, value]) => {
+            const match = key.match(/^(org\d+)\.(.+)$/);
+            if (match) {
+                const [, orgId, fieldName] = match;
+                if (!orgGroups[orgId]) {
+                    orgGroups[orgId] = {};
+                }
+                orgGroups[orgId][fieldName] = value;
+                console.log(`[MessageInfoBarRenderer] 📝 组织字段: ${orgId}.${fieldName} = ${value}`);
+            } else {
+                // 全局字段，稍后分配
+                globalFields[key] = value;
+                console.log(`[MessageInfoBarRenderer] 🌐 全局字段: ${key} = ${value}`);
+            }
+        });
+
+        // 第二遍：将全局字段分配给所有组织（如果组织没有对应的特定字段）
+        const orgIds = Object.keys(orgGroups);
+        if (orgIds.length === 0) {
+            // 如果没有组织特定字段，创建默认组织
+            orgGroups['org0'] = {};
+            orgIds.push('org0');
+        }
+
+        Object.entries(globalFields).forEach(([fieldName, value]) => {
+            orgIds.forEach(orgId => {
+                // 只有当组织没有这个字段时，才分配全局字段
+                if (!orgGroups[orgId].hasOwnProperty(fieldName)) {
+                    orgGroups[orgId][fieldName] = value;
+                    console.log(`[MessageInfoBarRenderer] 🔄 分配全局字段到 ${orgId}.${fieldName} = ${value}`);
+                }
+            });
+        });
+
+        console.log('[MessageInfoBarRenderer] ✅ 组织数据分组完成:');
+        Object.keys(orgGroups).forEach(orgId => {
+            console.log(`[MessageInfoBarRenderer]   ${orgId}: ${Object.keys(orgGroups[orgId]).length} 个字段`);
+        });
+
+        return orgGroups;
+    }
+
+    /**
+     * 获取组织显示名称
+     */
+    getOrgDisplayName(orgId, orgData) {
+        if (orgData['组织名称'] && orgData['组织名称'] !== orgId && !orgData['组织名称'].includes('[需更新]')) {
+            return orgData['组织名称'];
+        } else if (orgData.name && orgData.name !== orgId && !orgData.name.includes('[需更新]')) {
+            return orgData.name;
+        } else if (orgData['组织类型'] && orgData['组织类型'] !== orgId && !orgData['组织类型'].includes('[需更新]')) {
+            return orgData['组织类型'];
+        } else if (orgId.match(/^org\d+$/i)) {
+            const orgNum = orgId.replace(/^org/i, '');
+            return `组织 ${orgNum}`;
+        } else {
+            return orgId;
+        }
     }
 
     /**

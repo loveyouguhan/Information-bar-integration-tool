@@ -578,6 +578,14 @@ export class DataTable {
                 { name: 'NPC关系', key: 'npc0.relationship', value: '好友' },
                 { name: 'NPC心情', key: 'npc0.mood', value: '愉快' },
                 { name: 'NPC位置', key: 'npc0.location', value: '咖啡厅' }
+            ],
+            organization: [
+                { name: '组织名称', key: 'org0.组织名称', value: '天剑宗' },
+                { name: '组织类型', key: 'org0.组织类型', value: '修仙门派' },
+                { name: '组织等级', key: 'org0.组织等级', value: '一流门派' },
+                { name: '掌门', key: 'org0.掌门', value: '剑无极' },
+                { name: '成员数量', key: 'org0.成员数量', value: '3000人' },
+                { name: '势力范围', key: 'org0.势力范围', value: '东域' }
             ]
         };
 
@@ -592,6 +600,11 @@ export class DataTable {
             // 检查是否为交互对象面板且有多NPC数据
             if (panel.key === 'interaction') {
                 return this.createInteractionTable(panel);
+            }
+            
+            // 🔧 新增：检查是否为组织架构面板且有多组织数据
+            if (panel.key === 'organization') {
+                return this.createOrganizationTable(panel);
             }
 
             // 🔧 智能计算自适应列宽
@@ -1284,8 +1297,27 @@ export class DataTable {
                 // 分析该列所有数据的长度
                 const dataLengths = [];
                 
-                // 获取该列的样本数据来估算内容长度
-                const sampleValue = this.getPanelItemValue(panel, item);
+                // 🔧 特殊处理：组织架构面板使用分组数据而不是合并数据
+                let sampleValue;
+                if (panel.key === 'organization') {
+                    // 对于组织架构面板，从原始分组数据中获取样本值
+                    const organizationData = this.getOrganizationDataSync();
+                    if (organizationData) {
+                        const orgGroups = this.groupOrgData(organizationData);
+                        const firstOrg = Object.values(orgGroups)[0];
+                        if (firstOrg) {
+                            sampleValue = firstOrg[item.name] || item.value || '';
+                        } else {
+                            sampleValue = item.value || '';
+                        }
+                    } else {
+                        sampleValue = item.value || '';
+                    }
+                } else {
+                    // 其他面板使用原有逻辑
+                    sampleValue = this.getPanelItemValue(panel, item);
+                }
+                
                 const sampleLength = String(sampleValue || '').length;
                 dataLengths.push(sampleLength);
                 
@@ -1397,6 +1429,14 @@ export class DataTable {
                 '王老师': '师生关系',
                 '陈同学': '同学',
                 '刘邻居': '邻居'
+            },
+            'organization': {
+                '天剑宗': '修仙门派',
+                '商会联盟': '商业组织',
+                '皇室': '政治势力',
+                '学院': '教育机构',
+                '医院': '医疗机构',
+                '公司': '企业组织'
             }
         };
 
@@ -1435,7 +1475,7 @@ export class DataTable {
             console.log('[DataTable] 🖱️ 单元格被点击');
 
             // 获取单元格相关信息
-            const property = cellElement.getAttribute('data-property');
+            let property = cellElement.getAttribute('data-property');
             const value = cellElement.textContent.trim();
             const row = cellElement.closest('tr');
 
@@ -1455,12 +1495,31 @@ export class DataTable {
 
             // 获取NPC信息（如果是NPC表格）
             const npcId = row.getAttribute('data-npc-id');
+            
+            // 🔧 新增：获取组织ID（优先从行属性，其次从属性名前缀）
+            let orgId = row.getAttribute('data-org-id'); // 直接从行获取组织ID
+            let extractedNpcId = npcId;
+            
+            // 检查属性名是否包含前缀
+            const npcMatch = property.match(/^(npc\d+)\./);
+            const orgMatch = property.match(/^(org\d+)\./);
+            
+            if (npcMatch) {
+                extractedNpcId = npcMatch[1];
+                // 去掉前缀，获取实际字段名
+                property = property.substring(extractedNpcId.length + 1);
+            } else if (orgMatch) {
+                orgId = orgMatch[1]; // 如果属性名有前缀，使用前缀中的组织ID
+                // 去掉前缀，获取实际字段名
+                property = property.substring(orgId.length + 1);
+            }
 
             console.log('[DataTable] 📊 单元格信息:', {
                 panelId,
                 property,
                 value,
-                npcId: npcId || '无'
+                npcId: extractedNpcId || '无',
+                orgId: orgId || '无'
             });
 
             // 显示操作选项菜单
@@ -1468,7 +1527,8 @@ export class DataTable {
                 panelId,
                 property,
                 value,
-                npcId,
+                npcId: extractedNpcId,
+                orgId,
                 event
             });
 
@@ -1897,6 +1957,16 @@ export class DataTable {
                             <span class="btn-icon">📋</span>
                             <span class="btn-text">表格记录</span>
                         </button>
+                        <!-- 🔧 新增：删除操作 -->
+                        <div class="menu-separator"></div>
+                        <button class="menu-btn delete-field-btn" data-action="delete-field">
+                            <span class="btn-icon">🗑️</span>
+                            <span class="btn-text">删除数据</span>
+                        </button>
+                        <button class="menu-btn delete-row-btn" data-action="delete-row">
+                            <span class="btn-icon">🗂️</span>
+                            <span class="btn-text">删除数据行</span>
+                        </button>
                     </div>
                 </div>
             `;
@@ -1980,6 +2050,12 @@ export class DataTable {
             } else if (action === 'view-history') {
                 this.hideCellActionMenu();
                 this.showCellHistoryDialog(cellInfo);
+            } else if (action === 'delete-field') {
+                this.hideCellActionMenu();
+                this.showDeleteFieldConfirmation(cellInfo);
+            } else if (action === 'delete-row') {
+                this.hideCellActionMenu();
+                this.showDeleteRowConfirmation(cellInfo);
             }
         });
 
@@ -2716,20 +2792,78 @@ export class DataTable {
                 // 查找对应的字段值
                 let fieldValue = null;
 
-                // 🆕 优化字段匹配逻辑：先尝试反向映射（中文名->英文名）
-                const englishFieldName = this.getEnglishFieldName(property, panelId);
-                if (englishFieldName && panelData[englishFieldName] !== undefined) {
-                    fieldValue = panelData[englishFieldName];
-                    console.log('[DataTable] ✅ 通过英文字段名找到值:', englishFieldName, '=', fieldValue);
-                } else {
-                    // 尝试直接匹配和其他匹配方式
-                    for (const [key, value] of Object.entries(panelData)) {
-                        if (key === property ||
-                            key.toLowerCase() === property.toLowerCase() ||
-                            this.getFieldDisplayName(key) === property) {
-                            fieldValue = value;
-                            console.log('[DataTable] ✅ 通过直接匹配找到值:', key, '=', fieldValue);
+                // 🔧 修复：从单元格所在行获取NPC/组织ID，构建完整的字段键
+                const row = cell.closest('tr');
+                const npcId = row?.getAttribute('data-npc-id');
+                const orgId = row?.getAttribute('data-org-id');
+
+                if (npcId && npcId !== 'null') {
+                    // NPC字段：先尝试英文字段名，再尝试中文字段名
+                    const englishFieldName = this.dataCore?.getEnglishFieldName?.(property, panelId);
+                    const candidates = [
+                        englishFieldName ? `${npcId}.${englishFieldName}` : null,
+                        `${npcId}.${property}`
+                    ].filter(Boolean);
+
+                    for (const key of candidates) {
+                        if (panelData[key] !== undefined) {
+                            fieldValue = panelData[key];
+                            console.log('[DataTable] ✅ 通过NPC前缀键找到值:', key, '=', fieldValue);
                             break;
+                        }
+                    }
+                } else if (orgId && orgId !== 'null') {
+                    // 组织字段：处理两种情况
+                    // 1) 普通字段：data-property="org0.组织类型"，需要去掉前缀查找
+                    // 2) 组织名称：data-property="组织名称"，需要添加前缀查找
+                    
+                    let actualProperty = property;
+                    let needsPrefix = true;
+                    
+                    // 如果property已经包含orgId前缀，去掉前缀
+                    if (property.startsWith(`${orgId}.`)) {
+                        actualProperty = property.replace(`${orgId}.`, '');
+                        needsPrefix = false;
+                    }
+                    
+                    const englishFieldName = this.dataCore?.getEnglishFieldName?.(actualProperty, panelId);
+                    
+                    const candidates = [];
+                    if (needsPrefix) {
+                        // 需要添加前缀的情况（如"组织名称" -> "org0.name"）
+                        if (englishFieldName) candidates.push(`${orgId}.${englishFieldName}`);
+                        candidates.push(`${orgId}.${actualProperty}`);
+                    } else {
+                        // 已经有前缀的情况（如"org0.组织类型" -> 查找"org0.type"）
+                        if (englishFieldName) candidates.push(`${orgId}.${englishFieldName}`);
+                        candidates.push(`${orgId}.${actualProperty}`);
+                        // 也尝试原始的完整property
+                        candidates.push(property);
+                    }
+
+                    for (const key of candidates) {
+                        if (panelData[key] !== undefined) {
+                            fieldValue = panelData[key];
+                            console.log('[DataTable] ✅ 通过组织前缀键找到值:', key, '=', fieldValue);
+                            break;
+                        }
+                    }
+                } else {
+                    // 普通字段：先尝试英文字段名，再尝试直接匹配
+                    const englishFieldName = this.dataCore?.getEnglishFieldName?.(property, panelId);
+                    if (englishFieldName && panelData[englishFieldName] !== undefined) {
+                        fieldValue = panelData[englishFieldName];
+                        console.log('[DataTable] ✅ 通过英文字段名找到值:', englishFieldName, '=', fieldValue);
+                    } else {
+                        // 尝试直接匹配和其他匹配方式
+                        for (const [key, value] of Object.entries(panelData)) {
+                            if (key === property ||
+                                key.toLowerCase() === property.toLowerCase() ||
+                                this.getFieldDisplayName(key, panelId) === property) {
+                                fieldValue = value;
+                                console.log('[DataTable] ✅ 通过直接匹配找到值:', key, '=', fieldValue);
+                                break;
+                            }
                         }
                     }
                 }
@@ -2833,6 +2967,250 @@ export class DataTable {
     }
 
     /**
+     * 🔧 新增：创建组织架构表格 - 支持多组织数据（所有组织同时显示）
+     */
+    createOrganizationTable(panel) {
+        try {
+            // 获取组织数据 - 使用同步方式
+            const organizationData = this.getOrganizationDataSync();
+            if (!organizationData) {
+                return this.createEmptyTable(panel);
+            }
+
+            // 按组织分组数据
+            const orgGroups = this.groupOrgData(organizationData);
+            const orgList = Object.entries(orgGroups);
+
+            console.log('[DataTable] 🔍 组织表格组织分组:', Object.keys(orgGroups));
+
+            if (orgList.length === 0) {
+                return this.createEmptyTable(panel);
+            }
+
+            // 🔧 智能计算自适应列宽（包含组织名称列）
+            const columnAnalysis = this.calculateAdaptiveColumnWidths(panel);
+            
+            // 生成表头（添加组织名称列）
+            const headers = `
+                <th class="col-org-name" style="
+                    width: 120px;
+                    min-width: 120px;
+                    max-width: 200px;
+                    padding: 8px;
+                    text-align: center;
+                    font-weight: bold;
+                    border-right: 1px solid var(--theme-border-color, #dee2e6);
+                ">组织名称</th>
+                ${panel.subItems.map((item, index) => {
+                    const { adaptiveWidth } = columnAnalysis[index];
+                    const displayName = this.getFieldDisplayName(item.name, panel.key) || item.name;
+                    return `<th class="col-property" style="
+                        width: ${adaptiveWidth}px;
+                        min-width: ${Math.max(adaptiveWidth, 80)}px;
+                        max-width: ${Math.min(adaptiveWidth, 300)}px;
+                        padding: 8px;
+                        text-align: center;
+                        font-weight: bold;
+                        border-right: 1px solid var(--theme-border-color, #dee2e6);
+                    ">${displayName}</th>`;
+                }).join('')}
+            `;
+
+            // 为每个组织生成数据行
+            const orgDataRows = orgList.map(([orgId, orgData]) => {
+                const orgName = this.getOrgDisplayName(orgId, orgData);
+                const dataRow = panel.subItems.map((item, index) => {
+                    const value = this.getOrgFieldValue(orgData, item);
+                    const formattedValue = this.formatCellValue(value);
+                    const { adaptiveWidth } = columnAnalysis[index];
+                    return `<td class="cell-value" data-property="${orgId}.${item.name}" title="${this.escapeHtml(value)}" style="
+                        width: ${adaptiveWidth}px;
+                        min-width: ${Math.max(adaptiveWidth, 80)}px;
+                        max-width: ${Math.min(adaptiveWidth, 300)}px;
+                        padding: 8px;
+                        vertical-align: top;
+                        word-wrap: break-word;
+                        overflow: visible;
+                    ">${formattedValue}</td>`;
+                }).join('');
+
+                return `
+                    <tr class="data-row org-data-row" data-org-id="${orgId}">
+                        <td class="cell-value org-name-cell" data-property="组织名称" style="
+                            padding: 8px;
+                            vertical-align: top;
+                            word-wrap: break-word;
+                            width: 120px;
+                            min-width: 120px;
+                            max-width: 200px;
+                            font-weight: 500;
+                        ">${this.escapeHtml(orgName)}</td>
+                        ${dataRow}
+                    </tr>
+                `;
+            }).join('');
+
+            return `
+                <div class="data-table-container" style="
+                    overflow-x: auto;
+                    width: 100%;
+                    max-width: 100%;
+                    position: relative;
+                ">
+                    <table class="data-table dark-table horizontal-layout" style="
+                        table-layout: fixed;
+                        width: max-content;
+                        min-width: 100%;
+                        border-collapse: collapse;
+                    ">
+                        <thead>
+                            <tr class="table-header">
+                                ${headers}
+                            </tr>
+                        </thead>
+                        <tbody class="table-body">
+                            ${orgDataRows}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 创建组织表格失败:', error);
+            return this.createEmptyTable(panel);
+        }
+    }
+
+    /**
+     * 🔧 新增：按组织分组数据 - 类似NPC分组逻辑
+     */
+    groupOrgData(organizationData) {
+        const orgGroups = {};
+        const globalFields = {}; // 存储全局字段
+
+        console.log('[DataTable] 🔍 开始组织数据分组，原始字段数:', Object.keys(organizationData).length);
+
+        // 第一遍：收集所有组织特定字段和全局字段
+        Object.entries(organizationData).forEach(([key, value]) => {
+            const match = key.match(/^(org\d+)\.(.+)$/);
+            if (match) {
+                const [, orgId, fieldName] = match;
+                if (!orgGroups[orgId]) {
+                    orgGroups[orgId] = {};
+                }
+                orgGroups[orgId][fieldName] = value;
+                console.log(`[DataTable] 📝 组织字段: ${orgId}.${fieldName} = ${value}`);
+            } else {
+                // 全局字段，稍后分配
+                globalFields[key] = value;
+                console.log(`[DataTable] 🌐 全局字段: ${key} = ${value}`);
+            }
+        });
+
+        // 第二遍：🔧 修复全局字段分配逻辑，避免跨组织污染
+        // 全局字段不应该自动分配给所有组织，这会导致删除时的数据污染
+        const orgIds = Object.keys(orgGroups);
+        if (orgIds.length === 0) {
+            // 如果没有组织特定字段，创建默认组织
+            orgGroups['org0'] = {};
+            orgIds.push('org0');
+        }
+
+        // 🚫 删除全局字段自动分配逻辑，防止删除单个组织字段时影响其他组织
+        console.log('[DataTable] 🔧 发现全局字段，但不自动分配以避免删除时的数据污染:', Object.keys(globalFields));
+
+        console.log('[DataTable] ✅ 组织数据分组完成:');
+        Object.keys(orgGroups).forEach(orgId => {
+            console.log(`[DataTable]   ${orgId}: ${Object.keys(orgGroups[orgId]).length} 个字段`);
+        });
+
+        return orgGroups;
+    }
+
+    /**
+     * 🔧 新增：获取组织字段值
+     */
+    getOrgFieldValue(orgData, item) {
+        // 🔧 首先尝试直接使用字段名获取值（英文字段名）
+        if (orgData[item.name] !== undefined) {
+            return orgData[item.name];
+        }
+
+        // 🔧 如果是中文显示名，转换为英文字段名
+        const fieldNameMapping = {
+            '组织名称': 'name',
+            '组织类型': 'type', 
+            '层级结构': 'hierarchy',
+            '职位设置': 'positions',
+            '成员管理': 'members'
+        };
+        
+        const englishFieldName = fieldNameMapping[item.name];
+        if (englishFieldName && orgData[englishFieldName] !== undefined) {
+            return orgData[englishFieldName];
+        }
+
+        // 如果没有找到值，返回默认值
+        return item.value || '';
+    }
+
+    /**
+     * 🔧 新增：获取组织数据（同步方式）
+     */
+    getOrganizationDataSync() {
+        try {
+            const currentChatId = this.dataCore.getCurrentChatId();
+            if (!currentChatId) {
+                console.log('[DataTable] ⚠️ 当前聊天ID未找到');
+                return null;
+            }
+
+            // 尝试从缓存获取数据
+            const cachedData = this.dataCore.chatDataCache?.get(currentChatId);
+            if (cachedData && cachedData.infobar_data && cachedData.infobar_data.panels) {
+                const organizationData = cachedData.infobar_data.panels.organization;
+                
+                if (!organizationData || typeof organizationData !== 'object') {
+                    console.log('[DataTable] ⚠️ 组织数据为空或格式错误');
+                    return null;
+                }
+
+                console.log('[DataTable] 📊 获取到组织数据:', organizationData);
+                return organizationData;
+            }
+
+            console.log('[DataTable] ⚠️ 缓存中未找到组织数据');
+            return null;
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 获取组织数据失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🔧 新增：获取组织数据（异步方式）
+     */
+    async getOrganizationData() {
+        try {
+            // 🔧 修复：使用正确的方法获取面板数据
+            const organizationData = await this.dataCore.getPanelData('organization');
+            
+            if (!organizationData || typeof organizationData !== 'object') {
+                console.log('[DataTable] ⚠️ 组织数据为空或格式错误');
+                return null;
+            }
+
+            console.log('[DataTable] 📊 获取到组织数据:', organizationData);
+            return organizationData;
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 获取组织数据失败:', error);
+            return null;
+        }
+    }
+
+    /**
      * 按NPC分组数据 - 修复版本 (与MessageInfoBarRenderer保持一致)
      */
     groupNpcData(interactionData) {
@@ -2841,16 +3219,26 @@ export class DataTable {
 
         console.log('[DataTable] 🔍 开始NPC数据分组，原始字段数:', Object.keys(interactionData).length);
 
-        // 第一遍：收集所有NPC特定字段和全局字段
+        // 第一遍：收集所有NPC特定字段和全局字段（统一字段名为英文，避免中英文冲突）
         Object.entries(interactionData).forEach(([key, value]) => {
             const match = key.match(/^(npc\d+)\.(.+)$/);
             if (match) {
-                const [, npcId, fieldName] = match;
+                const [, npcId, rawFieldName] = match;
                 if (!npcGroups[npcId]) {
                     npcGroups[npcId] = {};
                 }
-                npcGroups[npcId][fieldName] = value;
-                console.log(`[DataTable] 📝 NPC字段: ${npcId}.${fieldName} = ${value}`);
+
+                // 将中文字段名映射为英文，以最新（英文优先）为准
+                const normalizedFieldName = this.dataCore?.getEnglishFieldName?.(rawFieldName, 'interaction') || rawFieldName;
+
+                // 英文优先：若当前是英文或尚未有值，则写入；若已有英文值且当前是中文别名，则不覆盖
+                const isEnglish = normalizedFieldName === rawFieldName;
+                const existing = npcGroups[npcId][normalizedFieldName];
+                if (isEnglish || existing === undefined || existing === null || existing === '') {
+                    npcGroups[npcId][normalizedFieldName] = value;
+                }
+
+                console.log(`[DataTable] 📝 NPC字段: ${npcId}.${rawFieldName} -> ${normalizedFieldName} = ${value}`);
             } else {
                 // 全局字段，稍后分配
                 globalFields[key] = value;
@@ -2925,13 +3313,36 @@ export class DataTable {
      */
     getNpcFieldValue(npcData, item) {
         try {
-            // 尝试不同的字段名匹配方式
-            const possibleFieldNames = [
-                item.key,
-                item.name,
-                item.name?.toLowerCase(),
-                item.key?.toLowerCase()
-            ].filter(Boolean);
+            // 尝试不同的字段名匹配方式（增强：加入中英互映）
+            const mapCnToEn = (name) => this.dataCore?.getEnglishFieldName?.(name, 'interaction') || name;
+            const mapEnToCn = (name) => this.getFieldDisplayName?.(name, 'interaction') || name;
+
+            const baseNames = [item.key, item.name].filter(Boolean);
+            const expanded = new Set();
+            for (const n of baseNames) {
+                expanded.add(n);
+                expanded.add(String(n).toLowerCase());
+                // 中->英
+                expanded.add(mapCnToEn(n));
+                // 英->中
+                expanded.add(mapEnToCn(n));
+            }
+
+            // 兼容旧key: npc0.field 和不带前缀的 field
+            const withAndWithoutNpc0 = new Set();
+            for (const n of expanded) {
+                if (!n) continue;
+                withAndWithoutNpc0.add(n);
+                if (typeof n === 'string') {
+                    if (!n.includes('.') && !n.startsWith('npc')) {
+                        withAndWithoutNpc0.add(`npc0.${n}`);
+                    } else if (n.startsWith('npc0.')) {
+                        withAndWithoutNpc0.add(n.replace('npc0.', ''));
+                    }
+                }
+            }
+
+            const possibleFieldNames = Array.from(withAndWithoutNpc0).filter(Boolean);
 
             for (const fieldName of possibleFieldNames) {
                 if (npcData.hasOwnProperty(fieldName)) {
@@ -4416,12 +4827,69 @@ export class DataTable {
             console.log('[DataTable] 🔍 获取单元格当前值:', cellInfo);
 
             if (cellInfo.npcId && cellInfo.npcId !== 'null' && cellInfo.npcId !== null) {
-                // NPC数据
-                const npcData = await this.dataCore.getNpcData(cellInfo.npcId);
-                console.log('[DataTable] 📊 NPC数据:', npcData);
-                const value = this.getNpcFieldValue(npcData, { name: cellInfo.property }) || '';
-                console.log('[DataTable] 🎯 NPC字段值:', value);
-                return value;
+                // NPC数据 - 从交互面板数据中获取
+                const interactionData = await this.dataCore.getPanelData('interaction');
+                console.log('[DataTable] 📊 交互面板数据:', interactionData);
+                
+                if (interactionData) {
+                    // 分组NPC数据
+                    const npcGroups = this.groupNpcData(interactionData);
+                    const npcData = npcGroups[cellInfo.npcId];
+                    console.log('[DataTable] 📊 NPC数据:', npcData);
+                    
+                    if (npcData) {
+                        // 获取英文字段名
+                        const englishFieldName = this.dataCore.getEnglishFieldName(cellInfo.property, cellInfo.panelId);
+                        console.log('[DataTable] 🔄 字段名映射:', {
+                            chinese: cellInfo.property,
+                            english: englishFieldName
+                        });
+                        
+                        const value = this.getNpcFieldValue(npcData, { 
+                            name: englishFieldName || cellInfo.property,
+                            key: englishFieldName || cellInfo.property
+                        }) || '';
+                        console.log('[DataTable] 🎯 NPC字段值:', value);
+                        return value;
+                    }
+                }
+                
+                console.log('[DataTable] ⚠️ 未找到NPC数据，使用显示值');
+                const displayedValue = this.getDisplayedCellValue(cellInfo);
+                return displayedValue || '';
+            } else if (cellInfo.orgId && cellInfo.orgId !== 'null' && cellInfo.orgId !== null) {
+                // 组织数据 - 从组织面板数据中获取
+                const organizationData = await this.dataCore.getPanelData('organization');
+                console.log('[DataTable] 📊 组织面板数据:', organizationData);
+                
+                if (organizationData) {
+                    // 分组组织数据
+                    const orgGroups = this.groupOrgData(organizationData);
+                    const orgData = orgGroups[cellInfo.orgId];
+                    console.log('[DataTable] 📊 组织数据:', orgData);
+                    
+                    if (orgData) {
+                        // 获取英文字段名 (去掉org前缀)
+                        const propertyWithoutPrefix = cellInfo.property.replace(/^org\d+\./, '');
+                        const englishFieldName = this.dataCore.getEnglishFieldName(propertyWithoutPrefix, cellInfo.panelId);
+                        console.log('[DataTable] 🔄 组织字段名映射:', {
+                            original: cellInfo.property,
+                            withoutPrefix: propertyWithoutPrefix,
+                            english: englishFieldName
+                        });
+                        
+                        const value = this.getOrgFieldValue(orgData, { 
+                            name: propertyWithoutPrefix,
+                            key: englishFieldName || propertyWithoutPrefix
+                        }) || '';
+                        console.log('[DataTable] 🎯 组织字段值:', value);
+                        return value;
+                    }
+                }
+                
+                console.log('[DataTable] ⚠️ 未找到组织数据，使用显示值');
+                const displayedValue = this.getDisplayedCellValue(cellInfo);
+                return displayedValue || '';
             } else {
                 // 面板数据 - 先尝试从当前显示的单元格获取值
                 const displayedValue = this.getDisplayedCellValue(cellInfo);
@@ -4542,8 +5010,37 @@ export class DataTable {
             await this.recordFieldChange(cellInfo, oldValue, newValue);
 
             if (cellInfo.npcId && cellInfo.npcId !== 'null' && cellInfo.npcId !== null) {
-                // 更新NPC数据
-                await this.dataCore.updateNpcField(cellInfo.npcId, cellInfo.property, newValue);
+                // 更新NPC数据 - 需要将中文字段名映射为英文字段名
+                const englishFieldName = this.dataCore.getEnglishFieldName(cellInfo.property, cellInfo.panelId);
+                const actualFieldName = englishFieldName || cellInfo.property;
+
+                console.log('[DataTable] 🔄 NPC字段名映射:', {
+                    chinese: cellInfo.property,
+                    english: englishFieldName,
+                    actual: actualFieldName
+                });
+
+                // 1) 写入NPC专用存储
+                await this.dataCore.updateNpcField(cellInfo.npcId, actualFieldName, newValue);
+                // 2) 同步写入到interaction面板（以 npcX.field 的形式），以便表格刷新后立刻可见
+                const prefixedField = `${cellInfo.npcId}.${actualFieldName}`;
+                await this.dataCore.updatePanelField(cellInfo.panelId, prefixedField, newValue);
+            } else if (cellInfo.orgId && cellInfo.orgId !== 'null' && cellInfo.orgId !== null) {
+                // 更新组织数据 - 需要将中文字段名映射为英文字段名
+                const propertyWithoutPrefix = cellInfo.property.replace(/^org\d+\./, '');
+                const englishFieldName = this.dataCore.getEnglishFieldName(propertyWithoutPrefix, cellInfo.panelId);
+                const actualFieldName = englishFieldName || propertyWithoutPrefix;
+                
+                console.log('[DataTable] 🔄 组织字段名映射:', {
+                    original: cellInfo.property,
+                    withoutPrefix: propertyWithoutPrefix,
+                    english: englishFieldName,
+                    actual: actualFieldName
+                });
+                
+                // 构建完整的组织字段名
+                const fullFieldName = `${cellInfo.orgId}.${actualFieldName}`;
+                await this.dataCore.updatePanelField(cellInfo.panelId, fullFieldName, newValue);
             } else {
                 // 更新面板数据
                 await this.dataCore.updatePanelField(cellInfo.panelId, cellInfo.property, newValue);
@@ -5733,6 +6230,390 @@ export class DataTable {
             console.error('[DataTable] ❌ 保存面板规则失败:', error);
             this.showErrorMessage('保存面板规则失败: ' + error.message);
         }
+    }
+
+    /**
+     * 🔧 新增：显示删除字段确认对话框
+     */
+    async showDeleteFieldConfirmation(cellInfo) {
+        try {
+            console.log('[DataTable] 🗑️ 显示删除字段确认对话框:', cellInfo);
+
+            // 获取当前值
+            const currentValue = await this.getCurrentCellValue(cellInfo);
+            
+            // 创建确认对话框
+            const dialog = document.createElement('div');
+            dialog.className = 'delete-confirmation-dialog';
+            dialog.innerHTML = `
+                <div class="dialog-overlay"></div>
+                <div class="dialog-content">
+                    <div class="dialog-header">
+                        <h3>⚠️ 确认删除数据</h3>
+                        <button class="dialog-close" data-action="close">×</button>
+                    </div>
+                    <div class="dialog-body">
+                        <div class="warning-message">
+                            <p>您即将删除以下字段的数据：</p>
+                        </div>
+                        <div class="field-info">
+                            <div class="info-row">
+                                <span class="info-label">面板:</span>
+                                <span class="info-value">${this.getPanelDisplayName(cellInfo.panelId)}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">字段:</span>
+                                <span class="info-value">${cellInfo.property}</span>
+                            </div>
+                            ${cellInfo.npcId ? `
+                            <div class="info-row">
+                                <span class="info-label">NPC:</span>
+                                <span class="info-value">${this.getNpcDisplayName(cellInfo.npcId)}</span>
+                            </div>
+                            ` : ''}
+                            ${cellInfo.orgId ? `
+                            <div class="info-row">
+                                <span class="info-label">组织:</span>
+                                <span class="info-value">${this.getOrgDisplayName(cellInfo.orgId)}</span>
+                            </div>
+                            ` : ''}
+                            <div class="info-row">
+                                <span class="info-label">当前值:</span>
+                                <span class="info-value current-value">${this.escapeHtml(currentValue)}</span>
+                            </div>
+                        </div>
+                        <div class="warning-note">
+                            <p><strong>注意：</strong>此操作将清空该字段的数据，但不会影响其他字段。</p>
+                        </div>
+                    </div>
+                    <div class="dialog-footer">
+                        <button class="btn btn-secondary" data-action="cancel">取消</button>
+                        <button class="btn btn-danger" data-action="confirm-delete-field">确认删除</button>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            document.body.appendChild(dialog);
+
+            // 绑定事件
+            this.bindDeleteConfirmationEvents(dialog, cellInfo, 'field');
+
+            // 显示对话框
+            setTimeout(() => {
+                dialog.classList.add('show');
+            }, 10);
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 显示删除字段确认对话框失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：显示删除数据行确认对话框
+     */
+    async showDeleteRowConfirmation(cellInfo) {
+        try {
+            console.log('[DataTable] 🗂️ 显示删除数据行确认对话框:', cellInfo);
+
+            // 获取行数据预览
+            const rowData = await this.getRowData(cellInfo);
+            
+            // 创建确认对话框
+            const dialog = document.createElement('div');
+            dialog.className = 'delete-confirmation-dialog';
+            dialog.innerHTML = `
+                <div class="dialog-overlay"></div>
+                <div class="dialog-content">
+                    <div class="dialog-header">
+                        <h3>⚠️ 确认删除数据行</h3>
+                        <button class="dialog-close" data-action="close">×</button>
+                    </div>
+                    <div class="dialog-body">
+                        <div class="warning-message">
+                            <p>您即将删除以下数据行的所有数据：</p>
+                        </div>
+                        <div class="field-info">
+                            <div class="info-row">
+                                <span class="info-label">面板:</span>
+                                <span class="info-value">${this.getPanelDisplayName(cellInfo.panelId)}</span>
+                            </div>
+                            ${cellInfo.npcId ? `
+                            <div class="info-row">
+                                <span class="info-label">目标NPC:</span>
+                                <span class="info-value">${this.getNpcDisplayName(cellInfo.npcId)}</span>
+                            </div>
+                            ` : ''}
+                            ${cellInfo.orgId ? `
+                            <div class="info-row">
+                                <span class="info-label">目标组织:</span>
+                                <span class="info-value">${this.getOrgDisplayName(cellInfo.orgId)}</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                        <div class="row-data-preview">
+                            <h4>将要删除的数据：</h4>
+                            <div class="data-preview">
+                                ${this.generateRowDataPreview(rowData)}
+                            </div>
+                        </div>
+                        <div class="warning-note">
+                            <p><strong>注意：</strong>此操作将删除该行的所有字段数据，且不可恢复！</p>
+                            ${(cellInfo.npcId || cellInfo.orgId) ? `
+                            <p><strong>特别提醒：</strong>这将删除整个${cellInfo.npcId ? 'NPC' : '组织'}的所有数据，不会影响其他${cellInfo.npcId ? 'NPC' : '组织'}。</p>
+                            ` : ''}
+                        </div>
+                    </div>
+                    <div class="dialog-footer">
+                        <button class="btn btn-secondary" data-action="cancel">取消</button>
+                        <button class="btn btn-danger" data-action="confirm-delete-row">确认删除</button>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            document.body.appendChild(dialog);
+
+            // 绑定事件
+            this.bindDeleteConfirmationEvents(dialog, cellInfo, 'row');
+
+            // 显示对话框
+            setTimeout(() => {
+                dialog.classList.add('show');
+            }, 10);
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 显示删除数据行确认对话框失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：绑定删除确认对话框事件
+     */
+    bindDeleteConfirmationEvents(dialog, cellInfo, deleteType) {
+        // 关闭对话框
+        const closeDialog = () => {
+            dialog.classList.remove('show');
+            setTimeout(() => dialog.remove(), 300);
+        };
+
+        // 点击遮罩层关闭
+        dialog.querySelector('.dialog-overlay').addEventListener('click', closeDialog);
+        
+        // 关闭按钮
+        dialog.querySelector('[data-action="close"]').addEventListener('click', closeDialog);
+        dialog.querySelector('[data-action="cancel"]').addEventListener('click', closeDialog);
+
+        // 确认删除按钮
+        const confirmAction = deleteType === 'field' ? 'confirm-delete-field' : 'confirm-delete-row';
+        dialog.querySelector(`[data-action="${confirmAction}"]`).addEventListener('click', async () => {
+            const confirmButton = dialog.querySelector(`[data-action="${confirmAction}"]`);
+            confirmButton.disabled = true;
+            confirmButton.textContent = '删除中...';
+
+            try {
+                if (deleteType === 'field') {
+                    await this.executeDeleteField(cellInfo);
+                } else {
+                    await this.executeDeleteRow(cellInfo);
+                }
+                closeDialog();
+            } catch (error) {
+                console.error(`[DataTable] ❌ 执行删除${deleteType === 'field' ? '字段' : '数据行'}失败:`, error);
+                confirmButton.disabled = false;
+                confirmButton.textContent = '确认删除';
+            }
+        });
+
+        // ESC键关闭
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                closeDialog();
+                document.removeEventListener('keydown', handleKeyDown);
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+    }
+
+    /**
+     * 🔧 新增：执行删除字段数据
+     */
+    async executeDeleteField(cellInfo) {
+        try {
+            console.log('[DataTable] 🗑️ 执行删除字段数据:', cellInfo);
+
+            // 构建删除的键名
+            let dataKey = cellInfo.property;
+            if (cellInfo.npcId) {
+                dataKey = `${cellInfo.npcId}.${cellInfo.property}`;
+            } else if (cellInfo.orgId) {
+                dataKey = `${cellInfo.orgId}.${cellInfo.property}`;
+            }
+
+            // 删除数据
+            await this.dataCore.deletePanelField(cellInfo.panelId, dataKey);
+
+            // 刷新表格显示
+            await this.refreshTableData();
+
+            this.showSuccessMessage(`字段 "${cellInfo.property}" 的数据已删除`);
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 删除字段数据失败:', error);
+            this.showErrorMessage('删除字段数据失败: ' + error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * 🔧 新增：执行删除数据行
+     */
+    async executeDeleteRow(cellInfo) {
+        try {
+            console.log('[DataTable] 🗂️ 执行删除数据行:', cellInfo);
+
+            if (cellInfo.npcId) {
+                // 删除整个NPC的所有数据
+                await this.deleteNpcData(cellInfo.panelId, cellInfo.npcId);
+                this.showSuccessMessage(`NPC "${this.getNpcDisplayName(cellInfo.npcId)}" 的所有数据已删除`);
+            } else if (cellInfo.orgId) {
+                // 删除整个组织的所有数据
+                await this.deleteOrgData(cellInfo.panelId, cellInfo.orgId);
+                this.showSuccessMessage(`组织 "${this.getOrgDisplayName(cellInfo.orgId)}" 的所有数据已删除`);
+            } else {
+                // 删除整个面板的数据
+                await this.deletePanelData(cellInfo.panelId);
+                this.showSuccessMessage(`面板 "${this.getPanelDisplayName(cellInfo.panelId)}" 的所有数据已删除`);
+            }
+
+            // 刷新表格显示
+            await this.refreshTableData();
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 删除数据行失败:', error);
+            this.showErrorMessage('删除数据行失败: ' + error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * 🔧 新增：删除NPC数据（完整版本）
+     */
+    async deleteNpcData(panelId, npcId) {
+        // 使用数据核心的完整删除方法，确保清理所有相关数据存储位置
+        await this.dataCore.deleteNpcCompletely(panelId, npcId);
+    }
+
+    /**
+     * 🔧 新增：删除组织数据（完整版本）
+     */
+    async deleteOrgData(panelId, orgId) {
+        // 使用数据核心的完整删除方法，确保清理所有相关数据存储位置
+        await this.dataCore.deleteOrganizationCompletely(panelId, orgId);
+    }
+
+    /**
+     * 🔧 新增：删除面板数据
+     */
+    async deletePanelData(panelId) {
+        // 清空整个面板的数据
+        await this.dataCore.deletePanelData(panelId);
+    }
+
+    /**
+     * 🔧 新增：获取行数据
+     */
+    async getRowData(cellInfo) {
+        try {
+            const panelData = await this.dataCore.getPanelData(cellInfo.panelId) || {};
+            const rowData = {};
+
+            if (cellInfo.npcId) {
+                // 获取NPC的所有数据
+                const prefix = cellInfo.npcId + '.';
+                for (const key in panelData) {
+                    if (key.startsWith(prefix)) {
+                        const fieldName = key.substring(prefix.length);
+                        rowData[fieldName] = panelData[key];
+                    }
+                }
+            } else if (cellInfo.orgId) {
+                // 获取组织的所有数据
+                const prefix = cellInfo.orgId + '.';
+                for (const key in panelData) {
+                    if (key.startsWith(prefix)) {
+                        const fieldName = key.substring(prefix.length);
+                        rowData[fieldName] = panelData[key];
+                    }
+                }
+            } else {
+                // 获取整个面板的数据
+                return panelData;
+            }
+
+            return rowData;
+        } catch (error) {
+            console.error('[DataTable] ❌ 获取行数据失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 🔧 新增：生成行数据预览
+     */
+    generateRowDataPreview(rowData) {
+        const entries = Object.entries(rowData);
+        if (entries.length === 0) {
+            return '<p class="no-data">暂无数据</p>';
+        }
+
+        return entries.map(([key, value]) => `
+            <div class="data-item">
+                <span class="data-key">${key}:</span>
+                <span class="data-value">${this.escapeHtml(String(value))}</span>
+            </div>
+        `).join('');
+    }
+
+    /**
+     * 🔧 新增：获取NPC显示名称
+     */
+    getNpcDisplayName(npcId) {
+        // 从npcId提取显示名称，例如npc0 -> NPC 1
+        const match = npcId.match(/npc(\d+)/);
+        if (match) {
+            return `NPC ${parseInt(match[1]) + 1}`;
+        }
+        return npcId;
+    }
+
+    /**
+     * 🔧 新增：获取组织显示名称
+     */
+    getOrgDisplayName(orgId, orgData = null) {
+        // 🔧 修复：如果有组织数据，优先使用实际名称
+        if (orgData && orgData.name && orgData.name.trim()) {
+            return orgData.name.trim();
+        }
+        
+        // 🔧 修复：如果没有组织数据，尝试从当前数据中获取
+        if (!orgData) {
+            const organizationData = this.getOrganizationDataSync();
+            if (organizationData) {
+                const orgGroups = this.groupOrgData(organizationData);
+                const targetOrg = orgGroups[orgId];
+                if (targetOrg && targetOrg.name && targetOrg.name.trim()) {
+                    return targetOrg.name.trim();
+                }
+            }
+        }
+        
+        // 最后使用默认格式
+        const match = orgId.match(/org(\d+)/);
+        if (match) {
+            return `组织 ${parseInt(match[1]) + 1}`;
+        }
+        return orgId;
     }
 
     destroy() {

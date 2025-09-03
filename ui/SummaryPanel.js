@@ -51,6 +51,14 @@ export class SummaryPanel {
             this.initialized = true;
             console.log('[SummaryPanel] ✅ 总结面板初始化完成');
             
+            // 🔧 新增：监听总结完成事件，触发自动隐藏检查
+            if (this.eventSystem) {
+                this.eventSystem.on('summary:completed', async (data) => {
+                    console.log('[SummaryPanel] 📨 收到总结完成事件，检查自动隐藏');
+                    await this.checkAndExecuteAutoHide();
+                });
+            }
+            
             // 触发初始化完成事件
             if (this.eventSystem) {
                 this.eventSystem.emit('summary-panel:initialized', {
@@ -110,6 +118,21 @@ export class SummaryPanel {
                         <label for="summary-word-count">总结字数：</label>
                         <input type="number" id="summary-word-count" min="50" max="1000" value="300" />
                         <span class="setting-hint">字</span>
+                    </div>
+                    
+                    <!-- 🔧 新增：自动隐藏楼层设置 -->
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="auto-hide-enabled" />
+                            启用自动隐藏已总结楼层
+                        </label>
+                        <span class="setting-hint">自动隐藏已经总结过的楼层内容，减少界面混乱</span>
+                    </div>
+                    
+                    <div class="setting-group" id="auto-hide-threshold-group" style="display: none;">
+                        <label for="auto-hide-threshold">保留最新楼层数：</label>
+                        <input type="number" id="auto-hide-threshold" min="10" max="200" value="30" />
+                        <span class="setting-hint">保留最新的N个楼层不隐藏</span>
                     </div>
                     
                     <div class="setting-actions">
@@ -422,6 +445,14 @@ export class SummaryPanel {
             });
         }
         
+        // 🔧 新增：自动隐藏楼层复选框
+        const autoHideEnabledCheckbox = this.panel.querySelector('#auto-hide-enabled');
+        if (autoHideEnabledCheckbox) {
+            autoHideEnabledCheckbox.addEventListener('change', (e) => {
+                this.handleAutoHideEnabledChange(e.target.checked);
+            });
+        }
+        
         // 关闭内容区域
         const closeContentBtn = this.panel.querySelector('#close-content-btn');
         if (closeContentBtn) {
@@ -522,6 +553,29 @@ export class SummaryPanel {
     }
 
     /**
+     * 🔧 新增：处理自动隐藏启用状态变化
+     */
+    handleAutoHideEnabledChange(enabled) {
+        try {
+            console.log('[SummaryPanel] 🔄 自动隐藏楼层启用状态变化:', enabled);
+            
+            // 显示/隐藏阈值设置
+            const thresholdGroup = this.panel.querySelector('#auto-hide-threshold-group');
+            if (thresholdGroup) {
+                thresholdGroup.style.display = enabled ? 'block' : 'none';
+            }
+            
+            // 如果启用了自动隐藏，立即检查是否需要隐藏楼层
+            if (enabled) {
+                this.checkAndExecuteAutoHide();
+            }
+            
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 处理自动隐藏状态变化失败:', error);
+        }
+    }
+
+    /**
      * 处理总结类型变化
      */
     handleSummaryTypeChange(summaryType) {
@@ -539,6 +593,121 @@ export class SummaryPanel {
 
         } catch (error) {
             console.error('[SummaryPanel] ❌ 处理总结类型变化失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：检查并执行自动隐藏楼层
+     */
+    async checkAndExecuteAutoHide() {
+        try {
+            // 获取设置
+            const autoHideEnabled = this.panel?.querySelector('#auto-hide-enabled')?.checked || false;
+            const autoHideThreshold = parseInt(this.panel?.querySelector('#auto-hide-threshold')?.value) || 30;
+            
+            if (!autoHideEnabled) {
+                console.log('[SummaryPanel] ⏸️ 自动隐藏未启用，跳过检查');
+                return;
+            }
+            
+            // 获取当前聊天消息数量
+            const chatLength = this.getChatLength();
+            if (chatLength <= autoHideThreshold) {
+                console.log('[SummaryPanel] ℹ️ 聊天长度不足，无需隐藏楼层');
+                return;
+            }
+            
+            // 计算需要隐藏的范围：0到(总长度-阈值-1)
+            const hideUntilIndex = chatLength - autoHideThreshold - 1;
+            
+            if (hideUntilIndex > 0) {
+                console.log(`[SummaryPanel] 🔄 执行自动隐藏：隐藏楼层 0-${hideUntilIndex}`);
+                await this.executeHideCommand(`/hide 0-${hideUntilIndex}`);
+            }
+            
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 自动隐藏楼层失败:', error);
+        }
+    }
+    
+    /**
+     * 获取当前聊天的消息数量
+     */
+    getChatLength() {
+        try {
+            // 使用SillyTavern的getContext获取聊天数据
+            if (typeof getContext === 'function') {
+                const context = getContext();
+                return context?.chat?.length || 0;
+            }
+            
+            // 备用方法：通过DOM查询消息数量
+            const messages = document.querySelectorAll('#chat .mes');
+            return messages.length;
+            
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 获取聊天长度失败:', error);
+            return 0;
+        }
+    }
+    
+    /**
+     * 执行隐藏命令
+     */
+    async executeHideCommand(command) {
+        try {
+            console.log('[SummaryPanel] 📋 执行隐藏命令:', command);
+            
+            // 方法1: 尝试使用SillyTavern的斜杠命令解析器
+            if (typeof window.SlashCommandParser !== 'undefined') {
+                const parser = new window.SlashCommandParser();
+                const result = parser.parse(command, false);
+                
+                if (result && typeof result.execute === 'function') {
+                    await result.execute();
+                    console.log('[SummaryPanel] ✅ 隐藏命令执行成功 (方法1)');
+                    return;
+                }
+            }
+            
+            // 方法2: 尝试直接在聊天输入框执行命令
+            const chatTextarea = document.getElementById('send_textarea');
+            if (chatTextarea) {
+                console.log('[SummaryPanel] 🔄 尝试通过聊天输入框执行命令');
+                const originalValue = chatTextarea.value;
+                chatTextarea.value = command;
+                
+                // 触发输入事件
+                chatTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                
+                // 等待短暂时间后按回车
+                setTimeout(() => {
+                    chatTextarea.dispatchEvent(new KeyboardEvent('keydown', {
+                        key: 'Enter',
+                        bubbles: true
+                    }));
+                    
+                    // 恢复原始值
+                    setTimeout(() => {
+                        chatTextarea.value = originalValue;
+                    }, 100);
+                }, 100);
+                
+                console.log('[SummaryPanel] ✅ 隐藏命令已通过聊天输入框发送');
+                return;
+            }
+            
+            // 方法3: 尝试使用SillyTavern的全局命令执行器
+            if (typeof window.executeSlashCommand === 'function') {
+                await window.executeSlashCommand(command);
+                console.log('[SummaryPanel] ✅ 隐藏命令执行成功 (方法3)');
+                return;
+            }
+            
+            console.warn('[SummaryPanel] ⚠️ 所有隐藏命令执行方法都失败');
+            
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 执行隐藏命令失败:', error);
         }
     }
 
@@ -571,6 +740,9 @@ export class SummaryPanel {
 
                     // 刷新总结历史
                     this.refreshSummaryHistory();
+                    
+                    // 🔧 新增：手动总结完成后检查自动隐藏
+                    await this.checkAndExecuteAutoHide();
                 } else {
                     console.error('[SummaryPanel] ❌ 手动总结失败:', result.error);
                     this.showNotification('❌ 总结生成失败: ' + result.error, 'error');
@@ -625,7 +797,10 @@ export class SummaryPanel {
             autoSummaryEnabled: false,
             summaryFloorCount: 20,
             summaryType: 'small',
-            summaryWordCount: 300
+            summaryWordCount: 300,
+            // 🔧 新增：自动隐藏楼层设置
+            autoHideEnabled: false,
+            autoHideThreshold: 30
         };
 
         try {
@@ -649,6 +824,17 @@ export class SummaryPanel {
             const summaryWordCount = this.panel.querySelector('#summary-word-count');
             if (summaryWordCount) {
                 settings.summaryWordCount = parseInt(summaryWordCount.value) || 300;
+            }
+            
+            // 🔧 新增：自动隐藏楼层设置
+            const autoHideEnabled = this.panel.querySelector('#auto-hide-enabled');
+            if (autoHideEnabled) {
+                settings.autoHideEnabled = autoHideEnabled.checked;
+            }
+            
+            const autoHideThreshold = this.panel.querySelector('#auto-hide-threshold');
+            if (autoHideThreshold) {
+                settings.autoHideThreshold = parseInt(autoHideThreshold.value) || 30;
             }
 
         } catch (error) {
@@ -690,6 +876,18 @@ export class SummaryPanel {
             const summaryWordCount = this.panel.querySelector('#summary-word-count');
             if (summaryWordCount) {
                 summaryWordCount.value = settings.summaryWordCount || 300;
+            }
+            
+            // 🔧 新增：自动隐藏楼层设置
+            const autoHideEnabled = this.panel.querySelector('#auto-hide-enabled');
+            if (autoHideEnabled) {
+                autoHideEnabled.checked = settings.autoHideEnabled || false;
+                this.handleAutoHideEnabledChange(autoHideEnabled.checked);
+            }
+            
+            const autoHideThreshold = this.panel.querySelector('#auto-hide-threshold');
+            if (autoHideThreshold) {
+                autoHideThreshold.value = settings.autoHideThreshold || 30;
             }
 
             console.log('[SummaryPanel] ✅ 设置加载完成');

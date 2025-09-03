@@ -1754,6 +1754,14 @@ export class FrontendDisplayManager {
                         return this.processInteractionPanelData(panelData, panelConfig);
                     }
                     
+                    // 🔧 重要：组织架构面板不再进行特殊处理，保持原始分组数据
+                    // 原因：processOrganizationPanelData会将orgX.fieldName格式合并为单一字段，
+                    // 这会影响DataTable的正确显示，DataTable需要原始的分组数据
+                    if (panelId === 'organization' && Object.keys(panelData).length > 0) {
+                        console.log('[FrontendDisplayManager] 🎯 组织架构面板保持原始数据格式，不进行合并处理');
+                        // 直接返回原始数据，不调用processOrganizationPanelData
+                    }
+                    
                     // 遍历启用的字段
                     Object.entries(panelConfig).forEach(([fieldKey, fieldConfig]) => {
                         if (fieldConfig?.enabled === true && fieldKey !== 'enabled' && fieldKey !== 'subItems') {
@@ -2492,6 +2500,88 @@ export class FrontendDisplayManager {
     }
 
     /**
+     * 组织数据分组函数 - 用于处理多组织架构面板数据
+     * 类似于NPC分组，但处理org1.、org2.等前缀
+     */
+    groupOrgData(organizationData) {
+        const orgGroups = {};
+        const globalFields = {}; // 存储全局字段
+
+        console.log('[FrontendDisplayManager] 🔍 开始组织数据分组，原始字段数:', Object.keys(organizationData).length);
+
+        // 第一遍：收集所有组织特定字段和全局字段
+        Object.entries(organizationData).forEach(([key, value]) => {
+            const match = key.match(/^(org\d+)\.(.+)$/);
+            if (match) {
+                const [, orgId, fieldName] = match;
+                if (!orgGroups[orgId]) {
+                    orgGroups[orgId] = {};
+                }
+                orgGroups[orgId][fieldName] = value;
+                console.log(`[FrontendDisplayManager] 📝 组织字段: ${orgId}.${fieldName} = ${value}`);
+            } else {
+                // 全局字段，稍后分配
+                globalFields[key] = value;
+                console.log(`[FrontendDisplayManager] 🌐 全局字段: ${key} = ${value}`);
+            }
+        });
+
+        // 第二遍：将全局字段分配给所有组织（如果组织没有对应的特定字段）
+        const orgIds = Object.keys(orgGroups);
+        if (orgIds.length === 0) {
+            // 如果没有组织特定字段，创建默认组织
+            orgGroups['org0'] = {};
+            orgIds.push('org0');
+        }
+
+        Object.entries(globalFields).forEach(([fieldName, value]) => {
+            orgIds.forEach(orgId => {
+                // 只有当组织没有这个字段时，才分配全局字段
+                if (!orgGroups[orgId].hasOwnProperty(fieldName)) {
+                    orgGroups[orgId][fieldName] = value;
+                    console.log(`[FrontendDisplayManager] 🔄 分配全局字段到 ${orgId}.${fieldName} = ${value}`);
+                }
+            });
+        });
+
+        console.log('[FrontendDisplayManager] ✅ 组织数据分组完成:');
+        Object.keys(orgGroups).forEach(orgId => {
+            console.log(`[FrontendDisplayManager]   ${orgId}: ${Object.keys(orgGroups[orgId]).length} 个字段`);
+        });
+
+        return orgGroups;
+    }
+
+    /**
+     * 获取组织显示名称
+     */
+    getOrgDisplayName(orgId, orgData) {
+        try {
+            // 优先使用组织名称字段
+            if (orgData['组织名称'] && orgData['组织名称'].trim() !== '' && orgData['组织名称'] !== '未设置') {
+                return orgData['组织名称'];
+            }
+
+            // 其次使用name字段
+            if (orgData.name && orgData.name.trim() !== '' && orgData.name !== '未设置') {
+                return orgData.name;
+            }
+
+            // 再次使用组织类型
+            if (orgData['组织类型'] && orgData['组织类型'].trim() !== '' && orgData['组织类型'] !== '未设置') {
+                return orgData['组织类型'];
+            }
+
+            // 最后使用组织ID
+            const orgNumber = orgId.replace('org', '');
+            return `组织 ${orgNumber}`;
+        } catch (error) {
+            console.error('[FrontendDisplayManager] ❌ 获取组织显示名称失败:', error);
+            return orgId;
+        }
+    }
+
+    /**
      * 获取NPC显示名称
      */
     getNpcDisplayName(npcId, npcData) {
@@ -2500,12 +2590,12 @@ export class FrontendDisplayManager {
             if (npcData.name && npcData.name.trim() !== '' && npcData.name !== '未设置') {
                 return npcData.name;
             }
-            
+
             // 其次使用对象名称
             if (npcData['对象名称'] && npcData['对象名称'].trim() !== '' && npcData['对象名称'] !== '未设置') {
                 return npcData['对象名称'];
             }
-            
+
             // 最后使用NPC ID
             const npcNumber = npcId.replace('npc', '');
             return `NPC ${npcNumber}`;
@@ -2516,23 +2606,75 @@ export class FrontendDisplayManager {
     }
 
     /**
+     * 处理组织面板的多组织数据
+     */
+    processOrganizationPanelData(panelData, panelConfig) {
+        try {
+            console.log('[FrontendDisplayManager] 🔍 开始处理组织面板数据');
+
+            // 使用组织分组函数处理数据
+            const orgGroups = this.groupOrgData(panelData);
+            const orgList = Object.entries(orgGroups);
+
+            if (orgList.length === 0) {
+                return {
+                    '组织架构': '暂无数据',
+                    source: '多组织处理'
+                };
+            }
+
+            // 为前端显示创建特殊的多组织数据结构
+            const processedData = {
+                _orgData: orgGroups, // 存储原始组织分组数据
+                _orgList: orgList,   // 存储组织列表
+                _isMultiOrg: true,   // 标记为多组织数据
+                source: '多组织处理'
+            };
+
+            // 添加组织选择器信息
+            processedData['组织选择器'] = `共 ${orgList.length} 个组织`;
+
+            // 为每个组织添加摘要信息
+            orgList.forEach(([orgId, orgData], index) => {
+                const orgName = this.getOrgDisplayName(orgId, orgData);
+                const fieldsCount = Object.keys(orgData).filter(key =>
+                    orgData[key] && orgData[key] !== '未设置'
+                ).length;
+
+                processedData[`${orgName} (${orgId})`] = `${fieldsCount} 个字段有数据`;
+            });
+
+            console.log('[FrontendDisplayManager] ✅ 组织面板数据处理完成:', processedData);
+            return processedData;
+
+        } catch (error) {
+            console.error('[FrontendDisplayManager] ❌ 处理组织面板数据失败:', error);
+            return {
+                '错误': '多组织数据处理失败',
+                '原因': error.message,
+                source: '错误信息'
+            };
+        }
+    }
+
+    /**
      * 处理交互面板的多NPC数据
      */
     processInteractionPanelData(panelData, panelConfig) {
         try {
             console.log('[FrontendDisplayManager] 🔍 开始处理交互面板数据');
-            
+
             // 使用NPC分组函数处理数据
             const npcGroups = this.groupNpcData(panelData);
             const npcList = Object.entries(npcGroups);
-            
+
             if (npcList.length === 0) {
-                return { 
+                return {
                     '交互对象': '暂无数据',
                     source: '多NPC处理'
                 };
             }
-            
+
             // 为前端显示创建特殊的多NPC数据结构
             const processedData = {
                 _npcData: npcGroups, // 存储原始NPC分组数据
@@ -2540,26 +2682,26 @@ export class FrontendDisplayManager {
                 _isMultiNpc: true,   // 标记为多NPC数据
                 source: '多NPC处理'
             };
-            
+
             // 添加NPC选择器信息
             processedData['NPC选择器'] = `共 ${npcList.length} 个交互对象`;
-            
+
             // 为每个NPC添加摘要信息
             npcList.forEach(([npcId, npcData], index) => {
                 const npcName = this.getNpcDisplayName(npcId, npcData);
-                const fieldsCount = Object.keys(npcData).filter(key => 
+                const fieldsCount = Object.keys(npcData).filter(key =>
                     npcData[key] && npcData[key] !== '未设置'
                 ).length;
-                
+
                 processedData[`${npcName} (${npcId})`] = `${fieldsCount} 个字段有数据`;
             });
-            
+
             console.log('[FrontendDisplayManager] ✅ 交互面板数据处理完成:', processedData);
             return processedData;
-            
+
         } catch (error) {
             console.error('[FrontendDisplayManager] ❌ 处理交互面板数据失败:', error);
-            return { 
+            return {
                 '错误': '多NPC数据处理失败',
                 '原因': error.message,
                 source: '错误信息'
@@ -2568,28 +2710,33 @@ export class FrontendDisplayManager {
     }
 
     /**
-     * 渲染面板数据 - 重写以支持多NPC交互面板
+     * 渲染面板数据 - 重写以支持多NPC交互面板和多组织面板
      */
     renderPanelData(panelId, panelData) {
         try {
             console.log(`[FrontendDisplayManager] 🎨 渲染面板数据: ${panelId}`);
-            
+
             // 🔧 特殊处理：多NPC交互面板
             if (panelId === 'interaction' && panelData._isMultiNpc) {
                 return this.renderInteractionPanelData(panelData);
             }
-            
+
+            // 🔧 特殊处理：多组织面板
+            if (panelId === 'organization' && panelData._isMultiOrg) {
+                return this.renderOrganizationPanelData(panelData);
+            }
+
             // 原有的通用面板数据渲染逻辑
-            const dataEntries = Object.entries(panelData).filter(([key]) => 
+            const dataEntries = Object.entries(panelData).filter(([key]) =>
                 !key.startsWith('_') && key !== 'source'
             );
-            
+
             console.log(`[FrontendDisplayManager] 📊 数据条目:`, dataEntries);
-            
+
             if (dataEntries.length === 0) {
                 return '<div class="data-row"><span class="data-value">暂无数据</span></div>';
             }
-            
+
             let html = '';
             dataEntries.forEach(([key, value]) => {
                 html += `
@@ -2599,10 +2746,10 @@ export class FrontendDisplayManager {
                         </div>
                     `;
             });
-            
+
             console.log(`[FrontendDisplayManager] ✅ 渲染HTML长度: ${html.length}`);
             return html;
-            
+
         } catch (error) {
             console.error('[FrontendDisplayManager] ❌ 渲染面板数据失败:', error);
             return '<div class="data-row"><span class="data-value">渲染失败</span></div>';
@@ -2670,28 +2817,116 @@ export class FrontendDisplayManager {
     }
 
     /**
+     * 渲染组织面板的多组织数据
+     */
+    renderOrganizationPanelData(panelData) {
+        try {
+            console.log('[FrontendDisplayManager] 🏢 渲染多组织面板');
+
+            const orgGroups = panelData._orgData;
+            const orgList = panelData._orgList;
+
+            if (!orgGroups || !orgList || orgList.length === 0) {
+                return '<div class="data-row"><span class="data-value">暂无组织数据</span></div>';
+            }
+
+            let html = '';
+
+            // 添加组织选择器
+            html += `
+                <div class="data-row org-selector-row">
+                    <span class="data-label">选择组织:</span>
+                    <select class="data-org-selector" onchange="window.SillyTavernInfobar?.modules?.frontendDisplayManager?.switchOrgDisplay(this)">
+            `;
+
+            orgList.forEach(([orgId, orgData], index) => {
+                const orgName = this.getOrgDisplayName(orgId, orgData);
+                html += `<option value="${orgId}" ${index === 0 ? 'selected' : ''}>${this.escapeHtml(orgName)}</option>`;
+            });
+
+            html += '</select></div>';
+
+            // 为每个组织创建数据显示区域
+            orgList.forEach(([orgId, orgData], index) => {
+                const displayStyle = index === 0 ? 'block' : 'none';
+                html += `<div class="org-data-container" data-org-id="${orgId}" style="display: ${displayStyle};">`;
+
+                // 渲染组织的字段数据
+                Object.entries(orgData).forEach(([fieldName, value]) => {
+                    if (this.isValidDataValue(value)) {
+                        const displayLabel = this.getFieldDisplayName(fieldName);
+                        html += `
+                            <div class="data-row">
+                                <span class="data-label">${this.escapeHtml(displayLabel)}:</span>
+                                <span class="data-value">${this.escapeHtml(String(value))}</span>
+                            </div>
+                        `;
+                    }
+                });
+
+                html += '</div>';
+            });
+
+            console.log('[FrontendDisplayManager] ✅ 多组织面板渲染完成');
+            return html;
+
+        } catch (error) {
+            console.error('[FrontendDisplayManager] ❌ 渲染多组织面板失败:', error);
+            return '<div class="data-row"><span class="data-value">多组织渲染失败</span></div>';
+        }
+    }
+
+    /**
+     * 切换组织显示 - 供前端选择器调用
+     */
+    switchOrgDisplay(selectElement) {
+        try {
+            const selectedOrgId = selectElement.value;
+            const container = selectElement.closest('.popup-body, .panel-content');
+
+            if (!container) return;
+
+            // 隐藏所有组织数据容器
+            const allContainers = container.querySelectorAll('.org-data-container');
+            allContainers.forEach(container => {
+                container.style.display = 'none';
+            });
+
+            // 显示选中的组织数据容器
+            const selectedContainer = container.querySelector(`[data-org-id="${selectedOrgId}"]`);
+            if (selectedContainer) {
+                selectedContainer.style.display = 'block';
+                console.log(`[FrontendDisplayManager] 🔄 切换到组织: ${selectedOrgId}`);
+            }
+
+        } catch (error) {
+            console.error('[FrontendDisplayManager] ❌ 切换组织显示失败:', error);
+        }
+    }
+
+    /**
      * 切换NPC显示 - 供前端选择器调用
      */
     switchNpcDisplay(selectElement) {
         try {
             const selectedNpcId = selectElement.value;
             const container = selectElement.closest('.popup-body, .panel-content');
-            
+
             if (!container) return;
-            
+
             // 隐藏所有NPC数据容器
             const allContainers = container.querySelectorAll('.npc-data-container');
             allContainers.forEach(container => {
                 container.style.display = 'none';
             });
-            
+
             // 显示选中的NPC数据容器
             const selectedContainer = container.querySelector(`[data-npc-id="${selectedNpcId}"]`);
             if (selectedContainer) {
                 selectedContainer.style.display = 'block';
                 console.log(`[FrontendDisplayManager] 🔄 切换到NPC: ${selectedNpcId}`);
             }
-            
+
         } catch (error) {
             console.error('[FrontendDisplayManager] ❌ 切换NPC显示失败:', error);
         }

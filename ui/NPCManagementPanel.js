@@ -93,9 +93,14 @@ export class NPCManagementPanel {
         // 🔧 修复：监听聊天切换事件，确保数据隔离
         this.eventSystem?.on?.('chat:changed', () => {
             console.log('[NPCPanel] 🔄 检测到聊天切换，刷新NPC列表');
-            if (this.visible) {
-                this.render(); // 重新渲染整个界面
-            }
+            // 🔧 修复：总是刷新数据，无论界面是否可见
+            setTimeout(async () => {
+                if (this.visible) {
+                    this.render(); // 重新渲染整个界面
+                }
+                // 🚀 强制刷新列表数据以确保下次打开时显示正确
+                await this.forceRefreshData();
+            }, 100); // 小延迟确保数据库已经切换完成
         });
 
         // 🔧 修复：监听NPC数据库重新加载事件
@@ -103,6 +108,14 @@ export class NPCManagementPanel {
             console.log('[NPCPanel] 🔄 NPC数据库已重新加载，刷新界面');
             if (this.visible) {
                 this.render();
+            }
+        });
+
+        // 🔧 修复：监听NPC数据库保存事件，确保实时同步
+        this.eventSystem?.on?.('npc:db:saved', () => {
+            console.log('[NPCPanel] 💾 NPC数据库已保存，刷新显示');
+            if (this.visible) {
+                this.renderList();
             }
         });
     }
@@ -232,7 +245,17 @@ export class NPCManagementPanel {
         if (!this.container) return;
         this.visible = true;
         this.container.style.display = '';
-        this.render();
+        
+        // 🔧 修复：显示时强制刷新数据，确保显示当前聊天的NPC
+        console.log('[NPCPanel] 📂 面板打开，刷新当前聊天的NPC数据');
+        
+        // 🚀 异步刷新数据，不阻塞界面显示
+        this.forceRefreshData().then(() => {
+            this.render();
+        }).catch(error => {
+            console.error('[NPCPanel] ❌ 打开面板时刷新数据失败:', error);
+            this.render(); // 即使刷新失败也要显示界面
+        });
     }
 
     hide() {
@@ -242,6 +265,31 @@ export class NPCManagementPanel {
     }
 
     toggle() { this.visible ? this.hide() : this.show(); }
+
+    /**
+     * 🔧 强制刷新数据 - 确保下次打开时显示正确的聊天数据
+     */
+    async forceRefreshData() {
+        try {
+            // 🚀 强制NPC数据库重新加载当前聊天的数据
+            if (this.npcDB && typeof this.npcDB.load === 'function') {
+                const currentChatId = this.npcDB.getCurrentChatId();
+                console.log('[NPCPanel] 🔄 强制刷新数据，当前聊天ID:', currentChatId);
+                
+                // 🚀 重新加载数据库，确保获取当前聊天的最新数据
+                await this.npcDB.load();
+                
+                console.log('[NPCPanel] ✅ NPC数据库已重新加载，NPC数量:', Object.keys(this.npcDB.db?.npcs || {}).length);
+                
+                // 如果界面当前可见，立即刷新列表
+                if (this.visible) {
+                    this.renderList();
+                }
+            }
+        } catch (error) {
+            console.error('[NPCPanel] ❌ 强制刷新数据失败:', error);
+        }
+    }
 
     onSearchInput(e) {
         this.searchText = e.target.value || '';
