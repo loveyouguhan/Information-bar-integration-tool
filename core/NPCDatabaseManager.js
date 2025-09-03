@@ -205,6 +205,23 @@ export class NPCDatabaseManager {
                 await this.load();
 
                 console.log('[NPCDB] ✅ 已切换到新聊天的NPC数据库:', Object.keys(this.db.npcs).length, '个NPC');
+
+                // 🚀 触发数据库重新加载事件，确保界面刷新
+                if (this.eventSystem) {
+                    this.eventSystem.emit('npc:db:reloaded', {
+                        chatId: newChatId,
+                        npcCount: Object.keys(this.db.npcs).length
+                    });
+                    
+                    // 🚀 额外触发更新事件，确保所有监听器都能收到通知
+                    this.eventSystem.emit('npc:db:updated', {
+                        action: 'chat_switch',
+                        chatId: newChatId,
+                        npcCount: Object.keys(this.db.npcs).length
+                    });
+                }
+            } else {
+                console.log('[NPCDB] ℹ️ 聊天ID未变化，跳过切换');
             }
         } catch (error) {
             console.error('[NPCDB] ❌ 处理聊天切换失败:', error);
@@ -554,13 +571,59 @@ export class NPCDatabaseManager {
     }
 
     // 查询与筛选
-    search({ q = '', sortBy = 'lastSeen', order = 'desc' } = {}) {
+    search({ q = '', sortBy = 'lastSeen', order = 'desc', filterCurrentChat = true } = {}) {
         const term = (q || '').trim();
         const arr = Object.values(this.db.npcs);
+        
+        // 🚀 关键修复：验证数据库隔离和NPC聊天归属
         let filtered = arr;
-        if (term) {
-            filtered = arr.filter(n => (n.name || '').includes(term));
+        const currentChatId = this.getCurrentChatId();
+        const currentDbKey = this.getCurrentDbKey();
+        
+        console.log(`[NPCDB] 🔍 搜索调试信息:`, {
+            currentChatId,
+            currentDbKey,
+            totalNpcs: arr.length,
+            filterCurrentChat
+        });
+        
+        if (filterCurrentChat && currentChatId) {
+            // 🔧 双重检查：既要检查数据库键匹配，也要检查NPC的lastChatId
+            filtered = arr.filter(npc => {
+                const npcChatId = npc.lastChatId;
+                const belongsToCurrentChat = npcChatId === currentChatId;
+                
+                if (!belongsToCurrentChat) {
+                    console.log(`[NPCDB] 🔍 过滤NPC "${npc.name}" (${npc.id}): 所属聊天 "${npcChatId}" != 当前聊天 "${currentChatId}"`);
+                }
+                
+                return belongsToCurrentChat;
+            });
+            
+            console.log(`[NPCDB] 🔍 聊天过滤结果: ${filtered.length}/${arr.length} 个NPC属于当前聊天 "${currentChatId}"`);
+            
+            // 🔧 额外检查：如果过滤后没有NPC，但数据库中有NPC，说明可能存在数据污染
+            if (filtered.length === 0 && arr.length > 0) {
+                console.warn(`[NPCDB] ⚠️ 数据库隔离检查: 当前聊天 "${currentChatId}" 的数据库中有 ${arr.length} 个NPC，但没有一个属于当前聊天`);
+                console.warn('[NPCDB] ⚠️ 这可能表明存在跨聊天数据污染问题');
+                
+                // 列出所有NPC的归属聊天
+                arr.forEach(npc => {
+                    console.warn(`[NPCDB] 🔍 NPC "${npc.name}" (${npc.id}) 归属聊天: "${npc.lastChatId}"`);
+                });
+            }
+        } else if (!currentChatId) {
+            console.warn('[NPCDB] ⚠️ 无法获取当前聊天ID，显示所有NPC');
         }
+        
+        // 搜索文本过滤
+        if (term) {
+            const beforeSearch = filtered.length;
+            filtered = filtered.filter(n => (n.name || '').includes(term));
+            console.log(`[NPCDB] 🔍 搜索过滤结果: ${filtered.length}/${beforeSearch} 个NPC匹配搜索词 "${term}"`);
+        }
+        
+        // 排序
         const keyGet = {
             name: n => n.name || '',
             appearCount: n => n.appearCount || 0,
@@ -570,6 +633,7 @@ export class NPCDatabaseManager {
             const va = keyGet(a); const vb = keyGet(b);
             return order === 'asc' ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
         });
+        
         return filtered;
     }
 

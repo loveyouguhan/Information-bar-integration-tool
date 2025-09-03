@@ -417,6 +417,15 @@ export class UnifiedDataCore {
                     } else {
                         shouldInclude = enabledKeys.has(fieldKey);
                     }
+                } else if (panelId === 'organization') {
+                    // 🔧 特殊处理：组织架构面板的动态组织字段格式 (orgX.fieldName)
+                    const orgFieldMatch = fieldKey.match(/^org\d+\.(.+)$/);
+                    if (orgFieldMatch) {
+                        const baseFieldName = orgFieldMatch[1];
+                        shouldInclude = enabledKeys.has(baseFieldName);
+                    } else {
+                        shouldInclude = enabledKeys.has(fieldKey);
+                    }
                 } else {
                     shouldInclude = enabledKeys.has(fieldKey);
                 }
@@ -439,6 +448,18 @@ export class UnifiedDataCore {
                         shouldInclude = enabledKeys.has(baseFieldName);
                         if (shouldInclude) {
                             console.log(`[UnifiedDataCore] ✅ 交互对象动态字段合并: ${fieldKey} -> ${baseFieldName}`);
+                        }
+                    } else {
+                        shouldInclude = enabledKeys.has(fieldKey);
+                    }
+                } else if (panelId === 'organization') {
+                    // 🔧 特殊处理：组织架构面板的动态组织字段格式 (orgX.fieldName)
+                    const orgFieldMatch = fieldKey.match(/^org\d+\.(.+)$/);
+                    if (orgFieldMatch) {
+                        baseFieldName = orgFieldMatch[1];
+                        shouldInclude = enabledKeys.has(baseFieldName);
+                        if (shouldInclude) {
+                            console.log(`[UnifiedDataCore] ✅ 组织架构动态字段合并: ${fieldKey} -> ${baseFieldName}`);
                         }
                     } else {
                         shouldInclude = enabledKeys.has(fieldKey);
@@ -485,12 +506,12 @@ export class UnifiedDataCore {
             // 🆕 默认多行数据字段配置
             const defaultMultiRowFields = {
                 'personal': ['经历记录', 'experience_log', '重要事件', 'important_events'],
-                'world': ['位置记录', 'locations', '事件记录', 'events_log'], 
+                'world': ['位置记录', 'locations', '事件记录', 'events_log'],
                 'interaction': ['对话记录', 'conversation_log', '互动历史', 'interaction_history'],
                 'tasks': ['任务记录', 'task_log', '完成记录', 'completion_log'],
                 'news': ['新闻事件', 'news_events', '事件记录', 'event_log'],
                 'plot': ['剧情发展', 'plot_development', '重要节点', 'key_moments'],
-                'organization': ['成员记录', 'member_log', '活动记录', 'activity_log']
+                'organization': ['成员记录', 'member_log', '活动记录', 'activity_log', '组织历史', 'organization_history', '重要决策', 'important_decisions']
             };
 
             // 添加面板默认的多行字段
@@ -2661,6 +2682,207 @@ export class UnifiedDataCore {
     }
 
     /**
+     * 🔧 新增：删除面板字段
+     * @param {string} panelId - 面板ID
+     * @param {string} fieldKey - 字段键（可能包含前缀，如npc0.name或直接name）
+     */
+    async deletePanelField(panelId, fieldKey) {
+        try {
+            console.log('[UnifiedDataCore] 🗑️ 删除面板字段:', { panelId, fieldKey });
+
+            // 获取当前聊天ID
+            const chatId = this.getCurrentChatId();
+            if (!chatId) {
+                throw new Error('当前聊天ID未找到');
+            }
+
+            // 🔧 修复：处理字段名转换
+            let actualFieldKey = fieldKey;
+            
+            // 如果fieldKey包含前缀（如npc0.中文字段名），需要分别处理
+            const prefixMatch = fieldKey.match(/^((?:npc|org)\d+)\.(.+)$/);
+            if (prefixMatch) {
+                const [, prefix, fieldName] = prefixMatch;
+                // 将中文字段名转换为英文字段名
+                const englishFieldName = this.getEnglishFieldName(fieldName, panelId);
+                actualFieldKey = englishFieldName ? `${prefix}.${englishFieldName}` : fieldKey;
+                
+                console.log('[UnifiedDataCore] 🔄 前缀字段名映射:', {
+                    original: fieldKey,
+                    prefix,
+                    fieldName,
+                    englishFieldName,
+                    actual: actualFieldKey
+                });
+            } else {
+                // 普通字段名转换
+                const englishFieldName = this.getEnglishFieldName(fieldKey, panelId);
+                actualFieldKey = englishFieldName || fieldKey;
+                
+                console.log('[UnifiedDataCore] 🔄 字段名映射:', {
+                    original: fieldKey,
+                    english: englishFieldName,
+                    actual: actualFieldKey
+                });
+            }
+
+            // 获取当前面板数据
+            const panelData = await this.getPanelData(panelId) || {};
+            
+            // 🔧 添加详细调试信息
+            console.log('[UnifiedDataCore] 🔍 面板数据获取结果:', {
+                panelId,
+                chatId,
+                panelDataExists: !!panelData,
+                panelDataKeys: Object.keys(panelData),
+                panelDataSize: Object.keys(panelData).length,
+                searchingFor: actualFieldKey
+            });
+            
+            // 检查字段是否存在
+            if (!(actualFieldKey in panelData)) {
+                console.warn('[UnifiedDataCore] ⚠️ 字段不存在:', actualFieldKey);
+                console.log('[UnifiedDataCore] 🔍 可用字段:', Object.keys(panelData));
+                
+                // 🔧 尝试从缓存数据中获取（作为备选方案）
+                const cachedData = this.chatDataCache?.get(chatId);
+                if (cachedData && cachedData.infobar_data && cachedData.infobar_data.panels) {
+                    const cachedPanelData = cachedData.infobar_data.panels[panelId];
+                    console.log('[UnifiedDataCore] 🔍 缓存中的面板数据:', {
+                        exists: !!cachedPanelData,
+                        keys: cachedPanelData ? Object.keys(cachedPanelData) : [],
+                        hasTargetField: cachedPanelData ? (actualFieldKey in cachedPanelData) : false
+                    });
+                }
+                
+                return true; // 字段不存在视为删除成功
+            }
+
+            const oldValue = panelData[actualFieldKey];
+
+            // 删除字段
+            delete panelData[actualFieldKey];
+
+            // 保存更新后的面板数据（删除操作需跳过合并，直接覆盖写回）
+            await this.writePanelDataWithoutMerge(chatId, panelId, panelData);
+
+            console.log('[UnifiedDataCore] ✅ 面板字段删除成功:', {
+                panelId,
+                originalFieldKey: fieldKey,
+                actualFieldKey,
+                oldValue
+            });
+
+            // 🚀 全面清理相关数据存储位置
+            await this.comprehensiveDataCleanup(chatId, panelId, actualFieldKey, oldValue);
+
+            // 触发数据更新事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('data:updated', {
+                    panelId,
+                    fieldKey: actualFieldKey,
+                    originalFieldKey: fieldKey,
+                    action: 'delete',
+                    oldValue,
+                    timestamp: Date.now()
+                });
+            }
+
+            return true;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 删除面板字段失败:', error);
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🔧 新增：删除面板数据
+     * @param {string} panelId - 面板ID
+     */
+    async deletePanelData(panelId) {
+        try {
+            console.log('[UnifiedDataCore] 🗂️ 删除面板数据:', panelId);
+
+            // 获取当前聊天ID
+            const chatId = this.getCurrentChatId();
+            if (!chatId) {
+                throw new Error('当前聊天ID未找到');
+            }
+
+            // 删除整个面板数据：直接覆盖为空对象，跳过合并
+            await this.writePanelDataWithoutMerge(chatId, panelId, {});
+
+            console.log('[UnifiedDataCore] ✅ 面板数据删除成功:', panelId);
+
+            // 🚀 全面清理整个面板的相关数据存储位置
+            await this.comprehensiveDataCleanup(chatId, panelId, null, null, 'panel');
+
+            // 触发数据更新事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('data:updated', {
+                    panelId,
+                    action: 'clear',
+                    timestamp: Date.now()
+                });
+            }
+
+            return true;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 删除面板数据失败:', error);
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🛠️ 仅内部使用：直接写回面板数据，跳过合并流程（用于删除/清空等场景）
+     * @param {string} chatId
+     * @param {string} panelId
+     * @param {Object} panelData
+     */
+    async writePanelDataWithoutMerge(chatId, panelId, panelData) {
+        try {
+            const panelKey = `panels.${chatId}.${panelId}`;
+
+            // 1) 直接写回 chatMetadata 对应 panels.<chatId>.<panelId>
+            await this.chatMetadata.set(panelKey, panelData);
+
+            // 2) 同步更新内存 Map（保持与旧逻辑一致）
+            if (this.data instanceof Map) {
+                this.data.set(panelId, panelData);
+            }
+
+            // 3) 同步更新 chat_<chatId>.infobar_data.panels
+            const chatDataKey = `chat_${chatId}`;
+            const chatData = this.chatMetadata.get(chatDataKey) || {};
+            if (!chatData.infobar_data) {
+                chatData.infobar_data = { panels: {}, history: [], lastUpdated: 0 };
+            }
+            if (!chatData.infobar_data.panels) {
+                chatData.infobar_data.panels = {};
+            }
+            chatData.infobar_data.panels[panelId] = panelData;
+            chatData.infobar_data.lastUpdated = Date.now();
+            await this.chatMetadata.set(chatDataKey, chatData);
+
+            // 4) 刷新当前聊天缓存
+            this.chatDataCache.set(chatId, chatData);
+
+            console.log('[UnifiedDataCore] ✅ 面板数据已直接写回(无合并):', {
+                panelId,
+                keys: Object.keys(panelData),
+                size: Object.keys(panelData).length
+            });
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 直接写回面板数据失败:', error);
+            throw error;
+        }
+    }
+
+    /**
      * 🆕 获取面板数据
      * @param {string} panelId - 面板ID
      * @returns {Object} 面板数据
@@ -2670,8 +2892,32 @@ export class UnifiedDataCore {
             const chatId = this.getCurrentChatId();
             if (!chatId) return null;
 
+            // 🔧 修复：优先从缓存获取数据
+            const cachedData = this.chatDataCache?.get(chatId);
+            if (cachedData && cachedData.infobar_data && cachedData.infobar_data.panels) {
+                const cachedPanelData = cachedData.infobar_data.panels[panelId];
+                if (cachedPanelData && typeof cachedPanelData === 'object') {
+                    console.log('[UnifiedDataCore] 📊 从缓存获取面板数据:', {
+                        panelId,
+                        keys: Object.keys(cachedPanelData),
+                        size: Object.keys(cachedPanelData).length
+                    });
+                    return cachedPanelData;
+                }
+            }
+
+            // 如果缓存中没有，从chatMetadata获取
             const panelKey = `panels.${chatId}.${panelId}`;
-            return await this.getData(panelKey, 'chat');
+            const metadataData = await this.getData(panelKey, 'chat');
+            
+            console.log('[UnifiedDataCore] 📊 从chatMetadata获取面板数据:', {
+                panelId,
+                exists: !!metadataData,
+                keys: metadataData ? Object.keys(metadataData) : [],
+                size: metadataData ? Object.keys(metadataData).length : 0
+            });
+            
+            return metadataData;
 
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 获取面板数据失败:', error);
@@ -3123,6 +3369,379 @@ export class UnifiedDataCore {
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 获取英文字段名失败:', error);
             return chineseDisplayName; // 出错时返回原字段名
+        }
+    }
+
+    /**
+     * 🚀 全面数据清理：删除字段/面板时清理所有相关的数据存储位置
+     * @param {string} chatId - 聊天ID
+     * @param {string} panelId - 面板ID
+     * @param {string} fieldKey - 字段键（可选，为null时清理整个面板）
+     * @param {*} oldValue - 旧值（可选）
+     * @param {string} scope - 清理范围：'field' | 'panel'
+     */
+    async comprehensiveDataCleanup(chatId, panelId, fieldKey = null, oldValue = null, scope = 'field') {
+        try {
+            console.log('[UnifiedDataCore] 🧹 开始全面数据清理:', { chatId, panelId, fieldKey, scope });
+
+            // 1. 清理字段历史记录
+            await this.cleanupFieldHistory(chatId, panelId, fieldKey, scope);
+
+            // 2. 清理STScript变量缓存（智能提示词使用）
+            await this.cleanupSTScriptVariables(chatId, panelId, fieldKey, scope);
+
+            // 3. 清理AI数据暴露缓存
+            await this.cleanupAIDataExposure(panelId, fieldKey, scope);
+
+            // 4. 清理消息渲染缓存
+            await this.cleanupMessageRendererCache(chatId, panelId, scope);
+
+            // 5. 清理前端显示缓存
+            await this.cleanupFrontendDisplayCache(chatId, panelId, scope);
+
+            // 6. 清理模块缓存
+            await this.cleanupModuleCaches(chatId, panelId, fieldKey, scope);
+
+            console.log('[UnifiedDataCore] ✅ 全面数据清理完成:', { panelId, fieldKey, scope });
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 全面数据清理失败:', error);
+            // 不抛出错误，避免影响主删除流程
+        }
+    }
+
+    /**
+     * 🧹 清理字段历史记录
+     */
+    async cleanupFieldHistory(chatId, panelId, fieldKey, scope) {
+        try {
+            if (scope === 'panel') {
+                // 清理整个面板的历史记录
+                const historyPattern = `${panelId}:`;
+                if (this.fieldHistory) {
+                    const keysToDelete = [];
+                    for (const [key] of this.fieldHistory.entries()) {
+                        if (key.startsWith(historyPattern)) {
+                            keysToDelete.push(key);
+                        }
+                    }
+                    keysToDelete.forEach(key => this.fieldHistory.delete(key));
+                    console.log('[UnifiedDataCore] 🧹 已清理面板历史记录:', keysToDelete.length, '条');
+                }
+            } else if (fieldKey) {
+                // 清理特定字段的历史记录
+                const historyKey = `${panelId}:${fieldKey}`;
+                if (this.fieldHistory && this.fieldHistory.has(historyKey)) {
+                    this.fieldHistory.delete(historyKey);
+                    console.log('[UnifiedDataCore] 🧹 已清理字段历史记录:', historyKey);
+                }
+            }
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理字段历史记录失败:', error);
+        }
+    }
+
+    /**
+     * 🧹 清理STScript变量缓存（智能提示词使用）
+     */
+    async cleanupSTScriptVariables(chatId, panelId, fieldKey, scope) {
+        try {
+            // 清理全局infobar变量
+            if (window.SillyTavernInfobar?.modules?.stScriptDataSync) {
+                const stScript = window.SillyTavernInfobar.modules.stScriptDataSync;
+                if (stScript.clearCache) {
+                    await stScript.clearCache();
+                    console.log('[UnifiedDataCore] 🧹 已清理STScript变量缓存');
+                }
+            }
+
+            // 清理特定的变量缓存
+            if (window.infobar_data) {
+                if (scope === 'panel') {
+                    delete window.infobar_data[panelId];
+                } else if (fieldKey && window.infobar_data[panelId]) {
+                    delete window.infobar_data[panelId][fieldKey];
+                }
+                console.log('[UnifiedDataCore] 🧹 已清理全局infobar_data变量');
+            }
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理STScript变量失败:', error);
+        }
+    }
+
+    /**
+     * 🧹 清理AI数据暴露缓存
+     */
+    async cleanupAIDataExposure(panelId, fieldKey, scope) {
+        try {
+            if (window.SillyTavernInfobar?.modules?.aiDataExposure) {
+                const aiDataExposure = window.SillyTavernInfobar.modules.aiDataExposure;
+                if (aiDataExposure.clearCache) {
+                    await aiDataExposure.clearCache();
+                    console.log('[UnifiedDataCore] 🧹 已清理AI数据暴露缓存');
+                }
+            }
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理AI数据暴露缓存失败:', error);
+        }
+    }
+
+    /**
+     * 🧹 清理消息渲染缓存
+     */
+    async cleanupMessageRendererCache(chatId, panelId, scope) {
+        try {
+            if (window.SillyTavernInfobar?.modules?.messageInfoBarRenderer) {
+                const renderer = window.SillyTavernInfobar.modules.messageInfoBarRenderer;
+                if (renderer.clearCache) {
+                    await renderer.clearCache();
+                }
+                console.log('[UnifiedDataCore] 🧹 已清理消息渲染缓存');
+            }
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理消息渲染缓存失败:', error);
+        }
+    }
+
+    /**
+     * 🧹 清理前端显示缓存
+     */
+    async cleanupFrontendDisplayCache(chatId, panelId, scope) {
+        try {
+            if (window.SillyTavernInfobar?.modules?.frontendDisplayManager) {
+                const frontendManager = window.SillyTavernInfobar.modules.frontendDisplayManager;
+                if (frontendManager.clearCache) {
+                    await frontendManager.clearCache();
+                }
+                console.log('[UnifiedDataCore] 🧹 已清理前端显示缓存');
+            }
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理前端显示缓存失败:', error);
+        }
+    }
+
+    /**
+     * 🧹 清理模块缓存
+     */
+    async cleanupModuleCaches(chatId, panelId, fieldKey, scope) {
+        try {
+            // 清理智能提示词系统缓存
+            if (window.SillyTavernInfobar?.modules?.smartPromptSystem) {
+                const smartPrompt = window.SillyTavernInfobar.modules.smartPromptSystem;
+                if (smartPrompt.clearCache) {
+                    await smartPrompt.clearCache();
+                }
+                console.log('[UnifiedDataCore] 🧹 已清理智能提示词缓存');
+            }
+
+            // 清理数据表格缓存
+            if (window.SillyTavernInfobar?.modules?.dataTable) {
+                const dataTable = window.SillyTavernInfobar.modules.dataTable;
+                if (dataTable.clearCache) {
+                    await dataTable.clearCache();
+                }
+                console.log('[UnifiedDataCore] 🧹 已清理数据表格缓存');
+            }
+
+            // 清理HTML模板解析器缓存
+            if (window.SillyTavernInfobar?.modules?.htmlTemplateParser) {
+                const templateParser = window.SillyTavernInfobar.modules.htmlTemplateParser;
+                if (templateParser.clearCache) {
+                    await templateParser.clearCache();
+                }
+                console.log('[UnifiedDataCore] 🧹 已清理模板解析器缓存');
+            }
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理模块缓存失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 删除NPC的所有数据：完整清理NPC在所有存储位置的数据
+     * @param {string} panelId - 面板ID（通常是'interaction'）
+     * @param {string} npcId - NPC ID（如'npc0'）
+     */
+    async deleteNpcCompletely(panelId, npcId) {
+        try {
+            console.log('[UnifiedDataCore] 🗑️ 开始完整删除NPC数据:', { panelId, npcId });
+
+            const chatId = this.getCurrentChatId();
+            if (!chatId) {
+                throw new Error('当前聊天ID未找到');
+            }
+
+            // 获取面板数据
+            const panelData = await this.getPanelData(panelId) || {};
+            const keysToDelete = [];
+            const deletedData = {};
+
+            // 找到所有以npcId开头的键
+            for (const key in panelData) {
+                if (key.startsWith(npcId + '.')) {
+                    keysToDelete.push(key);
+                    deletedData[key] = panelData[key];
+                    delete panelData[key];
+                }
+            }
+
+            console.log('[UnifiedDataCore] 🔍 找到NPC相关字段:', keysToDelete);
+
+            // 保存更新后的面板数据
+            await this.writePanelDataWithoutMerge(chatId, panelId, panelData);
+
+            // 🚀 全面清理NPC相关的所有数据存储位置
+            for (const fieldKey of keysToDelete) {
+                await this.comprehensiveDataCleanup(chatId, panelId, fieldKey, deletedData[fieldKey], 'field');
+            }
+
+            // 🚀 额外清理：移除NPC相关的特定缓存和变量
+            await this.cleanupNpcSpecificData(chatId, npcId, deletedData);
+
+            console.log('[UnifiedDataCore] ✅ NPC数据完整删除成功:', { npcId, deletedFields: keysToDelete.length });
+
+            // 触发数据更新事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('data:updated', {
+                    panelId,
+                    action: 'delete_npc',
+                    npcId,
+                    deletedFields: keysToDelete,
+                    timestamp: Date.now()
+                });
+            }
+
+            return true;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 完整删除NPC数据失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🚀 删除组织的所有数据：完整清理组织在所有存储位置的数据
+     * @param {string} panelId - 面板ID（通常是'organization'）
+     * @param {string} orgId - 组织ID（如'org0'）
+     */
+    async deleteOrganizationCompletely(panelId, orgId) {
+        try {
+            console.log('[UnifiedDataCore] 🗑️ 开始完整删除组织数据:', { panelId, orgId });
+
+            const chatId = this.getCurrentChatId();
+            if (!chatId) {
+                throw new Error('当前聊天ID未找到');
+            }
+
+            // 获取面板数据
+            const panelData = await this.getPanelData(panelId) || {};
+            const keysToDelete = [];
+            const deletedData = {};
+
+            // 找到所有以orgId开头的键
+            for (const key in panelData) {
+                if (key.startsWith(orgId + '.')) {
+                    keysToDelete.push(key);
+                    deletedData[key] = panelData[key];
+                    delete panelData[key];
+                }
+            }
+
+            console.log('[UnifiedDataCore] 🔍 找到组织相关字段:', keysToDelete);
+
+            // 保存更新后的面板数据
+            await this.writePanelDataWithoutMerge(chatId, panelId, panelData);
+
+            // 🚀 全面清理组织相关的所有数据存储位置
+            for (const fieldKey of keysToDelete) {
+                await this.comprehensiveDataCleanup(chatId, panelId, fieldKey, deletedData[fieldKey], 'field');
+            }
+
+            // 🚀 额外清理：移除组织相关的特定缓存和变量
+            await this.cleanupOrganizationSpecificData(chatId, orgId, deletedData);
+
+            console.log('[UnifiedDataCore] ✅ 组织数据完整删除成功:', { orgId, deletedFields: keysToDelete.length });
+
+            // 触发数据更新事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('data:updated', {
+                    panelId,
+                    action: 'delete_organization',
+                    orgId,
+                    deletedFields: keysToDelete,
+                    timestamp: Date.now()
+                });
+            }
+
+            return true;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 完整删除组织数据失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🧹 清理NPC特定的数据和缓存
+     */
+    async cleanupNpcSpecificData(chatId, npcId, deletedData) {
+        try {
+            // 清理NPC数据库模块的缓存
+            if (window.SillyTavernInfobar?.modules?.npcDatabaseManager) {
+                const npcDB = window.SillyTavernInfobar.modules.npcDatabaseManager;
+                if (npcDB.removeNpc) {
+                    await npcDB.removeNpc(npcId);
+                    console.log('[UnifiedDataCore] 🧹 已从NPC数据库移除:', npcId);
+                }
+            }
+
+            // 清理STScript中NPC相关的变量
+            if (window.infobar_data?.interaction) {
+                Object.keys(window.infobar_data.interaction).forEach(key => {
+                    if (key.startsWith(npcId + '.')) {
+                        delete window.infobar_data.interaction[key];
+                    }
+                });
+                console.log('[UnifiedDataCore] 🧹 已清理STScript中的NPC变量');
+            }
+
+            // 清理消息渲染器中的NPC缓存
+            if (window.SillyTavernInfobar?.modules?.messageInfoBarRenderer) {
+                const renderer = window.SillyTavernInfobar.modules.messageInfoBarRenderer;
+                if (renderer.clearNpcCache) {
+                    await renderer.clearNpcCache(npcId);
+                }
+            }
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理NPC特定数据失败:', error);
+        }
+    }
+
+    /**
+     * 🧹 清理组织特定的数据和缓存
+     */
+    async cleanupOrganizationSpecificData(chatId, orgId, deletedData) {
+        try {
+            // 清理STScript中组织相关的变量
+            if (window.infobar_data?.organization) {
+                Object.keys(window.infobar_data.organization).forEach(key => {
+                    if (key.startsWith(orgId + '.')) {
+                        delete window.infobar_data.organization[key];
+                    }
+                });
+                console.log('[UnifiedDataCore] 🧹 已清理STScript中的组织变量');
+            }
+
+            // 清理消息渲染器中的组织缓存
+            if (window.SillyTavernInfobar?.modules?.messageInfoBarRenderer) {
+                const renderer = window.SillyTavernInfobar.modules.messageInfoBarRenderer;
+                if (renderer.clearOrganizationCache) {
+                    await renderer.clearOrganizationCache(orgId);
+                }
+            }
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理组织特定数据失败:', error);
         }
     }
 }

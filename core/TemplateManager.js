@@ -786,7 +786,18 @@ export class TemplateManager {
                     { name: '剑术', level: 15 },
                     { name: '防御', level: 12 },
                     { name: '治疗', level: 8 }
-                ]
+                ],
+                // 组织面板示例数据（多组织格式）
+                'org0.组织名称': '冒险者公会',
+                'org0.组织类型': '冒险组织',
+                'org0.组织等级': '白银级',
+                'org0.职位': '正式成员',
+                'org0.贡献度': '1250',
+                'org1.组织名称': '铁匠工会',
+                'org1.组织类型': '工匠组织',
+                'org1.组织等级': '青铜级',
+                'org1.职位': '学徒',
+                'org1.贡献度': '320'
             },
             computed: {
                 healthPercentage: 85,

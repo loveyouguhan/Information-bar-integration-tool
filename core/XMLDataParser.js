@@ -370,6 +370,7 @@ export class XMLDataParser {
         // 🔧 修复：更灵活的面板模式匹配，支持中文字段名和复杂值
         const hasPanelPattern = /\w+:\s*[\w\u4e00-\u9fff]+.*?=/.test(content) || // 支持中文
                                /\w+:\s*npc\d+\.\w+\s*=/.test(content) || // 支持NPC格式
+                               /\w+:\s*org\d+\.\w+\s*=/.test(content) || // 支持组织格式
                                /\w+:\s*\w+\s*=/.test(content); // 原始格式
 
         const isNotPureNarrative = !this.isPureNarrativeContent(content);
@@ -394,6 +395,7 @@ export class XMLDataParser {
         // 先检查是否明显是面板数据格式
         const hasPanelStructure = /\w+:\s*[\w\u4e00-\u9fff]+.*?=/.test(content) ||
                                  /\w+:\s*npc\d+\.\w+\s*=/.test(content) ||
+                                 /\w+:\s*org\d+\.\w+\s*=/.test(content) ||
                                  /\w+:\s*\w+\s*=/.test(content);
         if (hasPanelStructure) {
             console.log('[XMLDataParser] 🔍 检测到面板结构，非纯叙述内容');
@@ -818,6 +820,22 @@ export class XMLDataParser {
                         // 非动态格式，直接匹配
                         shouldInclude = enabledKeys.has(field);
                     }
+                } else if (panelId === 'organization') {
+                    // 🔧 特殊处理：组织架构面板的动态组织字段格式 (orgX.fieldName)
+                    const orgFieldMatch = field.match(/^org\d+\.(.+)$/);
+                    if (orgFieldMatch) {
+                        // 提取基础字段名并检查是否启用
+                        const baseFieldName = orgFieldMatch[1];
+                        shouldInclude = enabledKeys.has(baseFieldName);
+                        if (shouldInclude) {
+                            console.log(`[XMLDataParser] ✅ 组织架构动态字段匹配: ${field} -> ${baseFieldName}`);
+                        } else {
+                            console.log(`[XMLDataParser] ❌ 组织架构动态字段未启用: ${field} (${baseFieldName})`);
+                        }
+                    } else {
+                        // 非动态格式，直接匹配
+                        shouldInclude = enabledKeys.has(field);
+                    }
                 } else {
                     // 其他面板使用直接匹配
                     shouldInclude = enabledKeys.has(field);
@@ -855,7 +873,12 @@ export class XMLDataParser {
                     // 依据启用配置过滤子项，只保留启用字段
                     const filtered = this.filterEnabledSubItems(englishPanelId, panelData);
                     if (Object.keys(filtered).length > 0) {
-                        cleanedData[englishPanelId] = this.cleanPanelData(filtered);
+                        // 🔧 组织架构面板特殊处理：智能分解合并格式
+                        if (englishPanelId === 'organization') {
+                            cleanedData[englishPanelId] = this.smartSplitOrganizationData(filtered);
+                        } else {
+                            cleanedData[englishPanelId] = this.cleanPanelData(filtered);
+                        }
                     } else {
                         console.log('[XMLDataParser] ℹ️ 过滤后无启用字段，跳过面板:', englishPanelId);
                     }
@@ -913,6 +936,78 @@ export class XMLDataParser {
         } catch (error) {
             console.error('[XMLDataParser] ❌ 验证面板数据失败:', error);
             return false;
+        }
+    }
+
+    /**
+     * 智能分解组织数据 - 检测并拆分合并格式
+     * @param {Object} panelData - 组织面板数据
+     * @returns {Object} 分解后的数据
+     */
+    smartSplitOrganizationData(panelData) {
+        try {
+            console.log('[XMLDataParser] 🔍 开始智能分解组织数据:', panelData);
+
+            // 检查是否已经是org前缀格式
+            const hasOrgPrefix = Object.keys(panelData).some(key => key.match(/^org\d+\./));
+            if (hasOrgPrefix) {
+                console.log('[XMLDataParser] ✅ 数据已是org前缀格式，直接清理');
+                return this.cleanPanelData(panelData);
+            }
+
+            // 检测合并格式字段
+            const fieldArrays = {};
+            let maxOrgCount = 0;
+
+            // 分析每个字段，检测逗号分隔的多个值
+            Object.keys(panelData).forEach(fieldName => {
+                const fieldValue = String(panelData[fieldName]).trim();
+                
+                if (fieldValue.includes(',')) {
+                    // 分割并清理值
+                    const values = fieldValue.split(',').map(v => v.trim()).filter(v => v && v !== '未知' && v !== '暂无');
+                    
+                    if (values.length > 1) {
+                        fieldArrays[fieldName] = values;
+                        maxOrgCount = Math.max(maxOrgCount, values.length);
+                        console.log(`[XMLDataParser] 🔍 检测到合并字段 ${fieldName}: ${values.length} 个值`);
+                    } else {
+                        fieldArrays[fieldName] = [fieldValue];
+                    }
+                } else {
+                    fieldArrays[fieldName] = [fieldValue];
+                }
+            });
+
+            // 如果没有检测到多个组织，直接返回清理的数据
+            if (maxOrgCount <= 1) {
+                console.log('[XMLDataParser] ℹ️ 未检测到多组织格式，返回单组织数据');
+                return this.cleanPanelData(panelData);
+            }
+
+            console.log(`[XMLDataParser] 🎯 检测到 ${maxOrgCount} 个组织，开始分解`);
+
+            // 生成分解后的org前缀格式数据
+            const splitData = {};
+
+            for (let orgIndex = 0; orgIndex < maxOrgCount; orgIndex++) {
+                Object.keys(fieldArrays).forEach(fieldName => {
+                    const values = fieldArrays[fieldName];
+                    const value = values[orgIndex] || values[0] || '未知'; // 使用对应值或第一个值或默认值
+                    
+                    const orgFieldName = `org${orgIndex}.${fieldName}`;
+                    splitData[orgFieldName] = value;
+                    
+                    console.log(`[XMLDataParser] 📝 生成字段: ${orgFieldName} = "${value}"`);
+                });
+            }
+
+            console.log(`[XMLDataParser] ✅ 组织数据分解完成，生成 ${Object.keys(splitData).length} 个字段`);
+            return splitData;
+
+        } catch (error) {
+            console.error('[XMLDataParser] ❌ 智能分解组织数据失败:', error);
+            return this.cleanPanelData(panelData);
         }
     }
 

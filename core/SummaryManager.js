@@ -24,7 +24,10 @@ export class SummaryManager {
             summaryFloorCount: 20,
             summaryType: 'small',
             summaryWordCount: 300,
-            injectSummaryEnabled: false  // 🔧 新增：总结注入功能开关
+            injectSummaryEnabled: false,  // 🔧 新增：总结注入功能开关
+            // 🔧 新增：自动隐藏楼层设置
+            autoHideEnabled: false,
+            autoHideThreshold: 30
         };
         
         // 状态管理
@@ -187,6 +190,13 @@ export class SummaryManager {
                 await this.generateSummary({
                     type: 'auto',
                     messageCount: currentMessageCount
+                });
+                
+                // 🔧 新增：总结完成后触发自动隐藏检查
+                this.eventSystem?.emit('summary:completed', {
+                    type: 'auto',
+                    messageCount: currentMessageCount,
+                    timestamp: Date.now()
                 });
             }
             

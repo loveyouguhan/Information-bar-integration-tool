@@ -258,10 +258,14 @@ export class SmartPromptSystem {
 
 **第二步：再输出面板数据（内容必须被<!--和-->包裹，必须严格遵循上述五步思考的分析结果）**
 
-🚨🚨🚨 **CRITICAL REMINDER: interaction面板NPC前缀格式** 🚨🚨🚨
+🚨🚨🚨 **CRITICAL REMINDER: 特殊面板前缀格式** 🚨🚨🚨
 ⚠️ **如果输出interaction面板，必须使用npc0.前缀！**
 ⚠️ **正确: interaction: npc0.name="江琳", npc0.type="朋友"**
 ⚠️ **错误: interaction: [WRONG_FORMAT_REMOVED] ← 系统将拒绝！**
+
+⚠️ **如果输出organization面板，必须使用org0.前缀！**
+⚠️ **正确: organization: org0.组织名称="天剑宗", org0.组织类型="修仙门派"**
+⚠️ **错误: organization: [WRONG_FORMAT_REMOVED] ← 系统将拒绝！**
 
 <infobar_data>
 <!--
@@ -413,13 +417,16 @@ interaction: npc0.姓名="小雨", npc0.关系="朋友", npc0.态度="友好", n
 personal: name="张三", age="25", occupation="程序员", location="办公室", status="工作中"
 world: name="现代都市", type="都市", time="2024年", location="办公大楼"
 interaction: npc0.姓名="小雨", npc0.关系="同事", npc0.态度="友好", npc0.情绪="关心", npc0.活动="询问项目进度"
+organization: org0.组织名称="科技公司", org0.组织类型="私企", org0.职位="高级工程师", org0.部门="研发部", org0.上级="李经理"
 tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
 -->
 </infobar_data>
 
-🚨 **注意：interaction面板必须使用NPC前缀格式！**
+🚨 **注意：特殊面板必须使用前缀格式！**
 ✅ 正确：interaction: npc0.姓名="小雨", npc0.关系="朋友"
+✅ 正确：organization: org0.组织名称="天剑宗", org0.组织类型="修仙门派"
 ❌ 错误：interaction: [WRONG_FORMAT] （系统将拒绝处理）
+❌ 错误：organization: [WRONG_FORMAT] （系统将拒绝处理）
 
 ❌ **错误格式示例（严禁使用）**：
 <aiThinkProcess>
@@ -436,6 +443,7 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
 personal: name="张三", age="25", occupation="程序员", status="工作中"（内容没有被注释符号包裹）
 world: name="现代都市", type="都市", location="办公大楼"
 interaction: npc0.姓名="小雨", npc0.关系="同事", npc0.态度="友好"
+organization: org0.组织名称="科技公司", org0.组织类型="私企", org0.职位="工程师"
 </infobar_data>
 
 【⚠️ 数据格式要求】
@@ -1803,6 +1811,14 @@ interaction: npc0.姓名="小雨", npc0.关系="同事", npc0.态度="友好"
                     templateParts.push(interactionTemplate);
                     console.log(`[SmartPromptSystem] 交互对象面板模板: ${interactionTemplate}`);
                 }
+            }
+            // 特殊处理组织架构面板 - 生成多组织格式
+            else if (panel.id === 'organization') {
+                const organizationTemplate = this.generateOrganizationPanelTemplate(panel, panelKey);
+                if (organizationTemplate) {
+                    templateParts.push(organizationTemplate);
+                    console.log(`[SmartPromptSystem] 组织架构面板模板: ${organizationTemplate}`);
+                }
             } else {
                 // 其他面板使用原有逻辑
                 console.log(`[SmartPromptSystem] 🔍 面板 ${panelKey} 子项详情:`, panel.subItems);
@@ -1997,6 +2013,71 @@ ${panelKey}: npc0.name="主要角色", npc0.type="角色类型", npc0.status="�
         };
 
         return interactionFieldMapping[fieldKey] || `NPC${fieldKey}`;
+    }
+
+    /**
+     * 生成组织架构面板模板 - 动态组织格式说明
+     */
+    generateOrganizationPanelTemplate(panel, panelKey) {
+        console.log('[SmartPromptSystem] 🏢 生成组织架构面板动态组织模板');
+
+        // 🔧 修复：生成正确的字段列表，对于organization面板使用组织前缀格式
+        const availableFields = panel.subItems.map(subItem => {
+            return `org0.${subItem.key}="具体内容"`;
+        });
+
+        // 🔧 优化：生成组织专用的示例格式
+        const exampleFields = panel.subItems.slice(0, 5).map(subItem => {
+            const orgExamples = {
+                '组织名称': 'org0.组织名称="天剑宗"',
+                '组织类型': 'org0.组织类型="修仙门派"',
+                '组织等级': 'org0.组织等级="一流门派"',
+                '掌门': 'org0.掌门="剑无极"',
+                '成员数量': 'org0.成员数量="3000人"',
+                '主要功法': 'org0.主要功法="天剑诀"',
+                '势力范围': 'org0.势力范围="东域"',
+                '组织地位': 'org0.组织地位="正道领袖"',
+                '组织历史': 'org0.组织历史="千年传承"',
+                '重要决策': 'org0.重要决策="闭关修炼"'
+            };
+            return orgExamples[subItem.key] || `org0.${subItem.key}="组织相关内容"`;
+        });
+
+        const result = `
+🏢🏢🏢 **组织架构面板 - 多组织前缀格式说明** 🏢🏢🏢
+
+⚠️ **重要：${panelKey}面板必须使用org前缀格式！**
+⚠️ **每个组织使用独立的orgX.前缀（X为0,1,2,3...）**
+⚠️ **绝对不能在一个字段中混合多个组织的信息**
+
+📋 **格式要求** 📋
+- 只能输出一个${panelKey}面板
+- 每个组织使用独立的orgX.前缀（X为0,1,2,3...）
+- 绝对不能在一个字段中混合多个组织的信息
+- 如果有3个组织，必须使用org0, org1, org2分别标识
+- 如果只有一个主要组织，强烈建议使用org0.前缀
+
+可用字段: ${availableFields.join(', ')}
+
+🎯 **标准示例（3个组织的正确格式 - 每个组织都有完整字段）** 🎯
+${panelKey}: ${exampleFields.join(', ')}, org1.组织名称="商会联盟", org1.组织类型="商业组织", org1.会长="金富贵", org1.成员数量="500人", org2.组织名称="皇室", org2.组织类型="政治势力", org2.皇帝="龙天启", org2.军队规模="十万大军"
+
+🚨🚨🚨 **关键要求：数据完整性** 🚨🚨🚨
+⚠️ **每个组织都必须包含所有相关字段！**
+⚠️ **绝对禁止只为第一个组织输出完整数据，其他组织数据不完整！**
+⚠️ **如果某个组织缺少信息，使用"未知"、"暂无"或"待确认"填充，不能省略字段！**
+
+🎯 **单个组织的推荐格式** 🎯
+${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型", org0.组织等级="等级", org0.领导者="领导人", org0.成员数量="人数", org0.势力范围="范围"
+
+🚫 **严禁的错误格式** 🚫
+❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
+❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
+❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
+❌ ${panelKey}: org0.组织名称="组织1", org0.组织类型="类型1", org1.组织名称="组织2" ← 严重错误！org1缺少组织类型字段！`;
+
+        console.log('[SmartPromptSystem] 🏢 组织架构动态组织模板生成完成（已强化组织前缀指令）');
+        return result;
     }
 
     /**
