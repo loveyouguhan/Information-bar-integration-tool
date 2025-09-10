@@ -2877,6 +2877,327 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     border-color: var(--theme-primary-light, #63b3ed);
 }
 
+/* btn-toolbar 按钮样式 - 与信息栏主题同步 */
+.datatable-modal-new .btn-toolbar {
+    background: var(--theme-primary-color, #4299e1);
+    border: 1px solid var(--theme-primary-color, #4299e1);
+    color: var(--theme-text-primary, #ffffff);
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    outline: none;
+}
+
+/* 🆕 紧凑型工具栏按钮样式 */
+.datatable-modal-new .btn-toolbar.btn-compact {
+    padding: 6px 12px; /* 🔧 减小内边距 */
+    font-size: 13px; /* 🔧 减小字体 */
+    gap: 0; /* 🔧 删除图标间距 */
+}
+
+.datatable-modal-new .btn-toolbar:hover {
+    background: var(--theme-primary-hover, #3182ce);
+    border-color: var(--theme-primary-hover, #3182ce);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+}
+
+.datatable-modal-new .btn-toolbar:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(66, 153, 225, 0.2);
+}
+
+.datatable-modal-new .btn-toolbar:focus {
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.2);
+}
+
+/* 🔧 删除图标样式，因为已经移除了图标 */
+
+/* 🆕 工具栏布局优化 */
+.datatable-modal-new .table-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--theme-border-color, #333);
+    background: var(--theme-bg-secondary, #1a1a1a);
+}
+
+.datatable-modal-new .toolbar-left,
+.datatable-modal-new .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* 🔧 按钮之间的间距 */
+}
+
+/* 增加新面板对话框样式 - 主题同步和移动端适配 */
+.add-panel-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.add-panel-dialog {
+    background: var(--theme-bg-primary, #1a1a1a);
+    border: 1px solid var(--theme-border-color, #333);
+    border-radius: 8px;
+    padding: 24px;
+    min-width: 400px;
+    max-width: 500px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.add-panel-dialog .dialog-header h3 {
+    margin: 0;
+    color: var(--theme-text-primary, #ffffff);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.add-panel-dialog .form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--theme-text-primary, #ffffff);
+    font-size: 14px;
+}
+
+.add-panel-dialog .form-group input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--theme-border-color, #333);
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+    background: var(--theme-bg-secondary, #2d2d2d);
+    color: var(--theme-text-primary, #ffffff);
+    transition: border-color 0.3s ease;
+}
+
+.add-panel-dialog .form-group input:focus {
+    outline: none;
+    border-color: var(--theme-primary-color, #4299e1);
+    box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.2);
+}
+
+.add-panel-dialog .form-group input::placeholder {
+    color: var(--theme-text-secondary, #888);
+}
+
+.add-panel-dialog .form-note {
+    background: var(--theme-bg-secondary, #2d2d2d);
+    border: 1px solid var(--theme-border-color, #333);
+    padding: 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--theme-text-secondary, #cccccc);
+    margin-bottom: 20px;
+}
+
+.add-panel-dialog .btn-cancel {
+    padding: 10px 16px;
+    border: 1px solid var(--theme-border-color, #333);
+    background: var(--theme-bg-secondary, #2d2d2d);
+    color: var(--theme-text-primary, #ffffff);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+}
+
+.add-panel-dialog .btn-cancel:hover {
+    background: var(--theme-bg-hover, #3d3d3d);
+    border-color: var(--theme-text-secondary, #888);
+}
+
+.add-panel-dialog .btn-confirm {
+    padding: 10px 16px;
+    border: none;
+    background: var(--theme-primary-color, #4299e1);
+    color: var(--theme-text-primary, #ffffff);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.add-panel-dialog .btn-confirm:hover {
+    background: var(--theme-primary-hover, #3182ce);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+}
+
+/* 移动端模式样式 - 通过JavaScript类控制 */
+.add-panel-dialog-overlay.mobile-mode {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(0, 0, 0, 0.6) !important;
+    z-index: 10001 !important;
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    padding: 10px !important;
+    padding-top: 10vh !important;
+    box-sizing: border-box !important;
+}
+
+.add-panel-dialog.mobile-mode {
+    background: var(--theme-bg-primary, #1a1a1a) !important;
+    border: 1px solid var(--theme-border-color, #333) !important;
+    border-radius: 12px !important;
+    padding: 20px !important;
+    min-width: unset !important;
+    max-width: none !important;
+    width: 100% !important;
+    max-height: 85vh !important;
+    overflow: hidden !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+    margin: 0 !important;
+}
+
+/* 移动端适配 - 参考字段规则对话框的成功实现 */
+@media (max-width: 768px) {
+    /* 🔧 增加新面板对话框移动端优化 - 强制覆盖内联样式 */
+    .add-panel-dialog-overlay {
+        padding: 10px !important;
+        align-items: flex-start !important;
+        padding-top: 10vh !important; /* 向下移动10%，为顶部留出空间 */
+        justify-content: center !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    .add-panel-dialog {
+        min-width: unset !important;
+        max-width: none !important;
+        width: 100% !important;
+        padding: 20px !important;
+        margin: 0 !important;
+        border-radius: 12px !important;
+        max-height: 85vh !important; /* 限制最大高度，确保不超出屏幕 */
+        overflow: hidden !important;
+    }
+
+    .add-panel-dialog .dialog-header {
+        padding: 16px !important;
+        margin-bottom: 16px !important;
+        padding-bottom: 12px !important;
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 10 !important;
+        background: var(--theme-bg-primary, #1a1a1a) !important;
+        border-bottom: 1px solid var(--theme-border-color, #333) !important;
+    }
+
+    .add-panel-dialog .dialog-header h3 {
+        font-size: 16px !important;
+        margin: 0 !important;
+    }
+
+    .add-panel-dialog .dialog-body {
+        padding: 16px !important;
+        overflow-y: auto !important;
+        max-height: calc(85vh - 120px) !important; /* 减去头部和底部的高度 */
+    }
+
+    .add-panel-dialog .form-group {
+        margin-bottom: 16px !important;
+    }
+
+    .add-panel-dialog .form-group input {
+        padding: 12px !important;
+        font-size: 16px !important; /* 防止iOS缩放 */
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    .add-panel-dialog .form-note {
+        padding: 12px !important;
+        font-size: 13px !important;
+        margin-bottom: 16px !important;
+    }
+
+    .add-panel-dialog .dialog-footer {
+        padding: 16px !important;
+        flex-direction: column-reverse !important;
+        gap: 8px !important;
+        position: sticky !important;
+        bottom: 0 !important;
+        z-index: 10 !important;
+        background: var(--theme-bg-primary, #1a1a1a) !important;
+        border-top: 1px solid var(--theme-border-color, #333) !important;
+    }
+
+    .add-panel-dialog .btn-cancel,
+    .add-panel-dialog .btn-confirm {
+        width: 100% !important;
+        padding: 12px 16px !important;
+        font-size: 16px !important;
+        margin: 0 !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .add-panel-dialog-overlay {
+        padding: 5px !important;
+        padding-top: 5vh !important;
+    }
+
+    .add-panel-dialog {
+        padding: 16px !important;
+        border-radius: 8px !important;
+        max-height: 90vh !important;
+    }
+
+    .add-panel-dialog .dialog-header {
+        padding: 12px !important;
+        margin-bottom: 12px !important;
+        padding-bottom: 10px !important;
+    }
+
+    .add-panel-dialog .dialog-body {
+        padding: 12px !important;
+        max-height: calc(90vh - 100px) !important;
+    }
+
+    .add-panel-dialog .form-group {
+        margin-bottom: 12px !important;
+    }
+
+    .add-panel-dialog .form-note {
+        padding: 10px !important;
+        font-size: 12px !important;
+        margin-bottom: 12px !important;
+    }
+
+    .add-panel-dialog .dialog-footer {
+        padding: 12px !important;
+    }
+}
+
 /* 搜索框样式已移除 - 简化界面 */
 
 /* 分组表格 */
@@ -3425,7 +3746,7 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     border: 1px solid var(--theme-border-color, #333);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    min-width: 200px;
+    min-width: 160px; /* 🔧 减小最小宽度，让菜单更紧凑 */
     transform: translateY(-10px);
     transition: transform 0.2s ease;
 }
@@ -3455,22 +3776,21 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 }
 
 .cell-action-menu .menu-actions {
-    padding: 8px;
+    padding: 6px; /* 🔧 减小内边距 */
 }
 
 .cell-action-menu .menu-btn {
     width: 100%;
-    padding: 10px 12px;
+    padding: 8px 12px; /* 🔧 减小按钮内边距，让选项更紧凑 */
     border: none;
     background: transparent;
     color: var(--theme-text-primary, #ffffff);
     text-align: left;
-    border-radius: 6px;
+    border-radius: 4px; /* 🔧 减小圆角 */
     cursor: pointer;
     transition: background 0.2s ease;
     display: flex;
     align-items: center;
-    gap: 8px;
     font-size: 13px;
 }
 
@@ -3478,9 +3798,7 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     background: var(--theme-bg-hover, #2a2a2a);
 }
 
-.cell-action-menu .menu-btn .btn-icon {
-    font-size: 16px;
-}
+/* 🔧 删除图标相关样式，因为已经移除了图标 */
 
 /* ========== 编辑对话框样式 ========== */
 .cell-edit-dialog,
@@ -3950,7 +4268,12 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     }
 
     .cell-action-menu .menu-content {
-        min-width: 180px;
+        min-width: 150px; /* 🔧 移动端进一步减小宽度 */
+    }
+
+    .cell-action-menu .menu-btn {
+        padding: 10px 12px; /* 🔧 移动端稍微增加触摸区域 */
+        font-size: 14px;
     }
 
     .message-toast {
@@ -10242,7 +10565,17 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 .cell-action-menu .menu-separator {
     height: 1px;
     background: var(--theme-border-color, #e2e8f0);
-    margin: 8px 0;
+    margin: 6px 0; /* 🔧 减小分隔线边距 */
+}
+
+/* 🆕 菜单节标题样式 */
+.cell-action-menu .menu-section-title {
+    padding: 6px 12px 4px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--theme-text-secondary, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 /* 删除按钮特殊样式 */
@@ -10314,3 +10647,180 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 }
 
 /* ========== 删除确认对话框样式结束 ========== */
+
+/* ========== 🆕 多行数据选择框样式 ========== */
+.infobar-row-selector-wrapper {
+    margin-bottom: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--theme-border-color, rgba(255, 255, 255, 0.1));
+}
+
+.infobar-row-selector {
+    width: 100%;
+    padding: 6px 10px;
+    background: var(--theme-bg-secondary, #2d2d2d);
+    border: 1px solid var(--theme-border-color, rgba(255, 255, 255, 0.2));
+    border-radius: 4px;
+    color: var(--theme-text-primary, #ffffff);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.infobar-row-selector:hover {
+    border-color: var(--theme-primary-color, #4299e1);
+    background: var(--theme-bg-hover, #3d3d3d);
+}
+
+.infobar-row-selector:focus {
+    outline: none;
+    border-color: var(--theme-primary-color, #4299e1);
+    box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.2);
+}
+
+.infobar-row-details-container {
+    position: relative;
+}
+
+.infobar-row-details {
+    display: none;
+}
+
+.infobar-row-details.active {
+    display: block;
+}
+
+/* 多行数据选择框在不同主题下的适配 */
+.infobar-container .infobar-row-selector {
+    background: var(--theme-bg-secondary, #2d2d2d);
+    border-color: var(--theme-border-color, rgba(255, 255, 255, 0.2));
+    color: var(--theme-text-primary, #ffffff);
+}
+
+.infobar-container .infobar-row-selector option {
+    background: var(--theme-bg-secondary, #2d2d2d);
+    color: var(--theme-text-primary, #ffffff);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .infobar-row-selector-wrapper {
+        margin-bottom: 10px;
+        padding: 6px 0;
+    }
+
+    .infobar-row-selector {
+        padding: 8px 10px;
+        font-size: 14px;
+        min-height: 36px;
+    }
+}
+
+/* ========== 多行数据选择框样式结束 ========== */
+
+/* ========== 🆕 破甲提示词配置样式 ========== */
+.armor-breaking-config-section {
+    background: var(--theme-bg-secondary, #2d2d2d);
+    border: 1px solid var(--theme-border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+    transition: all 0.3s ease;
+}
+
+.armor-breaking-config-section h4 {
+    color: var(--theme-text-primary, #ffffff);
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.armor-breaking-config-section h4::before {
+    content: "🛡️";
+    font-size: 18px;
+}
+
+#armor-breaking-prompt {
+    background: var(--theme-bg-primary, #1a1a1a);
+    border: 1px solid var(--theme-border-color, rgba(255, 255, 255, 0.2));
+    border-radius: 6px;
+    color: var(--theme-text-primary, #ffffff);
+    padding: 12px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+    transition: border-color 0.3s ease;
+}
+
+#armor-breaking-prompt:focus {
+    outline: none;
+    border-color: var(--theme-primary-color, #4299e1);
+    box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.2);
+}
+
+#armor-breaking-prompt::placeholder {
+    color: var(--theme-text-secondary, #888);
+    font-style: italic;
+}
+
+.armor-breaking-stats {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--theme-text-secondary, #888);
+    margin-top: 8px;
+}
+
+.armor-breaking-stats .char-count,
+.armor-breaking-stats .word-count {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.armor-breaking-stats .char-count::before {
+    content: "📝";
+    font-size: 14px;
+}
+
+.armor-breaking-stats .word-count::before {
+    content: "📊";
+    font-size: 14px;
+}
+
+/* 字符数量颜色提示 */
+#armor-breaking-char-count {
+    font-weight: 600;
+    transition: color 0.3s ease;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .armor-breaking-config-section {
+        padding: 12px;
+        margin-top: 12px;
+    }
+
+    .armor-breaking-config-section h4 {
+        font-size: 15px;
+        margin-bottom: 12px;
+    }
+
+    #armor-breaking-prompt {
+        font-size: 14px;
+        padding: 10px;
+        min-height: 100px;
+    }
+
+    .armor-breaking-stats {
+        flex-direction: column;
+        gap: 8px;
+        font-size: 11px;
+    }
+}
+
+/* ========== 破甲提示词配置样式结束 ========== */

@@ -32,6 +32,7 @@ import { NPCDatabaseManager } from './core/NPCDatabaseManager.js';
 import { NPCManagementPanel } from './ui/NPCManagementPanel.js';
 import { WorldBookManager } from './core/WorldBookManager.js';
 import { WorldBookConfigPanel } from './ui/WorldBookConfigPanel.js';
+import { AIMemoryDatabaseInjector } from './core/AIMemoryDatabaseInjector.js';
 
 // 导入UI组件
 import { InfoBarSettings } from './ui/InfoBarSettings.js';
@@ -39,6 +40,10 @@ import { DataTable } from './ui/DataTable.js';
 import { MessageInfoBarRenderer } from './ui/MessageInfoBarRenderer.js';
 import { SummaryPanel } from './ui/SummaryPanel.js';
 import { SummaryManager } from './core/SummaryManager.js';
+import { AIMemorySummarizer } from './core/AIMemorySummarizer.js';
+import { VectorizedMemoryRetrieval } from './core/VectorizedMemoryRetrieval.js';
+import { DeepMemoryManager } from './core/DeepMemoryManager.js';
+import { IntelligentMemoryClassifier } from './core/IntelligentMemoryClassifier.js';
 import { FrontendDisplayManager } from './ui/FrontendDisplayManager.js';
 
 // 提前初始化控制台门禁：默认不输出信息栏日志，直到调试模式应用级别
@@ -115,6 +120,9 @@ class InformationBarIntegrationTool {
 
         // 总结功能
         this.summaryManager = null;
+
+        // 🧠 AI记忆数据库注入器
+        this.aiMemoryDatabaseInjector = null;
 
         // 前端显示功能
         this.frontendDisplayManager = null;
@@ -329,6 +337,8 @@ class InformationBarIntegrationTool {
             this.configManager,
             this.eventSystem
         );
+        // 🔧 修复：立即初始化数据表格，确保UI界面在系统启动时就创建
+        await this.dataTable.init();
 
         // 初始化消息信息栏渲染器
         this.messageInfoBarRenderer = new MessageInfoBarRenderer({
@@ -345,6 +355,60 @@ class InformationBarIntegrationTool {
             this.infoBarSettings
         );
         await this.summaryManager.init();
+
+        // 🚀 新增：初始化AI记忆总结器
+        this.aiMemorySummarizer = new AIMemorySummarizer(
+            this.dataCore,
+            this.eventSystem,
+            this.summaryManager,
+            this.smartPromptSystem
+        );
+        await this.aiMemorySummarizer.init();
+
+        // 🚀 设置AI记忆总结器到总结管理器
+        this.summaryManager.setAIMemorySummarizer(this.aiMemorySummarizer);
+
+        // 🔍 新增：初始化向量化记忆检索系统
+        this.vectorizedMemoryRetrieval = new VectorizedMemoryRetrieval(
+            this.dataCore,
+            this.eventSystem,
+            this.aiMemorySummarizer
+        );
+        await this.vectorizedMemoryRetrieval.init();
+
+        // 🔍 设置向量化记忆检索系统到总结管理器
+        this.summaryManager.setVectorizedMemoryRetrieval(this.vectorizedMemoryRetrieval);
+
+        // 🧠 新增：初始化深度记忆管理器
+        this.deepMemoryManager = new DeepMemoryManager(
+            this.dataCore,
+            this.eventSystem,
+            this.aiMemorySummarizer,
+            this.vectorizedMemoryRetrieval
+        );
+        await this.deepMemoryManager.init();
+
+        // 🤖 新增：初始化智能记忆分类器
+        this.intelligentMemoryClassifier = new IntelligentMemoryClassifier(
+            this.dataCore,
+            this.eventSystem,
+            this.vectorizedMemoryRetrieval,
+            this.deepMemoryManager
+        );
+        await this.intelligentMemoryClassifier.init();
+
+        // 🧠 新增：初始化AI记忆数据库注入器
+        this.aiMemoryDatabaseInjector = new AIMemoryDatabaseInjector({
+            unifiedDataCore: this.dataCore,
+            eventSystem: this.eventSystem,
+            configManager: this.configManager,
+            summaryManager: this.summaryManager,
+            aiMemorySummarizer: this.aiMemorySummarizer,
+            vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
+            deepMemoryManager: this.deepMemoryManager,
+            intelligentMemoryClassifier: this.intelligentMemoryClassifier
+        });
+        await this.aiMemoryDatabaseInjector.init();
 
         // 🆕 将SummaryManager设置到STScript同步系统（延迟初始化）
         if (this.stscriptDataSync) {
@@ -394,6 +458,11 @@ class InformationBarIntegrationTool {
             aiDataExposure: this.aiDataExposure,
             stScriptDataSync: this.stscriptDataSync,
             summaryManager: this.summaryManager,
+            aiMemorySummarizer: this.aiMemorySummarizer,
+            vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
+            deepMemoryManager: this.deepMemoryManager,
+            intelligentMemoryClassifier: this.intelligentMemoryClassifier,
+            aiMemoryDatabaseInjector: this.aiMemoryDatabaseInjector,
             summaryPanel: this.summaryPanel,
             frontendDisplayManager: this.frontendDisplayManager,
             fieldRuleManager: this.fieldRuleManager,
@@ -692,6 +761,11 @@ class InformationBarIntegrationTool {
                 dataSnapshotManager: this.dataSnapshotManager,
                 stScriptDataSync: this.stscriptDataSync,
                 summaryManager: this.summaryManager,
+                aiMemorySummarizer: this.aiMemorySummarizer,
+                vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
+                deepMemoryManager: this.deepMemoryManager,
+                intelligentMemoryClassifier: this.intelligentMemoryClassifier,
+                aiMemoryDatabaseInjector: this.aiMemoryDatabaseInjector, // 🧠 添加：AI记忆数据库注入器
                 summaryPanel: this.summaryPanel,
                 frontendDisplayManager: this.frontendDisplayManager,
                 fieldRuleManager: this.fieldRuleManager,
