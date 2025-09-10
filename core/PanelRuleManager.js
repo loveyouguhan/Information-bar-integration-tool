@@ -225,6 +225,14 @@ export class PanelRuleManager {
     }
 
     /**
+     * 🚀 获取所有面板规则
+     * @returns {Map} 所有面板规则的映射
+     */
+    getAllPanelRules() {
+        return new Map(this.panelRules);
+    }
+
+    /**
      * 删除面板规则
      */
     async deletePanelRule(panelId) {

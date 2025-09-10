@@ -194,7 +194,35 @@ export class XMLDataParser {
                 return null;
             }
 
-            // 验证和清理数据
+            // 🚀 检查是否是操作指令格式
+            if (parsedData.__format === 'operation_commands') {
+                console.log('[XMLDataParser] 🚀 处理操作指令格式结果');
+
+                this.parseStats.successfulParsed++;
+                this.parseStats.lastParseTime = Date.now();
+
+                console.log('[XMLDataParser] ✅ 操作指令解析成功，包含', parsedData.__operations?.length || 0, '个操作');
+
+                // 🔧 优化：缓存解析结果
+                if (options.messageId) {
+                    const cacheKey = this.generateCacheKey(messageContent, options.messageId);
+                    this.cacheParseResult(cacheKey, parsedData);
+                }
+
+                // 触发操作指令解析完成事件
+                if (this.eventSystem) {
+                    this.eventSystem.emit('xml:operation:parsed', {
+                        operations: parsedData.__operations,
+                        metadata: parsedData.__metadata,
+                        timestamp: Date.now(),
+                        operationCount: parsedData.__operations?.length || 0
+                    });
+                }
+
+                return parsedData;
+            }
+
+            // 验证和清理数据（传统面板格式）
             const validatedData = this.validateAndCleanData(parsedData);
 
             // 🚨 移除兼容性处理：不再自动修复错误格式，让AI学会输出正确格式
@@ -357,12 +385,19 @@ export class XMLDataParser {
     }
 
     /**
-     * 验证内容是否像面板数据格式
+     * 🚀 验证内容是否像面板数据格式或操作指令格式
      * @param {string} content - 内容
      * @returns {boolean} 是否像面板数据格式
      */
     isValidPanelDataFormat(content) {
         if (!content || typeof content !== 'string') return false;
+
+        // 🚀 新增：检查是否是操作指令格式
+        const isOperationFormat = this.isOperationCommandFormat(content);
+        if (isOperationFormat) {
+            console.log('[XMLDataParser] 🚀 检测到操作指令格式');
+            return true;
+        }
 
         // 🔧 修复：放宽面板格式检查，支持更多格式变体
         const hasColonAndEquals = content.includes(':') && content.includes('=');
@@ -376,6 +411,7 @@ export class XMLDataParser {
         const isNotPureNarrative = !this.isPureNarrativeContent(content);
 
         console.log('[XMLDataParser] 🔍 格式验证详情:');
+        console.log('  是否操作指令格式:', isOperationFormat);
         console.log('  包含冒号和等号:', hasColonAndEquals);
         console.log('  匹配面板模式:', hasPanelPattern);
         console.log('  非纯叙述内容:', isNotPureNarrative);
@@ -428,10 +464,16 @@ export class XMLDataParser {
                 return null; // 返回null而不是空对象，表示解析失败
             }
 
+            // 🚀 新增：检查是否是操作指令格式
+            if (this.isOperationCommandFormat(dataContent)) {
+                console.log('[XMLDataParser] 🚀 检测到操作指令格式，使用操作指令解析器');
+                return this.parseOperationCommands(dataContent);
+            }
+
             // 🔧 严格验证：检查是否包含有效的面板数据格式
             if (!this.isValidPanelDataFormat(dataContent)) {
                 console.warn('[XMLDataParser] ⚠️ 数据内容不符合面板格式，内容:', dataContent.substring(0, 200));
-                console.warn('[XMLDataParser] 🔍 预期格式: panelName: field1="value1", field2="value2"');
+                console.warn('[XMLDataParser] 🔍 预期格式: panelName: field1="value1", field2="value2" 或操作指令格式');
                 return null; // 返回null表示格式不正确
             }
 
@@ -483,6 +525,203 @@ export class XMLDataParser {
         } catch (error) {
             console.error('[XMLDataParser] ❌ 解析面板数据失败:', error);
             return null; // 返回null表示解析失败
+        }
+    }
+
+    /**
+     * 🚀 检查是否是操作指令格式
+     * @param {string} content - 内容
+     * @returns {boolean} 是否是操作指令格式
+     */
+    isOperationCommandFormat(content) {
+        if (!content || typeof content !== 'string') return false;
+
+        // 检查是否包含操作指令格式的特征
+        const operationPattern = /^(add|update|delete)\s+\w+\(/m;
+        return operationPattern.test(content.trim());
+    }
+
+    /**
+     * 🚀 解析操作指令格式
+     * @param {string} dataContent - 操作指令内容
+     * @returns {Object} 解析结果
+     */
+    parseOperationCommands(dataContent) {
+        try {
+            console.log('[XMLDataParser] 🚀 开始解析操作指令格式...');
+
+            const operations = [];
+            const lines = dataContent.split('\n').filter(line => line.trim());
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine || trimmedLine.startsWith('//') || trimmedLine.startsWith('#')) {
+                    continue; // 跳过空行和注释
+                }
+
+                const operation = this.parseOperationCommand(trimmedLine);
+                if (operation) {
+                    operations.push(operation);
+                    console.log(`[XMLDataParser] ✅ 解析操作指令:`, operation);
+                }
+            }
+
+            console.log(`[XMLDataParser] ✅ 解析了 ${operations.length} 个操作指令`);
+
+            // 返回操作指令格式的结果
+            return {
+                __format: 'operation_commands',
+                __operations: operations,
+                __metadata: {
+                    timestamp: Date.now(),
+                    source: 'xml-parser',
+                    operationCount: operations.length
+                }
+            };
+
+        } catch (error) {
+            console.error('[XMLDataParser] ❌ 解析操作指令失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🚀 解析单个操作指令
+     * @param {string} commandLine - 操作指令行
+     * @returns {Object|null} 操作对象
+     */
+    parseOperationCommand(commandLine) {
+        try {
+            // 正则表达式匹配操作指令格式：add persona(1 {"1"，"张三"，"2"，"24"})
+            const operationRegex = /^(add|update|delete)\s+(\w+)\((\d+)(?:\s*\{([^}]*)\})?\)$/;
+            const match = commandLine.match(operationRegex);
+
+            if (!match) {
+                console.warn(`[XMLDataParser] ⚠️ 无法解析操作指令: ${commandLine}`);
+                return null;
+            }
+
+            const [, operation, panelName, rowNumber, dataParams] = match;
+
+            const operationData = {
+                type: operation.toLowerCase(), // add, update, delete
+                panel: panelName,
+                row: parseInt(rowNumber),
+                data: {}
+            };
+
+            // 解析数据参数（如果存在）
+            if (dataParams && dataParams.trim()) {
+                operationData.data = this.parseOperationDataParameters(dataParams);
+            }
+
+            return operationData;
+
+        } catch (error) {
+            console.error(`[XMLDataParser] ❌ 解析操作指令失败: ${commandLine}`, error);
+            return null;
+        }
+    }
+
+    /**
+     * 🚀 解析操作指令数据参数
+     * @param {string} dataParams - 数据参数字符串
+     * @returns {Object} 解析后的数据对象
+     */
+    parseOperationDataParameters(dataParams) {
+        try {
+            const data = {};
+
+            console.log(`[XMLDataParser] 🔍 开始解析操作数据参数: ${dataParams.substring(0, 200)}...`);
+
+            // 🔧 修复：使用更智能的解析方法，处理引号内的逗号
+            const parts = this.parseQuotedParameters(dataParams);
+
+            console.log(`[XMLDataParser] 🔍 智能分割后的参数部分:`, parts);
+
+            // 按照 "列号"，"值"，"列号"，"值" 的格式解析
+            for (let i = 0; i < parts.length; i += 2) {
+                if (i + 1 < parts.length) {
+                    // 移除双引号并解析列号
+                    const columnStr = parts[i].replace(/^"(.*)"$/, '$1');
+                    const valueStr = parts[i + 1].replace(/^"(.*)"$/, '$1');
+
+                    const columnNumber = parseInt(columnStr);
+
+                    if (!isNaN(columnNumber) && valueStr !== undefined) {
+                        data[`col_${columnNumber}`] = valueStr;
+                        console.log(`[XMLDataParser] 📊 解析操作参数: 列${columnNumber} = "${valueStr}"`);
+                    } else {
+                        console.warn(`[XMLDataParser] ⚠️ 无效操作参数: "${parts[i]}" -> "${parts[i + 1]}"`);
+                    }
+                }
+            }
+
+            console.log(`[XMLDataParser] ✅ 解析完成，共${Object.keys(data).length}个字段:`, data);
+            return data;
+
+        } catch (error) {
+            console.error('[XMLDataParser] ❌ 解析操作数据参数失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 🔧 智能解析带引号的参数，正确处理引号内的逗号
+     * @param {string} dataParams - 数据参数字符串
+     * @returns {Array} 解析后的参数数组
+     */
+    parseQuotedParameters(dataParams) {
+        try {
+            const parts = [];
+            let current = '';
+            let inQuotes = false;
+            let quoteChar = '';
+
+            for (let i = 0; i < dataParams.length; i++) {
+                const char = dataParams[i];
+
+                if ((char === '"' || char === "'") && !inQuotes) {
+                    // 开始引号
+                    inQuotes = true;
+                    quoteChar = char;
+                    current += char;
+                } else if (char === quoteChar && inQuotes) {
+                    // 结束引号
+                    inQuotes = false;
+                    current += char;
+                    quoteChar = '';
+                } else if ((char === ',' || char === '，') && !inQuotes) {
+                    // 在引号外的逗号，分割参数
+                    if (current.trim()) {
+                        parts.push(current.trim());
+                        current = '';
+                    }
+                } else {
+                    // 普通字符或引号内的逗号
+                    current += char;
+                }
+            }
+
+            // 添加最后一个参数
+            if (current.trim()) {
+                parts.push(current.trim());
+            }
+
+            console.log(`[XMLDataParser] 🔧 智能分割完成，共${parts.length}个参数`);
+            return parts;
+
+        } catch (error) {
+            console.error('[XMLDataParser] ❌ 智能分割失败，回退到简单分割:', error);
+
+            // 回退到原来的简单分割方法
+            if (dataParams.includes('，')) {
+                return dataParams.split('，').map(part => part.trim());
+            } else if (dataParams.includes(',')) {
+                return dataParams.split(',').map(part => part.trim());
+            } else {
+                return [dataParams];
+            }
         }
     }
 

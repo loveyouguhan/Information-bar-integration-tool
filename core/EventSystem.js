@@ -1236,10 +1236,66 @@ export class EventSystem {
                 };
             }
 
-            // 🔧 修复：按启用字段更新面板数据，避免跨面板数据污染
-            for (const [panelName, panelData] of Object.entries(parsedData)) {
+            // ✅ 优先处理：如果是操作指令格式，委托 SmartPromptSystem 执行并直接更新面板数据
+            const dataFormat = parsedData.__format || parsedData.format;
+            const operations = parsedData.__operations || parsedData.operations;
+            if (dataFormat === 'operation_commands' && Array.isArray(operations) && operations.length > 0) {
+                try {
+                    console.log('[EventSystem] 🚀 检测到操作指令格式，委托SmartPromptSystem执行操作并更新面板数据...');
+
+                    // 获取SmartPromptSystem实例
+                    const smartPromptSystem = window.SillyTavernInfobar?.modules?.smartPromptSystem;
+
+                    // 获取当前角色ID（与原逻辑一致）
+                    const context = SillyTavern.getContext?.();
+                    const characterId = context?.characterId || 'default';
+
+                    if (smartPromptSystem && typeof smartPromptSystem.executeOperationCommands === 'function') {
+                        // 执行操作指令，内部会直接写回 chatData.infobar_data.panels 结构
+                        await smartPromptSystem.executeOperationCommands(operations, characterId);
+
+                        // 重新获取最新聊天数据并补充元信息
+                        const updatedChatData = await this.dataCore.getChatData(chatId) || {};
+                        if (!updatedChatData.infobar_data) {
+                            updatedChatData.infobar_data = { panels: {}, history: [], lastUpdated: 0 };
+                        }
+                        updatedChatData.infobar_data.lastUpdated = Date.now();
+                        updatedChatData.infobar_data.history = updatedChatData.infobar_data.history || [];
+                        updatedChatData.infobar_data.history.push({
+                            timestamp: Date.now(),
+                            type: type,
+                            panelCount: Object.keys(updatedChatData.infobar_data.panels || {}).length,
+                            panels: Object.keys(updatedChatData.infobar_data.panels || {})
+                        });
+
+                        // 保存（将触发 chat:data:changed）
+                        await this.dataCore.setChatData(chatId, updatedChatData);
+
+                        // 触发存储完成事件
+                        this.emit('infobar:data:stored', {
+                            chatId: chatId,
+                            panelCount: Object.keys(updatedChatData.infobar_data.panels || {}).length,
+                            panels: Object.keys(updatedChatData.infobar_data.panels || {}),
+                            timestamp: Date.now()
+                        });
+
+                        console.log('[EventSystem] ✅ 操作指令执行并已存储到聊天数据');
+                        return; // 提前结束：已完成存储
+                    } else {
+                        console.warn('[EventSystem] ⚠️ SmartPromptSystem不可用，回退为面板合并流程');
+                    }
+                } catch (opErr) {
+                    console.error('[EventSystem] ❌ 执行操作指令并更新面板失败:', opErr);
+                    // 回退到面板合并流程
+                }
+            }
+
+            // 🔧 修复：只处理真正的面板数据，排除操作指令格式的元数据字段
+            const actualPanelData = this.filterActualPanelData(parsedData);
+
+            for (const [panelName, panelData] of Object.entries(actualPanelData)) {
                 const existingPanel = chatData.infobar_data.panels[panelName] || {};
-                
+
                 // 使用数据核心的启用字段过滤合并
                 if (this.dataCore && this.dataCore.mergeWithEnabledFields) {
                     chatData.infobar_data.panels[panelName] = await this.dataCore.mergeWithEnabledFields(panelName, existingPanel, panelData);
@@ -1247,15 +1303,15 @@ export class EventSystem {
                     // 降级处理：只保留新数据，避免历史污染
                     chatData.infobar_data.panels[panelName] = { ...panelData };
                 }
-                
+
                 console.log(`[EventSystem] 🔄 已按启用字段更新面板: ${panelName}`);
             }
-            
+
             // 🔧 分离系统元数据存储
             if (!chatData.infobar_data.systemMetadata) {
                 chatData.infobar_data.systemMetadata = {};
             }
-            Object.keys(parsedData).forEach(panelName => {
+            Object.keys(actualPanelData).forEach(panelName => {
                 chatData.infobar_data.systemMetadata[panelName] = {
                     lastUpdated: Date.now(),
                     source: type,
@@ -1269,8 +1325,8 @@ export class EventSystem {
                 const context = SillyTavern.getContext();
                 const characterId = context?.characterId || 'default';
 
-                // 使用正确的setData方法而不是data.set
-                for (const [panelName, panelData] of Object.entries(parsedData)) {
+                // 🔧 修复：只同步真正的面板数据，排除元数据字段
+                for (const [panelName, panelData] of Object.entries(actualPanelData)) {
                     const dataKey = `panels.${characterId}.${panelName}`;
                     await this.dataCore.setData(dataKey, panelData, 'chat');
                 }
@@ -1340,6 +1396,39 @@ export class EventSystem {
         } catch (error) {
             console.error('[EventSystem] ❌ 清理资源失败:', error);
             this.handleError(error);
+        }
+    }
+
+    /**
+     * 🔧 过滤出真正的面板数据，排除操作指令格式的元数据字段
+     * @param {Object} parsedData - 解析的数据
+     * @returns {Object} 过滤后的面板数据
+     */
+    filterActualPanelData(parsedData) {
+        try {
+            // 操作指令格式的元数据字段列表
+            const metadataFields = ['__format', '__operations', '__metadata', 'format', 'operations', 'metadata'];
+
+            const actualPanelData = {};
+
+            for (const [key, value] of Object.entries(parsedData)) {
+                // 跳过元数据字段
+                if (metadataFields.includes(key)) {
+                    console.log(`[EventSystem] 🔧 跳过元数据字段: ${key}`);
+                    continue;
+                }
+
+                // 只保留真正的面板数据
+                actualPanelData[key] = value;
+            }
+
+            console.log(`[EventSystem] 🔧 过滤完成，原始字段: ${Object.keys(parsedData).length}, 面板字段: ${Object.keys(actualPanelData).length}`);
+
+            return actualPanelData;
+
+        } catch (error) {
+            console.error('[EventSystem] ❌ 过滤面板数据失败:', error);
+            return parsedData; // 降级处理：返回原始数据
         }
     }
 }

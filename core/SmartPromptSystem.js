@@ -1,45 +1,51 @@
 /**
  * 智能提示词系统
- * 
+ *
  * 负责智能提示词的生成、注入和数据解析：
  * - 动态面板识别和提示词生成
  * - API提示词注入
  * - AI返回数据解析
  * - 增量/全量更新策略
- * 
+ *
  * @class SmartPromptSystem
  */
 
 export class SmartPromptSystem {
-    constructor(configManager, eventSystem, dataCore, fieldRuleManager = null) {
+    constructor(configManager, eventSystem, dataCore, fieldRuleManager = null, panelRuleManager = null) {
         console.log('[SmartPromptSystem] 🚀 智能提示词系统初始化开始');
 
         this.configManager = configManager;
         this.eventSystem = eventSystem;
         this.dataCore = dataCore;
         this.fieldRuleManager = fieldRuleManager;
-        
+        this.panelRuleManager = panelRuleManager; // 🚀 新增：面板规则管理器
+
         // SillyTavern上下文
         this.context = null;
-        
+
         // 提示词模板
         this.promptTemplate = null;
-        
+
         // 数据解析器
         this.dataParser = null;
-        
+
         // API注入状态
         this.injectionActive = false;
         this.lastInjectionTime = 0;
-        
+
         // 更新策略
         this.updateStrategy = 'incremental'; // 'incremental' | 'full'
         this.lastDataSnapshot = null;
-        
+
+        // 🚀 新增：规则缓存
+        this.rulesCache = new Map(); // 面板规则缓存
+        this.rulesCacheExpiry = 0; // 缓存过期时间
+        this.rulesCacheTTL = 300000; // 5分钟缓存
+
         // 初始化状态
         this.initialized = false;
         this.errorCount = 0;
-        
+
         console.log('[SmartPromptSystem] 🏗️ 构造函数完成');
     }
 
@@ -49,36 +55,39 @@ export class SmartPromptSystem {
     async init() {
         try {
             console.log('[SmartPromptSystem] 📊 开始初始化智能提示词系统...');
-            
+
             // 获取SillyTavern上下文
             this.context = SillyTavern.getContext();
-            
+
             if (!this.context) {
                 throw new Error('无法获取SillyTavern上下文');
             }
-            
+
             // 初始化提示词模板
             await this.initPromptTemplate();
-            
+
             // 初始化数据解析器
             await this.initDataParser();
-            
+
             // 注册API注入钩子
             await this.registerAPIInjection();
-            
+
             // 绑定事件监听器
             this.bindEventListeners();
-            
+
+            // 🚀 绑定规则变化监听器
+            this.bindRuleChangeListeners();
+
             this.initialized = true;
             console.log('[SmartPromptSystem] ✅ 智能提示词系统初始化完成');
-            
+
             // 触发初始化完成事件
             if (this.eventSystem) {
                 this.eventSystem.emit('smart-prompt:initialized', {
                     timestamp: Date.now()
                 });
             }
-            
+
         } catch (error) {
             console.error('[SmartPromptSystem] ❌ 初始化失败:', error);
             this.handleError(error);
@@ -90,7 +99,7 @@ export class SmartPromptSystem {
      */
     async initPromptTemplate() {
         console.log('[SmartPromptSystem] 📝 初始化提示词模板...');
-        
+
         // 从提示词文件读取模板
         try {
             const response = await fetch('./scripts/extensions/third-party/Information bar integration tool/提示词');
@@ -110,36 +119,54 @@ export class SmartPromptSystem {
      * 获取默认提示词模板
      */
     getDefaultPromptTemplate() {
-        return `🚨🚨🚨🚨🚨 【CRITICAL: NPC前缀格式强制要求】 🚨🚨🚨🚨🚨
+        // 使用精简的核心模板
+        return this.getCorePromptTemplate();
+    }
 
-⚠️⚠️⚠️ **MANDATORY REQUIREMENT - NO EXCEPTIONS** ⚠️⚠️⚠️
-🚨 **interaction面板必须使用NPC前缀格式！系统将拒绝处理任何错误格式！**
-🚨 **正确格式: interaction: npc0.name="江琳", npc0.type="朋友", npc0.status="开心"**
-🚨 **错误格式: interaction: [WRONG_FORMAT_REMOVED] ← 系统将完全忽略！**
-🚨 **如果你输出错误格式，数据将被完全拒绝，不会有任何兼容性处理！**
+    /**
+     * 获取原始完整模板（保留用于兼容性）
+     */
+    getOriginalPromptTemplate() {
+        return `🚨🚨🚨🚨🚨 【CRITICAL: 数据操作模式强制要求】 🚨🚨🚨🚨🚨
 
-🔴🔴🔴 **ABSOLUTE PROHIBITION - 绝对禁止** 🔴🔴🔴
-❌ **绝对禁止**: interaction: [WRONG_FORMAT] ← 没有npc前缀！
-❌ **绝对禁止**: interaction: [WRONG_FORMAT] ← 没有npc前缀！
-❌ **绝对禁止**: interaction: [WRONG_FORMAT] ← 没有npc前缀！
-❌ **绝对禁止**: interaction: [WRONG_FORMAT] ← 没有npc前缀！
+⚠️⚠️⚠️ **MANDATORY REQUIREMENT - 数据整理员模式** ⚠️⚠️⚠️
+🚨 **你现在是一个专业的数据整理员，必须严格按照操作指令处理数据！**
+🚨 **支持三种操作模式：ADD(增加)、UPDATE(更新)、DELETE(删除)**
+🚨 **必须使用标准化操作指令格式输出结果！**
 
-✅✅✅ **CORRECT FORMAT - 正确格式** ✅✅✅
-✅ **必须使用**: interaction: npc0.name="江琳" ← 有npc前缀！
-✅ **必须使用**: interaction: npc0.type="朋友" ← 有npc前缀！
-✅ **必须使用**: interaction: npc0.status="开心" ← 有npc前缀！
+🔴🔴🔴 **操作指令格式规范** 🔴🔴🔴
+✅ **ADD操作**: add 面板名(行号 {列号，值，列号，值})
+✅ **UPDATE操作**: update 面板名(行号 {列号，新值，列号，新值})
+✅ **DELETE操作**: delete 面板名(行号)
+
+📋 **操作指令示例**：
+✅ update persona(1 {"2"，"25"}) ← 更新persona面板第1行第2列为25（现有数据）
+✅ add persona(2 {"1"，"张三"，"2"，"24"，"3"，"程序员"})  ← 在persona面板第2行添加新数据
+✅ delete inventory(3) ← 删除inventory面板第3行
+
+🚨 **行号规则**：现有数据在第1行，新增数据从第2行开始！
+
+🚨🚨🚨 **列号格式严格要求** 🚨🚨🚨
+✅ **正确格式**：{"1"，"值1"，"2"，"值2"} ← 必须使用纯数字
+❌ **错误格式**：{"col_1"，"值1"，"col_2"，"值2"} ← 严禁使用col_前缀
+❌ **错误格式**：{"列1"，"值1"，"列2"，"值2"} ← 严禁使用中文
+❌ **错误格式**：{"column1"，"值1"，"column2"，"值2"} ← 严禁使用英文前缀
 
 🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-🚨【信息栏数据格式规范】🚨
+🚨【数据操作员工作规范】🚨
 
-📋 数据格式要求：
-在正常的角色扮演和剧情发展之外，请同时提供结构化的信息栏数据：
+📋 你的角色：专业数据整理员
+作为一名专业的数据整理员，你需要：
+1. 🔍 分析当前剧情中的数据变化需求
+2. 📊 确定需要执行的操作类型（增加/更新/删除）
+3. 📝 使用标准化操作指令格式输出结果
+4. ✅ 确保数据操作的准确性和逻辑性
 
 🚨 **严格输出顺序要求** 🚨
 **必须按照以下顺序输出，严禁颠倒：**
-1. **先输出** <aiThinkProcess><!--五步分析思考--></aiThinkProcess>
-2. **再输出** <infobar_data><!--完整面板数据--></infobar_data>
+1. **先输出** <aiThinkProcess><!--数据操作分析--></aiThinkProcess>
+2. **再输出** <infobar_data><!--操作指令列表--></infobar_data>
 
 🚨 **强制注释包裹要求** 🚨
 **所有内容必须被注释符号包裹：**
@@ -152,16 +179,24 @@ export class SmartPromptSystem {
 ⚠️ **严禁内容不被注释符号包裹**
 ⚠️ 这些标签用于数据解析，不会影响你的正常创作
 
-📋 规则2: XML紧凑格式规范
-<infobar_data>内容必须使用XML紧凑格式，示例：
-✅ 正确格式：personal: name="张三", age="25", occupation="程序员"
-✅ 正确格式：world: name="现代都市", type="都市", time="2024年"
-✅ 正确格式：tasks: creation="新任务创建", editing="任务编辑中"
+📋 规则2: 操作指令格式规范
+<infobar_data>内容必须使用标准化操作指令格式，示例：
+
+🔥 **三种操作类型** 🔥
+✅ **ADD操作**：add 面板名(行号 {"列号"，"值"，"列号"，"值"})
+   示例：add persona(1 {"1"，"张三"，"2"，"24"，"3"，"程序员"})
+
+✅ **UPDATE操作**：update 面板名(行号 {"列号"，"新值"，"列号"，"新值"})
+   示例：update persona(1 {"2"，"25"，"3"，"高级程序员"})
+
+✅ **DELETE操作**：delete 面板名(行号)
+   示例：delete inventory(3)
 
 🔥🔥🔥 系统将完全拒绝以下格式（导致数据解析失败）：🔥🔥🔥
+❌ 绝对禁止旧XML格式：personal: name="张三", age="25"
 ❌ 绝对禁止JSON格式：{"角色": "我", "时间": "下午"}
-❌ 绝对禁止对象格式：{ "角色": "我", "时间": "下午（光线无变化）", "地点": "古董店" }
-❌ 绝对禁止嵌套XML：<personal><name>张三</name><age>25</age></personal>
+❌ 绝对禁止对象格式：{ "角色": "我", "时间": "下午" }
+❌ 绝对禁止嵌套XML：<personal><name>张三</name></personal>
 ❌ 绝对禁止Markdown格式：- **个人信息**
 ❌ 绝对禁止分类标题：**人物**、**环境**、**当前目标**
 ❌ 绝对禁止列表符号：- **状态**: 值
@@ -227,11 +262,11 @@ export class SmartPromptSystem {
 ⚠️ 请使用模板中的确切字段名和中文显示名称
 ⚠️ 正确格式是将注释符号<!--和-->放在标签内部，而不是外部
 
-🚨🚨🚨 【NPC数据格式严格要求 - 必须遵守】🚨🚨🚨
-🚨 **绝对禁止使用错误格式！系统已移除兼容性处理！**
-🚨 **必须使用NPC前缀格式：npc0.姓名="NPC1", npc0.关系="关系", npc0.态度="态度", npc0.情绪="情绪"**
-🚨 **严禁使用无前缀格式：姓名="NPC1", 关系="关系", 态度="态度", 情绪="情绪"**
-🚨 **系统将拒绝处理任何没有NPC前缀的交互对象数据！**
+🚨🚨🚨 【多行数据格式严格要求 - 必须遵守】🚨🚨🚨
+🚨 **系统已升级为多行数据架构！必须使用新格式！**
+🚨 **必须使用多行数据格式：add interaction(1 {"1","王静","2","银行大堂经理","3","服务与客户","4","初次接触，友好"})**
+🚨 **严禁使用旧的前缀格式：npc0.姓名="NPC1", npc0.关系="关系"等**
+🚨 **系统将拒绝处理任何使用旧前缀格式的数据！**
 🚨 **如果你输出错误格式，数据将被完全忽略，不会有任何兼容性处理！**
 
 🚨 **必须严格按照以下顺序输出** 🚨
@@ -241,31 +276,31 @@ export class SmartPromptSystem {
 <!--
 [输出模式: {{OUTPUT_MODE}}]
 
-🚨🚨🚨 CRITICAL: 严格按照以下五步进行分析，禁止自创步骤！🚨🚨🚨
+🚨🚨🚨 CRITICAL: 严格按照以下五步进行数据操作分析，禁止自创步骤！🚨🚨🚨
 
-五步分析过程：
-0. 更新策略:全量/增量更新 （禁止修改此步骤名称！）
-1. 剧情分析：当前发生什么事件？角色在哪里？在做什么？（禁止修改此步骤名称！）
-2. 数据变化识别：哪些信息发生了变化？哪些是新信息？（禁止修改此步骤名称！）
-3. 更新策略判断：需要新增哪些字段？需要更新哪些字段？哪些保持不变？（禁止修改此步骤名称！）
-4. 数据完整性检查：确保所有启用面板都有完整数据（禁止修改此步骤名称！）
-5. 质量验证：确认数据逻辑一致性和合理性（禁止修改此步骤名称！）
+数据操作员五步分析过程：
+0. 操作模式确定：确定需要执行的操作类型（ADD/UPDATE/DELETE）（禁止修改此步骤名称！）
+1. 剧情数据分析：当前剧情中涉及哪些数据变化？新增、修改还是删除？（禁止修改此步骤名称！）
+2. 操作目标识别：确定需要操作的面板、行号和具体数据内容（禁止修改此步骤名称！）
+3. 操作指令规划：规划具体的操作指令格式和参数，确保所有值都用双引号包裹（禁止修改此步骤名称！）
+4. 数据一致性检查：确保操作后的数据逻辑正确且符合剧情（禁止修改此步骤名称！）
+5. 指令格式验证：确认操作指令格式正确且可执行，所有值必须用双引号包裹（禁止修改此步骤名称！）
 
 ❌❌❌ 严禁自创步骤如："识别核心需求"、"解析剧情文本" 等！❌❌❌
-✅✅✅ 必须完全按照上述五步进行分析！✅✅✅
+✅✅✅ 必须完全按照上述数据操作员五步进行分析！✅✅✅
 -->
 </aiThinkProcess>
 
 **第二步：再输出面板数据（内容必须被<!--和-->包裹，必须严格遵循上述五步思考的分析结果）**
 
-🚨🚨🚨 **CRITICAL REMINDER: 特殊面板前缀格式** 🚨🚨🚨
-⚠️ **如果输出interaction面板，必须使用npc0.前缀！**
-⚠️ **正确: interaction: npc0.name="江琳", npc0.type="朋友"**
-⚠️ **错误: interaction: [WRONG_FORMAT_REMOVED] ← 系统将拒绝！**
+🚨🚨🚨 **CRITICAL REMINDER: 多行数据格式要求** 🚨🚨🚨
+⚠️ **如果输出interaction面板，必须使用多行数据格式！**
+⚠️ **正确: add interaction(1 {"1","江琳","2","朋友","3","友好","4","聊天中"})**
+⚠️ **错误: interaction: npc0.name="江琳" ← 旧格式，系统将拒绝！**
 
-⚠️ **如果输出organization面板，必须使用org0.前缀！**
-⚠️ **正确: organization: org0.组织名称="天剑宗", org0.组织类型="修仙门派"**
-⚠️ **错误: organization: [WRONG_FORMAT_REMOVED] ← 系统将拒绝！**
+⚠️ **如果输出organization面板，必须使用多行数据格式！**
+⚠️ **正确: add organization(1 {"1","天剑宗","2","修仙门派","3","一流门派","4","剑无极"})**
+⚠️ **错误: organization: org0.组织名称="天剑宗" ← 旧格式，系统将拒绝！**
 
 <infobar_data>
 <!--
@@ -285,9 +320,9 @@ export class SmartPromptSystem {
 </aiThinkProcess>
 
 <infobar_data>
-personal: name="李明", age="28", location="咖啡厅", mood="轻松"（内容没有被注释符号包裹）
-world: name="现代都市", location="市中心咖啡厅", atmosphere="温馨"
-interaction: npc0.姓名="小王", npc0.关系="朋友", npc0.态度="友好", npc0.情绪="开心"
+update personal(1 {"1","李明","2","28","7","咖啡厅","8","轻松"})（内容没有被注释符号包裹）
+update world(1 {"1","现代都市","5","市中心咖啡厅","6","温馨"})
+add interaction(1 {"1","小王","2","朋友","3","友好","4","开心"})
 </infobar_data>
 
 🚨【重要提醒】🚨
@@ -366,7 +401,7 @@ personal: name="张三", age="25"
 - **个人信息**
     - **姓名**: 张三
     - **年龄**: 25
-- **世界信息**  
+- **世界信息**
     - **地点**: 现代都市
 -->
 </infobar_data>
@@ -393,40 +428,38 @@ interaction: npc0.姓名="小雨", npc0.关系="朋友", npc0.态度="友好", n
 
 ✅ 正确格式示例 - 严格遵守输出顺序和注释包裹格式：
 
-**第一步：必须先输出五步思考（注意：内容必须被<!--和-->包裹）**
+**第一步：必须先输出数据操作分析（注意：内容必须被<!--和-->包裹）**
 <aiThinkProcess>
 <!--
-🚨 必须严格按照以下五步名称进行分析，禁止自创步骤名称！🚨
+🚨 必须严格按照以下数据操作员五步名称进行分析，禁止自创步骤名称！🚨
 
-五步分析过程：
-0. 更新策略:增量更新（步骤名称禁止修改）
-1. 剧情分析：张三正在现代都市的办公室里工作，处理编程任务，同事小雨过来询问项目进度，两人进行了友好的工作交流（步骤名称禁止修改）
-2. 数据变化识别：位置从家里变为办公室，状态从休息变为工作，新增了任务信息，出现了新的交互对象小雨（步骤名称禁止修改）
-3. 更新策略判断：需要更新personal的location为"办公室"，world保持"现代都市"，新增interaction面板记录与小雨的交互，新增tasks相关字段（步骤名称禁止修改）
-4. 数据完整性检查：personal、world、interaction、tasks面板都有完整数据，确保NPC信息完整（步骤名称禁止修改）
-5. 质量验证：数据与当前剧情一致，张三作为程序员在办公室工作，与同事小雨的交互符合工作场景逻辑（步骤名称禁止修改）
+数据操作员五步分析过程：
+0. 操作模式确定：需要执行ADD和UPDATE操作（步骤名称禁止修改）
+1. 剧情数据分析：张三从家里来到办公室工作，需要添加新的工作任务记录，更新个人位置信息，同事小雨前来询问进度需要记录交互（步骤名称禁止修改）
+2. 操作目标识别：personal面板第1行需要更新位置，tasks面板需要添加新任务记录，interaction面板需要添加小雨的交互记录（步骤名称禁止修改）
+3. 操作指令规划：update personal(1 {"4"，"办公室"})，add tasks(2 {"1"，"项目开发"，"2"，"进行中"})，add interaction(2 {"1"，"小雨"，"2"，"同事"，"3"，"友好"})（步骤名称禁止修改）
+4. 数据一致性检查：位置更新符合剧情，任务记录合理，交互对象信息完整（步骤名称禁止修改）
+5. 指令格式验证：所有操作指令格式正确，参数完整，所有值都用双引号包裹，可正常执行（步骤名称禁止修改）
 
 ❌ 严禁使用："识别核心需求"、"解析剧情文本"、"输出格式分析"等自创步骤
-✅ 必须使用："剧情分析"、"数据变化识别"、"更新策略判断"等指定步骤
+✅ 必须使用："操作模式确定"、"剧情数据分析"、"操作目标识别"等指定步骤
 -->
 </aiThinkProcess>
 
-**第二步：基于上述分析输出面板数据（注意：内容必须被<!--和-->包裹）**
+**第二步：基于上述分析输出操作指令（注意：内容必须被<!--和-->包裹）**
 <infobar_data>
 <!--
-personal: name="张三", age="25", occupation="程序员", location="办公室", status="工作中"
-world: name="现代都市", type="都市", time="2024年", location="办公大楼"
-interaction: npc0.姓名="小雨", npc0.关系="同事", npc0.态度="友好", npc0.情绪="关心", npc0.活动="询问项目进度"
-organization: org0.组织名称="科技公司", org0.组织类型="私企", org0.职位="高级工程师", org0.部门="研发部", org0.上级="李经理"
-tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
+update personal(1 {"4"，"办公室"，"5"，"工作中"})
+add tasks(1 {"1"，"项目开发"，"2"，"进行中"，"3"，"高优先级"})
+add interaction(1 {"1"，"小雨"，"2"，"同事"，"3"，"友好"，"4"，"询问进度"})
 -->
 </infobar_data>
 
-🚨 **注意：特殊面板必须使用前缀格式！**
-✅ 正确：interaction: npc0.姓名="小雨", npc0.关系="朋友"
-✅ 正确：organization: org0.组织名称="天剑宗", org0.组织类型="修仙门派"
-❌ 错误：interaction: [WRONG_FORMAT] （系统将拒绝处理）
-❌ 错误：organization: [WRONG_FORMAT] （系统将拒绝处理）
+🚨 **注意：所有面板必须使用多行数据格式！**
+✅ 正确：add interaction(1 {"1","小雨","2","朋友","3","友好","4","询问进度"})
+✅ 正确：add organization(1 {"1","天剑宗","2","修仙门派","3","一流门派","4","剑无极"})
+❌ 错误：interaction: npc0.姓名="小雨" （旧格式，系统将拒绝处理）
+❌ 错误：organization: org0.组织名称="天剑宗" （旧格式，系统将拒绝处理）
 
 ❌ **错误格式示例（严禁使用）**：
 <aiThinkProcess>
@@ -440,17 +473,17 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
 </aiThinkProcess>
 
 <infobar_data>
-personal: name="张三", age="25", occupation="程序员", status="工作中"（内容没有被注释符号包裹）
-world: name="现代都市", type="都市", location="办公大楼"
-interaction: npc0.姓名="小雨", npc0.关系="同事", npc0.态度="友好"
-organization: org0.组织名称="科技公司", org0.组织类型="私企", org0.职位="工程师"
+update personal(1 {"1","张三","2","25","4","程序员","8","工作中"})（内容没有被注释符号包裹）
+update world(1 {"1","现代都市","2","都市","5","办公大楼"})
+add interaction(1 {"1","小雨","2","同事","3","友好","4","询问进度"})
+add organization(1 {"1","科技公司","2","私企","3","工程师","4","技术部门"})
 </infobar_data>
 
 【⚠️ 数据格式要求】
 ✅ **输出顺序**：必须先输出 <aiThinkProcess>，再输出 <infobar_data>
 ✅ **注释包裹**：所有内容必须被<!--和-->包裹
 ✅ **标签名称**：使用 <aiThinkProcess> 和 <infobar_data>
-✅ **格式要求**：XML紧凑格式（面板名: 字段="值", 字段="值"）
+✅ **格式要求**：操作指令格式（add/update/delete；列号为纯数字）
 ✅ **数据范围**：只为下方模板列出的已启用面板生成数据
 ✅ **数据一致性**：infobar_data必须严格遵循aiThinkProcess中的五步分析结果
 ❌ **避免**：使用其他标签名、JSON格式、XML嵌套格式
@@ -466,24 +499,207 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
 
 ⚠️⚠️⚠️ **MANDATORY - NO EXCEPTIONS - SYSTEM BREAKING CHANGE** ⚠️⚠️⚠️
 
-🔴 **interaction面板格式已变更为STRICT MODE！**
-🔴 **任何不使用npc前缀的格式都会导致系统崩溃！**
-🔴 **兼容性处理已完全移除！错误格式=系统错误！**
+🔴 **交互面板数据统一为操作指令多行格式（STRICT MODE）**
+🔴 **任何使用旧的 npc 前缀键值对格式都将被拒绝**
+🔴 **兼容性处理已完全移除！必须使用 add/update/delete 指令**
 
-✅ **ONLY CORRECT FORMAT ACCEPTED:**
-✅ interaction: npc0.name="江琳", npc0.type="朋友", npc0.status="开心"
+✅ **正确格式（示例）**:
+✅ add interaction(1 {"1","江琳","2","朋友","3","友好","4","聊天中"})
+✅ update interaction(1 {"3","紧张"})
 
-❌ **THESE FORMATS WILL CRASH THE SYSTEM:**
-❌ interaction: [WRONG_FORMAT] ← SYSTEM CRASH!
-❌ interaction: [WRONG_FORMAT] ← SYSTEM CRASH!
-❌ interaction: [WRONG_FORMAT] ← SYSTEM CRASH!
+❌ **错误格式（将被拒绝）**:
+❌ interaction: npc0.name="江琳", npc0.type="朋友"
+❌ interaction: name="江琳", type="朋友"
 
-🚨 **WARNING: 如果你输出错误格式，整个信息栏系统将停止工作！**
-🚨 **WARNING: 用户将看到错误信息而不是你的回复！**
-🚨 **WARNING: 这是系统级别的强制要求，无法绕过！**
-
-🔥🔥🔥 **REMEMBER: npc0. PREFIX IS MANDATORY FOR ALL INTERACTION FIELDS** 🔥🔥🔥
+🚨 **WARNING: 请仅输出操作指令格式，列号为纯数字，从1开始**
 🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨`;
+    }
+
+    /**
+     * 获取核心提示词模板（精简版）
+     */
+    getCorePromptTemplate() {
+        // 🚀 获取动态面板规则并注入到提示词中
+        const panelRulesSection = this.generatePanelRulesSection();
+        
+        return `【数据操作员模式】
+
+你是专业数据整理员，使用操作指令格式处理数据：
+• ADD: add 面板名(行号 {"1","值1","2","值2"})
+• UPDATE: update 面板名(行号 {"1","新值"})
+• DELETE: delete 面板名(行号)
+
+${panelRulesSection}
+
+输出要求：
+1. 先输出思考过程：<aiThinkProcess><!--五步分析...--></aiThinkProcess>
+2. 再输出数据：<infobar_data><!--操作指令...--></infobar_data>
+3. 列号必须为纯数字："1","2","3"...
+4. 内容必须在<!--和-->内
+
+示例：
+<aiThinkProcess><!--五步分析：1.剧情分析 2.数据识别 3.操作确定 4.格式检查 5.逻辑验证--></aiThinkProcess>
+<infobar_data><!--add interaction(1 {"1","张三","2","朋友","3","友好"})--></infobar_data>`;
+    }
+
+    /**
+     * 获取全量更新模板
+     */
+    getFullUpdateTemplate() {
+        return `【全量更新模式】
+
+🚨 **强制要求：必须输出所有启用面板的数据** 🚨
+
+生成所有启用面板的完整数据，确保：
+• 覆盖所有启用字段
+• 数据与剧情一致
+• 使用操作指令格式
+• **不得遗漏任何面板**
+
+{PANEL_DATA_TEMPLATE}
+
+{CURRENT_DATA_INFO}
+
+{FIELD_CONSTRAINTS}
+
+⚠️ **重要提醒**：上述面板模板中的每一个面板都必须在输出中包含，不得省略任何面板！`;
+    }
+
+    /**
+     * 获取增量更新模板
+     */
+    getIncrementalUpdateTemplate() {
+        return `【增量更新模式】
+
+仅输出变化或新增的数据：
+• 保持现有数据不变
+• 只更新有变化的字段
+• 补充缺失的必要字段
+
+{CURRENT_DATA_INFO}
+
+【当前行索引提示】
+- 行号从 1 开始计数（1-based）
+- 现有数据位于第 1 行；新增数据请从第 2 行开始
+- 禁止使用第 0 行或负数行号
+- 如不确定目标行：更新默认使用第 1 行；新增使用 add 自动追加到最后
+
+{INCREMENTAL_INSTRUCTIONS}`;
+    }
+
+    /**
+     * 构建全量更新提示词
+     */
+    async buildFullUpdatePrompt(enabledPanels, memoryEnhancedData, updateStrategy) {
+        const coreTemplate = this.getCorePromptTemplate();
+        const fullTemplate = this.getFullUpdateTemplate();
+
+        // 生成面板数据模板
+        const panelDataTemplate = this.generatePanelDataTemplate(enabledPanels);
+
+        // 生成数据信息
+        const currentDataInfo = await this.generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy);
+
+        // 生成字段约束（简化版）
+        const fieldConstraints = this.generateSimplifiedFieldConstraints(enabledPanels);
+
+        // 组合模板
+        let prompt = coreTemplate + '\n\n' + fullTemplate;
+        prompt = prompt.replace('{PANEL_DATA_TEMPLATE}', panelDataTemplate);
+        prompt = prompt.replace('{CURRENT_DATA_INFO}', currentDataInfo);
+        prompt = prompt.replace('{FIELD_CONSTRAINTS}', fieldConstraints);
+
+        // 添加最终检查清单
+        prompt += this.generatePanelCheckList(enabledPanels);
+
+        return prompt;
+    }
+
+    /**
+     * 构建增量更新提示词
+     */
+    async buildIncrementalPrompt(enabledPanels, memoryEnhancedData, updateStrategy, missingDataFields) {
+        const coreTemplate = this.getCorePromptTemplate();
+        const incrementalTemplate = this.getIncrementalUpdateTemplate();
+
+        // 生成数据信息
+        const currentDataInfo = await this.generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy);
+
+        // 生成增量指令
+        let incrementalInstructions = '';
+        if (missingDataFields.length > 0) {
+            incrementalInstructions = this.generateIncrementalInstructions(missingDataFields, enabledPanels);
+        } else {
+            incrementalInstructions = '无缺失字段，仅输出有变化的数据';
+        }
+
+        // 组合模板
+        let prompt = coreTemplate + '\n\n' + incrementalTemplate;
+        prompt = prompt.replace('{CURRENT_DATA_INFO}', currentDataInfo);
+        prompt = prompt.replace('{INCREMENTAL_INSTRUCTIONS}', incrementalInstructions);
+
+        return prompt;
+    }
+
+    /**
+     * 生成简化的字段约束
+     */
+    generateSimplifiedFieldConstraints(enabledPanels) {
+        let constraints = `启用面板总数：${enabledPanels.length}个\n\n`;
+        constraints += '面板清单：\n';
+        for (const panel of enabledPanels) {
+            const panelName = this.getBasicPanelDisplayName(panel.id);
+            const fieldCount = panel.subItems.length;
+            const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+            constraints += `• ${panelName} (${panelKey}) - ${fieldCount}个字段\n`;
+        }
+        constraints += `\n🚨 **验证要求**：输出必须包含上述所有${enabledPanels.length}个面板的数据！`;
+        return constraints;
+    }
+
+    /**
+     * 生成增量指令
+     */
+    generateIncrementalInstructions(missingDataFields, enabledPanels) {
+        let instructions = '需要补充的字段：\n';
+        for (const field of missingDataFields) {
+            instructions += `• ${field.panelName}: ${field.missingSubItems.map(s => s.displayName).join(', ')}\n`;
+        }
+        return instructions;
+    }
+
+    /**
+     * 获取模板选择原因
+     */
+    getTemplateSelectionReason(updateStrategy, missingDataFields) {
+        if (updateStrategy.type === 'incremental') {
+            if (missingDataFields.length > 0) {
+                return `数据覆盖率${updateStrategy.dataPercentage}%，需补充${missingDataFields.length}个字段`;
+            } else {
+                return `数据覆盖率${updateStrategy.dataPercentage}%，仅输出变化`;
+            }
+        } else {
+            return `数据覆盖率${updateStrategy.dataPercentage}%，生成完整数据`;
+        }
+    }
+
+    /**
+     * 生成面板检查清单
+     */
+    generatePanelCheckList(enabledPanels) {
+        let checkList = '\n\n【📋 输出完整性检查清单】\n';
+        checkList += '在输出<infobar_data>标签前，请确认已包含以下所有面板：\n\n';
+
+        enabledPanels.forEach((panel, index) => {
+            const panelName = this.getBasicPanelDisplayName(panel.id);
+            const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+            checkList += `${index + 1}. ☐ ${panelName} (${panelKey})\n`;
+        });
+
+        checkList += `\n✅ **确认要求**：必须勾选上述所有${enabledPanels.length}个复选框后才能输出数据！\n`;
+        checkList += '❌ **如果遗漏任何面板，将导致系统错误！**';
+
+        return checkList;
     }
 
     /**
@@ -491,13 +707,13 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
      */
     async initDataParser() {
         console.log('[SmartPromptSystem] 🔍 初始化数据解析器...');
-        
+
         this.dataParser = {
             // 解析AI返回的数据
             parseAIResponse: (message) => {
                 return this.parseInfobarData(message);
             },
-            
+
             // 提取infobar_data标签内容
             extractInfobarData: (content) => {
                 // 🔧 修复：支持多种格式的infobar_data标签
@@ -528,13 +744,13 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                 console.log('[SmartPromptSystem] ⚠️ 未找到任何格式的infobar_data标签');
                 return null;
             },
-            
+
             // 解析扁平格式数据
             parseFlatFormat: (dataContent) => {
                 return this.parseFlatFormatData(dataContent);
             }
         };
-        
+
         console.log('[SmartPromptSystem] ✅ 数据解析器初始化完成');
     }
 
@@ -697,19 +913,19 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
      */
     bindEventListeners() {
         console.log('[SmartPromptSystem] 🔗 绑定事件监听器...');
-        
+
         if (this.eventSystem) {
             // 监听面板配置变更
             this.eventSystem.on('panel:config:changed', (data) => {
                 this.handlePanelConfigChanged(data);
             });
-            
+
             // 监听设置变更
             this.eventSystem.on('config:changed', (data) => {
                 this.handleConfigChanged(data);
             });
         }
-        
+
         console.log('[SmartPromptSystem] ✅ 事件监听器绑定完成');
     }
 
@@ -719,7 +935,7 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
     handleError(error) {
         this.errorCount++;
         console.error('[SmartPromptSystem] ❌ 错误:', error);
-        
+
         if (this.eventSystem) {
             this.eventSystem.emit('smart-prompt:error', {
                 error: error.message,
@@ -754,72 +970,36 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
             // 检测是否有新启用的子项需要补充数据
             const missingDataFields = await this.detectMissingDataFields(enabledPanels);
 
-            // 🔧 优化：增量更新模式下跳过面板数据模板生成，但保持交互面板多NPC逻辑
-            let panelDataTemplate = '';
-            if (updateStrategy.type === 'incremental') {
-                // 增量模式：只为交互面板生成多NPC模板，其他面板跳过模板生成（有现有数据对照）
-                const interactionPanel = enabledPanels.find(p => p.id === 'interaction');
-                if (interactionPanel) {
-                    const panelKey = interactionPanel.type === 'custom' && interactionPanel.key ? interactionPanel.key : interactionPanel.id;
-                    const interactionTemplate = this.generateInteractionPanelTemplate(interactionPanel, panelKey);
-                    if (interactionTemplate) {
-                        panelDataTemplate = `增量更新模式 - 仅交互面板需要特殊处理多NPC:\n${interactionTemplate}`;
-                        console.log('[SmartPromptSystem] 📊 增量模式：仅生成交互面板多NPC模板');
-                    } else {
-                        panelDataTemplate = '增量更新模式 - 基于现有数据对照，无需数据模板';
-                        console.log('[SmartPromptSystem] 📊 增量模式：跳过所有面板数据模板生成');
-                    }
-                } else {
-                    panelDataTemplate = '增量更新模式 - 基于现有数据对照，无需数据模板';
-                    console.log('[SmartPromptSystem] 📊 增量模式：跳过所有面板数据模板生成');
-                }
-            } else {
-                // 完整模式：生成所有面板的数据模板
-                panelDataTemplate = this.generatePanelDataTemplate(enabledPanels);
-                console.log('[SmartPromptSystem] 📊 完整模式：生成所有面板数据模板');
+            // 🎯 新增：分析自定义面板缺失情况
+            const customPanelsMissing = missingDataFields.filter(field => {
+                // 通过面板类型识别自定义面板
+                const panel = enabledPanels.find(p => p.id === field.panelId);
+                return panel && panel.type === 'custom';
+            });
+
+            if (customPanelsMissing.length > 0) {
+                console.log(`[SmartPromptSystem] 🎯 检测到 ${customPanelsMissing.length} 个自定义面板缺失数据:`,
+                    customPanelsMissing.map(p => p.panelName));
             }
 
-            // 🚀 增强：生成包含记忆增强的数据对照信息
-            const currentDataInfo = await this.generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy);
+            // 🔧 新增：根据更新策略智能选择对应的模板
+            let prompt = '';
+            const templateSelectionReason = this.getTemplateSelectionReason(updateStrategy, missingDataFields);
+
+            if (updateStrategy.type === 'incremental') {
+                prompt = await this.buildIncrementalPrompt(enabledPanels, memoryEnhancedData, updateStrategy, missingDataFields);
+                console.log('[SmartPromptSystem] 📊 使用增量更新模板 -', templateSelectionReason);
+            } else {
+                prompt = await this.buildFullUpdatePrompt(enabledPanels, memoryEnhancedData, updateStrategy);
+                console.log('[SmartPromptSystem] 📊 使用全量更新模板 -', templateSelectionReason);
+            }
 
             // 检测输出模式
             const outputMode = this.getOutputMode();
-
-            // 🚀 重要：首先将记忆增强内容放到提示词最顶部
-            let prompt = this.addMemoryEnhancedDataToTop(currentDataInfo, this.promptTemplate);
-
-            // 替换模板中的占位符
-            prompt = prompt.replace('{PANEL_DATA_TEMPLATE}', panelDataTemplate);
-
-            // 增量策略：优先添加"只输出变化字段"的通用约束，再追加"缺失数据强制补充"以覆盖通用约束
-            if (updateStrategy.type === 'incremental') {
-                // 先给出通用增量约束
-                prompt = this.addIncrementalOnlyChangedRules(prompt, currentPanelData, enabledPanels);
-                // 再以更高优先级追加强制补充要求（覆盖上面的通用规则）
-                if (missingDataFields.length > 0) {
-                    prompt = this.addIncrementalDataInstructions(prompt, missingDataFields);
-                    // 🔧 新增：在提示词最末尾添加终极验证提醒
-                    prompt = this.addFinalValidationReminder(prompt, missingDataFields);
-                }
-            }
-
-            // 🔧 修复：先替换更新策略信息，再替换输出模式标识
-            prompt = this.addUpdateStrategyInfo(prompt, updateStrategy);
-            
-            // 替换输出模式标识
             prompt = prompt.replace('{{OUTPUT_MODE}}', outputMode);
-
-            // 添加严格的字段约束说明
-            prompt = this.addFieldConstraints(prompt, enabledPanels, updateStrategy);
 
             console.log('[SmartPromptSystem] 🔍 模板替换结果:');
             console.log('原始模板长度:', this.promptTemplate.length);
-            if (updateStrategy.type === 'incremental') {
-                console.log('增量模式面板模板:', panelDataTemplate.substring(0, 100) + (panelDataTemplate.length > 100 ? '...' : ''));
-            } else {
-                console.log('完整模式面板模板长度:', panelDataTemplate.length);
-            }
-            console.log('当前数据信息长度:', currentDataInfo.length);
             console.log('更新策略:', updateStrategy.type, `(数据覆盖率: ${updateStrategy.dataPercentage}%)`);
             console.log('最终提示词长度:', prompt.length);
 
@@ -876,12 +1056,25 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                 const panelId = panel.id;
                 const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
                 const sourceData = panels[panelKey] || panels[panelId];
-                if (sourceData && Object.keys(sourceData).length > 0) {
-                    // 🔧 修复：使用启用字段过滤，避免跨面板数据污染在提示词中出现
-                    const filteredPanelData = this.filterByEnabledFields(panelId, sourceData, panel);
-                    if (Object.keys(filteredPanelData).length > 0) {
-                        currentData[panelKey] = filteredPanelData;
-                        console.log(`[SmartPromptSystem] 📊 面板 ${panelId}(${panelKey}): 过滤后保留 ${Object.keys(filteredPanelData).length} 个启用字段`);
+
+                console.log(`[SmartPromptSystem] 🔍 检查面板 ${panelId}(${panelKey}): 数据存在=${!!sourceData}, 数据类型=${Array.isArray(sourceData) ? 'array' : typeof sourceData}`);
+
+                if (sourceData) {
+                    // 🔧 修复：处理新的多行数据格式
+                    if (Array.isArray(sourceData) && sourceData.length > 0) {
+                        // 新的多行数据格式：转换为键值对格式用于统计
+                        const convertedData = this.convertMultiRowDataToKeyValue(sourceData, panel);
+                        if (Object.keys(convertedData).length > 0) {
+                            currentData[panelKey] = convertedData;
+                            console.log(`[SmartPromptSystem] 📊 面板 ${panelId}(${panelKey}): 多行数据转换后保留 ${Object.keys(convertedData).length} 个字段`);
+                        }
+                    } else if (typeof sourceData === 'object' && Object.keys(sourceData).length > 0) {
+                        // 旧的键值对格式：使用启用字段过滤
+                        const filteredPanelData = this.filterByEnabledFields(panelId, sourceData, panel);
+                        if (Object.keys(filteredPanelData).length > 0) {
+                            currentData[panelKey] = filteredPanelData;
+                            console.log(`[SmartPromptSystem] 📊 面板 ${panelId}(${panelKey}): 键值对数据过滤后保留 ${Object.keys(filteredPanelData).length} 个启用字段`);
+                        }
                     }
                 }
             }
@@ -891,6 +1084,47 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
 
         } catch (error) {
             console.error('[SmartPromptSystem] ❌ 获取当前面板数据失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 🔧 新增：将多行数据格式转换为键值对格式用于统计
+     */
+    convertMultiRowDataToKeyValue(multiRowData, panel) {
+        try {
+            const convertedData = {};
+
+            // 为每一行数据创建字段映射
+            multiRowData.forEach((rowData, rowIndex) => {
+                // 🔧 修复：处理两种数据结构
+                let actualRowData = null;
+
+                if (rowData && rowData.rowData) {
+                    // 新的数据结构：{rowData: {col_1: ...}}
+                    actualRowData = rowData.rowData;
+                } else if (rowData && typeof rowData === 'object') {
+                    // 直接的数据结构：{col_1: ...}
+                    actualRowData = rowData;
+                }
+
+                if (actualRowData) {
+                    // 遍历行数据中的所有列
+                    Object.entries(actualRowData).forEach(([colKey, value]) => {
+                        if (value !== null && value !== undefined && value !== '') {
+                            // 创建唯一的字段键名
+                            const fieldKey = `row${rowIndex}_${colKey}`;
+                            convertedData[fieldKey] = value;
+                        }
+                    });
+                }
+            });
+
+            console.log(`[SmartPromptSystem] 🔄 多行数据转换: ${multiRowData.length}行 -> ${Object.keys(convertedData).length}个字段`);
+            return convertedData;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 多行数据转换失败:', error);
             return {};
         }
     }
@@ -1101,7 +1335,7 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
     filterByEnabledFields(panelId, panelData, panelConfig) {
         try {
             const filteredData = {};
-            
+
             // 收集启用字段的key列表
             const enabledFieldKeys = new Set();
             if (panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
@@ -1118,7 +1352,7 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                 if (['lastUpdated', 'source'].includes(key)) {
                     return;
                 }
-                
+
                 // 交互对象面板：支持动态NPC字段，例如 npc0.name
                 if (panelId === 'interaction') {
                     // 提取基础字段名：匹配 npc<number>.<field>
@@ -1184,26 +1418,33 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
             let existingFields = 0;
 
             for (const panel of enabledPanels) {
-                const panelData = currentPanelData[panel.id];
-                
+                // 🔧 修复：使用正确的键名查找面板数据
+                const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+                const panelData = currentPanelData[panelKey] || currentPanelData[panel.id];
+
+                console.log(`[SmartPromptSystem] 🔍 检查面板 ${panel.id}(${panelKey}): 数据存在=${!!panelData}`);
+
                 if (panelData) {
                     // 实际存在的字段数
                     const actualFields = Object.keys(panelData);
                     const validFields = Object.values(panelData).filter(value =>
                         value !== null && value !== undefined && value !== ''
                     );
-                    
+
+                    console.log(`[SmartPromptSystem] 📊 面板 ${panel.id}: 实际字段=${actualFields.length}, 有效字段=${validFields.length}`);
+
                     // 使用实际字段数和配置字段数的最大值，防止覆盖率超过100%
                     const configuredFieldCount = panel.subItems ? panel.subItems.length : 0;
                     const actualFieldCount = actualFields.length;
                     const maxFieldCount = Math.max(configuredFieldCount, actualFieldCount);
-                    
+
                     totalFields += maxFieldCount;
                     existingFields += validFields.length;
                 } else {
                     // 没有数据的面板，使用配置的字段数
                     const configuredFieldCount = panel.subItems ? panel.subItems.length : 0;
                     totalFields += configuredFieldCount;
+                    console.log(`[SmartPromptSystem] 📊 面板 ${panel.id}: 无数据，配置字段=${configuredFieldCount}`);
                     // existingFields += 0 (已有数据为0)
                 }
             }
@@ -1229,7 +1470,7 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                 // 20%-60%之间，根据具体情况智能判断
                 const missingPanels = enabledPanels.filter(panel => !currentPanelData[panel.id]);
                 console.log(`[SmartPromptSystem] 🔍 缺失面板数量: ${missingPanels.length}/${enabledPanels.length}`);
-                
+
                 if (missingPanels.length > enabledPanels.length / 2) {
                     strategyType = 'full';
                     reason = '缺失面板数量过多，采用全量更新策略';
@@ -1286,15 +1527,15 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                         const allSubItems = [];
 
                         // 1. 处理基础设置中的复选框配置（panel[key].enabled格式）
-                        const subItemKeys = Object.keys(panel).filter(key => 
-                            key !== 'enabled' && 
+                        const subItemKeys = Object.keys(panel).filter(key =>
+                            key !== 'enabled' &&
                             key !== 'subItems' &&     // 排除自定义子项数组
                             key !== 'description' &&  // 排除面板属性
-                            key !== 'icon' && 
-                            key !== 'required' && 
-                            key !== 'memoryInject' && 
-                            key !== 'prompts' && 
-                            typeof panel[key] === 'object' && 
+                            key !== 'icon' &&
+                            key !== 'required' &&
+                            key !== 'memoryInject' &&
+                            key !== 'prompts' &&
+                            typeof panel[key] === 'object' &&
                             panel[key].enabled !== undefined
                         );
                         const enabledSubItems = subItemKeys.filter(key => panel[key].enabled === true);
@@ -1314,13 +1555,13 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                         let enabledCustomSubItems = [];
                         if (panel.subItems && Array.isArray(panel.subItems)) {
                             enabledCustomSubItems = panel.subItems.filter(subItem => subItem.enabled !== false);
-                            
+
                             // 🔧 修复：创建键名集合，避免重复添加
                             const existingKeys = new Set(allSubItems.map(item => item.key));
-                            
+
                             enabledCustomSubItems.forEach(subItem => {
                                 const key = subItem.key || subItem.name.toLowerCase().replace(/\s+/g, '_');
-                                
+
                                 // 🔧 修复：检查是否已存在，避免重复
                                 if (!existingKeys.has(key)) {
                                     allSubItems.push({
@@ -1360,7 +1601,7 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                         // 🔧 修复：只统计启用的子项
                         const enabledSubItems = allSubItems.filter(subItem => subItem.enabled !== false);
                         console.log(`[SmartPromptSystem] 📊 自定义面板 ${panelId} 所有子项: ${allSubItems.length}, 启用子项: ${enabledSubItems.length}`);
-                        
+
                         // 🔧 修复：处理启用的子项
                         const processedSubItems = enabledSubItems.map(subItem => {
                             // 处理不同的子项格式
@@ -1389,7 +1630,7 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                             name: panelConfig.name || '未命名面板',
                             subItems: processedSubItems
                         });
-                        
+
                         console.log(`[SmartPromptSystem] ✅ 添加自定义面板: ${panelId}, 启用子项数量: ${processedSubItems.length}/${allSubItems.length}`);
                     }
                 }
@@ -1456,7 +1697,7 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                 const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
                 const panelName = this.getBasicPanelDisplayName(panelId);
                 const panelData = currentPanelData[panelKey] || currentPanelData[panelId] || {};
-                
+
                 dataInfoParts.push(`【${panelName}面板 (${panelId}) - ${Object.keys(panelData).length > 0 ? '现有数据' : '待生成数据'}】`);
 
                 const dataEntries = Object.entries(panelData);
@@ -1473,13 +1714,13 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                                 normalizedEntries.push(`${key}: ${displayValue}`);
                             } else {
                                 // 错误格式，规范化为 npc0 前缀并添加警告
-                                normalizedEntries.push(`npc0.${key}: ${displayValue} (已规范化格式)`);
+                                normalizedEntries.push(`${key}: ${displayValue} (原始键)`);
                             }
                         });
                         normalizedEntries.forEach(entry => dataInfoParts.push(entry));
 
                         // 添加格式提醒
-                        dataInfoParts.push('🚨 注意：交互面板必须使用 npc0.字段名="值" 格式！');
+                        dataInfoParts.push('🚨 注意：交互面板数据请使用操作指令多行格式（add/update；数字列）！');
                     } else {
                         // 非交互面板，正常显示
                         dataEntries.forEach(([key, value]) => {
@@ -1522,7 +1763,14 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
         try {
             console.log('[SmartPromptSystem] 🧠 生成记忆增强数据对照信息...');
 
-            const { current, historical, persistent, context, metadata } = memoryEnhancedData;
+            // 安全解构，提供默认值
+            const {
+                current = {},
+                historical = {},
+                persistent = {},
+                context = {},
+                metadata = {}
+            } = memoryEnhancedData || {};
 
             // 获取所有启用的面板列表
             const enabledPanels = await this.getEnabledPanels();
@@ -1533,9 +1781,9 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
 
             const dataInfoParts = ['【AI记忆增强数据 - 永不遗忘的剧情记忆】'];
             dataInfoParts.push(`聊天ID: ${metadata.chatId || 'unknown'}`);
-            dataInfoParts.push(`数据覆盖率: ${updateStrategy.dataPercentage}% (${updateStrategy.existingFields}/${updateStrategy.totalFields}个字段)`);
-            dataInfoParts.push(`更新策略: ${updateStrategy.type === 'full' ? '全量更新' : '增量更新'} - ${updateStrategy.reason}`);
-            dataInfoParts.push(`记忆深度: ${metadata.memoryDepth}个历史记录`);
+            dataInfoParts.push(`数据覆盖率: ${updateStrategy?.dataPercentage || 0}% (${updateStrategy?.existingFields || 0}/${updateStrategy?.totalFields || 0}个字段)`);
+            dataInfoParts.push(`更新策略: ${updateStrategy?.type === 'full' ? '全量更新' : '增量更新'} - ${updateStrategy?.reason || 'unknown'}`);
+            dataInfoParts.push(`记忆深度: ${metadata.memoryDepth || 0}个历史记录`);
             dataInfoParts.push('');
 
             // 1. 当前数据状态
@@ -1559,7 +1807,7 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                                 dataInfoParts.push(`  ${key}: ${displayValue}`);
                             } else {
                                 // 错误格式，规范化为 npc0 前缀
-                                dataInfoParts.push(`  npc0.${key}: ${displayValue} (已规范化)`);
+                                dataInfoParts.push(`  ${key}: ${displayValue} (已规范化)`);
                             }
                         });
                     } else {
@@ -1601,7 +1849,7 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                                         dataInfoParts.push(`     ${key}: ${displayValue}`);
                                     } else {
                                         // 错误格式，规范化显示
-                                        dataInfoParts.push(`     npc0.${key}: ${displayValue} (历史数据已规范化)`);
+                                        dataInfoParts.push(`     ${key}: ${displayValue} (历史数据原始键)`);
                                     }
                                 } else {
                                     // 非交互面板，正常显示
@@ -1630,7 +1878,7 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                                 dataInfoParts.push(`  ${key}: ${displayValue}`);
                             } else {
                                 // 错误格式，规范化显示
-                                dataInfoParts.push(`  npc0.${key}: ${displayValue} (持久化数据已规范化)`);
+                                dataInfoParts.push(`  ${key}: ${displayValue} (持久化数据原始键)`);
                             }
                         } else {
                             // 非交互面板，正常显示
@@ -1720,13 +1968,26 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
 
     /**
      * 🚀 新增：将记忆增强数据添加到提示词最顶部
+     * @param {string} memoryEnhancedDataInfo - 记忆增强数据信息
+     * @param {string} promptTemplate - 提示词模板
+     * @param {string|null} armorBreakingPrompt - 破甲提示词（可选）
      */
-    addMemoryEnhancedDataToTop(memoryEnhancedDataInfo, promptTemplate) {
+    addMemoryEnhancedDataToTop(memoryEnhancedDataInfo, promptTemplate, armorBreakingPrompt = null) {
         try {
             console.log('[SmartPromptSystem] 🧠 将AI记忆增强内容添加到提示词顶部...');
 
-            // 构建顶部记忆增强内容
-            const topMemoryContent = [
+            // 🆕 构建最终的顶部内容数组
+            const topContentParts = [];
+
+            // 🛡️ 如果有破甲提示词，放在最顶部
+            if (armorBreakingPrompt) {
+                topContentParts.push(armorBreakingPrompt);
+                topContentParts.push('');
+                console.log('[SmartPromptSystem] 🛡️ 破甲提示词已添加到最顶部');
+            }
+
+            // 🧠 然后添加记忆增强内容
+            topContentParts.push(
                 '🧠🧠🧠【AI记忆增强系统 - 最高优先级阅读】🧠🧠🧠',
                 '⚠️ 重要：在开始任何思考和生成之前，必须仔细阅读以下完整记忆内容 ⚠️',
                 '',
@@ -1752,9 +2013,12 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
                 '                    开始正常提示词内容',
                 '═══════════════════════════════════════════════════════════════',
                 ''
-            ].join('\n');
+            );
 
-            // 将记忆增强内容放到提示词最顶部
+            // 构建完整的顶部内容
+            const topMemoryContent = topContentParts.join('\n');
+
+            // 将顶部内容放到提示词最顶部
             const enhancedPrompt = topMemoryContent + promptTemplate;
 
             console.log(`[SmartPromptSystem] 🧠 记忆增强内容已添加到顶部，总长度: ${enhancedPrompt.length}`);
@@ -1766,6 +2030,47 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
             console.error('[SmartPromptSystem] ❌ 添加记忆增强内容到顶部失败:', error);
             // 降级：如果失败，至少将记忆内容添加到开头
             return memoryEnhancedDataInfo + '\n\n' + promptTemplate;
+        }
+    }
+
+    /**
+     * 🆕 获取破甲提示词
+     */
+    async getArmorBreakingPrompt() {
+        try {
+            // 获取扩展设置
+            const extensionSettings = this.context?.extensionSettings?.['Information bar integration tool'] || {};
+            const apiConfig = extensionSettings.apiConfig || {};
+
+            // 检查是否启用了破甲提示词
+            if (!apiConfig.enableArmorBreaking) {
+                return null;
+            }
+
+            // 获取破甲提示词内容
+            const armorBreakingPrompt = apiConfig.armorBreakingPrompt;
+            if (!armorBreakingPrompt || armorBreakingPrompt.trim() === '') {
+                console.warn('[SmartPromptSystem] ⚠️ 破甲提示词已启用但内容为空');
+                return null;
+            }
+
+            console.log('[SmartPromptSystem] 🛡️ 获取破甲提示词成功，长度:', armorBreakingPrompt.length);
+
+            // 格式化破甲提示词
+            const formattedPrompt = [
+                '🚨🚨🚨🚨🚨 【ARMOR BREAKING PROMPT】 🚨🚨🚨🚨🚨',
+                '',
+                armorBreakingPrompt.trim(),
+                '',
+                '🚨🚨🚨🚨🚨 【END ARMOR BREAKING】 🚨🚨🚨🚨🚨',
+                ''
+            ].join('\n');
+
+            return formattedPrompt;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 获取破甲提示词失败:', error);
+            return null;
         }
     }
 
@@ -1794,291 +2099,44 @@ organization: org0.组织名称="科技公司", org0.组织类型="私企", org0
      * 生成面板数据模板
      */
     generatePanelDataTemplate(enabledPanels) {
-        console.log('[SmartPromptSystem] 📝 生成面板数据模板，面板数量:', enabledPanels.length);
+        console.log('[SmartPromptSystem] 📝 生成面板数据模板（操作指令格式），面板数量:', enabledPanels.length);
         console.log('[SmartPromptSystem] 🔍 面板列表:', enabledPanels.map(p => `${p.id}(${p.type})`));
 
         const templateParts = [];
 
         for (const panel of enabledPanels) {
-            // 对于自定义面板，使用key；对于基础面板，使用id
+            // 自定义面板使用 key；基础面板使用 id
             const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
-            console.log(`[SmartPromptSystem] 处理面板: ${panel.id} (键名: ${panelKey}), 子项数量: ${panel.subItems.length}`);
+            const subItems = Array.isArray(panel.subItems) ? panel.subItems : [];
+            console.log(`[SmartPromptSystem] 处理面板: ${panel.id} (键名: ${panelKey}), 子项数量: ${subItems.length}`);
 
-            // 特殊处理交互对象面板 - 生成多NPC格式
-            if (panel.id === 'interaction') {
-                const interactionTemplate = this.generateInteractionPanelTemplate(panel, panelKey);
-                if (interactionTemplate) {
-                    templateParts.push(interactionTemplate);
-                    console.log(`[SmartPromptSystem] 交互对象面板模板: ${interactionTemplate}`);
-                }
-            }
-            // 特殊处理组织架构面板 - 生成多组织格式
-            else if (panel.id === 'organization') {
-                const organizationTemplate = this.generateOrganizationPanelTemplate(panel, panelKey);
-                if (organizationTemplate) {
-                    templateParts.push(organizationTemplate);
-                    console.log(`[SmartPromptSystem] 组织架构面板模板: ${organizationTemplate}`);
-                }
+            // 使用操作指令多行数据模板：按子项顺序映射为数字列 1..N
+            const colPairs = subItems.map((subItem, idx) => {
+                const display = this.getSubItemDisplayName(panel.id, subItem.key);
+                const colIndex = idx + 1; // 列号从1开始
+                return `"${colIndex}","${display}"`;
+            });
+
+            if (colPairs.length > 0) {
+                const line = `add ${panelKey}(1 {${colPairs.join(', ')}})`; // 行号1：现有/首行
+                templateParts.push(line);
+                console.log(`[SmartPromptSystem] 面板模板: ${line}`);
             } else {
-                // 其他面板使用原有逻辑
-                console.log(`[SmartPromptSystem] 🔍 面板 ${panelKey} 子项详情:`, panel.subItems);
-                const subItemTemplates = panel.subItems.map(subItem => {
-                    // 🔧 优化：为personal面板提供用户角色相关的字段示例
-                    if (panel.id === 'personal') {
-                        // 🚨 个人信息面板 = 用户角色专用字段示例
-                        const personalExamples = {
-                            'name': 'name="李明"',
-                            'age': 'age="28"',
-                            'gender': 'gender="男"',
-                            'occupation': 'occupation="软件工程师"',
-                            'appearance': 'appearance="中等身材，戴眼镜"',
-                            'personality': 'personality="内向，细心"',
-                            'status': 'status="工作中"',
-                            'mood': 'mood="专注"',
-                            'location': 'location="办公室"',
-                            'health': 'health="良好"',
-                            'energy': 'energy="充沛"',
-                            'skills': 'skills="编程，设计"',
-                            'goals': 'goals="完成项目"',
-                            'background': 'background="计算机专业毕业"'
-                        };
-                        return personalExamples[subItem.key] || `${subItem.key}="用户相关内容"`;
-                    } else {
-                        return `${subItem.key}="具体内容"`;
-                    }
-                });
-
-                if (subItemTemplates.length > 0) {
-                    const panelTemplate = `${panelKey}: ${subItemTemplates.join(', ')}`;
-                    templateParts.push(panelTemplate);
-                    console.log(`[SmartPromptSystem] 面板模板: ${panelTemplate}`);
-                } else {
-                    console.warn(`[SmartPromptSystem] ⚠️ 面板 ${panelKey} 没有有效的子项模板，跳过生成`);
-                }
+                console.warn(`[SmartPromptSystem] ⚠️ 面板 ${panelKey} 没有有效的子项模板，跳过生成`);
             }
         }
 
-        console.log(`[SmartPromptSystem] 📋 模板部分数组长度: ${templateParts.length}`);
-        console.log('[SmartPromptSystem] 📋 模板部分内容:', templateParts);
-        
         const result = templateParts.join('\n');
-        console.log('[SmartPromptSystem] 生成的面板数据模板:', result);
-
+        console.log('[SmartPromptSystem] 生成的面板数据模板（操作指令）:', result);
         return result;
     }
 
-    /**
-     * 生成交互对象面板模板 - 动态NPC格式说明
-     */
-    generateInteractionPanelTemplate(panel, panelKey) {
-        console.log('[SmartPromptSystem] 🎭 生成交互对象面板动态NPC模板');
 
-        // 🔧 修复：生成正确的字段列表，对于interaction面板使用NPC前缀格式
-        const availableFields = panel.subItems.map(subItem => {
-            return `npc0.${subItem.key}="具体内容"`;
-        });
 
-        // 🔧 优化：生成NPC角色专用的示例格式
-        const exampleFields = panel.subItems.slice(0, 5).map(subItem => {
-            const npcExamples = {
-                'name': 'npc0.name="小雨"',
-                'type': 'npc0.type="朋友"',
-                'status': 'npc0.status="开心"',
-                'location': 'npc0.location="咖啡厅"',
-                'mood': 'npc0.mood="愉快"',
-                'relationship': 'npc0.relationship="好友"',
-                'activity': 'npc0.activity="聊天"',
-                'attitude': 'npc0.attitude="友善"',
-                'emotion': 'npc0.emotion="兴奋"'
-            };
-            return npcExamples[subItem.key] || `npc0.${subItem.key}="NPC相关内容"`;
-        });
 
-        // 🚨🚨🚨 超强化交互对象面板的NPC身份识别约束 🚨🚨🚨
-        // 🚀 检查是否为自定义API模式，需要加强格式约束
-        const isCustomAPIMode = this.getOutputMode() === '自定义API';
 
-        let result = `${panelKey}: 🚨🚨🚨 **交互对象面板专用于NPC角色！严禁填入用户信息！每个NPC必须有独立的npcX.前缀！** 🚨🚨🚨
 
-🚨 **身份识别警告：严禁角色混淆** 🚨
-❌ 绝对禁止将用户信息填入交互对象面板！
-❌ 绝对禁止将NPC信息填入个人信息面板！
-❌ 绝对禁止: name="我, 小明" ← 用户和NPC混合！
-❌ 绝对禁止: status="我很开心, 小明很累" ← 角色状态混合！
 
-🔴 **NPC信息混合警告：绝对禁止的错误行为** 🔴
-❌ 绝对禁止: name="小雨, 张经理, 李医生" ← 多个NPC混合！
-❌ 绝对禁止: type="朋友/同事/医生" ← 多个NPC类型混合！
-❌ 绝对禁止: status="开心/忙碌/专业" ← 多个NPC状态混合！
-❌ 绝对禁止: relationship="朋友/同事/医患" ← 多个NPC关系混合！
-
-✅ **正确做法：每个NPC独立字段** ✅
-✅ 正确: npc0.name="小雨", npc1.name="张经理", npc2.name="李医生"
-✅ 正确: npc0.type="朋友", npc1.type="同事", npc2.type="医生"
-✅ 正确: npc0.status="开心", npc1.status="忙碌", npc2.status="专业"
-✅ 正确: npc0.relationship="好友", npc1.relationship="上下级", npc2.relationship="医患"
-
-🎭 **NPC角色识别指南**
-- 对话中除用户外的所有其他角色
-- 用户交互的对象（朋友、同事、陌生人等）
-- 剧情中出现的非玩家角色
-- 当用户说"你"时指代的对象（用户→NPC）
-- 当其他角色自称"我"时的角色（NPC自述）`;
-
-        // 🚀 自定义API模式下加强NPC格式约束
-        if (isCustomAPIMode) {
-            console.log('[SmartPromptSystem] 🔥 自定义API模式，为交互面板加强NPC格式约束');
-            result += `
-
-🔥🔥🔥 **自定义API模式 - 交互面板超级严格要求** 🔥🔥🔥
-⚠️ **重要提醒：自定义API模式下，系统对格式要求极其严格！**
-
-❌ **绝对禁止的错误格式示例**：
-❌ ${panelKey}: name="小雨", type="朋友", status="开心" (缺少npc前缀)
-❌ ${panelKey}: npc0.name="小雨", type="朋友" (部分缺少前缀)
-❌ ${panelKey}: name="小雨, 张三", type="朋友, 同事" (多NPC混合)
-
-✅ **必须使用的正确格式**：
-✅ ${panelKey}: npc0.name="小雨", npc0.type="朋友", npc0.status="开心"
-✅ ${panelKey}: npc0.name="小雨", npc0.type="朋友", npc1.name="张三", npc1.type="同事"
-
-🚨 **系统将完全拒绝处理任何没有npc前缀的交互对象数据！**
-🚨 **如果输出错误格式，数据将被完全忽略，不会有任何兼容性处理！**
-🚨 **自定义API模式下，格式错误将导致整个交互面板数据丢失！**`;
-        }
-
-        result += `
-
-📋 **格式要求** 📋
-- 只能输出一个${panelKey}面板
-- 每个NPC使用独立的npcX.前缀（X为0,1,2,3...）
-- 绝对不能在一个字段中混合多个NPC的信息
-- 如果有3个NPC，必须使用npc0, npc1, npc2分别标识
-- 如果只有一个主要交互对象，强烈建议使用npc0.前缀
-
-可用字段: ${availableFields.join(', ')}
-
-🎯 **标准示例（3个NPC的正确格式 - 每个NPC都有完整字段）** 🎯
-${panelKey}: ${exampleFields.join(', ')}, npc1.name="第二个NPC", npc1.type="类型2", npc1.status="状态2", npc1.relationship="关系2", npc2.name="第三个NPC", npc2.type="类型3", npc2.status="状态3", npc2.relationship="关系3"
-
-🚨🚨🚨 **关键要求：数据完整性** 🚨🚨🚨
-⚠️ **每个NPC都必须包含所有相关字段！**
-⚠️ **绝对禁止只为第一个NPC输出完整数据，其他NPC数据不完整！**
-⚠️ **如果某个NPC缺少信息，使用"未知"、"暂无"或"待确认"填充，不能省略字段！**
-
-🎯 **单个NPC的推荐格式** 🎯
-${panelKey}: npc0.name="主要角色", npc0.type="角色类型", npc0.status="当前状态", npc0.relationship="与用户关系", npc0.intimacy="亲密度", npc0.history="交互历史"
-
-🚫 **严禁的错误格式** 🚫
-❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
-❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
-❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
-❌ ${panelKey}: npc0.name="NPC1", npc0.type="类型1", npc1.name="NPC2" ← 严重错误！npc1缺少type字段！`;
-
-        console.log('[SmartPromptSystem] 🎭 交互对象动态NPC模板生成完成（已强化NPC前缀指令）');
-        return result;
-    }
-
-    /**
-     * 获取交互对象字段的中文显示名称
-     */
-    getInteractionFieldDisplayName(fieldKey) {
-        // 🎭 交互对象面板 = NPC角色专用字段映射
-        const interactionFieldMapping = {
-            'name': 'NPC姓名',
-            'type': 'NPC类型',
-            'status': 'NPC状态',
-            'location': 'NPC位置',
-            'mood': 'NPC心情',
-            'activity': 'NPC活动',
-            'availability': 'NPC可用性',
-            'priority': 'NPC优先级',
-            'relationship': '与用户关系',
-            'intimacy': '亲密度',
-            'history': '交互历史',
-            'autoRecord': '自动记录',
-            'trust': '对用户信任度',
-            'friendship': '友谊程度',
-            'romance': '浪漫关系',
-            'respect': '对用户尊重',
-            'dependency': '依赖程度',
-            'conflict': '冲突状态',
-            'attitude': 'NPC态度',
-            'emotion': 'NPC情绪',
-            'appearance': 'NPC外貌',
-            'personality': 'NPC性格',
-            'occupation': 'NPC职业',
-            'age': 'NPC年龄',
-            'gender': 'NPC性别'
-        };
-
-        return interactionFieldMapping[fieldKey] || `NPC${fieldKey}`;
-    }
-
-    /**
-     * 生成组织架构面板模板 - 动态组织格式说明
-     */
-    generateOrganizationPanelTemplate(panel, panelKey) {
-        console.log('[SmartPromptSystem] 🏢 生成组织架构面板动态组织模板');
-
-        // 🔧 修复：生成正确的字段列表，对于organization面板使用组织前缀格式
-        const availableFields = panel.subItems.map(subItem => {
-            return `org0.${subItem.key}="具体内容"`;
-        });
-
-        // 🔧 优化：生成组织专用的示例格式
-        const exampleFields = panel.subItems.slice(0, 5).map(subItem => {
-            const orgExamples = {
-                '组织名称': 'org0.组织名称="天剑宗"',
-                '组织类型': 'org0.组织类型="修仙门派"',
-                '组织等级': 'org0.组织等级="一流门派"',
-                '掌门': 'org0.掌门="剑无极"',
-                '成员数量': 'org0.成员数量="3000人"',
-                '主要功法': 'org0.主要功法="天剑诀"',
-                '势力范围': 'org0.势力范围="东域"',
-                '组织地位': 'org0.组织地位="正道领袖"',
-                '组织历史': 'org0.组织历史="千年传承"',
-                '重要决策': 'org0.重要决策="闭关修炼"'
-            };
-            return orgExamples[subItem.key] || `org0.${subItem.key}="组织相关内容"`;
-        });
-
-        const result = `
-🏢🏢🏢 **组织架构面板 - 多组织前缀格式说明** 🏢🏢🏢
-
-⚠️ **重要：${panelKey}面板必须使用org前缀格式！**
-⚠️ **每个组织使用独立的orgX.前缀（X为0,1,2,3...）**
-⚠️ **绝对不能在一个字段中混合多个组织的信息**
-
-📋 **格式要求** 📋
-- 只能输出一个${panelKey}面板
-- 每个组织使用独立的orgX.前缀（X为0,1,2,3...）
-- 绝对不能在一个字段中混合多个组织的信息
-- 如果有3个组织，必须使用org0, org1, org2分别标识
-- 如果只有一个主要组织，强烈建议使用org0.前缀
-
-可用字段: ${availableFields.join(', ')}
-
-🎯 **标准示例（3个组织的正确格式 - 每个组织都有完整字段）** 🎯
-${panelKey}: ${exampleFields.join(', ')}, org1.组织名称="商会联盟", org1.组织类型="商业组织", org1.会长="金富贵", org1.成员数量="500人", org2.组织名称="皇室", org2.组织类型="政治势力", org2.皇帝="龙天启", org2.军队规模="十万大军"
-
-🚨🚨🚨 **关键要求：数据完整性** 🚨🚨🚨
-⚠️ **每个组织都必须包含所有相关字段！**
-⚠️ **绝对禁止只为第一个组织输出完整数据，其他组织数据不完整！**
-⚠️ **如果某个组织缺少信息，使用"未知"、"暂无"或"待确认"填充，不能省略字段！**
-
-🎯 **单个组织的推荐格式** 🎯
-${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型", org0.组织等级="等级", org0.领导者="领导人", org0.成员数量="人数", org0.势力范围="范围"
-
-🚫 **严禁的错误格式** 🚫
-❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
-❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
-❌ ${panelKey}: [WRONG_FORMAT_MIXING] ← 严重错误！
-❌ ${panelKey}: org0.组织名称="组织1", org0.组织类型="类型1", org1.组织名称="组织2" ← 严重错误！org1缺少组织类型字段！`;
-
-        console.log('[SmartPromptSystem] 🏢 组织架构动态组织模板生成完成（已强化组织前缀指令）');
-        return result;
-    }
 
     /**
      * 获取子项显示名称 - 使用统一的完整映射表
@@ -2096,7 +2154,7 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
 
             // 如果没有映射，返回原始键名（保持原样，避免格式化错误）
             return subItemKey;
-            
+
         } catch (error) {
             console.warn('[SmartPromptSystem] ⚠️ 获取子项显示名称失败:', error);
             return subItemKey;
@@ -2144,25 +2202,19 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
             let simplifiedConstraint = `
 
 【📋 增量更新模式约束】
-⚠️ **只输出发生变化的字段，保持现有字段名格式**
-🚨 **交互对象面板严禁信息混合：每个NPC必须使用独立的npcX.字段名格式（X为0,1,2...）**
-🚨 **绝对禁止将多个NPC信息写在一个字段中（如：name="NPC1, NPC2"）**
-⚠️ **严禁添加未启用的面板或字段**`;
+⚠️ 只输出发生变化的字段，保持未变化字段不输出
+⚠️ 严禁添加未启用的面板或字段
 
-            // 🚀 自定义API模式下加强NPC格式约束
-            if (isCustomAPIMode) {
-                console.log('[SmartPromptSystem] 🔥 自定义API模式，加强NPC格式约束');
-                simplifiedConstraint += `
+【✅ 数据输出格式（统一要求）】
+- 必须使用“操作指令格式”：add / update / delete
+- 列号必须为纯数字（1,2,3, ...），对应面板子项顺序
+- 行号规则：第1行代表现有数据；新增从第2行开始
+- 内容必须位于 <infobar_data><!-- ... --></infobar_data> 注释内部
 
-🔥🔥🔥 **自定义API模式 - 超级严格NPC格式要求** 🔥🔥🔥
-❌ **绝对禁止错误格式**: interaction: name="小雨", type="朋友" (缺少npc前缀)
-✅ **必须使用正确格式**: interaction: npc0.name="小雨", npc0.type="朋友"
-❌ **绝对禁止混合格式**: interaction: npc0.name="小雨", type="朋友" (部分缺少前缀)
-✅ **每个NPC都要前缀**: interaction: npc0.name="小雨", npc0.type="朋友", npc1.name="张三", npc1.type="同事"
-
-🚨 **系统将完全拒绝处理任何没有npc前缀的交互对象数据！**
-🚨 **如果输出错误格式，数据将被完全忽略，不会有任何兼容性处理！**`;
-            }
+【示例】
+- update personal(1 {"4","办公室","5","工作中"})
+- add interaction(1 {"1","小雨","2","同事","3","友好","4","询问进度"})
+- delete tasks(2)`;
 
             return prompt + simplifiedConstraint;
         }
@@ -2203,11 +2255,11 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
         for (const panel of enabledPanels) {
             const panelName = this.getBasicPanelDisplayName(panel.id);
             constraintText += `\n\n**✅ ${panelName}面板 (${panel.id})：**`;
-            
+
             if (panel.id === 'interaction') {
                 // 交互对象面板：特殊处理
-                constraintText += `\n⚠️ 使用动态NPC格式：npcX.字段名="内容"（X为NPC编号0,1,2...）\n📋 可用字段：`;
-                
+                constraintText += `\n⚠️ 使用操作指令多行格式：add/update/delete；列号为纯数字（1,2,3...），按字段顺序对应\n📋 可用字段：`;
+
                 for (const subItem of panel.subItems) {
                     const displayName = this.getSubItemDisplayName(panel.id, subItem.key);
                     constraintText += `\n  - ${subItem.key}="${displayName}"`;
@@ -2258,8 +2310,8 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
 - 当AI对用户说话时的第二人称："你"、"你的"（AI→用户方向）
 - 明确的用户角色名称或用户设定的角色身份
 
-📋 数据格式：使用动态NPC格式：npcX.字段名="中文内容"
-其中X为NPC编号(0,1,2,3...)，根据剧情中实际出现的NPC数量动态生成
+📋 数据格式：使用操作指令多行格式：add interaction(行号 {"1","姓名","2","关系",...})
+列号为纯数字(1,2,3,...)，按面板字段顺序依次对应
 
 🚨🚨🚨 **关键要求：每个NPC必须输出完整的字段数据！** 🚨🚨🚨
 ⚠️ **绝对禁止只为第一个NPC输出完整数据，其他NPC输出不完整数据！**
@@ -2273,11 +2325,11 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
 ❌ [WRONG_FORMAT_MIXING] ← 绝对禁止！
 
 🔴 **严禁的错误格式（数据不完整）** 🔴
-❌ npc0.name="角色1", npc0.type="类型1", npc0.status="状态1", npc1.name="角色2" ← 错误！npc1缺少type和status字段！
+❌ add interaction(1 {"1","角色1","2","类型1","3","状态1"}), add interaction(2 {"1","角色2"}) ← 错误！第二条缺少必要列！
 ❌ 只为第一个NPC输出完整字段，其他NPC字段不完整 ← 严重错误！
 
 ✅ **正确格式（NPC分离且数据完整）** ✅
-✅ npc0.name="角色1", npc0.type="类型1", npc0.status="状态1", npc1.name="角色2", npc1.type="类型2", npc1.status="状态2"
+✅ add interaction(1 {"1","角色1","2","类型1","3","状态1"})，add interaction(2 {"1","角色2","2","类型2","3","状态2"})
 ✅ 每个NPC都必须包含相同的字段集合，确保数据完整性
 
 可用字段: ${interactionFields.join(', ')}
@@ -2339,12 +2391,12 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
             // 🔧 修复：检查是否启用了自定义API模式，并清理错误的禁止规则
             const apiConfig = extensionSettings.apiConfig || {};
             const isCustomAPIEnabled = apiConfig.enabled && apiConfig.apiKey && apiConfig.model;
-            
+
             if (isCustomAPIEnabled) {
                 console.log('[SmartPromptSystem] 🚫 检测到自定义API模式已启用，注入主API技术性禁止规则');
                 console.log('[SmartPromptSystem] 📊 自定义API提供商:', apiConfig.provider);
                 console.log('[SmartPromptSystem] 📊 自定义API模型:', apiConfig.model);
-                
+
                 // 注入主API技术性禁止规则
                 await this.injectMainAPIProhibitionRules();
                 return;
@@ -2393,8 +2445,23 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
 
                 console.log('[SmartPromptSystem] ✅ 插件已启用，开始解析AI消息数据...');
 
+                // 🔧 修复：获取最新的消息内容，而不是依赖事件传递的旧数据
+                let messageContent = data.mes;
+
+                // 尝试从聊天记录中获取最新的AI消息内容
+                if (this.context.chat && Array.isArray(this.context.chat) && this.context.chat.length > 0) {
+                    const latestAIMessage = this.context.chat.slice().reverse().find(msg => !msg.is_user);
+                    if (latestAIMessage && latestAIMessage.mes) {
+                        console.log('[SmartPromptSystem] 🔄 使用聊天记录中的最新AI消息内容');
+                        messageContent = latestAIMessage.mes;
+                    }
+                }
+
+                console.log('[SmartPromptSystem] 📊 消息内容长度:', messageContent?.length || 0);
+                console.log('[SmartPromptSystem] 🔍 是否包含infobar_data标签:', messageContent?.includes('<infobar_data>') || false);
+
                 // 解析AI返回的数据
-                const parsedData = this.dataParser.parseAIResponse(data.mes);
+                const parsedData = this.dataParser.parseAIResponse(messageContent);
 
                 if (parsedData) {
                     // 更新数据到数据核心
@@ -2448,9 +2515,9 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
             if (typeof this.context.setExtensionPrompt === 'function') {
                 const injectionParams = this.getInjectionParameters(mode, depth);
                 this.context.setExtensionPrompt(
-                    injectionParams.identifier, 
-                    prompt, 
-                    injectionParams.priority, 
+                    injectionParams.identifier,
+                    prompt,
+                    injectionParams.priority,
                     injectionParams.position
                 );
                 console.log(`[SmartPromptSystem] ✅ 使用SillyTavern内置机制注入提示词 (模式: ${mode}, 深度: ${depth})`);
@@ -2481,34 +2548,34 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
                     ...baseParams,
                     position: 0  // 在角色定义之前，位置为0
                 };
-            
+
             case 'afterCharacter':
                 return {
                     ...baseParams,
                     position: false  // 在角色定义之后，使用默认位置
                 };
-            
+
             case 'atDepthSystem':
                 return {
                     ...baseParams,
                     identifier: 'Information bar integration tool - System',
                     position: depth  // 系统角色消息，使用指定深度
                 };
-            
+
             case 'atDepthUser':
                 return {
                     ...baseParams,
                     identifier: 'Information bar integration tool - User',
                     position: depth  // 用户角色消息，使用指定深度
                 };
-            
+
             case 'atDepthAssistant':
                 return {
                     ...baseParams,
                     identifier: 'Information bar integration tool - Assistant',
                     position: depth  // 助手角色消息，使用指定深度
                 };
-            
+
             default:
                 console.warn(`[SmartPromptSystem] ⚠️ 未知的位置模式: ${mode}，使用默认配置`);
                 return {
@@ -2581,7 +2648,18 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
                 return null;
             }
 
-            // 解析扁平格式数据
+            // 🚀 新增：检查是否是操作指令格式，优先使用XMLDataParser
+            const xmlDataParser = window.SillyTavernInfobar?.modules?.xmlDataParser;
+            if (xmlDataParser && xmlDataParser.isOperationCommandFormat && xmlDataParser.isOperationCommandFormat(dataContent)) {
+                console.log('[SmartPromptSystem] 🚀 检测到操作指令格式，使用XMLDataParser解析');
+                const operationResult = xmlDataParser.parseOperationCommands(dataContent);
+                if (operationResult && operationResult.__format === 'operation_commands') {
+                    console.log('[SmartPromptSystem] ✅ 操作指令解析成功，操作数量:', operationResult.__operations?.length || 0);
+                    return operationResult;
+                }
+            }
+
+            // 解析扁平格式数据（传统格式）
             const parsedData = this.dataParser.parseFlatFormat(dataContent);
 
             if (parsedData) {
@@ -2605,10 +2683,317 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
     }
 
     /**
-     * 解析扁平格式数据
+     * 解析扁平格式数据 - 支持新的操作指令格式
      */
     parseFlatFormatData(dataContent) {
         try {
+            console.log('[SmartPromptSystem] 🔍 开始解析数据内容...');
+            console.log('[SmartPromptSystem] 📝 数据内容:', dataContent);
+
+            // 检测数据格式类型
+            const formatType = this.detectDataFormat(dataContent);
+            console.log('[SmartPromptSystem] 🔍 检测到数据格式类型:', formatType);
+
+            if (formatType === 'operation_commands') {
+                // 新的操作指令格式
+                return this.parseOperationCommands(dataContent);
+            } else if (formatType === 'legacy_xml') {
+                // 旧的XML格式（向后兼容）
+                return this.parseLegacyXMLFormat(dataContent);
+            } else {
+                console.warn('[SmartPromptSystem] ⚠️ 未识别的数据格式，尝试通用解析');
+                return this.parseGenericFormat(dataContent);
+            }
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 解析扁平格式数据失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 检测数据格式类型
+     */
+    detectDataFormat(dataContent) {
+        const lines = dataContent.split('\n').filter(line => line.trim());
+
+        // 检查是否包含操作指令格式（新格式优先）
+        const operationPattern = /^(add|update|delete)\s+\w+\(/;
+        const hasOperationCommands = lines.some(line => operationPattern.test(line.trim()));
+
+        if (hasOperationCommands) {
+            return 'operation_commands';
+        }
+
+        // 🔧 新增：检查是否是新的中文字段名格式
+        const modernChinesePattern = /^[\u4e00-\u9fff]+:\s*[\u4e00-\u9fff\w\s]+=/;
+        const hasModernChineseFormat = lines.some(line => modernChinesePattern.test(line.trim()));
+
+        if (hasModernChineseFormat) {
+            return 'modern_chinese';
+        }
+
+        // 🔧 新增：检查是否是键值对格式（支持中文键名）
+        const keyValuePattern = /^[\u4e00-\u9fff\w]+\s*[:=]\s*.+/;
+        const hasKeyValueFormat = lines.some(line => keyValuePattern.test(line.trim()));
+
+        if (hasKeyValueFormat) {
+            return 'key_value_chinese';
+        }
+
+        // 检查是否是旧的XML格式（保持向后兼容）
+        const xmlPattern = /^\w+:\s*\w+="[^"]*"/;
+        const hasXMLFormat = lines.some(line => xmlPattern.test(line.trim()));
+
+        if (hasXMLFormat) {
+            return 'legacy_xml';
+        }
+
+        // 🔧 新增：检查是否是JSON对象格式
+        if (dataContent.trim().startsWith('{') && dataContent.trim().endsWith('}')) {
+            try {
+                JSON.parse(dataContent);
+                return 'json_object';
+            } catch (e) {
+                // 不是有效JSON，继续检查其他格式
+            }
+        }
+
+        console.warn('[SmartPromptSystem] ⚠️ 未识别的数据格式，内容预览:', dataContent.substring(0, 100));
+        return 'unknown';
+    }
+
+    /**
+     * 🚀 解析新的中文字段名格式
+     */
+    parseModernChineseFormat(dataContent) {
+        try {
+            console.log('[SmartPromptSystem] 🚀 开始解析新的中文字段名格式...');
+
+            const result = {};
+            const lines = dataContent.split('\n').filter(line => line.trim());
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine || trimmedLine.startsWith('//') || trimmedLine.startsWith('#')) {
+                    continue;
+                }
+
+                // 匹配格式：面板名: 字段名=值
+                const match = trimmedLine.match(/^(.+?):\s*(.+?)=(.+)$/);
+                if (match) {
+                    const [, panelName, fieldName, value] = match;
+                    const cleanPanelName = panelName.trim();
+                    const cleanFieldName = fieldName.trim();
+                    const cleanValue = value.trim();
+
+                    if (!result[cleanPanelName]) {
+                        result[cleanPanelName] = {};
+                    }
+                    result[cleanPanelName][cleanFieldName] = cleanValue;
+                    
+                    console.log(`[SmartPromptSystem] ✅ 解析中文格式: ${cleanPanelName}.${cleanFieldName}=${cleanValue}`);
+                }
+            }
+
+            console.log(`[SmartPromptSystem] ✅ 中文格式解析完成，解析了 ${Object.keys(result).length} 个面板`);
+            return result;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 解析中文格式失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 🚀 解析键值对中文格式
+     */
+    parseKeyValueChineseFormat(dataContent) {
+        try {
+            console.log('[SmartPromptSystem] 🚀 开始解析键值对中文格式...');
+
+            const result = {};
+            const lines = dataContent.split('\n').filter(line => line.trim());
+            let currentPanel = 'default';
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine || trimmedLine.startsWith('//') || trimmedLine.startsWith('#')) {
+                    continue;
+                }
+
+                // 匹配格式：字段名: 值 或 字段名=值
+                const colonMatch = trimmedLine.match(/^(.+?):\s*(.+)$/);
+                const equalsMatch = trimmedLine.match(/^(.+?)=(.+)$/);
+                
+                if (colonMatch || equalsMatch) {
+                    const match = colonMatch || equalsMatch;
+                    const [, fieldName, value] = match;
+                    const cleanFieldName = fieldName.trim();
+                    const cleanValue = value.trim();
+
+                    if (!result[currentPanel]) {
+                        result[currentPanel] = {};
+                    }
+                    result[currentPanel][cleanFieldName] = cleanValue;
+                    
+                    console.log(`[SmartPromptSystem] ✅ 解析键值对: ${currentPanel}.${cleanFieldName}=${cleanValue}`);
+                }
+            }
+
+            console.log(`[SmartPromptSystem] ✅ 键值对格式解析完成，解析了 ${Object.keys(result).length} 个面板`);
+            return result;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 解析键值对格式失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 🚀 解析操作指令格式
+     */
+    parseOperationCommands(dataContent) {
+        try {
+            console.log('[SmartPromptSystem] 🚀 开始解析操作指令格式...');
+
+            const operations = [];
+            const lines = dataContent.split('\n').filter(line => line.trim());
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine || trimmedLine.startsWith('//') || trimmedLine.startsWith('#')) {
+                    continue; // 跳过空行和注释
+                }
+
+                const operation = this.parseOperationCommand(trimmedLine);
+                if (operation) {
+                    operations.push(operation);
+                    console.log(`[SmartPromptSystem] ✅ 解析操作指令:`, operation);
+                }
+            }
+
+            console.log(`[SmartPromptSystem] ✅ 解析了 ${operations.length} 个操作指令`);
+
+            return {
+                operations,
+                format: 'operation_commands',
+                metadata: {
+                    timestamp: Date.now(),
+                    source: 'ai-message',
+                    operationCount: operations.length
+                }
+            };
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 解析操作指令失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🔧 解析单个操作指令
+     * 格式：add persona(1 {1，张三，2，24，3，程序员})
+     */
+    parseOperationCommand(commandLine) {
+        try {
+            // 正则表达式匹配操作指令格式
+            const operationRegex = /^(add|update|delete)\s+(\w+)\((\d+)(?:\s*\{([^}]*)\})?\)$/;
+            const match = commandLine.match(operationRegex);
+
+            if (!match) {
+                console.warn(`[SmartPromptSystem] ⚠️ 无法解析操作指令: ${commandLine}`);
+                return null;
+            }
+
+            const [, operation, panelName, rowNumber, dataParams] = match;
+
+            const operationData = {
+                type: operation.toLowerCase(), // add, update, delete
+                panel: panelName,
+                row: parseInt(rowNumber),
+                data: {}
+            };
+
+            // 解析数据参数（如果存在）
+            if (dataParams && dataParams.trim()) {
+                operationData.data = this.parseDataParameters(dataParams);
+            }
+
+            return operationData;
+
+        } catch (error) {
+            console.error(`[SmartPromptSystem] ❌ 解析操作指令失败: ${commandLine}`, error);
+            return null;
+        }
+    }
+
+    /**
+     * 🔧 解析数据参数
+     * 格式："1"，"张三"，"2"，"24"，"3"，"程序员"
+     */
+    parseDataParameters(dataParams) {
+        try {
+            const data = {};
+            const parts = dataParams.split('，').map(part => part.trim());
+
+            // 按照 "列号"，"值"，"列号"，"值" 的格式解析
+            for (let i = 0; i < parts.length; i += 2) {
+                if (i + 1 < parts.length) {
+                    // 移除双引号并解析列号
+                    const columnStr = parts[i].replace(/^"(.*)"$/, '$1');
+                    const valueStr = parts[i + 1].replace(/^"(.*)"$/, '$1');
+
+                    // 🔧 修复：支持多种列号格式的容错处理
+                    let columnNumber;
+
+                    // 情况1：纯数字格式 "2" -> 2
+                    if (/^\d+$/.test(columnStr)) {
+                        columnNumber = parseInt(columnStr);
+                        console.log(`[SmartPromptSystem] ✅ 标准格式: "${columnStr}" -> 列${columnNumber}`);
+                    }
+                    // 情况2：col_格式 "col_2" -> 2
+                    else if (/^col_\d+$/.test(columnStr)) {
+                        columnNumber = parseInt(columnStr.replace('col_', ''));
+                        console.log(`[SmartPromptSystem] 🔧 容错处理: "${columnStr}" -> 列${columnNumber}`);
+                    }
+                    // 情况3：其他可能的格式
+                    else {
+                        // 尝试提取数字
+                        const numberMatch = columnStr.match(/\d+/);
+                        if (numberMatch) {
+                            columnNumber = parseInt(numberMatch[0]);
+                            console.log(`[SmartPromptSystem] 🔧 智能提取: "${columnStr}" -> 列${columnNumber}`);
+                        } else {
+                            console.warn(`[SmartPromptSystem] ❌ 无法解析列号: "${columnStr}"`);
+                            continue;
+                        }
+                    }
+
+                    if (!isNaN(columnNumber) && valueStr !== undefined) {
+                        data[`col_${columnNumber}`] = valueStr;
+                        console.log(`[SmartPromptSystem] 📊 解析参数: 列${columnNumber} = "${valueStr}"`);
+                    } else {
+                        console.warn(`[SmartPromptSystem] ⚠️ 无效参数: "${parts[i]}" -> "${parts[i + 1]}"`);
+                    }
+                }
+            }
+
+            return data;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 解析数据参数失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 🔧 解析旧的XML格式（向后兼容）
+     */
+    parseLegacyXMLFormat(dataContent) {
+        try {
+            console.log('[SmartPromptSystem] 🔄 解析旧XML格式（向后兼容）...');
+
             const panels = {};
             const lines = dataContent.split('\n').filter(line => line.trim());
 
@@ -2633,18 +3018,49 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
                 this.parseFieldsString(fieldsStr, panels[panelId]);
             }
 
-            console.log(`[SmartPromptSystem] ✅ 解析了 ${Object.keys(panels).length} 个面板的数据`);
+            console.log(`[SmartPromptSystem] ✅ 解析了 ${Object.keys(panels).length} 个面板的数据（旧格式）`);
 
-            return { panels };
+            return {
+                panels,
+                format: 'legacy_xml',
+                metadata: {
+                    timestamp: Date.now(),
+                    source: 'ai-message',
+                    panelCount: Object.keys(panels).length
+                }
+            };
 
         } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 解析扁平格式数据失败:', error);
+            console.error('[SmartPromptSystem] ❌ 解析旧XML格式失败:', error);
             return null;
         }
     }
 
     /**
-     * 解析字段字符串
+     * 🔧 解析通用格式
+     */
+    parseGenericFormat(dataContent) {
+        try {
+            console.log('[SmartPromptSystem] 🔄 尝试通用格式解析...');
+
+            // 尝试作为旧格式解析
+            const legacyResult = this.parseLegacyXMLFormat(dataContent);
+            if (legacyResult && legacyResult.panels && Object.keys(legacyResult.panels).length > 0) {
+                legacyResult.format = 'generic_legacy';
+                return legacyResult;
+            }
+
+            console.warn('[SmartPromptSystem] ⚠️ 无法解析数据内容');
+            return null;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 通用格式解析失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🔧 解析字段字符串（旧格式支持）
      */
     parseFieldsString(fieldsStr, panelData) {
         try {
@@ -2655,7 +3071,7 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
 
             while ((match = fieldRegex.exec(fieldsStr)) !== null) {
                 const [, key, value] = match;
-                
+
                 // 🔧 修复：验证key的有效性，确保不会将数字单独解析为key
                 if (this.isValidFieldKey(key)) {
                     panelData[key] = value;
@@ -2677,36 +3093,37 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
      */
     isValidFieldKey(key) {
         // 🔧 修复：确保key不是纯数字，并且符合有效的字段命名规范
-        
+
         // 排除纯数字的key
         if (/^\d+$/.test(key)) {
             return false;
         }
-        
+
         // 排除空字符串或只包含特殊字符的key
         if (!key || key.trim().length === 0) {
             return false;
         }
-        
+
         // 允许的key格式：
         // 1. 中文字符和数字组合：测试子项1, 物品1, 技能等级2
         // 2. 英文字符和数字组合：name, age, level1, item2
         // 3. NPC格式：npc0.name, npc1.status
         // 4. 嵌套格式：category.subcategory
         const validKeyPattern = /^[\u4e00-\u9fa5\w]+(\.[\u4e00-\u9fa5\w]+)*$/;
-        
+
         return validKeyPattern.test(key);
     }
 
     /**
-     * 更新数据到数据核心
+     * 🚀 更新数据到数据核心 - 支持操作指令格式
      */
     async updateDataCore(parsedData) {
         try {
             console.log('[SmartPromptSystem] 💾 开始更新数据到数据核心...');
+            console.log('[SmartPromptSystem] 📊 解析数据格式:', parsedData?.format || parsedData?.__format);
 
-            if (!parsedData || !parsedData.panels) {
-                console.warn('[SmartPromptSystem] ⚠️ 没有有效的面板数据');
+            if (!parsedData) {
+                console.warn('[SmartPromptSystem] ⚠️ 没有有效的解析数据');
                 return;
             }
 
@@ -2717,12 +3134,26 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
                 characterId = 'default';
             }
 
-            // 更新每个面板的数据 - 修复：使用正确的scope参数
-            for (const [panelId, panelData] of Object.entries(parsedData.panels)) {
-                // 将面板数据存储到chat范围，包含角色ID信息
-                const dataKey = `panels.${characterId}.${panelId}`;
-                await this.dataCore.setData(dataKey, panelData, 'chat');
-                console.log(`[SmartPromptSystem] ✅ 更新面板数据: ${panelId} (角色: ${characterId})`);
+            // 🔧 修复：支持两种格式字段名
+            const dataFormat = parsedData.format || parsedData.__format;
+            const operations = parsedData.operations || parsedData.__operations;
+
+            // 根据数据格式选择处理方式
+            if (dataFormat === 'operation_commands' && operations) {
+                // 新的操作指令格式
+                console.log('[SmartPromptSystem] 🚀 处理操作指令格式，操作数量:', operations.length);
+                await this.executeOperationCommands(operations, characterId);
+            } else if (parsedData.panels) {
+                // 旧的面板格式（向后兼容）
+                await this.updateLegacyPanelData(parsedData.panels, characterId);
+            } else {
+                // 🔧 修复：检查是否是操作指令格式但被错误处理的情况
+                if (dataFormat === 'operation_commands') {
+                    console.warn('[SmartPromptSystem] ⚠️ 操作指令格式但缺少operations字段');
+                } else {
+                    console.warn('[SmartPromptSystem] ⚠️ 未识别的数据格式');
+                }
+                return;
             }
 
             // 更新元数据
@@ -2735,6 +3166,315 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
         } catch (error) {
             console.error('[SmartPromptSystem] ❌ 更新数据核心失败:', error);
             throw error;
+        }
+    }
+
+    /**
+     * 🚀 执行操作指令
+     */
+    async executeOperationCommands(operations, characterId) {
+        try {
+            console.log(`[SmartPromptSystem] 🚀 开始执行 ${operations.length} 个操作指令...`);
+
+            for (const operation of operations) {
+                await this.executeOperation(operation, characterId);
+            }
+
+            console.log('[SmartPromptSystem] ✅ 所有操作指令执行完成');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 执行操作指令失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🔧 执行单个操作
+     */
+    async executeOperation(operation, characterId) {
+        try {
+            const { type, panel } = operation;
+            let { row, data } = operation;
+            console.log(`[SmartPromptSystem] 🔧 执行操作: ${type} ${panel}(${row})`, data);
+
+            // 🔧 修复：直接从infobar_data.panels获取当前面板数据，避免数据核心的键值查找问题
+            let currentPanelData = await this.getCurrentPanelDataDirect(panel);
+
+            // 🛡️ 行号规范化（1-based）：防止 AI 误用 0 或负数行
+            row = this.normalizeRowIndex(row, currentPanelData, type, panel);
+
+            switch (type) {
+                case 'add':
+                    await this.executeAddOperation(currentPanelData, row, data, panel);
+                    break;
+                case 'update':
+                    await this.executeUpdateOperation(currentPanelData, row, data, panel);
+                    break;
+                case 'delete':
+                    await this.executeDeleteOperation(currentPanelData, row, panel);
+                    break;
+                default:
+                    console.warn(`[SmartPromptSystem] ⚠️ 未知操作类型: ${type}`);
+            }
+
+        } catch (error) {
+            console.error(`[SmartPromptSystem] ❌ 执行操作失败:`, operation, error);
+        }
+    }
+
+    /**
+     * 🔧 直接获取当前面板数据
+     */
+    async getCurrentPanelDataDirect(panelId) {
+        try {
+            // 获取当前聊天ID
+            const chatId = this.dataCore.getCurrentChatId();
+            if (!chatId) {
+                console.warn(`[SmartPromptSystem] ⚠️ 无法获取当前聊天ID`);
+                return {};
+            }
+
+            // 获取当前聊天数据
+            const chatData = await this.dataCore.getChatData(chatId);
+            if (!chatData || !chatData.infobar_data || !chatData.infobar_data.panels) {
+                console.log(`[SmartPromptSystem] ℹ️ 面板数据不存在，返回空对象`);
+                return {};
+            }
+
+            const panelData = chatData.infobar_data.panels[panelId] || {};
+            console.log(`[SmartPromptSystem] 📊 获取面板 ${panelId} 数据:`, Array.isArray(panelData) ? `数组(${panelData.length}行)` : `对象(${Object.keys(panelData).length}键)`);
+
+            return panelData;
+
+        } catch (error) {
+            console.error(`[SmartPromptSystem] ❌ 获取面板数据失败:`, error);
+            return {};
+        }
+    }
+
+    /**
+     * 行号规范化（1-based）：防止 AI 生成 0 或负数行号
+     */
+    normalizeRowIndex(row, currentPanelData, type = 'update', panelId = '') {
+        let r = parseInt(row);
+        if (Number.isNaN(r)) r = 1;
+        if (r >= 1) return r;
+
+        const count = this.getExistingRowCount(currentPanelData);
+        let target = 1;
+        if (type === 'add') {
+            target = Math.max(1, count + 1); // 添加：缺省追加到最后一行之后
+        } else if (type === 'update' || type === 'delete') {
+            target = count > 0 ? 1 : 1; // 更新/删除：若已有数据，则指向第1行；否则规范为1
+        }
+        console.warn(`[SmartPromptSystem] ⚠ 行号 ${row} 无效，已规范化为 ${target}（面板: ${panelId}，现有行数: ${count}）`);
+        return target;
+    }
+
+    /**
+     * 获取现有行数（支持数组或以数字键存储的对象）
+     */
+    getExistingRowCount(currentPanelData) {
+        try {
+            if (Array.isArray(currentPanelData)) {
+                return currentPanelData.length;
+            }
+            if (currentPanelData && typeof currentPanelData === 'object') {
+                const numeric = Object.keys(currentPanelData)
+                    .map(k => parseInt(k))
+                    .filter(n => !Number.isNaN(n) && n >= 1);
+                if (numeric.length > 0) return Math.max(...numeric);
+                // 非数字键但有内容，视为至少1行
+                return Object.keys(currentPanelData).length > 0 ? 1 : 0;
+            }
+            return 0;
+        } catch (e) {
+            console.warn('[SmartPromptSystem] ⚠ 统计现有行数失败：', e?.message);
+            return 0;
+        }
+    }
+
+
+    /**
+     * 🚀 执行ADD操作
+     */
+    async executeAddOperation(currentPanelData, row, data, panelId) {
+        try {
+            console.log(`[SmartPromptSystem] ➕ 执行ADD操作: 行${row}`, data);
+
+            // 🔧 修复：确保面板数据是数组格式，处理对象格式的转换
+            let panelArray = [];
+            if (Array.isArray(currentPanelData)) {
+                panelArray = [...currentPanelData];
+            } else if (currentPanelData && typeof currentPanelData === 'object') {
+                // 将对象格式转换为数组格式
+                const keys = Object.keys(currentPanelData).map(k => parseInt(k)).filter(k => !isNaN(k)).sort((a, b) => a - b);
+                panelArray = keys.map(k => currentPanelData[k]);
+                console.log(`[SmartPromptSystem] 🔄 将对象格式转换为数组格式: ${keys.length}行`);
+            }
+
+            // 确保数组有足够的行
+            while (panelArray.length < row) {
+                panelArray.push({});
+            }
+
+            // 添加数据到指定行（行号从1开始，数组索引从0开始）
+            const rowIndex = row - 1;
+            if (!panelArray[rowIndex]) {
+                panelArray[rowIndex] = {};
+            }
+
+            // 合并新数据
+            Object.assign(panelArray[rowIndex], data);
+
+            // 🔧 修复：直接更新到infobar_data.panels结构，避免数据核心的合并逻辑
+            await this.saveArrayDataDirectly(panelId, panelArray);
+            console.log(`[SmartPromptSystem] ✅ ADD操作完成: 行${row}`);
+
+        } catch (error) {
+            console.error(`[SmartPromptSystem] ❌ ADD操作失败:`, error);
+        }
+    }
+
+    /**
+     * 🔄 执行UPDATE操作
+     */
+    async executeUpdateOperation(currentPanelData, row, data, panelId) {
+        try {
+            console.log(`[SmartPromptSystem] 🔄 执行UPDATE操作: 行${row}`, data);
+
+            // 🔧 修复：确保面板数据是数组格式，处理对象格式的转换
+            let panelArray = [];
+            if (Array.isArray(currentPanelData)) {
+                panelArray = [...currentPanelData];
+            } else if (currentPanelData && typeof currentPanelData === 'object') {
+                // 将对象格式转换为数组格式
+                const keys = Object.keys(currentPanelData).map(k => parseInt(k)).filter(k => !isNaN(k)).sort((a, b) => a - b);
+                panelArray = keys.map(k => currentPanelData[k]);
+                console.log(`[SmartPromptSystem] 🔄 将对象格式转换为数组格式: ${keys.length}行`);
+            }
+
+            // 确保数组有足够的行
+            while (panelArray.length < row) {
+                panelArray.push({});
+            }
+
+            // 更新指定行的数据（行号从1开始，数组索引从0开始）
+            const rowIndex = row - 1;
+            if (!panelArray[rowIndex]) {
+                panelArray[rowIndex] = {};
+            }
+
+            // 更新指定列的数据
+            Object.assign(panelArray[rowIndex], data);
+
+            // 🔧 修复：直接更新到infobar_data.panels结构，避免数据核心的合并逻辑
+            await this.saveArrayDataDirectly(panelId, panelArray);
+            console.log(`[SmartPromptSystem] ✅ UPDATE操作完成: 行${row}`);
+
+        } catch (error) {
+            console.error(`[SmartPromptSystem] ❌ UPDATE操作失败:`, error);
+        }
+    }
+
+    /**
+     * 🗑️ 执行DELETE操作
+     */
+    async executeDeleteOperation(currentPanelData, row, panelId) {
+        try {
+            console.log(`[SmartPromptSystem] 🗑️ 执行DELETE操作: 行${row}`);
+
+            // 🔧 修复：确保面板数据是数组格式，处理对象格式的转换
+            let panelArray = [];
+            if (Array.isArray(currentPanelData)) {
+                panelArray = [...currentPanelData];
+            } else if (currentPanelData && typeof currentPanelData === 'object') {
+                // 将对象格式转换为数组格式
+                const keys = Object.keys(currentPanelData).map(k => parseInt(k)).filter(k => !isNaN(k)).sort((a, b) => a - b);
+                panelArray = keys.map(k => currentPanelData[k]);
+                console.log(`[SmartPromptSystem] 🔄 将对象格式转换为数组格式: ${keys.length}行`);
+            } else {
+                console.log(`[SmartPromptSystem] ℹ️ 面板数据为空，无需删除`);
+                return;
+            }
+
+            // 删除指定行（行号从1开始，数组索引从0开始）
+            const rowIndex = row - 1;
+            if (rowIndex >= 0 && rowIndex < panelArray.length) {
+                panelArray.splice(rowIndex, 1);
+                console.log(`[SmartPromptSystem] ✅ 删除行${row}成功`);
+            } else {
+                console.log(`[SmartPromptSystem] ⚠️ 行${row}不存在，无需删除`);
+                return;
+            }
+
+            // 🔧 修复：直接更新到infobar_data.panels结构，避免数据核心的合并逻辑
+            await this.saveArrayDataDirectly(panelId, panelArray);
+            console.log(`[SmartPromptSystem] ✅ DELETE操作完成: 行${row}`);
+
+        } catch (error) {
+            console.error(`[SmartPromptSystem] ❌ DELETE操作失败:`, error);
+        }
+    }
+
+    /**
+     * 🔧 直接保存数组数据，避免数据核心的合并逻辑
+     */
+    async saveArrayDataDirectly(panelId, arrayData) {
+        try {
+            // 获取当前聊天ID
+            const chatId = this.dataCore.getCurrentChatId();
+            if (!chatId) {
+                console.error(`[SmartPromptSystem] ❌ 无法获取当前聊天ID`);
+                return;
+            }
+
+            // 获取当前聊天数据
+            const chatData = await this.dataCore.getChatData(chatId);
+            if (!chatData) {
+                console.error(`[SmartPromptSystem] ❌ 无法获取聊天数据`);
+                return;
+            }
+
+            // 确保infobar_data.panels结构存在
+            if (!chatData.infobar_data) {
+                chatData.infobar_data = {};
+            }
+            if (!chatData.infobar_data.panels) {
+                chatData.infobar_data.panels = {};
+            }
+
+            // 直接设置数组数据
+            chatData.infobar_data.panels[panelId] = arrayData;
+
+            // 保存整个聊天数据
+            await this.dataCore.setChatData(chatId, chatData);
+            console.log(`[SmartPromptSystem] ✅ 数组数据直接保存成功: ${panelId} (${arrayData.length}行)`);
+
+        } catch (error) {
+            console.error(`[SmartPromptSystem] ❌ 直接保存数组数据失败:`, error);
+        }
+    }
+
+    /**
+     * 🔧 更新旧格式面板数据（向后兼容）
+     */
+    async updateLegacyPanelData(panels, characterId) {
+        try {
+            console.log('[SmartPromptSystem] 🔄 更新旧格式面板数据（向后兼容）...');
+
+            // 更新每个面板的数据 - 修复：使用正确的scope参数
+            for (const [panelId, panelData] of Object.entries(panels)) {
+                // 将面板数据存储到chat范围，包含角色ID信息
+                const dataKey = `panels.${characterId}.${panelId}`;
+                await this.dataCore.setData(dataKey, panelData, 'chat');
+                console.log(`[SmartPromptSystem] ✅ 更新面板数据: ${panelId} (角色: ${characterId})`);
+            }
+
+            console.log('[SmartPromptSystem] ✅ 旧格式面板数据更新完成');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 更新旧格式面板数据失败:', error);
         }
     }
 
@@ -2861,8 +3601,14 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
     /**
      * 添加增量数据补充指令
      */
-    addIncrementalDataInstructions(prompt, missingFields) {
+    addIncrementalDataInstructions(prompt, missingFields, enabledPanels = []) {
         console.log('[SmartPromptSystem] 📝 添加增量数据补充指令...');
+
+        // 🎯 分析自定义面板缺失情况
+        const customPanelsMissing = missingFields.filter(field => {
+            const panel = enabledPanels.find(p => p.id === field.panelId);
+            return panel && panel.type === 'custom';
+        });
 
         // 🔧 简化：以清晰业务语言列出需补充字段
         let incrementalInstructions = `
@@ -2872,14 +3618,21 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
 
 `;
 
+        if (customPanelsMissing.length > 0) {
+            incrementalInstructions += `🎯 **自定义面板特别注意**：检测到 ${customPanelsMissing.length} 个自定义面板缺失数据，请根据当前剧情场景合理填写\n\n`;
+        }
+
         for (const field of missingFields) {
             const panelKey = field.panelKey || field.panelId; // 🔧 修复：使用正确的面板键
-            incrementalInstructions += `📋 ${field.panelName} (${panelKey}):\n`;
+            const panel = enabledPanels.find(p => p.id === field.panelId);
+            const isCustomPanel = panel && panel.type === 'custom';
+
+            incrementalInstructions += `📋 ${field.panelName} (${panelKey})${isCustomPanel ? ' [自定义面板]' : ''}:\n`;
 
             for (const subItem of field.missingSubItems) {
                 // 交互对象面板：强制使用npc前缀
                 if (panelKey === 'interaction') {
-                    incrementalInstructions += `  - npc0.${subItem.key}="${subItem.displayName}": 请生成合适的内容（必须包含npcX.前缀）\n`;
+                    incrementalInstructions += `  - ${subItem.key}="${subItem.displayName}": 请在操作指令的数据中补充对应列值\n`;
                 } else {
                     incrementalInstructions += `  - ${subItem.key}="${subItem.displayName}": 请生成合适的内容\n`;
                 }
@@ -2893,7 +3646,7 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
 1. 仅补充上述缺失字段，不修改已存在字段
 2. 生成内容需与当前剧情一致，具体、可用
 3. 这些字段属于"新增启用"，即使增量模式也必须输出
-4. 交互对象面板字段必须使用npcX.前缀（例如：npc0.${missingFields?.[0]?.missingSubItems?.[0]?.key || 'name'}="...")
+4. 交互对象面板请使用操作指令多行格式（示例：add interaction(行号 {"1","姓名","2","关系",...})）
 5. 🔥🔥🔥 **严禁使用Markdown格式**：禁止 - **标题**、**粗体**、列表符号
 
 `;
@@ -2908,15 +3661,15 @@ ${panelKey}: org0.组织名称="主要组织", org0.组织类型="组织类型",
      */
     generateForcedPanelsForMainTemplate(missingFields) {
         let forcedPanelsText = '';
-        
+
         for (const field of missingFields) {
             const panelKey = field.panelKey || field.panelId;
             forcedPanelsText += `⚡ ${field.panelName} (${panelKey}): `;
-            
+
             const subItemsList = field.missingSubItems.map(subItem => subItem.key).join(', ');
             forcedPanelsText += `${subItemsList}\n`;
         }
-        
+
         if (forcedPanelsText) {
             forcedPanelsText = `
 ❌ MISSING CRITICAL PANELS ❌
@@ -2927,7 +3680,7 @@ ${forcedPanelsText.trim()}
 💀 **OVERRIDE CODE**: FORCE_OUTPUT_MISSING_PANELS_NOW
 `;
         }
-        
+
         console.log('[SmartPromptSystem] 🔥 生成强制面板模板:', forcedPanelsText.length, '字符');
         return forcedPanelsText;
     }
@@ -2935,40 +3688,68 @@ ${forcedPanelsText.trim()}
     /**
      * 🔥 生成预填充的缺失面板模板（强制AI填写）
      */
-    generatePrefilledMissingPanels(missingFields) {
+    generatePrefilledMissingPanels(missingFields, enabledPanels = []) {
         let prefilledTemplate = '';
-        
+        let customPanelCount = 0;
+        let basicPanelCount = 0;
+
         for (const field of missingFields) {
             const panelKey = field.panelKey || field.panelId;
+            // 通过面板类型识别自定义面板
+            const panel = enabledPanels.find(p => p.id === field.panelId);
+            const isCustomPanel = panel && panel.type === 'custom';
+
+            if (isCustomPanel) {
+                customPanelCount++;
+            } else {
+                basicPanelCount++;
+            }
+
             prefilledTemplate += `${panelKey}: `;
-            
+
             const subItemTemplates = [];
             for (const subItem of field.missingSubItems) {
-                subItemTemplates.push(`${subItem.key}="【请填写${subItem.displayName}的具体内容】"`);
+                if (isCustomPanel) {
+                    // 自定义面板使用更具体的提示
+                    subItemTemplates.push(`${subItem.key}="【${field.panelName}中的${subItem.displayName}，请根据当前场景填写】"`);
+                } else {
+                    subItemTemplates.push(`${subItem.key}="【请填写${subItem.displayName}的具体内容】"`);
+                }
             }
-            
+
             prefilledTemplate += subItemTemplates.join(', ') + '\n';
         }
-        
+
         if (prefilledTemplate) {
-            prefilledTemplate = `
+            let instructions = `
 🔥 **预设模板（您必须复制并填写具体内容）：**
 \`\`\`
 ${prefilledTemplate.trim()}
 \`\`\`
 
-⚡ **使用说明**：请将上述模板复制到您的<infobar_data>中，并将【请填写...】替换为具体内容！
-`;
+⚡ **使用说明**：请将上述模板复制到您的<infobar_data>中，并将【请填写...】替换为具体内容！`;
+
+            if (customPanelCount > 0) {
+                instructions += `
+🎯 **自定义面板特别注意**：检测到 ${customPanelCount} 个自定义面板缺失数据，请根据当前剧情场景合理填写`;
+            }
+
+            if (basicPanelCount > 0) {
+                instructions += `
+📊 **基础面板**：${basicPanelCount} 个基础面板需要补充数据`;
+            }
+
+            prefilledTemplate = instructions + '\n';
         }
-        
-        console.log('[SmartPromptSystem] 🔥 生成预填充模板:', prefilledTemplate.length, '字符');
+
+        console.log('[SmartPromptSystem] 🔥 生成预填充模板:', prefilledTemplate.length, '字符，自定义面板:', customPanelCount, '个');
         return prefilledTemplate;
     }
 
     /**
      * 添加终极验证提醒（在提示词最末尾）
      */
-    addFinalValidationReminder(prompt, missingFields) {
+    addFinalValidationReminder(prompt, missingFields, enabledPanels = []) {
         let finalReminder = `
 
 💥💥💥 **最终执行检查清单** 💥💥💥
@@ -3014,16 +3795,26 @@ ${prefilledTemplate.trim()}
 【🔁 增量更新模式 - 只输出变化数据】
 请严格基于上文的"当前数据对照信息"进行对比，仅当你决定修改某个字段的内容时，才为该字段输出键值；若字段内容与当前数据保持一致，请不要输出该字段。
 
+🚨🚨🚨 **关键行号规则** 🚨🚨🚨
+**现有数据的行号统一为1，新增数据从2开始！**
+- UPDATE操作：update 面板名(1 {字段数据}) ← 更新现有数据，必须使用第1行
+- ADD操作：add 面板名(2 {字段数据}) ← 添加新数据，从第2行开始
+
 约束要求：
 1. 仅输出以下已启用面板中的变化字段：${allowedPanels.join(', ')}。
 2. 不要输出未变化、为空、未知或占位的字段值；不要重复输出同一字段。
 3. 不要输出未启用面板；不要创建未定义的新字段键名（必须使用已定义的子项键）。
 4. 仅包含发生变化的面板；没有变化的面板不要出现在输出中。
-5. 输出格式保持为每行"面板名: 键="值", 键2="值2"的形式，且所有值为最终内容，不要解释说明。
+5. **必须使用操作指令格式**：update 面板名(1 {字段数据}) 或 add 面板名(行号 {字段数据})
 
-示例（仅演示格式）：
-interaction: npc0.name="小张", npc0.relationship="同事"
-plot: exposition="剧情推进到清晨，……"
+🎯 **正确示例**：
+update interaction(1 {"5":"新的关系状态"}) ← 更新现有NPC数据
+add interaction(2 {"1":"新NPC","2":"角色","3":"性格"}) ← 添加新NPC
+update plot(1 {"4":"新的剧情发展"}) ← 更新现有剧情数据
+
+🚨🚨🚨 **列号格式严格要求** 🚨🚨🚨
+✅ **正确格式**：{"1"，"值1"，"2"，"值2"} ← 必须使用纯数字
+❌ **错误格式**：{"col_1"，"值1"，"col_2"，"值2"} ← 严禁使用col_前缀
 
 `;
 
@@ -3046,7 +3837,7 @@ plot: exposition="剧情推进到清晨，……"
 
             // 检查基础面板和自定义面板
             const memoryPanels = [];
-            
+
             // 🔧 修复：基础面板配置直接存储在扩展设置根级别
             // 遍历可能的基础面板ID，并放宽启用判断（未显式关闭则视为启用）
             const basicPanelIds = ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
@@ -3141,7 +3932,7 @@ plot: exposition="剧情推进到清晨，……"
 
             // 提取记忆内容
             const memoryContent = await this.extractMemoryContent(memoryPanels, chatData.infobar_data.panels);
-            
+
             if (memoryContent.trim()) {
                 // 注入到context.memory
                 await this.injectToContextMemory(memoryContent);
@@ -3164,9 +3955,9 @@ plot: exposition="剧情推进到清晨，……"
         for (const memoryPanel of memoryPanels) {
             const panelId = memoryPanel.id;
             const panelConfig = memoryPanel.config;
-            
+
             // 获取面板显示名称
-            const panelDisplayName = memoryPanel.type === 'basic' 
+            const panelDisplayName = memoryPanel.type === 'basic'
                 ? this.getBasicPanelDisplayName(panelId)
                 : panelConfig.name || panelId;
 
@@ -3179,7 +3970,7 @@ plot: exposition="剧情推进到清晨，……"
 
             // 提取有效的数据项
             const dataItems = [];
-            
+
             if (memoryPanel.type === 'basic') {
                 // 基础面板：提取启用的子项数据
                 for (const [fieldKey, fieldValue] of Object.entries(actualPanelData)) {
@@ -3337,7 +4128,7 @@ plot: exposition="剧情推进到清晨，……"
    - 在每次回复的最后部分，必须首先包含 <aiThinkProcess> 标签
    - **强制注释包裹格式**：<aiThinkProcess><!--五步分析思考--></aiThinkProcess>
    - **严禁格式**：<aiThinkProcess>五步分析思考</aiThinkProcess>（缺少注释符号）
-   
+
    🚨🚨🚨 **CRITICAL：必须包含完整的五步分析过程，严禁自创步骤名称** 🚨🚨🚨
    **必须完全按照以下步骤名称进行分析，一个字都不能改：**
      * 0. 更新策略：全量/增量更新 ✅（禁止改为"识别核心需求"❌）
@@ -3346,7 +4137,7 @@ plot: exposition="剧情推进到清晨，……"
      * 3. 更新策略判断：需要新增哪些字段？需要更新哪些字段？ ✅
      * 4. 数据完整性检查：确保所有启用面板都有完整数据 ✅
      * 5. 质量验证：确认数据逻辑一致性和合理性 ✅
-   
+
    ❌❌❌ **如果你使用自创的步骤名称，系统将完全拒绝处理你的输出！** ❌❌❌
 
 2. **第二步：必须后输出 infobar_data 标签**：
@@ -3355,13 +4146,13 @@ plot: exposition="剧情推进到清晨，……"
    - **严禁格式**：<infobar_data>面板数据</infobar_data>（缺少注释符号）
    - **必须根据【信息栏数据格式规范】生成具体内容**
    - **必须严格遵循上述aiThinkProcess中五步分析的结果**
-   
+
    🚨🚨🚨 **CRITICAL：必须使用XML紧凑格式，系统将拒绝所有其他格式** 🚨🚨🚨
-   
+
    ✅ **正确格式（唯一可接受）**：
    - personal: name="张三", age="25", occupation="程序员"
    - world: name="现代都市", type="都市", time="2024年"
-   
+
    ❌❌❌ **系统将完全拒绝以下格式（导致数据解析失败）** ❌❌❌：
    - ❌ JSON格式：{"角色": "我", "时间": "下午"}
    - ❌ 对象格式：{ "角色": "我", "地点": "古董店" }
@@ -3369,7 +4160,7 @@ plot: exposition="剧情推进到清晨，……"
    - ❌ 分类标题：**人物**、**环境**、**当前目标**
    - ❌ 列表符号：- **任何内容**
    - ❌ 粗体标记：**任何粗体文本**
-   
+
    ⚠️⚠️⚠️ **如果使用错误格式，数据将无法解析，扩展功能将完全失效！** ⚠️⚠️⚠️
 
 **⚠️ 严禁先输出infobar_data再输出aiThinkProcess！**
@@ -3377,7 +4168,7 @@ plot: exposition="剧情推进到清晨，……"
 
 3. **格式规范要求**：
    - **严格遵循【信息栏数据格式规范】**
-   - 使用正确的XML紧凑格式，不要使用JSON或嵌套XML
+   - 使用“操作指令格式”（add/update/delete；列号为纯数字），不要使用旧键值对/XML紧凑/JSON/嵌套XML
    - 🔥🔥🔥 **严禁使用Markdown格式**：禁止 - **标题**、**粗体**、列表符号
    - 生成真实、具体的数据内容，避免"未知"、"N/A"等占位符
    - 确保数据与当前剧情和角色状态一致
@@ -3399,11 +4190,9 @@ plot: exposition="剧情推进到清晨，……"
    **第二步：infobar_data标签示例（必须后输出，基于上述分析，注意注释包裹）：**
    <infobar_data>
    <!--
-   personal: name="艾莉丝", age="23", occupation="魔法师", appearance="红发，绿眼", location="魔法学院图书馆", mood="专注"
-   world: name="魔法学院", location="图书馆", type="奇幻", time="下午", atmosphere="安静学术"
-   interaction: npc0.姓名="马克教授", npc0.关系="导师", npc0.态度="乐于助人", npc0.情绪="耐心", npc0.活动="推荐魔法典籍"
-   inventory: storage="法杖、魔法袍、古老魔法书", retrieval="便捷", organization="有序", capacity="充足"
-   tasks: research="传送法术研究", progress="查阅资料中", priority="高", status="进行中"
+   update personal(1 {"4","魔法学院图书馆","8","专注"})
+   add interaction(1 {"1","马克教授","2","导师","3","乐于助人","4","推荐魔法典籍"})
+   add tasks(1 {"1","传送法术研究","2","查阅资料中","3","高优先级"})
    -->
    </infobar_data>
 
@@ -3622,15 +4411,15 @@ infobar_data标签（独立输出，必须后输出）
                     hasInteractionPanel = true;
                     console.log('[SmartPromptSystem] 🔍 检测到interaction面板，验证NPC前缀格式...');
 
-                    // 检查是否使用了正确的NPC前缀格式
-                    const npcPrefixPattern = /npc\d+\./;
-                    const hasNpcPrefix = npcPrefixPattern.test(fieldsStr);
+                    // 检查是否使用了操作指令格式（add/update/delete interaction(...)）
+                    const opCmdPattern = /(add|update|delete)\s+interaction\s*\(/i;
+                    const isOpCmd = opCmdPattern.test(fieldsStr);
 
-                    if (!hasNpcPrefix) {
+                    if (!isOpCmd) {
                         // 🚨🚨🚨 CRITICAL ERROR：直接拒绝错误格式
-                        const errorMsg = `🚨🚨🚨 CRITICAL FORMAT ERROR: interaction面板必须使用NPC前缀格式！
+                        const errorMsg = `🚨🚨🚨 CRITICAL FORMAT ERROR: interaction面板必须使用操作指令多行格式！
 ❌ 当前错误格式: ${fieldsStr}
-✅ 正确格式示例: npc0.name="江琳", npc0.type="朋友", npc0.status="开心"
+✅ 正确格式示例: add interaction(1 {"1","江琳","2","朋友","3","开心"})
 🚨 系统已完全移除兼容性处理！AI必须输出正确格式！`;
 
                         console.error('[SmartPromptSystem] 🚨 CRITICAL FORMAT ERROR:', errorMsg);
@@ -3638,7 +4427,7 @@ infobar_data标签（独立输出，必须后输出）
                         // 🔥 激进措施：直接抛出错误，阻止继续处理
                         throw new Error(errorMsg);
                     } else {
-                        console.log('[SmartPromptSystem] ✅ interaction面板使用了正确的NPC前缀格式');
+                        console.log('[SmartPromptSystem] ✅ interaction面板检测为操作指令格式');
                     }
                 }
             }
@@ -3647,7 +4436,7 @@ infobar_data标签（独立输出，必须后输出）
             if (hasInteractionPanel && interactionErrors.length > 0) {
                 errors.push(...interactionErrors);
                 errors.push('🚨 系统已移除对错误格式的兼容性处理！');
-                errors.push('🚨 请确保AI输出正确的NPC前缀格式！');
+                errors.push('🚨 请确保AI输出操作指令格式！');
             }
 
             const isValid = errors.length === 0;
@@ -3674,6 +4463,244 @@ infobar_data标签（独立输出，必须后输出）
                 warnings: [],
                 hasInteractionPanel: false
             };
+        }
+    }
+
+    // ==================== 🚀 面板规则集成功能 ====================
+
+    /**
+     * 🚀 生成面板规则部分
+     * 动态收集所有面板规则并格式化为AI友好的格式
+     */
+    generatePanelRulesSection() {
+        try {
+            const now = Date.now();
+            
+            // 检查缓存是否有效
+            if (this.rulesCacheExpiry > now && this.rulesCache.has('panelRulesSection')) {
+                console.log('[SmartPromptSystem] 📋 使用缓存的面板规则');
+                return this.rulesCache.get('panelRulesSection');
+            }
+
+            console.log('[SmartPromptSystem] 🔄 生成面板规则部分...');
+
+            const rulesSection = this.collectAndFormatPanelRules();
+            
+            // 缓存结果
+            this.rulesCache.set('panelRulesSection', rulesSection);
+            this.rulesCacheExpiry = now + this.rulesCacheTTL;
+
+            console.log('[SmartPromptSystem] ✅ 面板规则生成完成，字符数:', rulesSection.length);
+            return rulesSection;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 生成面板规则失败:', error);
+            return '<!-- 面板规则暂时不可用 -->';
+        }
+    }
+
+    /**
+     * 🚀 收集和格式化面板规则
+     */
+    collectAndFormatPanelRules() {
+        try {
+            const panelRules = [];
+            const fieldRules = [];
+
+            // 1. 收集面板规则
+            if (this.panelRuleManager) {
+                const allPanelRules = this.panelRuleManager.getAllPanelRules?.() || new Map();
+                
+                for (const [panelId, rule] of allPanelRules) {
+                    if (rule && (rule.description || rule.updateRule || rule.addRule || rule.deleteRule)) {
+                        panelRules.push(this.formatPanelRule(panelId, rule));
+                    }
+                }
+            }
+
+            // 2. 收集字段规则（通过AIDataExposure或直接从FieldRuleManager）
+            if (this.fieldRuleManager) {
+                const allFieldRules = this.fieldRuleManager.getAllFieldRules?.() || new Map();
+                
+                for (const [fieldKey, rule] of allFieldRules) {
+                    if (rule && rule.examples && rule.examples.length > 0) {
+                        fieldRules.push(this.formatFieldRule(fieldKey, rule));
+                    }
+                }
+            }
+
+            // 3. 组合规则部分
+            let rulesContent = '';
+
+            if (panelRules.length > 0) {
+                rulesContent += `【面板操作规则】\n`;
+                rulesContent += panelRules.join('\n');
+                rulesContent += '\n';
+            }
+
+            if (fieldRules.length > 0) {
+                rulesContent += `【字段填写规则】\n`;
+                rulesContent += fieldRules.join('\n');
+            }
+
+            return rulesContent || '<!-- 暂无自定义面板规则 -->';
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 收集面板规则失败:', error);
+            return '<!-- 面板规则收集失败 -->';
+        }
+    }
+
+    /**
+     * 🚀 格式化单个面板规则
+     */
+    formatPanelRule(panelId, rule) {
+        let formatted = `\n▪ ${panelId}面板：\n`;
+
+        // 基础描述
+        if (rule.description) {
+            formatted += `  📋 描述：${rule.description}\n`;
+        }
+
+        // 更新规则
+        if (rule.updateRule) {
+            formatted += `  🔄 更新规则：${rule.updateRule}\n`;
+        }
+
+        // 增加规则
+        if (rule.addRule) {
+            formatted += `  ➕ 增加规则：${rule.addRule}\n`;
+        }
+
+        // 删除规则
+        if (rule.deleteRule) {
+            formatted += `  🗑️ 删除规则：${rule.deleteRule}\n`;
+        }
+
+        // 过滤规则
+        if (rule.filterType && rule.filterType !== 'none') {
+            formatted += `  🔍 过滤条件：${rule.filterType} = ${rule.filterValue}\n`;
+        }
+
+        return formatted;
+    }
+
+    /**
+     * 🚀 格式化字段规则
+     */
+    formatFieldRule(fieldKey, rule) {
+        const [panelName, fieldName] = fieldKey.split('.');
+        let formatted = `\n  • ${panelName}.${fieldName}：`;
+
+        // 字段示例
+        if (rule.examples && rule.examples.length > 0) {
+            const examples = rule.examples.slice(0, 3).map(ex => ex.value || ex).join('、');
+            formatted += `示例：${examples}`;
+        }
+
+        // 字段类型和约束
+        if (rule.type) {
+            formatted += ` (类型：${rule.type})`;
+        }
+
+        if (rule.range) {
+            formatted += ` (范围：${rule.range})`;
+        }
+
+        return formatted;
+    }
+
+    /**
+     * 🚀 清除规则缓存
+     */
+    clearRulesCache() {
+        this.rulesCache.clear();
+        this.rulesCacheExpiry = 0;
+        console.log('[SmartPromptSystem] 🧹 规则缓存已清除');
+    }
+
+    /**
+     * 🚀 获取面板规则统计信息
+     */
+    getRulesStatistics() {
+        try {
+            const stats = {
+                panelRules: 0,
+                fieldRules: 0,
+                cacheValid: this.rulesCacheExpiry > Date.now()
+            };
+
+            if (this.panelRuleManager) {
+                const allPanelRules = this.panelRuleManager.getAllPanelRules?.() || new Map();
+                stats.panelRules = allPanelRules.size;
+            }
+
+            if (this.fieldRuleManager) {
+                const allFieldRules = this.fieldRuleManager.getAllFieldRules?.() || new Map();
+                stats.fieldRules = allFieldRules.size;
+            }
+
+            return stats;
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 获取规则统计失败:', error);
+            return { panelRules: 0, fieldRules: 0, cacheValid: false };
+        }
+    }
+
+    /**
+     * 🚀 绑定规则变化监听器
+     */
+    bindRuleChangeListeners() {
+        try {
+            if (!this.eventSystem) {
+                console.warn('[SmartPromptSystem] ⚠️ 事件系统不可用，无法监听规则变化');
+                return;
+            }
+
+            // 监听面板规则更新事件
+            this.eventSystem.on('panelRule:updated', (data) => {
+                console.log('[SmartPromptSystem] 📋 检测到面板规则更新，清除缓存:', data.panelId);
+                this.clearRulesCache();
+            });
+
+            // 监听面板规则删除事件
+            this.eventSystem.on('panelRule:deleted', (data) => {
+                console.log('[SmartPromptSystem] 🗑️ 检测到面板规则删除，清除缓存:', data.panelId);
+                this.clearRulesCache();
+            });
+
+            // 监听字段规则更新事件
+            this.eventSystem.on('fieldRule:updated', (data) => {
+                console.log('[SmartPromptSystem] 🔧 检测到字段规则更新，清除缓存:', `${data.panelName}.${data.fieldName}`);
+                this.clearRulesCache();
+            });
+
+            // 监听字段规则删除事件
+            this.eventSystem.on('fieldRule:deleted', (data) => {
+                console.log('[SmartPromptSystem] 🗑️ 检测到字段规则删除，清除缓存:', `${data.panelName}.${data.fieldName}`);
+                this.clearRulesCache();
+            });
+
+            console.log('[SmartPromptSystem] 🔗 规则变化监听器已绑定');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 绑定规则变化监听器失败:', error);
+        }
+    }
+
+    /**
+     * 错误处理
+     */
+    handleError(error) {
+        this.errorCount++;
+        console.error('[SmartPromptSystem] ❌ 系统错误:', error);
+        
+        if (this.eventSystem) {
+            this.eventSystem.emit('system:error', {
+                module: 'SmartPromptSystem',
+                error: error.message,
+                timestamp: Date.now()
+            });
         }
     }
 }

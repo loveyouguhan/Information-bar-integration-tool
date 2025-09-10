@@ -1,42 +1,42 @@
 /**
  * 数据快照管理器
- * 
+ *
  * 负责管理数据核心的快照和回溯功能：
  * - 为每条消息创建数据快照（楼层命名）
  * - 消息删除/重新生成时的数据回溯
  * - 快照存储和管理（每个聊天50个限制）
  * - 快照数据的完整性验证
- * 
+ *
  * @class DataSnapshotManager
  */
 
 export class DataSnapshotManager {
     constructor(dataCore, eventSystem = null) {
         console.log('[DataSnapshotManager] 🔧 数据快照管理器初始化开始');
-        
+
         this.dataCore = dataCore;
         this.eventSystem = eventSystem;
-        
+
         // 快照存储结构
         this.snapshots = new Map(); // chatId -> Array<Snapshot>
         this.maxSnapshotsPerChat = 50; // 每个聊天最多保持50个快照
-        
+
         // 快照元数据
         this.snapshotMetadata = new Map(); // snapshotId -> metadata
-        
+
         // 当前楼层跟踪
         this.currentFloors = new Map(); // chatId -> currentFloor
-        
+
         // 初始化状态
         this.initialized = false;
         this.errorCount = 0;
-        
+
         // 绑定方法
         this.init = this.init.bind(this);
         this.createSnapshot = this.createSnapshot.bind(this);
         this.rollbackToSnapshot = this.rollbackToSnapshot.bind(this);
         this.cleanupSnapshots = this.cleanupSnapshots.bind(this);
-        
+
         console.log('[DataSnapshotManager] 🏗️ 构造函数完成');
     }
 
@@ -46,16 +46,16 @@ export class DataSnapshotManager {
     async init() {
         try {
             console.log('[DataSnapshotManager] 📊 开始初始化数据快照管理器...');
-            
+
             // 绑定事件监听
             this.bindEvents();
-            
+
             // 加载现有快照
             await this.loadExistingSnapshots();
-            
+
             this.initialized = true;
             console.log('[DataSnapshotManager] ✅ 数据快照管理器初始化完成');
-            
+
         } catch (error) {
             console.error('[DataSnapshotManager] ❌ 初始化失败:', error);
             this.handleError(error);
@@ -79,6 +79,11 @@ export class DataSnapshotManager {
 
             // 监听聊天数据变更事件
             this.eventSystem.on('chat:data:changed', async (data) => {
+                // 🔧 修复：防循环 - 跳过快照相关的数据变更
+                if (data && data.source === 'snapshot') {
+                    console.log('[DataSnapshotManager] ⚠️ 跳过快照相关的数据变更事件，防止循环');
+                    return;
+                }
                 await this.handleChatDataChanged(data);
             });
 
@@ -117,11 +122,40 @@ export class DataSnapshotManager {
                 throw new Error('聊天ID不能为空');
             }
 
+            // 🔧 修复：防重复创建检查 - 避免无限循环
+            const snapshotKey = `${chatId}_${messageFloor}`;
+            const currentTime = Date.now();
+            
+            // 检查是否在短时间内重复创建同一楼层的快照
+            if (this.recentSnapshots && this.recentSnapshots.has(snapshotKey)) {
+                const lastCreateTime = this.recentSnapshots.get(snapshotKey);
+                const timeDiff = currentTime - lastCreateTime;
+                
+                // 如果在5秒内重复创建同一楼层快照，跳过
+                if (timeDiff < 5000) {
+                    console.log(`[DataSnapshotManager] ⚠️ 防循环保护：跳过重复创建快照 ${chatId} 楼层:${messageFloor}，距离上次创建仅${timeDiff}ms`);
+                    return null;
+                }
+            }
+
+            // 初始化重复检查映射
+            if (!this.recentSnapshots) {
+                this.recentSnapshots = new Map();
+            }
+            
+            // 记录创建时间
+            this.recentSnapshots.set(snapshotKey, currentTime);
+            
+            // 清理5分钟前的记录，避免内存泄漏
+            setTimeout(() => {
+                this.recentSnapshots.delete(snapshotKey);
+            }, 300000); // 5分钟后清理
+
             console.log('[DataSnapshotManager] 📸 创建数据快照:', chatId, '楼层:', messageFloor);
 
             // 获取当前数据核心状态
             const currentData = await this.captureCurrentState(chatId);
-            
+
             if (!currentData) {
                 console.warn('[DataSnapshotManager] ⚠️ 无法获取当前数据状态，跳过快照创建');
                 return null;
@@ -154,14 +188,18 @@ export class DataSnapshotManager {
             console.log('[DataSnapshotManager] ✅ 快照创建完成:', snapshotId);
             console.log('[DataSnapshotManager] 📊 快照包含', snapshot.metadata.panelCount, '个面板，数据大小:', snapshot.metadata.dataSize, 'B');
 
-            // 触发快照创建事件
-            if (this.eventSystem) {
-                this.eventSystem.emit('snapshot:created', {
-                    snapshotId,
-                    chatId,
-                    messageFloor,
-                    timestamp: snapshot.timestamp
-                });
+            // 🔧 修复：延迟触发快照创建事件，防止立即循环
+            if (this.eventSystem && !options.skipEvent) {
+                // 延迟100ms触发事件，让当前操作完全结束
+                setTimeout(() => {
+                    this.eventSystem.emit('snapshot:created', {
+                        snapshotId,
+                        chatId,
+                        messageFloor,
+                        timestamp: snapshot.timestamp,
+                        source: options.source || 'normal'
+                    });
+                }, 100);
             }
 
             return snapshotId;
@@ -201,8 +239,18 @@ export class DataSnapshotManager {
                     actualTargetFloor = fallbackResult.floor;
                     console.log('[DataSnapshotManager] 🔄 使用回退快照:', actualTargetFloor);
                 } else {
-                    console.error('[DataSnapshotManager] ❌ 无法找到任何有效快照');
-                    return false;
+                    console.error('[DataSnapshotManager] ❌ 无法找到任何有效快照，启用安全软回退：保持当前数据不变');
+                    // 🔧 修复：安全软回退策略 - 绝对不清空用户数据
+                    console.log('[DataSnapshotManager] 🛡️ 安全策略：数据保护优先，不执行任何可能导致数据丢失的操作');
+                    
+                    // 创建当前状态的保护性快照
+                    await this.createSnapshot(chatId, targetFloor, {
+                        source: 'protective_snapshot',
+                        trigger: 'rollback_fallback_protection',
+                        note: '回溯失败时的数据保护快照'
+                    });
+                    
+                    return true; // 返回true，视为"回溯完成"，但未更改数据
                 }
             }
 
@@ -219,7 +267,18 @@ export class DataSnapshotManager {
                     targetSnapshot = alternativeResult.snapshot;
                     actualTargetFloor = alternativeResult.floor;
                 } else {
-                    return false;
+                    console.error('[DataSnapshotManager] ❌ 无法找到任何有效的备选快照');
+                    // 🔧 修复：即使验证失败，也不应该返回false导致潜在的数据清空
+                    console.log('[DataSnapshotManager] 🛡️ 数据保护：避免因快照验证失败导致数据清空');
+                    
+                    // 创建当前状态的保护性快照
+                    await this.createSnapshot(chatId, actualTargetFloor, {
+                        source: 'validation_failure_protection',
+                        trigger: 'snapshot_validation_failed',
+                        note: '快照验证失败时的数据保护快照'
+                    });
+                    
+                    return true; // 返回true，保护用户数据不被清空
                 }
             }
 
@@ -229,7 +288,7 @@ export class DataSnapshotManager {
                 panelCount: Object.keys(snapshotPanels).length,
                 panelNames: Object.keys(snapshotPanels)
             });
-            
+
             // 🔧 调试：检查几个主要面板的数据内容
             const samplePanels = ['personal', 'world', 'interaction'];
             for (const panelName of samplePanels) {
@@ -264,7 +323,7 @@ export class DataSnapshotManager {
                     snapshotId: targetSnapshot.id,
                     timestamp: Date.now()
                 };
-                
+
                 console.log('[DataSnapshotManager] 🔔 准备触发回溯完成事件:', eventData);
                 this.eventSystem.emit('snapshot:rollback:completed', eventData);
                 console.log('[DataSnapshotManager] 🔔 回溯完成事件已触发');
@@ -290,23 +349,46 @@ export class DataSnapshotManager {
         try {
             // 获取聊天数据
             const chatData = await this.dataCore.getChatData(chatId);
-            
+
             if (!chatData) {
                 return null;
             }
 
-            // 构建快照数据结构
+            // 构建快照数据结构（支持新数据格式）
             const state = {
+                version: '2.0.0', // 🔧 新增：数据版本标识
+                format: 'modern', // 🔧 新增：数据格式标识
                 panels: {},
                 metadata: {
                     lastUpdated: Date.now(),
-                    chatId: chatId
+                    chatId: chatId,
+                    captureMethod: 'current_state',
+                    dataStructure: 'chinese_fields' // 🔧 新增：字段名格式标识
                 }
             };
 
-            // 提取面板数据
+            // 🔧 修复：支持多种数据结构格式
             if (chatData.infobar_data && chatData.infobar_data.panels) {
+                // 新格式：保持原始结构，支持中文字段名
                 state.panels = this.deepClone(chatData.infobar_data.panels);
+                console.log('[DataSnapshotManager] 📊 捕获新格式面板数据，面板数量:', Object.keys(state.panels).length);
+                
+                // 🔧 新增：记录每个面板的数据格式类型
+                Object.keys(state.panels).forEach(panelId => {
+                    const panelData = state.panels[panelId];
+                    if (Array.isArray(panelData)) {
+                        state.metadata[`${panelId}_format`] = 'multirow_array';
+                        state.metadata[`${panelId}_rows`] = panelData.length;
+                    } else if (typeof panelData === 'object') {
+                        state.metadata[`${panelId}_format`] = 'key_value_object';
+                        state.metadata[`${panelId}_fields`] = Object.keys(panelData).length;
+                    }
+                });
+            } else if (chatData.panels) {
+                // 🔧 兼容：直接从chatData获取面板数据
+                state.panels = this.deepClone(chatData.panels);
+                state.metadata.dataStructure = 'direct_panels';
+                console.log('[DataSnapshotManager] 📊 捕获直接面板数据，面板数量:', Object.keys(state.panels).length);
             }
 
             // 添加历史记录信息
@@ -314,6 +396,10 @@ export class DataSnapshotManager {
                 state.metadata.historyCount = chatData.infobar_data.history.length;
             }
 
+            // 🔧 新增：数据完整性验证
+            state.metadata.dataIntegrity = this.calculateDataIntegrity(state.panels);
+
+            console.log('[DataSnapshotManager] 🎯 快照状态捕获完成，数据版本:', state.version, '格式:', state.format);
             return state;
 
         } catch (error) {
@@ -330,9 +416,87 @@ export class DataSnapshotManager {
     async restoreDataCore(chatId, snapshotData) {
         try {
             console.log('[DataSnapshotManager] 🔄 恢复数据核心状态...');
+            
+            // 🔧 修复：检查快照数据版本和格式
+            const snapshotVersion = snapshotData.version || '1.0.0';
+            const snapshotFormat = snapshotData.format || 'legacy';
+            
+            console.log('[DataSnapshotManager] 📊 快照版本:', snapshotVersion, '格式:', snapshotFormat);
 
             // 获取当前聊天数据
             const chatData = await this.dataCore.getChatData(chatId) || {};
+
+            // 🔧 修复：根据快照版本使用不同的恢复策略
+            if (snapshotVersion >= '2.0.0' && snapshotFormat === 'modern') {
+                // 新版本快照：直接恢复，保持数据格式
+                await this.restoreModernFormatSnapshot(chatId, chatData, snapshotData);
+            } else {
+                // 旧版本快照：兼容性恢复
+                await this.restoreLegacyFormatSnapshot(chatId, chatData, snapshotData);
+            }
+
+            // 🔧 保存恢复后的数据，标记为快照操作以避免循环
+            await this.dataCore.setChatData(chatId, chatData, { source: 'snapshot', operation: 'restore' });
+
+            console.log('[DataSnapshotManager] ✅ 数据核心状态恢复完成');
+            return true;
+
+        } catch (error) {
+            console.error('[DataSnapshotManager] ❌ 数据核心状态恢复失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 🚀 恢复新格式快照
+     */
+    async restoreModernFormatSnapshot(chatId, chatData, snapshotData) {
+        try {
+            console.log('[DataSnapshotManager] 🚀 使用新格式恢复策略...');
+
+            // 确保infobar_data结构存在
+            if (!chatData.infobar_data) {
+                chatData.infobar_data = {
+                    panels: {},
+                    history: [],
+                    lastUpdated: 0,
+                    version: '2.0.0',
+                    format: 'modern'
+                };
+            }
+
+            // 🔧 修复：直接恢复面板数据，保持中文字段名格式
+            if (snapshotData.panels) {
+                chatData.infobar_data.panels = this.deepClone(snapshotData.panels);
+                chatData.infobar_data.lastUpdated = Date.now();
+                chatData.infobar_data.version = snapshotData.version;
+                chatData.infobar_data.format = snapshotData.format;
+
+                // 添加回溯记录到历史
+                chatData.infobar_data.history.push({
+                    timestamp: Date.now(),
+                    type: 'rollback_modern',
+                    panelCount: Object.keys(snapshotData.panels).length,
+                    snapshotVersion: snapshotData.version,
+                    dataStructure: snapshotData.metadata?.dataStructure || 'chinese_fields',
+                    restoredPanels: Object.keys(snapshotData.panels)
+                });
+
+                console.log('[DataSnapshotManager] ✅ 新格式面板数据恢复完成，面板数量:', Object.keys(snapshotData.panels).length);
+            }
+
+        } catch (error) {
+            console.error('[DataSnapshotManager] ❌ 新格式快照恢复失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🔧 恢复旧格式快照（兼容性处理）
+     */
+    async restoreLegacyFormatSnapshot(chatId, chatData, snapshotData) {
+        try {
+            console.log('[DataSnapshotManager] 🔧 使用兼容性恢复策略...');
 
             // 确保infobar_data结构存在
             if (!chatData.infobar_data) {
@@ -347,11 +511,11 @@ export class DataSnapshotManager {
             if (snapshotData.panels) {
                 chatData.infobar_data.panels = this.deepClone(snapshotData.panels);
                 chatData.infobar_data.lastUpdated = Date.now();
-                
+
                 // 添加回溯记录到历史
                 chatData.infobar_data.history.push({
                     timestamp: Date.now(),
-                    type: 'rollback',
+                    type: 'rollback_legacy',
                     panelCount: Object.keys(snapshotData.panels).length,
                     panels: Object.keys(snapshotData.panels)
                 });
@@ -360,9 +524,54 @@ export class DataSnapshotManager {
                 if (chatData.infobar_data.history.length > 100) {
                     chatData.infobar_data.history = chatData.infobar_data.history.slice(-50);
                 }
+
+                console.log('[DataSnapshotManager] ✅ 旧格式面板数据恢复完成，面板数量:', Object.keys(snapshotData.panels).length);
             }
 
-            // 保存聊天数据
+        } catch (error) {
+            console.error('[DataSnapshotManager] ❌ 旧格式快照恢复失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🔧 新增：计算数据完整性哈希
+     */
+    calculateDataIntegrity(panels) {
+        try {
+            if (!panels || typeof panels !== 'object') {
+                return 'empty';
+            }
+
+            // 生成数据指纹
+            const dataFingerprint = {
+                panelCount: Object.keys(panels).length,
+                totalFields: 0,
+                panelTypes: {}
+            };
+
+            Object.keys(panels).forEach(panelId => {
+                const panelData = panels[panelId];
+                if (Array.isArray(panelData)) {
+                    dataFingerprint.panelTypes[panelId] = 'array';
+                    dataFingerprint.totalFields += panelData.reduce((sum, row) => 
+                        sum + (typeof row === 'object' ? Object.keys(row).length : 0), 0);
+                } else if (typeof panelData === 'object') {
+                    dataFingerprint.panelTypes[panelId] = 'object';
+                    dataFingerprint.totalFields += Object.keys(panelData).length;
+                }
+            });
+
+            return this.simpleHash(JSON.stringify(dataFingerprint));
+
+        } catch (error) {
+            console.error('[DataSnapshotManager] ❌ 计算数据完整性失败:', error);
+            return 'error';
+        }
+    }
+
+    /**
+     * 存储快照
             await this.dataCore.setChatData(chatId, chatData);
 
             console.log('[DataSnapshotManager] ✅ 数据核心状态恢复完成');
@@ -593,7 +802,7 @@ export class DataSnapshotManager {
 
             const currentChatId = this.dataCore.getCurrentChatId();
             if (currentChatId) {
-                await this.loadSnapshotsForChat(currentChatId);
+                await this.loadSnapshotsForChatCompat(currentChatId);
             }
 
             console.log('[DataSnapshotManager] ✅ 现有快照加载完成');
@@ -613,20 +822,119 @@ export class DataSnapshotManager {
             const persistedSnapshots = this.dataCore.chatMetadata.get(snapshotKey);
 
             if (persistedSnapshots && Array.isArray(persistedSnapshots)) {
-                this.snapshots.set(chatId, persistedSnapshots);
+                // f  
+                const normalized = persistedSnapshots.map(s => {
+                    const snap = { ...s };
+                    try {
+                        //   data  JSON 
+                        if (typeof snap.data === 'string') {
+                            try {
+                                const parsed = JSON.parse(snap.data);
+                                if (parsed && typeof parsed === 'object') {
+                                    snap.data = parsed;
+                                }
+                            } catch (e) {
+                                console.warn('[DataSnapshotManager]   data JSON ');
+                                snap.data = { panels: {}, _raw: snap.data };
+                            }
+                        }
+                        //   panels 
+                        if (!snap.data || typeof snap.data !== 'object') {
+                            snap.data = { panels: {} };
+                        }
+                        if (!snap.data.panels) {
+                            //  
+                            if (snap.data.__format === 'operation_commands' && Array.isArray(snap.data.__operations)) {
+                                console.log('[DataSnapshotManager]    (),  panels ');
+                                snap.data.panels = {};
+                            } else {
+                                snap.data.panels = {};
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[DataSnapshotManager]   ,  panels ');
+                        snap.data = { panels: {} };
+                    }
+                    return snap;
+                });
 
-                // 恢复元数据
-                for (const snapshot of persistedSnapshots) {
+                this.snapshots.set(chatId, normalized);
+
+                // 
+                for (const snapshot of normalized) {
                     this.snapshotMetadata.set(snapshot.id, snapshot.metadata);
                 }
 
-                console.log('[DataSnapshotManager] 📥 已加载', persistedSnapshots.length, '个快照:', chatId);
+                console.log('[DataSnapshotManager]  ', normalized.length, ':', chatId);
+            }
+
+        } catch (error) {
+            console.error('[DataSnapshotManager]  :', error);
+        }
+    }
+
+    /**
+     * 为指定聊天加载快照（兼容旧数据格式，安全规范化）
+     * @param {string} chatId - 聊天ID
+     */
+    async loadSnapshotsForChatCompat(chatId) {
+        try {
+            const snapshotKey = `snapshots_${chatId}`;
+            const persistedSnapshots = this.dataCore.chatMetadata.get(snapshotKey);
+
+            if (persistedSnapshots && Array.isArray(persistedSnapshots)) {
+                // 规范化历史快照，兼容旧格式
+                const normalized = persistedSnapshots.map(s => {
+                    const snap = { ...s };
+                    try {
+                        // 兼容旧格式：data 为 JSON 字符串
+                        if (typeof snap.data === 'string') {
+                            try {
+                                const parsed = JSON.parse(snap.data);
+                                if (parsed && typeof parsed === 'object') {
+                                    snap.data = parsed;
+                                }
+                            } catch (e) {
+                                console.warn('[DataSnapshotManager] ⚠ 解析旧格式快照 data(JSON) 失败，使用空对象并保留_raw');
+                                snap.data = { panels: {}, _raw: snap.data };
+                            }
+                        }
+                        // 保障 data 是对象
+                        if (!snap.data || typeof snap.data !== 'object') {
+                            snap.data = { panels: {} };
+                        }
+                        // 保障 panels 字段存在
+                        if (!snap.data.panels) {
+                            // 若为操作指令快照格式，暂不执行指令，初始化为空 panels
+                            if (snap.data.__format === 'operation_commands' && Array.isArray(snap.data.__operations)) {
+                                console.log('[DataSnapshotManager] ℹ 检测到操作指令格式快照，暂不执行指令，初始化为空 panels');
+                                snap.data.panels = {};
+                            } else {
+                                snap.data.panels = {};
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[DataSnapshotManager] ⚠ 规范化快照数据失败，回退为空 panels');
+                        snap.data = { panels: {} };
+                    }
+                    return snap;
+                });
+
+                this.snapshots.set(chatId, normalized);
+
+                // 恢复元数据
+                for (const snapshot of normalized) {
+                    this.snapshotMetadata.set(snapshot.id, snapshot.metadata);
+                }
+
+                console.log('[DataSnapshotManager] 📥 已加载', normalized.length, '个快照(含兼容处理):', chatId);
             }
 
         } catch (error) {
             console.error('[DataSnapshotManager] ❌ 加载聊天快照失败:', error);
         }
     }
+
 
     /**
      * 处理数据存储完成事件
@@ -778,7 +1086,7 @@ export class DataSnapshotManager {
 
             // 执行回溯
             const success = await this.rollbackToSnapshot(chatId, targetFloor);
-            
+
             if (success) {
                 console.log('[DataSnapshotManager] ✅ 消息重新生成回溯成功');
             } else {
@@ -799,7 +1107,7 @@ export class DataSnapshotManager {
             const chatId = this.dataCore.getCurrentChatId();
             if (chatId) {
                 // 加载新聊天的快照
-                await this.loadSnapshotsForChat(chatId);
+                await this.loadSnapshotsForChatCompat(chatId);
             }
 
         } catch (error) {
@@ -910,20 +1218,17 @@ export class DataSnapshotManager {
      */
     async handleRollbackFailure(chatId, currentFloor) {
         try {
-            console.log('[DataSnapshotManager] 🚨 回溯失败，执行降级处理...');
+            console.log('[DataSnapshotManager] 🚨 回溯失败，执行非破坏性降级处理（Soft Fallback）...');
 
-            // 🔧 降级策略1: 清空当前数据核心状态
-            console.log('[DataSnapshotManager] 🧹 清空数据核心状态');
-            await this.clearDataCore(chatId);
-
-            // 🔧 降级策略2: 创建一个基础快照作为新的起点
-            console.log('[DataSnapshotManager] 📸 创建基础快照作为新起点');
+            // ✅ 安全策略：不清空数据，保持当前状态，避免造成数据丢失
+            // 仅创建一个保护性快照，作为后续操作的基线
+            console.log('[DataSnapshotManager] 🛡️ 创建保护性快照作为新起点');
             await this.createSnapshot(chatId, Math.max(0, currentFloor - 1), {
                 source: 'rollback_failure',
-                trigger: 'fallback'
+                trigger: 'soft_fallback'
             });
 
-            console.log('[DataSnapshotManager] ✅ 降级处理完成');
+            console.log('[DataSnapshotManager] ✅ 非破坏性降级处理完成（未清空数据）');
 
         } catch (error) {
             console.error('[DataSnapshotManager] ❌ 降级处理失败:', error);
@@ -963,8 +1268,8 @@ export class DataSnapshotManager {
      * @returns {boolean} 是否有效
      */
     validateSnapshotData(snapshot) {
-        return snapshot && 
-               snapshot.data && 
+        return snapshot &&
+               snapshot.data &&
                typeof snapshot.data === 'object' &&
                snapshot.timestamp &&
                snapshot.id;

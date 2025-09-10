@@ -13,14 +13,20 @@
 export class SummaryManager {
     constructor(unifiedDataCore, eventSystem, infoBarSettings) {
         console.log('[SummaryManager] 🔧 总结管理器初始化开始');
-        
+
         this.unifiedDataCore = unifiedDataCore;
         this.eventSystem = eventSystem;
         this.infoBarSettings = infoBarSettings;
+
+        // 🚀 新增：AI记忆总结器引用
+        this.aiMemorySummarizer = null;
+
+        // 🔍 新增：向量化记忆检索系统引用
+        this.vectorizedMemoryRetrieval = null;
         
         // 总结设置
         this.settings = {
-            autoSummaryEnabled: false,
+            autoSummaryEnabled: true,  // 🔧 修复：启用自动总结功能以增加记忆数据积累
             summaryFloorCount: 20,
             summaryType: 'small',
             summaryWordCount: 300,
@@ -48,29 +54,55 @@ export class SummaryManager {
     async init() {
         try {
             console.log('[SummaryManager] 📊 开始初始化总结管理器...');
-            
+
             // 加载总结设置
             await this.loadSettings();
-            
+
             // 绑定事件监听器
             this.bindEventListeners();
-            
+
             // 初始化消息计数
             await this.initMessageCount();
-            
+
             this.initialized = true;
             console.log('[SummaryManager] ✅ 总结管理器初始化完成');
-            
+
             // 触发初始化完成事件
             if (this.eventSystem) {
                 this.eventSystem.emit('summary-manager:initialized', {
                     timestamp: Date.now()
                 });
             }
-            
+
         } catch (error) {
             console.error('[SummaryManager] ❌ 初始化失败:', error);
             this.handleError(error);
+        }
+    }
+
+    /**
+     * 🚀 设置AI记忆总结器
+     */
+    setAIMemorySummarizer(aiMemorySummarizer) {
+        try {
+            console.log('[SummaryManager] 🧠 设置AI记忆总结器...');
+            this.aiMemorySummarizer = aiMemorySummarizer;
+            console.log('[SummaryManager] ✅ AI记忆总结器设置完成');
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 设置AI记忆总结器失败:', error);
+        }
+    }
+
+    /**
+     * 🔍 设置向量化记忆检索系统
+     */
+    setVectorizedMemoryRetrieval(vectorizedMemoryRetrieval) {
+        try {
+            console.log('[SummaryManager] 🔍 设置向量化记忆检索系统...');
+            this.vectorizedMemoryRetrieval = vectorizedMemoryRetrieval;
+            console.log('[SummaryManager] ✅ 向量化记忆检索系统设置完成');
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 设置向量化记忆检索系统失败:', error);
         }
     }
 
@@ -148,11 +180,58 @@ export class SummaryManager {
             const context = SillyTavern.getContext();
             if (context && context.chat) {
                 this.lastMessageCount = context.chat.length;
-                console.log('[SummaryManager] 📊 当前消息数量:', this.lastMessageCount);
+                
+                // 🔧 修复：动态设置lastSummaryMessageId，处理中途安装插件的情况
+                await this.initLastSummaryMessageId(context.chat.length);
+                
+                console.log('[SummaryManager] 📊 消息计数初始化完成:', {
+                    currentMessageCount: this.lastMessageCount,
+                    lastSummaryMessageId: this.lastSummaryMessageId,
+                    messagesSinceLastSummary: this.lastMessageCount - this.lastSummaryMessageId
+                });
             }
             
         } catch (error) {
             console.error('[SummaryManager] ❌ 初始化消息计数失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：初始化lastSummaryMessageId，处理中途安装插件的情况
+     */
+    async initLastSummaryMessageId(currentMessageCount) {
+        try {
+            console.log('[SummaryManager] 🎯 初始化最后总结消息ID...');
+            
+            // 检查是否有历史总结记录
+            const summaryHistory = await this.getSummaryHistory();
+            
+            if (summaryHistory && summaryHistory.length > 0) {
+                // 从总结历史中获取最后一次总结的消息ID
+                const lastSummary = summaryHistory[summaryHistory.length - 1];
+                if (lastSummary.messageRange && typeof lastSummary.messageRange.end === 'number') {
+                    this.lastSummaryMessageId = lastSummary.messageRange.end + 1;
+                    console.log('[SummaryManager] ✅ 从历史记录恢复lastSummaryMessageId:', this.lastSummaryMessageId);
+                    return;
+                }
+            }
+            
+            // 如果没有历史记录，根据当前消息数量智能设置
+            if (currentMessageCount > this.settings.summaryFloorCount) {
+                // 如果当前消息数量超过一个总结周期，设置为适当的起始点
+                // 避免第一次总结时处理过多历史消息
+                this.lastSummaryMessageId = Math.max(0, currentMessageCount - this.settings.summaryFloorCount);
+                console.log('[SummaryManager] 🎯 智能设置lastSummaryMessageId（避免处理过多历史）:', this.lastSummaryMessageId);
+            } else {
+                // 如果消息数量不多，从头开始
+                this.lastSummaryMessageId = 0;
+                console.log('[SummaryManager] 🎯 设置lastSummaryMessageId为0（消息数量较少）:', this.lastSummaryMessageId);
+            }
+            
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 初始化lastSummaryMessageId失败:', error);
+            // 如果出错，保持默认值0
+            this.lastSummaryMessageId = 0;
         }
     }
 
@@ -314,12 +393,28 @@ export class SummaryManager {
                 await this.injectSummaryToMainAPI(summaryContent, summaryRecord);
             }
 
+            // 🚀 新增：如果有AI记忆总结器，也生成AI记忆总结
+            if (this.aiMemorySummarizer && this.aiMemorySummarizer.settings.enabled) {
+                try {
+                    console.log('[SummaryManager] 🧠 生成AI记忆总结...');
+                    const aiSummaryData = await this.generateAIMemorySummary(messages, summaryRange, summaryRecord);
+                    if (aiSummaryData) {
+                        summaryRecord.aiMemorySummary = aiSummaryData;
+                        console.log('[SummaryManager] ✅ AI记忆总结已添加到总结记录');
+                    }
+                } catch (aiError) {
+                    console.error('[SummaryManager] ❌ 生成AI记忆总结失败:', aiError);
+                    // 不影响主总结流程
+                }
+            }
+
             console.log('[SummaryManager] ✅ 总结生成完成:', summaryRecord.id);
 
             return {
                 success: true,
                 summaryId: summaryRecord.id,
-                content: summaryContent
+                content: summaryContent,
+                aiMemorySummary: summaryRecord.aiMemorySummary
             };
             
         } catch (error) {
@@ -982,6 +1077,590 @@ ${summaryContent}
         } catch (error) {
             console.error('[SummaryManager] ❌ 作为系统消息注入失败:', error);
             return false;
+        }
+    }
+
+    /**
+     * 🚀 生成AI记忆总结
+     */
+    async generateAIMemorySummary(messages, summaryRange, summaryRecord) {
+        try {
+            console.log('[SummaryManager] 🧠 开始生成AI记忆总结...');
+
+            if (!this.aiMemorySummarizer) {
+                throw new Error('AI记忆总结器未初始化');
+            }
+
+            // 获取需要总结的消息
+            const messagesToSummarize = messages.slice(summaryRange.start, summaryRange.end + 1);
+
+            // 评估消息重要性
+            const importanceScores = await this.aiMemorySummarizer.evaluateMessageImportance(messagesToSummarize);
+
+            // 生成AI总结
+            const aiSummary = await this.aiMemorySummarizer.generateAISummary(messagesToSummarize, importanceScores);
+
+            // 分类和标记
+            const classifiedSummary = await this.aiMemorySummarizer.classifyAndTagSummary(aiSummary, messagesToSummarize);
+
+            // 添加与传统总结的关联
+            classifiedSummary.relatedSummaryId = summaryRecord.id;
+            classifiedSummary.summaryType = 'ai_memory';
+            classifiedSummary.messageRange = summaryRange;
+
+            // 保存到AI总结历史
+            await this.aiMemorySummarizer.saveAISummaryToHistory(classifiedSummary);
+
+            console.log('[SummaryManager] ✅ AI记忆总结生成完成');
+            return classifiedSummary;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 生成AI记忆总结失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🚀 获取增强的总结历史（包含AI记忆总结）
+     */
+    async getEnhancedSummaryHistory() {
+        try {
+            console.log('[SummaryManager] 📚 获取增强的总结历史...');
+
+            // 获取传统总结历史
+            const traditionalSummaries = await this.getSummaryHistory();
+
+            // 获取AI记忆总结历史
+            let aiSummaries = [];
+            if (this.aiMemorySummarizer) {
+                aiSummaries = await this.aiMemorySummarizer.getAISummaryHistory();
+            }
+
+            // 合并和排序
+            const allSummaries = [
+                ...traditionalSummaries.map(s => ({ ...s, type: 'traditional' })),
+                ...aiSummaries.map(s => ({ ...s, type: 'ai_memory' }))
+            ].sort((a, b) => b.timestamp - a.timestamp);
+
+            console.log('[SummaryManager] 📊 增强总结历史获取完成:', {
+                traditional: traditionalSummaries.length,
+                aiMemory: aiSummaries.length,
+                total: allSummaries.length
+            });
+
+            return allSummaries;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 获取增强总结历史失败:', error);
+            return await this.getSummaryHistory(); // 降级到传统总结
+        }
+    }
+
+    /**
+     * 🚀 智能总结推荐
+     */
+    async getSmartSummaryRecommendations() {
+        try {
+            console.log('[SummaryManager] 🎯 生成智能总结推荐...');
+
+            if (!this.aiMemorySummarizer) {
+                return {
+                    shouldSummarize: false,
+                    reason: 'AI记忆总结器未启用',
+                    recommendations: []
+                };
+            }
+
+            const context = SillyTavern.getContext();
+            if (!context || !context.chat) {
+                return {
+                    shouldSummarize: false,
+                    reason: '无法获取聊天上下文',
+                    recommendations: []
+                };
+            }
+
+            const currentMessageCount = context.chat.length;
+            const messagesSinceLastSummary = currentMessageCount - this.lastSummaryMessageId;
+
+            // 获取最近的消息进行分析
+            const recentMessages = context.chat.slice(-10);
+            const importanceScores = await this.aiMemorySummarizer.evaluateMessageImportance(recentMessages);
+
+            // 计算平均重要性
+            const avgImportance = importanceScores.reduce((a, b) => a + b, 0) / importanceScores.length;
+
+            const recommendations = [];
+            let shouldSummarize = false;
+
+            // 基于消息数量的推荐
+            if (messagesSinceLastSummary >= this.settings.summaryFloorCount) {
+                shouldSummarize = true;
+                recommendations.push({
+                    type: 'message_count',
+                    priority: 'high',
+                    reason: `已达到设定的总结楼层数 (${this.settings.summaryFloorCount})`
+                });
+            }
+
+            // 基于重要性的推荐
+            if (avgImportance > 0.7) {
+                shouldSummarize = true;
+                recommendations.push({
+                    type: 'importance',
+                    priority: 'high',
+                    reason: `最近消息重要性较高 (${(avgImportance * 100).toFixed(0)}%)`
+                });
+            }
+
+            // 基于内容类型的推荐
+            const hasImportantContent = recentMessages.some(msg => {
+                const content = (msg.mes || '').toLowerCase();
+                return content.includes('重要') || content.includes('决定') || content.includes('计划');
+            });
+
+            if (hasImportantContent) {
+                recommendations.push({
+                    type: 'content',
+                    priority: 'medium',
+                    reason: '检测到重要内容关键词'
+                });
+            }
+
+            return {
+                shouldSummarize,
+                messagesSinceLastSummary,
+                avgImportance,
+                recommendations,
+                timestamp: Date.now()
+            };
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 生成智能总结推荐失败:', error);
+            return {
+                shouldSummarize: false,
+                reason: '推荐生成失败',
+                error: error.message,
+                recommendations: []
+            };
+        }
+    }
+
+    /**
+     * 🔍 语义搜索记忆
+     */
+    async semanticSearchMemories(query, options = {}) {
+        try {
+            console.log('[SummaryManager] 🔍 开始语义搜索记忆:', query);
+
+            if (!this.vectorizedMemoryRetrieval) {
+                console.warn('[SummaryManager] ⚠️ 向量化记忆检索系统未初始化，使用基础搜索');
+                return await this.basicSearchMemories(query, options);
+            }
+
+            // 使用向量化记忆检索系统进行语义搜索
+            const searchResults = await this.vectorizedMemoryRetrieval.semanticSearch(query, options);
+
+            console.log(`[SummaryManager] ✅ 语义搜索完成，找到 ${searchResults.results.length} 个结果`);
+            return searchResults;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 语义搜索失败:', error);
+            // 降级到基础搜索
+            return await this.basicSearchMemories(query, options);
+        }
+    }
+
+    /**
+     * 🔍 基础搜索记忆（降级方案）
+     */
+    async basicSearchMemories(query, options = {}) {
+        try {
+            console.log('[SummaryManager] 🔍 使用基础搜索记忆:', query);
+
+            const {
+                maxResults = 10,
+                includeTraditional = true,
+                includeAIMemory = true
+            } = options;
+
+            const results = [];
+            const queryLower = query.toLowerCase();
+
+            // 搜索传统总结
+            if (includeTraditional) {
+                const traditionalSummaries = await this.getSummaryHistory();
+                for (const summary of traditionalSummaries) {
+                    if (summary.content && summary.content.toLowerCase().includes(queryLower)) {
+                        results.push({
+                            id: summary.id,
+                            content: summary.content,
+                            type: 'traditional_summary',
+                            timestamp: summary.timestamp,
+                            similarity: 0.8 // 基础匹配分数
+                        });
+                    }
+                }
+            }
+
+            // 搜索AI记忆总结
+            if (includeAIMemory && this.aiMemorySummarizer) {
+                const aiSummaries = await this.aiMemorySummarizer.getAISummaryHistory();
+                for (const summary of aiSummaries) {
+                    if (summary.content && summary.content.toLowerCase().includes(queryLower)) {
+                        results.push({
+                            id: summary.id,
+                            content: summary.content,
+                            type: 'ai_memory',
+                            timestamp: summary.timestamp,
+                            similarity: 0.8,
+                            classification: summary.classification,
+                            tags: summary.tags
+                        });
+                    }
+                }
+            }
+
+            // 按时间戳排序并限制结果数量
+            results.sort((a, b) => b.timestamp - a.timestamp);
+            const finalResults = results.slice(0, maxResults);
+
+            return {
+                query: query,
+                results: finalResults,
+                totalResults: results.length,
+                searchTime: 0,
+                timestamp: Date.now(),
+                searchType: 'basic'
+            };
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 基础搜索失败:', error);
+            return {
+                query: query,
+                results: [],
+                error: error.message,
+                timestamp: Date.now(),
+                searchType: 'basic'
+            };
+        }
+    }
+
+    /**
+     * 🔍 获取相关记忆
+     */
+    async getRelatedMemories(context, options = {}) {
+        try {
+            console.log('[SummaryManager] 🧠 获取相关记忆...');
+
+            if (!this.vectorizedMemoryRetrieval) {
+                console.warn('[SummaryManager] ⚠️ 向量化记忆检索系统未初始化');
+                return [];
+            }
+
+            const {
+                maxResults = 5,
+                similarityThreshold = 0.7,
+                includeMetadata = true
+            } = options;
+
+            // 使用语义搜索获取相关记忆
+            const searchResults = await this.vectorizedMemoryRetrieval.semanticSearch(context, {
+                maxResults,
+                similarityThreshold,
+                includeMetadata
+            });
+
+            return searchResults.results || [];
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 获取相关记忆失败:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 🔍 获取向量化记忆检索系统状态
+     */
+    getVectorizedMemoryRetrievalStatus() {
+        try {
+            if (!this.vectorizedMemoryRetrieval) {
+                return {
+                    available: false,
+                    error: '向量化记忆检索系统未初始化'
+                };
+            }
+
+            return {
+                available: true,
+                status: this.vectorizedMemoryRetrieval.getStatus()
+            };
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 获取向量化记忆检索系统状态失败:', error);
+            return {
+                available: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * 🚀 上传总结到世界书
+     * @param {string} summaryId - 总结ID
+     * @param {Object} options - 上传选项
+     * @returns {Promise<Object>} 上传结果
+     */
+    async uploadSummaryToWorldBook(summaryId, options = {}) {
+        try {
+            console.log('[SummaryManager] 📤 开始上传总结到世界书:', summaryId);
+
+            // 1. 获取总结数据
+            const summaryData = await this.getSummaryById(summaryId);
+            if (!summaryData) {
+                throw new Error(`未找到总结记录: ${summaryId}`);
+            }
+
+            // 2. 检查WorldBookManager是否可用
+            const infoBarTool = window.SillyTavernInfobar;
+            const worldBookManager = infoBarTool?.modules?.worldBookManager;
+
+            if (!worldBookManager) {
+                throw new Error('WorldBookManager未初始化，无法上传到世界书');
+            }
+
+            // 3. 调用WorldBookManager上传方法
+            const uploadResult = await worldBookManager.uploadSummaryToWorldBook(summaryData, options);
+
+            // 4. 更新总结记录，标记已上传
+            if (uploadResult.success) {
+                await this.markSummaryAsUploaded(summaryId, {
+                    worldBookName: uploadResult.worldBookName,
+                    entryId: uploadResult.entryId,
+                    entryName: uploadResult.entryName,
+                    uploadedAt: Date.now()
+                });
+            }
+
+            // 5. 触发事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('summary:uploaded-to-worldbook', {
+                    summaryId: summaryId,
+                    uploadResult: uploadResult,
+                    timestamp: Date.now()
+                });
+            }
+
+            console.log('[SummaryManager] ✅ 总结上传完成:', uploadResult);
+            return uploadResult;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 上传总结到世界书失败:', error);
+
+            // 触发错误事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('summary:upload-error', {
+                    summaryId: summaryId,
+                    error: error.message,
+                    timestamp: Date.now()
+                });
+            }
+
+            return {
+                success: false,
+                error: error.message,
+                message: `上传失败: ${error.message}`
+            };
+        }
+    }
+
+    /**
+     * 📋 根据ID获取总结数据
+     */
+    async getSummaryById(summaryId) {
+        try {
+            // 从增强的总结历史中查找
+            const allSummaries = await this.getEnhancedSummaryHistory();
+            const summary = allSummaries.find(s => s.id === summaryId);
+
+            if (summary) {
+                console.log('[SummaryManager] 📋 找到总结记录:', summaryId);
+                return summary;
+            }
+
+            console.warn('[SummaryManager] ⚠️ 未找到总结记录:', summaryId);
+            return null;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 获取总结数据失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🏷️ 标记总结为已上传
+     */
+    async markSummaryAsUploaded(summaryId, uploadInfo) {
+        try {
+            console.log('[SummaryManager] 🏷️ 标记总结为已上传:', summaryId);
+
+            if (!this.unifiedDataCore) {
+                console.warn('[SummaryManager] ⚠️ UnifiedDataCore未初始化，无法标记上传状态');
+                return false;
+            }
+
+            // 获取当前聊天ID
+            const currentChatId = this.unifiedDataCore.getCurrentChatId();
+            if (!currentChatId) {
+                console.warn('[SummaryManager] ⚠️ 无法获取当前聊天ID');
+                return false;
+            }
+
+            // 获取聊天数据
+            const chatData = await this.unifiedDataCore.getChatData(currentChatId) || {};
+            const summaryHistory = chatData.summary_history || [];
+
+            // 查找并更新总结记录
+            const summaryIndex = summaryHistory.findIndex(s => s.id === summaryId);
+            if (summaryIndex !== -1) {
+                summaryHistory[summaryIndex].worldBookUpload = uploadInfo;
+
+                // 保存更新后的数据
+                chatData.summary_history = summaryHistory;
+                await this.unifiedDataCore.setChatData(currentChatId, chatData);
+
+                console.log('[SummaryManager] ✅ 总结上传状态已更新');
+                return true;
+            }
+
+            // 如果在传统总结中没找到，检查AI记忆总结
+            if (this.aiMemorySummarizer) {
+                const aiSummaryUpdated = await this.aiMemorySummarizer.markSummaryAsUploaded(summaryId, uploadInfo);
+                if (aiSummaryUpdated) {
+                    console.log('[SummaryManager] ✅ AI记忆总结上传状态已更新');
+                    return true;
+                }
+            }
+
+            console.warn('[SummaryManager] ⚠️ 未找到要更新的总结记录:', summaryId);
+            return false;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 标记总结上传状态失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 📤 批量上传总结到世界书
+     * @param {Array} summaryIds - 总结ID数组
+     * @param {Object} options - 上传选项
+     * @returns {Promise<Object>} 批量上传结果
+     */
+    async batchUploadSummariesToWorldBook(summaryIds, options = {}) {
+        try {
+            console.log('[SummaryManager] 📤 开始批量上传总结到世界书:', summaryIds.length);
+
+            const results = {
+                success: [],
+                failed: [],
+                total: summaryIds.length
+            };
+
+            // 逐个上传总结
+            for (const summaryId of summaryIds) {
+                try {
+                    const uploadResult = await this.uploadSummaryToWorldBook(summaryId, options);
+
+                    if (uploadResult.success) {
+                        results.success.push({
+                            summaryId: summaryId,
+                            result: uploadResult
+                        });
+                    } else {
+                        results.failed.push({
+                            summaryId: summaryId,
+                            error: uploadResult.error
+                        });
+                    }
+
+                    // 添加延迟避免过快的连续请求
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                } catch (error) {
+                    results.failed.push({
+                        summaryId: summaryId,
+                        error: error.message
+                    });
+                }
+            }
+
+            console.log('[SummaryManager] ✅ 批量上传完成:', {
+                success: results.success.length,
+                failed: results.failed.length,
+                total: results.total
+            });
+
+            // 触发批量上传完成事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('summary:batch-upload-complete', {
+                    results: results,
+                    timestamp: Date.now()
+                });
+            }
+
+            return {
+                success: true,
+                results: results,
+                message: `批量上传完成: ${results.success.length}/${results.total} 成功`
+            };
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 批量上传总结失败:', error);
+            return {
+                success: false,
+                error: error.message,
+                message: `批量上传失败: ${error.message}`
+            };
+        }
+    }
+
+    /**
+     * 🔍 检查总结是否已上传到世界书
+     * @param {string} summaryId - 总结ID
+     * @returns {Promise<Object>} 上传状态信息
+     */
+    async checkSummaryUploadStatus(summaryId) {
+        try {
+            const summaryData = await this.getSummaryById(summaryId);
+            if (!summaryData) {
+                return {
+                    uploaded: false,
+                    error: '总结记录不存在'
+                };
+            }
+
+            const uploadInfo = summaryData.worldBookUpload;
+            if (uploadInfo) {
+                return {
+                    uploaded: true,
+                    worldBookName: uploadInfo.worldBookName,
+                    entryId: uploadInfo.entryId,
+                    entryName: uploadInfo.entryName,
+                    uploadedAt: uploadInfo.uploadedAt
+                };
+            }
+
+            return {
+                uploaded: false
+            };
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 检查总结上传状态失败:', error);
+            return {
+                uploaded: false,
+                error: error.message
+            };
         }
     }
 }

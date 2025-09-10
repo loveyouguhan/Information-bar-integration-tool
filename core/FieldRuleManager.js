@@ -298,6 +298,14 @@ export class FieldRuleManager {
     }
 
     /**
+     * 🚀 获取所有字段规则
+     * @returns {Map} 所有字段规则的映射
+     */
+    getAllFieldRules() {
+        return new Map(this.fieldRules);
+    }
+
+    /**
      * 删除字段规则（现在使用中文键名）
      */
     async deleteFieldRule(panelName, fieldName) {

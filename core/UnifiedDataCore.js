@@ -2123,8 +2123,9 @@ export class UnifiedDataCore {
      * 设置指定聊天的数据
      * @param {string} chatId - 聊天ID
      * @param {Object} data - 聊天数据
+     * @param {Object} options - 可选参数，包含source等标识
      */
-    async setChatData(chatId, data) {
+    async setChatData(chatId, data, options = {}) {
         try {
             if (!chatId) {
                 console.warn('[UnifiedDataCore] ⚠️ 聊天ID为空');
@@ -2154,7 +2155,9 @@ export class UnifiedDataCore {
                 this.eventSystem.emit('chat:data:changed', {
                     chatId,
                     data,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    source: options.source || 'normal',
+                    operation: options.operation || 'update'
                 });
             }
 

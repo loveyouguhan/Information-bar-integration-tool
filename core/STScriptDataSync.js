@@ -43,6 +43,7 @@ export class STScriptDataSync {
         // 初始化状态
         this.initialized = false;
         this.isRollbackSyncing = false; // 🔧 优化：防止重复回溯同步
+        this.lastDataChangeTime = 0; // 🔧 新增：防抖时间戳
 
         console.log('[STScript同步] 🏗️ 构造函数完成');
     }
@@ -897,9 +898,27 @@ export class STScriptDataSync {
 
         // 监听聊天数据变更事件
         this.eventSystem.on('chat:data:changed', (data) => {
+            // 🔧 修复：防循环机制 - 避免快照创建引起的循环
+            if (data && data.source === 'snapshot') {
+                console.log('[STScript同步] ⚠️ 跳过快照相关的数据变更事件，防止循环');
+                return;
+            }
+            
+            // 🔧 修复：防抖机制 - 避免频繁触发
+            const now = Date.now();
+            if (this.lastDataChangeTime && (now - this.lastDataChangeTime) < 1000) {
+                console.log('[STScript同步] ⚠️ 防抖保护：跳过1秒内的重复数据变更事件');
+                return;
+            }
+            this.lastDataChangeTime = now;
+            
             console.log('[STScript同步] 📡 检测到聊天数据变更，清理缓存');
             this.clearCache();
-            this.queueFullSync();
+            
+            // 🔧 修复：延迟执行同步，避免立即循环
+            setTimeout(() => {
+                this.queueFullSync();
+            }, 200);
         });
 
         // 🔧 集成回溯：监听快照回溯完成事件，延迟同步变量数据
@@ -946,6 +965,12 @@ export class STScriptDataSync {
                 targetFloor: data.targetFloor,
                 snapshotId: data.snapshotId
             });
+
+            // 🔧 修复：检查是否应该跳过STScript同步（根据用户要求）
+            if (!this.syncEnabled || this.shouldSkipRollbackSync()) {
+                console.log('[STScript同步] ⏸️ STScript回溯同步已被禁用，跳过处理');
+                return;
+            }
 
             // 🔧 优化：防止重复回溯同步
             if (this.isRollbackSyncing) {
@@ -1009,6 +1034,13 @@ export class STScriptDataSync {
                     
                     // 🔧 调试：验证数据是否在回溯后发生了变化
                     console.log('[STScript同步] 🔄 将要基于回溯后的数据进行同步，期望数据已回溯到楼层', data.targetFloor);
+
+                    // 🔧 修复：检查是否应该跳过嵌套结构同步
+                    if (this.shouldSkipNestedStructureSync()) {
+                        console.log('[STScript同步] ⏸️ 回溯时跳过嵌套结构同步（根据新策略）');
+                        this.isRollbackSyncing = false;
+                        return;
+                    }
 
                     // 🔧 回溯专用：正确获取回溯后的数据并模拟正常数据变更流程
                     console.log('[STScript同步] 🔄 开始回溯专用数据同步，模拟正常数据变更流程...');
@@ -2793,6 +2825,52 @@ export class STScriptDataSync {
     }
 
     /**
+     * 🚀 检查是否应该跳过回溯同步
+     */
+    shouldSkipRollbackSync() {
+        // 🔧 修复：根据用户要求，不再采用数据同步机制，特别是在回溯时
+        const skipRollbackSync = true; // 用户明确要求跳过回溯同步
+        
+        if (skipRollbackSync) {
+            console.log('[STScript同步] ⏸️ 根据新策略，回溯时跳过STScript数据同步');
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * 🚀 检查是否应该跳过嵌套结构同步
+     */
+    shouldSkipNestedStructureSync() {
+        // 🔧 修复：用户明确指出不应该在回溯时操作同步嵌套结构
+        const skipNestedSync = true; // 不采用同步嵌套结构的机制
+        
+        if (skipNestedSync) {
+            console.log('[STScript同步] ⏸️ 根据新策略，不操作同步嵌套结构');
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * 🚀 禁用回溯时的同步功能
+     */
+    disableRollbackSync() {
+        this.rollbackSyncEnabled = false;
+        console.log('[STScript同步] ⏸️ 回溯同步功能已禁用');
+    }
+
+    /**
+     * 🚀 启用回溯时的同步功能
+     */
+    enableRollbackSync() {
+        this.rollbackSyncEnabled = true;
+        console.log('[STScript同步] ✅ 回溯同步功能已启用');
+    }
+
+    /**
      * 获取同步状态
      */
     getStatus() {
@@ -2801,7 +2879,8 @@ export class STScriptDataSync {
             errorCount: this.errorCount,
             lastSyncTime: this.lastSyncTime,
             cacheSize: this.macroCache.size,
-            isInitialized: this.initialized
+            isInitialized: this.initialized,
+            rollbackSyncEnabled: this.rollbackSyncEnabled || false
         };
     }
 }
