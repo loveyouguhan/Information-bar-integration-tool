@@ -1829,6 +1829,185 @@ export class MessageInfoBarRenderer {
     }
 
     /**
+     * 🔧 将col_X格式的字段名转换为系统期望的标准字段名
+     */
+    convertColFieldToStandardName(fieldName, panelKey) {
+        try {
+            // 检查是否是col_X格式
+            const colMatch = fieldName.match(/^col_(\d+)$/);
+            if (!colMatch) {
+                return fieldName; // 不是col_X格式，直接返回
+            }
+
+            const colNumber = parseInt(colMatch[1]);
+            console.log(`[MessageInfoBarRenderer] 🔧 转换col_${colNumber}字段 (面板: ${panelKey})`);
+
+            // 根据面板类型和列号映射到系统期望的标准字段名
+            const standardFieldMappings = {
+                personal: {
+                    1: 'name',        // 姓名
+                    2: 'age',         // 年龄
+                    3: 'gender',      // 性别
+                    4: 'occupation',  // 职业
+                    5: 'appearance',  // 外貌
+                    6: 'personality', // 性格
+                    7: 'status',      // 心理状态
+                    8: 'location',    // 当前状态
+                    9: 'background',  // 特殊能力
+                    10: 'relationship', // 当前行为
+                    11: 'emotion',    // 关系
+                    12: 'notes'       // 备注
+                },
+                world: {
+                    1: 'world_name',  // 世界名称
+                    2: 'world_type',  // 世界类型
+                    3: 'culture',     // 风格
+                    4: 'geography',   // 地点
+                    5: 'location',    // 具体位置
+                    6: 'time'         // 时间
+                },
+                interaction: {
+                    1: 'npc_name',        // 对象
+                    2: 'npc_occupation',  // 身份
+                    3: 'emotion',         // 情绪
+                    4: 'relationship',    // 关系
+                    5: 'favorability',    // 亲密度
+                    6: 'status',          // 当前行为
+                    7: 'dialogue',        // 对话内容
+                    8: 'action',          // 行动
+                    9: 'reaction',        // 反应
+                    10: 'intention',      // 意图
+                    11: 'background',     // 背景
+                    12: 'environment',    // 环境
+                    13: 'atmosphere',     // 氛围
+                    14: 'time',           // 时间
+                    15: 'location',       // 地点
+                    16: 'notes'           // 备注
+                }
+            };
+
+            const panelMapping = standardFieldMappings[panelKey];
+            if (panelMapping && panelMapping[colNumber]) {
+                const standardName = panelMapping[colNumber];
+                console.log(`[MessageInfoBarRenderer] ✅ col_${colNumber} -> ${standardName} (面板: ${panelKey})`);
+                return standardName;
+            }
+
+            // 如果没有找到映射，返回原字段名
+            console.log(`[MessageInfoBarRenderer] ⚠️ col_${colNumber} 无标准映射 (面板: ${panelKey})`);
+            return fieldName;
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ col_X字段转换失败:', error);
+            return fieldName;
+        }
+    }
+
+    /**
+     * 🔧 将字段名映射为显示名称（从数据表格配置中获取真实列标题）
+     */
+    mapColFieldToDisplayName(fieldName, panelKey) {
+        try {
+            console.log(`[MessageInfoBarRenderer] 🔧 映射字段 "${fieldName}" (面板: ${panelKey})`);
+
+            // 🔧 修复：从数据表格配置中获取真实的列标题映射
+            const dataTable = window.SillyTavernInfobar?.modules?.dataTable;
+            if (dataTable) {
+                const enabledPanels = dataTable.getAllEnabledPanels();
+
+                // 🔧 修复：特殊处理信息面板的键匹配
+                let targetPanel = enabledPanels.find(panel => panel.key === panelKey);
+
+                // 如果没找到，尝试通过面板名称匹配（特别是信息面板）
+                if (!targetPanel && (panelKey === 'info' || panelKey === undefined)) {
+                    targetPanel = enabledPanels.find(panel =>
+                        panel.name === '信息' ||
+                        (panel.key === undefined && panel.name === '信息') ||
+                        panel.key === 'info'
+                    );
+                    console.log(`[MessageInfoBarRenderer] 🔧 通过名称找到信息面板:`, targetPanel?.name);
+                }
+
+                if (targetPanel && targetPanel.subItems) {
+                    console.log(`[MessageInfoBarRenderer] 🔧 找到目标面板: ${targetPanel.name}, 子项数量: ${targetPanel.subItems.length}`);
+
+                    // 检查是否是col_X格式
+                    const colMatch = fieldName.match(/^col_(\d+)$/);
+                    if (colMatch) {
+                        const colNumber = parseInt(colMatch[1]);
+                        const enabledSubItems = targetPanel.subItems.filter(item => item.enabled);
+                        console.log(`[MessageInfoBarRenderer] 🔧 启用子项数量: ${enabledSubItems.length}, 查找col_${colNumber}`);
+
+                        if (enabledSubItems[colNumber - 1]) {
+                            const realColumnName = enabledSubItems[colNumber - 1].name;
+                            console.log(`[MessageInfoBarRenderer] ✅ ${fieldName} -> "${realColumnName}" (面板: ${panelKey})`);
+                            return realColumnName;
+                        } else {
+                            console.log(`[MessageInfoBarRenderer] ⚠️ ${fieldName} 超出启用子项范围 (面板: ${panelKey})`);
+                        }
+                    }
+
+                    // 如果不是col_X格式，尝试直接匹配字段名
+                    const matchedSubItem = targetPanel.subItems.find(item =>
+                        item.key === fieldName || item.name === fieldName
+                    );
+                    if (matchedSubItem) {
+                        console.log(`[MessageInfoBarRenderer] ✅ ${fieldName} -> "${matchedSubItem.name}" (面板: ${panelKey})`);
+                        return matchedSubItem.name;
+                    }
+                } else {
+                    console.log(`[MessageInfoBarRenderer] ⚠️ 未找到面板配置或子项 (面板: ${panelKey})`);
+                }
+            }
+
+            // 🔧 备用方案：使用基础的英文字段名到中文显示名的映射
+            const basicFieldMappings = {
+                personal: {
+                    'name': '姓名',
+                    'age': '年龄',
+                    'gender': '性别',
+                    'occupation': '职业',
+                    'appearance': '外貌',
+                    'personality': '性格'
+                },
+                world: {
+                    'name': '世界名称',
+                    'type': '世界类型',
+                    'genre': '世界风格',
+                    'geography': '地理环境',
+                    'locations': '重要地点',
+                    'time': '时间设定'
+                },
+                interaction: {
+                    'name': '对象名称',
+                    'type': '对象类型',
+                    'status': '当前状态',
+                    'relationship': '关系类型',
+                    'intimacy': '亲密度',
+                    'history': '历史记录',
+                    'autoRecord': '自动记录'
+                }
+            };
+
+            // 🔧 修复：使用基础映射作为备用方案
+            const panelMapping = basicFieldMappings[panelKey];
+            if (panelMapping && panelMapping[fieldName]) {
+                const displayName = panelMapping[fieldName];
+                console.log(`[MessageInfoBarRenderer] ✅ ${fieldName} -> ${displayName} (面板: ${panelKey}, 基础映射)`);
+                return displayName;
+            }
+
+            // 如果没有找到映射，返回原字段名
+            console.log(`[MessageInfoBarRenderer] ⚠️ ${fieldName} -> ${fieldName} (面板: ${panelKey}, 无映射)`);
+            return fieldName;
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 字段映射失败:', error);
+            return fieldName;
+        }
+    }
+
+    /**
      * 渲染标准面板
      */
     renderPanel(panelKey, panelData, panelConfig, globalDefaultCollapsed = false) {
@@ -1837,11 +2016,47 @@ export class MessageInfoBarRenderer {
                 return '';
             }
 
+            // 🆕 优化：处理多行数据的选择框功能
+            if (Array.isArray(panelData)) {
+                console.log(`[MessageInfoBarRenderer] 🔧 处理数组格式面板数据: ${panelKey}, 行数: ${panelData.length}`);
+                if (panelData.length === 0) {
+                    return '';
+                }
+
+                // 🆕 多行数据：自动添加选择框
+                if (panelData.length > 1) {
+                    console.log(`[MessageInfoBarRenderer] 🆕 检测到多行数据，生成选择框: ${panelKey}`);
+                    return this.renderMultiRowPanel(panelKey, panelData, panelConfig, globalDefaultCollapsed);
+                }
+
+                // 单行数据：直接使用第一行
+                const processedData = panelData[0];
+                console.log(`[MessageInfoBarRenderer] 🔧 单行数据，取第一行:`, processedData);
+                return this.renderSingleRowPanel(panelKey, processedData, panelConfig, globalDefaultCollapsed);
+            } else {
+                console.log(`[MessageInfoBarRenderer] 🔧 处理对象格式面板数据: ${panelKey}`);
+                return this.renderSingleRowPanel(panelKey, panelData, panelConfig, globalDefaultCollapsed);
+            }
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 渲染面板失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 🆕 渲染单行数据面板（原renderPanel的核心逻辑）
+     */
+    renderSingleRowPanel(panelKey, panelData, panelConfig, globalDefaultCollapsed = false) {
+        try {
             // 过滤系统字段
             const filteredData = this.filterSystemFields(panelData);
             if (!filteredData || Object.keys(filteredData).length === 0) {
+                console.log(`[MessageInfoBarRenderer] ⚠️ 过滤后数据为空: ${panelKey}`);
                 return '';
             }
+
+            console.log(`[MessageInfoBarRenderer] 🔍 过滤后数据: ${panelKey}`, filteredData);
 
             // 特殊处理交互对象面板
             if (panelKey === 'interaction') {
@@ -1861,6 +2076,22 @@ export class MessageInfoBarRenderer {
                 return result;
             }
 
+            // 继续原有的渲染逻辑...
+            return this.renderStandardPanel(panelKey, filteredData, panelConfig, globalDefaultCollapsed);
+
+        } catch (error) {
+            console.error(`[MessageInfoBarRenderer] ❌ 渲染单行面板失败: ${panelKey}`, error);
+            return '';
+        }
+    }
+
+    /**
+     * 🆕 渲染多行数据面板（带选择框）
+     */
+    renderMultiRowPanel(panelKey, panelDataArray, panelConfig, globalDefaultCollapsed = false) {
+        try {
+            console.log(`[MessageInfoBarRenderer] 🆕 开始渲染多行数据面板: ${panelKey}, 行数: ${panelDataArray.length}`);
+
             // 获取面板信息
             const panelInfo = this.getPanelInfo(panelKey);
             const defaultCollapsed = globalDefaultCollapsed || panelConfig?.defaultCollapsed || false;
@@ -1877,20 +2108,104 @@ export class MessageInfoBarRenderer {
                          style="display: ${defaultCollapsed ? 'none' : 'block'};">
             `;
 
-            // 渲染面板项目
+            // 🆕 添加行选择器
+            html += '<div class="infobar-row-selector-wrapper">';
+            html += `<select class="infobar-row-selector" data-panel="${panelKey}">`;
+
+            // 生成选择器选项（使用每行第一列数据作为标题）
+            panelDataArray.forEach((rowData, index) => {
+                const rowTitle = this.generateRowTitle(rowData, index);
+                console.log(`[MessageInfoBarRenderer] 🔍 生成行标题 ${index}: ${rowTitle}`);
+                html += `<option value="${index}" ${index === 0 ? 'selected' : ''}>${this.escapeHtml(rowTitle)}</option>`;
+            });
+
+            html += '</select></div>';
+
+            // 🆕 为每行数据创建详情面板
+            html += '<div class="infobar-row-details-container">';
+
+            panelDataArray.forEach((rowData, index) => {
+                const displayStyle = index === 0 ? 'block' : 'none';
+                html += `<div class="infobar-row-details" data-panel="${panelKey}" data-row-index="${index}" style="display: ${displayStyle};">`;
+
+                // 渲染这一行的数据
+                const rowHtml = this.renderRowData(panelKey, rowData, panelConfig);
+                html += rowHtml;
+
+                html += '</div>';
+            });
+
+            html += '</div>'; // 结束 row-details-container
+            html += '</div>'; // 结束 panel-content
+            html += '</div>'; // 结束 panel
+
+            console.log(`[MessageInfoBarRenderer] ✅ 多行数据面板渲染完成: ${panelKey}`);
+            return html;
+
+        } catch (error) {
+            console.error(`[MessageInfoBarRenderer] ❌ 渲染多行面板失败: ${panelKey}`, error);
+            return '';
+        }
+    }
+
+    /**
+     * 🆕 生成行标题（使用第一列数据）
+     */
+    generateRowTitle(rowData, index) {
+        try {
+            if (!rowData || typeof rowData !== 'object') {
+                return `第${index + 1}行`;
+            }
+
+            // 过滤系统字段
+            const filteredData = this.filterSystemFields(rowData);
+            const keys = Object.keys(filteredData);
+
+            if (keys.length === 0) {
+                return `第${index + 1}行`;
+            }
+
+            // 使用第一列数据作为标题
+            const firstKey = keys[0];
+            const firstValue = filteredData[firstKey];
+
+            if (firstValue && String(firstValue).trim()) {
+                return String(firstValue).trim();
+            }
+
+            return `第${index + 1}行`;
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 生成行标题失败:', error);
+            return `第${index + 1}行`;
+        }
+    }
+
+    /**
+     * 🆕 渲染单行数据内容
+     */
+    renderRowData(panelKey, rowData, panelConfig) {
+        try {
+            const filteredData = this.filterSystemFields(rowData);
+            if (!filteredData || Object.keys(filteredData).length === 0) {
+                return '<div class="infobar-empty">暂无数据</div>';
+            }
+
+            let html = '';
             Object.entries(filteredData).forEach(([fieldName, value]) => {
                 if (this.isValidDataValue(value)) {
-                    // 🔧 修复：使用统一的完整映射表获取字段显示名称
+                    // 获取字段显示名称
                     let displayLabel = this.getFieldDisplayNameFromConfig(panelKey, fieldName, panelConfig);
                     if (!displayLabel) {
-                        // 优先使用InfoBarSettings的完整映射表
-                        displayLabel = this.getUnifiedFieldDisplayName(fieldName, panelKey);
+                        const standardFieldName = this.convertColFieldToStandardName(fieldName, panelKey);
+                        displayLabel = this.getUnifiedFieldDisplayName(standardFieldName, panelKey);
                         if (!displayLabel) {
-                            // 备用：使用本地FIELD_LABELS映射表
-                            displayLabel = this.FIELD_LABELS[fieldName] || fieldName;
+                            displayLabel = this.FIELD_LABELS[standardFieldName] || this.FIELD_LABELS[fieldName];
+                            if (!displayLabel) {
+                                displayLabel = this.mapColFieldToDisplayName(fieldName, panelKey) || fieldName;
+                            }
                         }
                     }
-                    console.log(`[MessageInfoBarRenderer] 🔍 字段映射: ${fieldName} -> ${displayLabel} (面板: ${panelKey})`);
 
                     html += `
                         <div class="infobar-item">
@@ -1901,11 +2216,102 @@ export class MessageInfoBarRenderer {
                 }
             });
 
-            html += `</div></div>`;
+            return html || '<div class="infobar-empty">暂无有效数据</div>';
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 渲染行数据失败:', error);
+            return '<div class="infobar-error">数据渲染失败</div>';
+        }
+    }
+
+    /**
+     * 🆕 渲染标准面板（提取原有逻辑）
+     */
+    renderStandardPanel(panelKey, filteredData, panelConfig, globalDefaultCollapsed = false) {
+        try {
+            // 🔧 新增：特殊处理info面板的数组数据（通过面板配置识别信息面板）
+            const isInfoPanel = this.isInfoPanel(panelKey, panelConfig);
+            console.log(`[MessageInfoBarRenderer] 🔍 面板检查: panelKey="${panelKey || 'undefined'}", isInfoPanel=${isInfoPanel}, 数据类型=${typeof filteredData}, 是否数组=${Array.isArray(filteredData)}`);
+
+            if (isInfoPanel && Array.isArray(filteredData)) {
+                console.log('[MessageInfoBarRenderer] 🔍 开始处理info面板数组数据');
+                console.log('[MessageInfoBarRenderer] 🔍 Info面板数组长度:', filteredData.length);
+                console.log('[MessageInfoBarRenderer] 🔍 Info面板数组内容:', filteredData);
+
+                // 将数组数据转换为对象格式
+                const convertedData = {};
+                filteredData.forEach((item, index) => {
+                    console.log(`[MessageInfoBarRenderer] 🔧 处理数组项${index}:`, item, typeof item);
+
+                    if (item && typeof item === 'object') {
+                        // 如果数组元素是对象，将其字段合并到convertedData中
+                        console.log(`[MessageInfoBarRenderer] 🔧 展开对象，键:`, Object.keys(item));
+                        Object.entries(item).forEach(([key, value]) => {
+                            if (!this.SYSTEM_FIELDS.has(key)) {
+                                console.log(`[MessageInfoBarRenderer] 🔧 添加字段: ${key} = ${value}`);
+                                convertedData[key] = value;
+                            } else {
+                                console.log(`[MessageInfoBarRenderer] 🔧 跳过系统字段: ${key}`);
+                            }
+                        });
+                    } else {
+                        // 如果数组元素是基本类型，使用索引作为字段名
+                        const fieldMapping = this.mapColFieldToDisplayName(`col_${index + 1}`, panelKey);
+                        const fieldName = fieldMapping || `信息${index + 1}`;
+                        console.log(`[MessageInfoBarRenderer] 🔧 添加基本类型: ${fieldName} = ${item}`);
+                        convertedData[fieldName] = item;
+                    }
+                });
+
+                console.log('[MessageInfoBarRenderer] 🔧 Info面板转换后数据:', convertedData);
+                filteredData = convertedData;
+            }
+
+            // 获取面板信息
+            const panelInfo = this.getPanelInfo(panelKey);
+            const defaultCollapsed = globalDefaultCollapsed || panelConfig?.defaultCollapsed || false;
+
+            let html = `
+                <div class="infobar-panel" data-panel="${panelKey}">
+                    <div class="infobar-panel-header">
+                        <div class="infobar-panel-title">
+                            <span class="infobar-panel-arrow">${defaultCollapsed ? '▶' : '▼'}</span>
+                            <i class="${panelInfo.icon}"></i> ${panelInfo.name}
+                        </div>
+                    </div>
+                    <div class="infobar-panel-content ${defaultCollapsed ? '' : 'expanded'}"
+                         style="display: ${defaultCollapsed ? 'none' : 'block'};">
+            `;
+
+            // 渲染数据项
+            Object.entries(filteredData).forEach(([fieldName, value]) => {
+                if (this.isValidDataValue(value)) {
+                    let displayLabel = this.getFieldDisplayNameFromConfig(panelKey, fieldName, panelConfig);
+                    if (!displayLabel) {
+                        const standardFieldName = this.convertColFieldToStandardName(fieldName, panelKey);
+                        displayLabel = this.getUnifiedFieldDisplayName(standardFieldName, panelKey);
+                        if (!displayLabel) {
+                            displayLabel = this.FIELD_LABELS[standardFieldName] || this.FIELD_LABELS[fieldName];
+                            if (!displayLabel) {
+                                displayLabel = this.mapColFieldToDisplayName(fieldName, panelKey) || fieldName;
+                            }
+                        }
+                    }
+
+                    html += `
+                        <div class="infobar-item">
+                            <span class="infobar-item-label">${this.escapeHtml(displayLabel)}:</span>
+                            <span class="infobar-item-value">${this.escapeHtml(String(value))}</span>
+                        </div>
+                    `;
+                }
+            });
+
+            html += '</div></div>';
             return html;
 
         } catch (error) {
-            console.error('[MessageInfoBarRenderer] ❌ 渲染面板失败:', error);
+            console.error(`[MessageInfoBarRenderer] ❌ 渲染标准面板失败: ${panelKey}`, error);
             return '';
         }
     }
@@ -1915,7 +2321,22 @@ export class MessageInfoBarRenderer {
      */
     renderInteractionPanel(interactionData, panelConfig, globalDefaultCollapsed = false) {
         try {
-            if (!interactionData || Object.keys(interactionData).length === 0) {
+            // 🔧 修复：处理数组格式的交互面板数据
+            let processedData;
+            if (Array.isArray(interactionData)) {
+                console.log(`[MessageInfoBarRenderer] 🔧 处理数组格式交互面板数据, 行数: ${interactionData.length}`);
+                if (interactionData.length === 0) {
+                    return '';
+                }
+                // 对于数组格式，取第一行数据
+                processedData = interactionData[0];
+                console.log(`[MessageInfoBarRenderer] 🔧 取第一行交互数据:`, processedData);
+            } else {
+                console.log(`[MessageInfoBarRenderer] 🔧 处理对象格式交互面板数据`);
+                processedData = interactionData;
+            }
+
+            if (!processedData || Object.keys(processedData).length === 0) {
                 return '';
             }
 
@@ -1934,7 +2355,7 @@ export class MessageInfoBarRenderer {
             `;
 
             // 按NPC分组数据
-            const npcGroups = this.groupNpcData(interactionData);
+            const npcGroups = this.groupNpcData(processedData);
             const npcList = Object.entries(npcGroups);
 
             console.log('[MessageInfoBarRenderer] 🔍 NPC分组结果:', npcGroups);
@@ -1964,11 +2385,24 @@ export class MessageInfoBarRenderer {
 
                     Object.entries(npcData).forEach(([fieldName, value]) => {
                         if (this.isValidDataValue(value)) {
-                            // 优先从面板配置中获取displayName
+                            // 🔧 修复：使用统一的字段映射逻辑，支持col_X格式
                             let displayLabel = this.getFieldDisplayNameFromConfig('interaction', fieldName, panelConfig);
                             if (!displayLabel) {
-                                displayLabel = this.FIELD_LABELS[fieldName] || fieldName;
+                                // 🔧 新增：先将col_X格式转换为系统期望的字段名
+                                const standardFieldName = this.convertColFieldToStandardName(fieldName, 'interaction');
+
+                                // 优先使用InfoBarSettings的完整映射表（使用转换后的字段名）
+                                displayLabel = this.getUnifiedFieldDisplayName(standardFieldName, 'interaction');
+                                if (!displayLabel) {
+                                    // 备用：使用本地FIELD_LABELS映射表
+                                    displayLabel = this.FIELD_LABELS[standardFieldName] || this.FIELD_LABELS[fieldName];
+                                    if (!displayLabel) {
+                                        // 最后备用：使用我的col_X映射
+                                        displayLabel = this.mapColFieldToDisplayName(fieldName, 'interaction') || fieldName;
+                                    }
+                                }
                             }
+                            console.log(`[MessageInfoBarRenderer] 🔍 交互面板字段映射: ${fieldName} -> ${displayLabel}`);
 
                             html += `
                                 <div class="infobar-item">
@@ -2050,11 +2484,24 @@ export class MessageInfoBarRenderer {
 
                     Object.entries(orgData).forEach(([fieldName, value]) => {
                         if (this.isValidDataValue(value)) {
-                            // 优先从面板配置中获取displayName
+                            // 🔧 修复：使用统一的字段映射逻辑
                             let displayLabel = this.getFieldDisplayNameFromConfig('organization', fieldName, panelConfig);
                             if (!displayLabel) {
-                                displayLabel = this.FIELD_LABELS[fieldName] || fieldName;
+                                // 🔧 新增：先将col_X格式转换为系统期望的字段名
+                                const standardFieldName = this.convertColFieldToStandardName(fieldName, 'organization');
+
+                                // 优先使用InfoBarSettings的完整映射表（使用转换后的字段名）
+                                displayLabel = this.getUnifiedFieldDisplayName(standardFieldName, 'organization');
+                                if (!displayLabel) {
+                                    // 备用：使用本地FIELD_LABELS映射表
+                                    displayLabel = this.FIELD_LABELS[standardFieldName] || this.FIELD_LABELS[fieldName];
+                                    if (!displayLabel) {
+                                        // 最后备用：使用我的字段映射
+                                        displayLabel = this.mapColFieldToDisplayName(fieldName, 'organization') || fieldName;
+                                    }
+                                }
                             }
+                            console.log(`[MessageInfoBarRenderer] 🔍 组织面板字段映射: ${fieldName} -> ${displayLabel}`);
 
                             html += `
                                 <div class="infobar-item">
@@ -3452,6 +3899,29 @@ export class MessageInfoBarRenderer {
                 });
             }
 
+            // 🆕 绑定多行数据选择器事件
+            const rowSelectors = container.querySelectorAll('.infobar-row-selector');
+            rowSelectors.forEach(selector => {
+                selector.addEventListener('change', function() {
+                    const selectedRowIndex = this.value;
+                    const panelKey = this.getAttribute('data-panel');
+                    console.log(`[MessageInfoBarRenderer] 🔄 行选择器变更: 面板=${panelKey}, 行=${selectedRowIndex}`);
+
+                    // 隐藏该面板的所有行详情
+                    const allRowDetails = container.querySelectorAll(`.infobar-row-details[data-panel="${panelKey}"]`);
+                    allRowDetails.forEach(detail => {
+                        detail.style.display = 'none';
+                    });
+
+                    // 显示选中的行详情
+                    const selectedDetail = container.querySelector(`.infobar-row-details[data-panel="${panelKey}"][data-row-index="${selectedRowIndex}"]`);
+                    if (selectedDetail) {
+                        selectedDetail.style.display = 'block';
+                        console.log(`[MessageInfoBarRenderer] ✅ 已切换到行: 面板=${panelKey}, 行=${selectedRowIndex}`);
+                    }
+                });
+            });
+
             console.log('[MessageInfoBarRenderer] ✅ 信息栏事件绑定完成');
 
         } catch (error) {
@@ -3850,7 +4320,21 @@ export class MessageInfoBarRenderer {
      */
     getFieldDisplayNameFromConfig(panelKey, fieldName, panelConfig) {
         try {
-            // 首先尝试从传入的panelConfig中获取
+            // 🔧 新增：对于自定义面板的col_X字段，需要特殊处理
+            if (panelConfig && panelConfig.subItems && fieldName.match(/^col_(\d+)$/)) {
+                const colMatch = fieldName.match(/^col_(\d+)$/);
+                if (colMatch) {
+                    const colIndex = parseInt(colMatch[1]) - 1; // col_1对应索引0
+                    const subItem = panelConfig.subItems[colIndex];
+                    if (subItem && (subItem.displayName || subItem.name)) {
+                        const displayName = subItem.displayName || subItem.name;
+                        console.log(`[MessageInfoBarRenderer] 🎯 自定义面板col_映射: ${fieldName} -> ${displayName} (面板: ${panelKey})`);
+                        return displayName;
+                    }
+                }
+            }
+
+            // 首先尝试从传入的panelConfig中获取（原有逻辑）
             if (panelConfig && panelConfig.subItems) {
                 const subItem = panelConfig.subItems.find(item =>
                     item.name === fieldName || item.key === fieldName
@@ -3993,8 +4477,142 @@ export class MessageInfoBarRenderer {
                 return '';
             }
 
+            // 🆕 优化：处理多行数据的选择框功能（与基础面板保持一致）
+            if (Array.isArray(panelData)) {
+                console.log(`[MessageInfoBarRenderer] 🔧 自定义面板数组处理: ${panelId}, 行数: ${panelData.length}`);
+                if (panelData.length === 0) {
+                    return '';
+                }
+
+                // 🆕 多行数据：自动添加选择框（与基础面板逻辑一致）
+                if (panelData.length > 1) {
+                    console.log(`[MessageInfoBarRenderer] 🆕 检测到自定义面板多行数据，生成选择框: ${panelId}`);
+                    return this.renderMultiRowCustomPanel(panelId, panelData, panelConfig, globalDefaultCollapsed);
+                }
+
+                // 单行数据：直接使用第一行
+                const processedData = panelData[0];
+                console.log(`[MessageInfoBarRenderer] 🔧 自定义面板单行数据，取第一行:`, processedData);
+                return this.renderSingleRowCustomPanel(panelId, processedData, panelConfig, globalDefaultCollapsed);
+            } else {
+                console.log(`[MessageInfoBarRenderer] 🔧 处理对象格式自定义面板数据: ${panelId}`);
+                return this.renderSingleRowCustomPanel(panelId, panelData, panelConfig, globalDefaultCollapsed);
+            }
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 渲染自定义面板失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 🆕 渲染多行数据自定义面板（带选择框）
+     */
+    renderMultiRowCustomPanel(panelId, panelDataArray, panelConfig, globalDefaultCollapsed = false) {
+        try {
+            console.log(`[MessageInfoBarRenderer] 🆕 开始渲染多行数据自定义面板: ${panelId}, 行数: ${panelDataArray.length}`);
+
+            const panelName = panelConfig?.name || panelId;
+            const panelIcon = panelConfig?.icon || 'fa-solid fa-info';
+            const defaultCollapsed = globalDefaultCollapsed || panelConfig?.defaultCollapsed || false;
+
+            let html = `
+                <div class="infobar-panel" data-panel="${panelId}">
+                    <div class="infobar-panel-header">
+                        <div class="infobar-panel-title">
+                            <span class="infobar-panel-arrow">${defaultCollapsed ? '▶' : '▼'}</span>
+                            <i class="${panelIcon}"></i> ${this.escapeHtml(panelName)}
+                        </div>
+                    </div>
+                    <div class="infobar-panel-content ${defaultCollapsed ? '' : 'expanded'}"
+                         style="display: ${defaultCollapsed ? 'none' : 'block'};">
+            `;
+
+            // 🆕 添加行选择器
+            html += '<div class="infobar-row-selector-wrapper">';
+            html += `<select class="infobar-row-selector" data-panel="${panelId}">`;
+
+            // 生成选择器选项（使用每行第一列数据作为标题）
+            panelDataArray.forEach((rowData, index) => {
+                const rowTitle = this.generateRowTitle(rowData, index);
+                console.log(`[MessageInfoBarRenderer] 🔍 生成自定义面板行标题 ${index}: ${rowTitle}`);
+                html += `<option value="${index}" ${index === 0 ? 'selected' : ''}>${this.escapeHtml(rowTitle)}</option>`;
+            });
+
+            html += '</select></div>';
+
+            // 🆕 为每行数据创建详情面板
+            html += '<div class="infobar-row-details-container">';
+
+            panelDataArray.forEach((rowData, index) => {
+                const displayStyle = index === 0 ? 'block' : 'none';
+                html += `<div class="infobar-row-details" data-panel="${panelId}" data-row-index="${index}" style="display: ${displayStyle};">`;
+
+                // 渲染这一行的数据
+                const rowHtml = this.renderCustomRowData(panelId, rowData, panelConfig);
+                html += rowHtml;
+
+                html += '</div>';
+            });
+
+            html += '</div>'; // 结束 row-details-container
+            html += '</div>'; // 结束 panel-content
+            html += '</div>'; // 结束 panel
+
+            console.log(`[MessageInfoBarRenderer] ✅ 多行数据自定义面板渲染完成: ${panelId}`);
+            return html;
+
+        } catch (error) {
+            console.error(`[MessageInfoBarRenderer] ❌ 渲染多行自定义面板失败: ${panelId}`, error);
+            return '';
+        }
+    }
+
+    /**
+     * 🆕 渲染单行数据自定义面板
+     */
+    renderSingleRowCustomPanel(panelId, panelData, panelConfig, globalDefaultCollapsed = false) {
+        try {
+            // 🔧 特殊处理信息面板的数组数据
+            let processedData;
+            const isInfoPanel = this.isInfoPanel(panelId, panelConfig);
+            if (isInfoPanel && Array.isArray(panelData)) {
+                console.log('[MessageInfoBarRenderer] 🔍 开始处理自定义信息面板数组数据');
+                console.log('[MessageInfoBarRenderer] 🔍 信息面板数组内容:', panelData);
+
+                // 将数组数据转换为对象格式
+                const convertedData = {};
+                panelData.forEach((item, index) => {
+                    console.log(`[MessageInfoBarRenderer] 🔧 处理数组项${index}:`, item, typeof item);
+
+                    if (item && typeof item === 'object') {
+                        // 如果数组元素是对象，将其字段合并到convertedData中
+                        console.log(`[MessageInfoBarRenderer] 🔧 展开对象，键:`, Object.keys(item));
+                        Object.entries(item).forEach(([key, value]) => {
+                            if (!this.SYSTEM_FIELDS.has(key)) {
+                                console.log(`[MessageInfoBarRenderer] 🔧 添加字段: ${key} = ${value}`);
+                                convertedData[key] = value;
+                            } else {
+                                console.log(`[MessageInfoBarRenderer] 🔧 跳过系统字段: ${key}`);
+                            }
+                        });
+                    } else {
+                        // 如果数组元素是基本类型，使用索引作为字段名
+                        const fieldMapping = this.mapColFieldToDisplayName(`col_${index + 1}`, panelId);
+                        const fieldName = fieldMapping || `信息${index + 1}`;
+                        console.log(`[MessageInfoBarRenderer] 🔧 添加基本类型: ${fieldName} = ${item}`);
+                        convertedData[fieldName] = item;
+                    }
+                });
+
+                console.log('[MessageInfoBarRenderer] 🔧 信息面板转换后数据:', convertedData);
+                processedData = convertedData;
+            } else {
+                processedData = panelData;
+            }
+
             // 过滤系统字段
-            const filteredData = this.filterSystemFields(panelData);
+            const filteredData = this.filterSystemFields(processedData);
             if (!filteredData || Object.keys(filteredData).length === 0) {
                 return '';
             }
@@ -4016,19 +4634,49 @@ export class MessageInfoBarRenderer {
             `;
 
             // 渲染面板项目
+            const rowHtml = this.renderCustomRowData(panelId, filteredData, panelConfig);
+            html += rowHtml;
+
+            html += `</div></div>`;
+            return html;
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 渲染单行自定义面板失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 🆕 渲染自定义面板单行数据内容
+     */
+    renderCustomRowData(panelId, rowData, panelConfig) {
+        try {
+            const filteredData = this.filterSystemFields(rowData);
+            if (!filteredData || Object.keys(filteredData).length === 0) {
+                return '<div class="infobar-empty">暂无数据</div>';
+            }
+
+            let html = '';
             Object.entries(filteredData).forEach(([fieldName, value]) => {
                 if (this.isValidDataValue(value)) {
-                    // 对于自定义面板，优先使用字段映射，然后尝试从配置中获取字段显示名
-                    let displayLabel = this.FIELD_LABELS[fieldName] || fieldName;
+                    // 🔧 修复：对于自定义面板，使用完整的字段映射逻辑
+                    let displayLabel = this.getFieldDisplayNameFromConfig(panelId, fieldName, panelConfig);
+                    if (!displayLabel) {
+                        // 🔧 新增：先将col_X格式转换为系统期望的字段名
+                        const standardFieldName = this.convertColFieldToStandardName(fieldName, panelId);
 
-                    if (panelConfig && panelConfig.subItems) {
-                        const subItem = panelConfig.subItems.find(item =>
-                            item.name === fieldName || item.key === fieldName
-                        );
-                        if (subItem && subItem.displayName) {
-                            displayLabel = subItem.displayName;
+                        // 优先使用InfoBarSettings的完整映射表（使用转换后的字段名）
+                        displayLabel = this.getUnifiedFieldDisplayName(standardFieldName, panelId);
+                        if (!displayLabel) {
+                            // 备用：使用本地FIELD_LABELS映射表
+                            displayLabel = this.FIELD_LABELS[standardFieldName] || this.FIELD_LABELS[fieldName];
+                            if (!displayLabel) {
+                                // 最后备用：使用我的字段映射
+                                displayLabel = this.mapColFieldToDisplayName(fieldName, panelId) || fieldName;
+                            }
                         }
                     }
+                    console.log(`[MessageInfoBarRenderer] 🔍 自定义面板字段映射: ${fieldName} -> ${displayLabel} (面板: ${panelId})`);
 
                     html += `
                         <div class="infobar-item">
@@ -4039,12 +4687,11 @@ export class MessageInfoBarRenderer {
                 }
             });
 
-            html += `</div></div>`;
-            return html;
+            return html || '<div class="infobar-empty">暂无有效数据</div>';
 
         } catch (error) {
-            console.error('[MessageInfoBarRenderer] ❌ 渲染自定义面板失败:', error);
-            return '';
+            console.error('[MessageInfoBarRenderer] ❌ 渲染自定义面板行数据失败:', error);
+            return '<div class="infobar-error">数据渲染失败</div>';
         }
     }
 
@@ -4361,6 +5008,45 @@ export class MessageInfoBarRenderer {
         };
 
         return themes[themeId] || themes['default-dark'];
+    }
+
+    /**
+     * 🔧 判断是否为信息面板（通过面板名称或配置识别）
+     */
+    isInfoPanel(panelKey, panelConfig) {
+        try {
+            // 方法1: 通过面板键识别
+            if (panelKey === 'info') {
+                return true;
+            }
+
+            // 方法2: 通过面板配置识别
+            if (panelConfig && panelConfig.name === '信息') {
+                return true;
+            }
+
+            // 方法3: 通过数据表格配置识别
+            const dataTable = window.SillyTavernInfobar?.modules?.dataTable;
+            if (dataTable) {
+                const enabledPanels = dataTable.getAllEnabledPanels();
+                const infoPanel = enabledPanels.find(panel =>
+                    panel.name === '信息' ||
+                    (panel.key === undefined && panel.name === '信息') ||
+                    panel.key === 'info'
+                );
+
+                if (infoPanel) {
+                    // 如果找到信息面板配置，检查当前面板是否匹配
+                    return (panelKey === infoPanel.key ||
+                           (panelKey === undefined && infoPanel.key === undefined));
+                }
+            }
+
+            return false;
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 判断信息面板失败:', error);
+            return false;
+        }
     }
 
     /**

@@ -120,6 +120,31 @@ export class SummaryPanel {
                         <span class="setting-hint">字</span>
                     </div>
                     
+                    <!-- 🚀 新增：AI记忆总结设置 -->
+                    <div class="setting-group ai-memory-section">
+                        <h5>🧠 AI记忆总结</h5>
+                        <label>
+                            <input type="checkbox" id="ai-memory-enabled" />
+                            启用AI记忆总结
+                        </label>
+                        <span class="setting-hint">使用AI智能分析和总结消息内容</span>
+                    </div>
+
+                    <div class="setting-group ai-memory-options" id="ai-memory-options" style="display: none;">
+                        <label>
+                            <input type="checkbox" id="ai-message-level-summary" />
+                            消息级别总结
+                        </label>
+                        <span class="setting-hint">为每条重要消息生成智能总结</span>
+                    </div>
+
+                    <div class="setting-group ai-memory-options" style="display: none;">
+                        <label for="ai-importance-threshold">重要性阈值：</label>
+                        <input type="range" id="ai-importance-threshold" min="0.1" max="1.0" step="0.1" value="0.6" />
+                        <span class="setting-value" id="ai-importance-value">60%</span>
+                        <span class="setting-hint">只总结重要性超过此阈值的消息</span>
+                    </div>
+
                     <!-- 🔧 新增：自动隐藏楼层设置 -->
                     <div class="setting-group">
                         <label>
@@ -128,7 +153,7 @@ export class SummaryPanel {
                         </label>
                         <span class="setting-hint">自动隐藏已经总结过的楼层内容，减少界面混乱</span>
                     </div>
-                    
+
                     <div class="setting-group" id="auto-hide-threshold-group" style="display: none;">
                         <label for="auto-hide-threshold">保留最新楼层数：</label>
                         <input type="number" id="auto-hide-threshold" min="10" max="200" value="30" />
@@ -148,6 +173,14 @@ export class SummaryPanel {
                 <!-- 总结历史区域 -->
                 <div class="summary-history-section">
                     <h4>📚 总结历史</h4>
+
+                    <!-- 🚀 新增：总结类型筛选 -->
+                    <div class="summary-filter-tabs">
+                        <button class="filter-tab active" data-filter="all">全部</button>
+                        <button class="filter-tab" data-filter="traditional">传统总结</button>
+                        <button class="filter-tab" data-filter="ai_memory">AI记忆</button>
+                    </div>
+
                     <div class="summary-history-list" id="summary-history-list">
                         <div class="no-summaries">暂无总结记录</div>
                     </div>
@@ -402,6 +435,146 @@ export class SummaryPanel {
                 color: var(--SmartThemeBodyColor, #e0e0e0);
                 white-space: pre-wrap;
             }
+
+            /* 🚀 AI记忆总结样式 */
+            .ai-memory-section h5 {
+                margin: 0 0 10px 0;
+                color: #4CAF50;
+                font-size: 14px;
+                font-weight: 600;
+            }
+
+            .ai-memory-options {
+                margin-left: 20px;
+                border-left: 2px solid #4CAF50;
+                padding-left: 15px;
+            }
+
+            .summary-filter-tabs {
+                display: flex;
+                margin-bottom: 15px;
+                border-bottom: 1px solid var(--SmartThemeBorderColor, #333);
+            }
+
+            .filter-tab {
+                background: none;
+                border: none;
+                padding: 8px 16px;
+                color: var(--SmartThemeQuoteColor, #888);
+                cursor: pointer;
+                border-bottom: 2px solid transparent;
+                transition: all 0.2s;
+            }
+
+            .filter-tab.active {
+                color: var(--SmartThemeEmColor, #ff6b6b);
+                border-bottom-color: var(--SmartThemeEmColor, #ff6b6b);
+            }
+
+            .filter-tab:hover {
+                color: var(--SmartThemeEmColor, #ff6b6b);
+            }
+
+            .summary-item.ai-memory {
+                border-left: 4px solid #4CAF50;
+            }
+
+            .summary-item.traditional {
+                border-left: 4px solid #2196F3;
+            }
+
+            .summary-item-type {
+                display: inline-block;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 600;
+                text-transform: uppercase;
+                margin-left: 8px;
+            }
+
+            .summary-item-type.ai-memory {
+                background: #4CAF50;
+                color: white;
+            }
+
+            .summary-item-type.traditional {
+                background: #2196F3;
+                color: white;
+            }
+
+            /* 🚀 增强的总结历史样式 */
+            .summary-item-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 5px;
+            }
+
+            .summary-item-badge {
+                flex-shrink: 0;
+            }
+
+            .badge {
+                display: inline-block;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 10px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .ai-memory-badge {
+                background: linear-gradient(135deg, #4CAF50, #45a049);
+                color: white;
+                box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+            }
+
+            .traditional-badge {
+                background: linear-gradient(135deg, #2196F3, #1976D2);
+                color: white;
+                box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3);
+            }
+
+            .summary-item-preview {
+                font-size: 12px;
+                color: var(--SmartThemeQuoteColor, #888);
+                margin-top: 5px;
+                line-height: 1.4;
+                max-height: 40px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+            }
+
+            .ai-memory-item {
+                border-left: 4px solid #4CAF50;
+                background: linear-gradient(90deg, rgba(76, 175, 80, 0.05), transparent);
+            }
+
+            .traditional-item {
+                border-left: 4px solid #2196F3;
+                background: linear-gradient(90deg, rgba(33, 150, 243, 0.05), transparent);
+            }
+
+            .ai-memory-item:hover {
+                background: linear-gradient(90deg, rgba(76, 175, 80, 0.1), transparent);
+                border-left-color: #45a049;
+            }
+
+            .traditional-item:hover {
+                background: linear-gradient(90deg, rgba(33, 150, 243, 0.1), transparent);
+                border-left-color: #1976D2;
+            }
+
+            .setting-value {
+                margin-left: 8px;
+                color: var(--SmartThemeEmColor, #ff6b6b);
+                font-weight: 600;
+            }
         `;
         
         document.head.appendChild(style);
@@ -445,6 +618,38 @@ export class SummaryPanel {
             });
         }
         
+        // 🚀 新增：AI记忆总结复选框
+        const aiMemoryEnabledCheckbox = this.panel.querySelector('#ai-memory-enabled');
+        if (aiMemoryEnabledCheckbox) {
+            aiMemoryEnabledCheckbox.addEventListener('change', (e) => {
+                this.handleAIMemoryEnabledChange(e.target.checked);
+            });
+        }
+
+        // 🚀 新增：消息级别总结复选框
+        const aiMessageLevelCheckbox = this.panel.querySelector('#ai-message-level-summary');
+        if (aiMessageLevelCheckbox) {
+            aiMessageLevelCheckbox.addEventListener('change', (e) => {
+                this.handleAIMessageLevelChange(e.target.checked);
+            });
+        }
+
+        // 🚀 新增：重要性阈值滑块
+        const aiImportanceThreshold = this.panel.querySelector('#ai-importance-threshold');
+        if (aiImportanceThreshold) {
+            aiImportanceThreshold.addEventListener('input', (e) => {
+                this.handleAIImportanceThresholdChange(e.target.value);
+            });
+        }
+
+        // 🚀 新增：总结筛选标签
+        const filterTabs = this.panel.querySelectorAll('.filter-tab');
+        filterTabs.forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                this.handleFilterTabClick(e.target.dataset.filter);
+            });
+        });
+
         // 🔧 新增：自动隐藏楼层复选框
         const autoHideEnabledCheckbox = this.panel.querySelector('#auto-hide-enabled');
         if (autoHideEnabledCheckbox) {
@@ -452,7 +657,7 @@ export class SummaryPanel {
                 this.handleAutoHideEnabledChange(e.target.checked);
             });
         }
-        
+
         // 关闭内容区域
         const closeContentBtn = this.panel.querySelector('#close-content-btn');
         if (closeContentBtn) {
@@ -495,7 +700,17 @@ export class SummaryPanel {
             this.eventSystem.on('chat:changed', (data) => {
                 this.handleChatChanged(data);
             });
-            
+
+            // 🚀 新增：监听AI总结创建事件
+            this.eventSystem.on('ai-summary:created', (data) => {
+                this.handleAISummaryCreated(data);
+            });
+
+            // 🚀 新增：监听AI记忆总结器初始化事件
+            this.eventSystem.on('ai-memory-summarizer:initialized', (data) => {
+                this.handleAIMemorySummarizerInitialized(data);
+            });
+
             console.log('[SummaryPanel] ✅ 事件系统监听器绑定完成');
             
         } catch (error) {
@@ -1070,15 +1285,26 @@ export class SummaryPanel {
         try {
             console.log('[SummaryPanel] 📄 显示总结内容:', summaryId);
 
-            if (!this.unifiedDataCore) return;
+            if (!this.summaryManager) {
+                console.warn('[SummaryPanel] ⚠️ SummaryManager未初始化');
+                return;
+            }
 
-            const summaryHistory = await this.unifiedDataCore.getData('summary_history') || [];
-            const summary = summaryHistory.find(s => s.id === summaryId);
+            // 🔧 修复：使用增强的总结历史获取方法，支持AI记忆总结
+            const allSummaries = await this.summaryManager.getEnhancedSummaryHistory();
+            const summary = allSummaries.find(s => s.id === summaryId);
 
             if (!summary) {
                 console.warn('[SummaryPanel] ⚠️ 未找到总结记录:', summaryId);
                 return;
             }
+
+            console.log('[SummaryPanel] 📋 找到总结记录:', {
+                id: summary.id,
+                type: summary.type,
+                source: summary.source,
+                hasContent: !!summary.content
+            });
 
             // 显示内容区域
             const contentSection = this.panel.querySelector('#summary-content-section');
@@ -1087,11 +1313,18 @@ export class SummaryPanel {
             const bodyElement = this.panel.querySelector('#summary-content-body');
 
             if (contentSection && titleElement && dateElement && bodyElement) {
-                titleElement.textContent = this.formatSummaryTitle(summary);
+                // 🔧 修复：使用增强的标题格式化方法
+                titleElement.textContent = this.formatEnhancedSummaryTitle(summary);
                 dateElement.textContent = this.formatDate(summary.timestamp);
                 bodyElement.textContent = summary.content || '暂无内容';
 
+                // 🔧 新增：添加总结类型徽章
+                const badgeHtml = this.getSummaryTypeBadge(summary);
+                titleElement.innerHTML = `${this.formatEnhancedSummaryTitle(summary)} ${badgeHtml}`;
+
                 contentSection.style.display = 'block';
+
+                console.log('[SummaryPanel] ✅ 总结内容已显示');
 
                 // 滚动到内容区域
                 contentSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1214,5 +1447,294 @@ export class SummaryPanel {
             errorCount: this.errorCount,
             panelExists: !!this.panel
         };
+    }
+
+    /**
+     * 🚀 处理AI记忆总结启用状态变化
+     */
+    handleAIMemoryEnabledChange(enabled) {
+        try {
+            console.log('[SummaryPanel] 🧠 AI记忆总结启用状态变化:', enabled);
+
+            // 显示/隐藏AI记忆选项
+            const aiMemoryOptions = this.panel.querySelectorAll('.ai-memory-options');
+            aiMemoryOptions.forEach(option => {
+                option.style.display = enabled ? 'block' : 'none';
+            });
+
+            // 更新AI记忆总结器设置
+            if (this.summaryManager && this.summaryManager.aiMemorySummarizer) {
+                this.summaryManager.aiMemorySummarizer.updateSettings({
+                    enabled: enabled
+                });
+            }
+
+            this.showNotification(
+                enabled ? '✅ AI记忆总结已启用' : '❌ AI记忆总结已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 处理AI记忆总结启用状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 处理消息级别总结变化
+     */
+    handleAIMessageLevelChange(enabled) {
+        try {
+            console.log('[SummaryPanel] 📝 消息级别总结状态变化:', enabled);
+
+            // 更新AI记忆总结器设置
+            if (this.summaryManager && this.summaryManager.aiMemorySummarizer) {
+                this.summaryManager.aiMemorySummarizer.updateSettings({
+                    messageLevelSummary: enabled
+                });
+            }
+
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 处理消息级别总结变化失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 处理重要性阈值变化
+     */
+    handleAIImportanceThresholdChange(value) {
+        try {
+            console.log('[SummaryPanel] 🎯 重要性阈值变化:', value);
+
+            // 更新显示值
+            const valueDisplay = this.panel.querySelector('#ai-importance-value');
+            if (valueDisplay) {
+                valueDisplay.textContent = `${Math.round(value * 100)}%`;
+            }
+
+            // 更新AI记忆总结器设置
+            if (this.summaryManager && this.summaryManager.aiMemorySummarizer) {
+                this.summaryManager.aiMemorySummarizer.updateSettings({
+                    importanceThreshold: parseFloat(value)
+                });
+            }
+
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 处理重要性阈值变化失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 处理筛选标签点击
+     */
+    handleFilterTabClick(filter) {
+        try {
+            console.log('[SummaryPanel] 🔍 筛选标签点击:', filter);
+
+            // 更新标签状态
+            const filterTabs = this.panel.querySelectorAll('.filter-tab');
+            filterTabs.forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.filter === filter);
+            });
+
+            // 筛选总结历史
+            this.filterSummaryHistory(filter);
+
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 处理筛选标签点击失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 筛选总结历史
+     */
+    async filterSummaryHistory(filter) {
+        try {
+            console.log('[SummaryPanel] 🔍 筛选总结历史:', filter);
+
+            if (!this.summaryManager) return;
+
+            // 获取增强的总结历史
+            const allSummaries = await this.summaryManager.getEnhancedSummaryHistory();
+
+            // 根据筛选条件过滤
+            let filteredSummaries = allSummaries;
+            if (filter !== 'all') {
+                filteredSummaries = allSummaries.filter(summary => {
+                    // 根据不同的筛选条件进行过滤
+                    switch (filter) {
+                        case 'traditional':
+                            return summary.source === 'traditional' || summary.type === 'small' || summary.type === 'large' || summary.type === 'manual' || summary.type === 'auto';
+                        case 'ai_memory':
+                            return summary.source === 'ai_memory_summarizer' || summary.type === 'ai_memory';
+                        default:
+                            return true;
+                    }
+                });
+            }
+
+            // 更新显示
+            this.displaySummaryHistory(filteredSummaries);
+
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 筛选总结历史失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 显示总结历史（支持筛选后的结果）
+     */
+    displaySummaryHistory(summaries) {
+        try {
+            console.log('[SummaryPanel] 📋 显示总结历史，共', summaries.length, '条记录');
+
+            const historyList = this.panel.querySelector('#summary-history-list');
+            if (!historyList) return;
+
+            if (!summaries || summaries.length === 0) {
+                historyList.innerHTML = '<div class="no-summaries">暂无符合条件的总结记录</div>';
+                return;
+            }
+
+            // 按时间倒序排列
+            const sortedSummaries = summaries.sort((a, b) => b.timestamp - a.timestamp);
+
+            historyList.innerHTML = sortedSummaries.map(summary => `
+                <div class="summary-item ${this.getSummaryItemClass(summary)}" data-summary-id="${summary.id}">
+                    <div class="summary-item-header">
+                        <div class="summary-item-title">${this.formatEnhancedSummaryTitle(summary)}</div>
+                        <div class="summary-item-badge">${this.getSummaryTypeBadge(summary)}</div>
+                    </div>
+                    <div class="summary-item-date">${this.formatDate(summary.timestamp)}</div>
+                    ${summary.preview ? `<div class="summary-item-preview">${summary.preview}</div>` : ''}
+                </div>
+            `).join('');
+
+            // 绑定点击事件
+            historyList.querySelectorAll('.summary-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    const summaryId = e.currentTarget.getAttribute('data-summary-id');
+                    this.showSummaryContent(summaryId);
+                });
+            });
+
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 显示总结历史失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 获取总结项目的CSS类
+     */
+    getSummaryItemClass(summary) {
+        const baseClass = 'summary-item';
+        const sourceClass = summary.source === 'ai_memory_summarizer' ? 'ai-memory-item' : 'traditional-item';
+        return `${baseClass} ${sourceClass}`;
+    }
+
+    /**
+     * 🚀 格式化增强的总结标题
+     */
+    formatEnhancedSummaryTitle(summary) {
+        // 如果是AI记忆总结
+        if (summary.source === 'ai_memory_summarizer') {
+            return summary.title || `AI记忆总结 (${summary.messageCount || 0}条消息)`;
+        }
+
+        // 传统总结
+        const typeMap = {
+            'small': '小总结',
+            'large': '大总结',
+            'manual': '手动总结',
+            'auto': '自动总结'
+        };
+
+        const typeText = typeMap[summary.type] || '总结';
+        const messageRange = summary.messageRange ?
+            ` (${summary.messageRange.start}-${summary.messageRange.end})` : '';
+
+        return `${typeText}${messageRange}`;
+    }
+
+    /**
+     * 🚀 获取总结类型徽章
+     */
+    getSummaryTypeBadge(summary) {
+        if (summary.source === 'ai_memory_summarizer') {
+            return '<span class="badge ai-memory-badge">🧠 AI记忆</span>';
+        } else {
+            return '<span class="badge traditional-badge">📝 传统</span>';
+        }
+    }
+
+    /**
+     * 🚀 处理AI总结创建事件
+     */
+    handleAISummaryCreated(data) {
+        try {
+            console.log('[SummaryPanel] 🧠 AI总结创建事件:', data);
+
+            this.showNotification('🧠 AI记忆总结已生成', 'success');
+
+            // 刷新总结历史
+            this.refreshSummaryHistory();
+
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 处理AI总结创建事件失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 处理AI记忆总结器初始化事件
+     */
+    handleAIMemorySummarizerInitialized(data) {
+        try {
+            console.log('[SummaryPanel] 🧠 AI记忆总结器初始化完成:', data);
+
+            // 加载AI记忆总结器的设置到UI
+            this.loadAIMemorySettings();
+
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 处理AI记忆总结器初始化事件失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 加载AI记忆设置到UI
+     */
+    async loadAIMemorySettings() {
+        try {
+            console.log('[SummaryPanel] 📥 加载AI记忆设置到UI...');
+
+            if (!this.summaryManager || !this.summaryManager.aiMemorySummarizer) return;
+
+            const aiMemorySummarizer = this.summaryManager.aiMemorySummarizer;
+            const settings = aiMemorySummarizer.settings;
+
+            // 设置AI记忆总结启用状态
+            const aiMemoryEnabledCheckbox = this.panel.querySelector('#ai-memory-enabled');
+            if (aiMemoryEnabledCheckbox) {
+                aiMemoryEnabledCheckbox.checked = settings.enabled;
+                this.handleAIMemoryEnabledChange(settings.enabled);
+            }
+
+            // 设置消息级别总结
+            const aiMessageLevelCheckbox = this.panel.querySelector('#ai-message-level-summary');
+            if (aiMessageLevelCheckbox) {
+                aiMessageLevelCheckbox.checked = settings.messageLevelSummary;
+            }
+
+            // 设置重要性阈值
+            const aiImportanceThreshold = this.panel.querySelector('#ai-importance-threshold');
+            const aiImportanceValue = this.panel.querySelector('#ai-importance-value');
+            if (aiImportanceThreshold && aiImportanceValue) {
+                aiImportanceThreshold.value = settings.importanceThreshold;
+                aiImportanceValue.textContent = `${Math.round(settings.importanceThreshold * 100)}%`;
+            }
+
+            console.log('[SummaryPanel] ✅ AI记忆设置加载完成');
+
+        } catch (error) {
+            console.error('[SummaryPanel] ❌ 加载AI记忆设置失败:', error);
+        }
     }
 }

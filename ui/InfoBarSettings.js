@@ -418,6 +418,10 @@ export class InfoBarSettings {
             // 注意：事件绑定已在createUI()中的bindNewEvents()完成，避免重复绑定
 
             this.initialized = true;
+
+            // 🔧 新增：预生成字段映射缓存，避免运行时重复生成
+            this.preloadCompleteDisplayNameMapping();
+
             console.log('[InfoBarSettings] ✅ 设置界面初始化完成');
 
         } catch (error) {
@@ -1035,6 +1039,19 @@ export class InfoBarSettings {
                 }
             });
 
+            // 🆕 破甲提示词文本框事件
+            this.modal.addEventListener('input', (e) => {
+                if (e.target.id === 'armor-breaking-prompt') {
+                    this.updateArmorBreakingStats();
+                }
+            });
+
+            this.modal.addEventListener('keyup', (e) => {
+                if (e.target.id === 'armor-breaking-prompt') {
+                    this.updateArmorBreakingStats();
+                }
+            });
+
             // 按钮点击事件
             this.modal.addEventListener('click', (e) => {
                 // 🔧 修复：使用closest查找具有data-action属性的父元素，解决按钮内子元素点击问题
@@ -1066,6 +1083,11 @@ export class InfoBarSettings {
                 if (e.target.id === 'test-connection-btn') {
                     this.testConnection();
                 }
+
+            // 🆕 破甲提示词文本框字符统计
+            if (e.target.id === 'armor-breaking-prompt') {
+                this.updateArmorBreakingStats();
+            }
 
                 // 主题预览卡片点击事件
                 const themeCard = e.target.closest('.theme-preview-card');
@@ -2429,6 +2451,9 @@ export class InfoBarSettings {
 
             // 触发 SillyTavern 保存设置
             context.saveSettingsDebounced();
+
+            // 🔧 新增：清理缓存，确保下次获取映射时重新生成
+            this._cachedCompleteMapping = null;
 
             console.log('[InfoBarSettings] ✅ 自定义面板已保存:', panel.id);
             return true;
@@ -4691,6 +4716,15 @@ export class InfoBarSettings {
                 }
             }
 
+            // 🆕 特殊处理破甲提示词开关
+            if (name === 'apiConfig.enableArmorBreaking') {
+                const armorBreakingSection = this.modal.querySelector('.armor-breaking-config-section');
+                if (armorBreakingSection) {
+                    armorBreakingSection.style.display = checked ? 'block' : 'none';
+                    console.log(`[InfoBarSettings] 🛡️ 破甲提示词配置区域${checked ? '显示' : '隐藏'}`);
+                }
+            }
+
             // 如果是主开关，控制相关子项
             if (name && name.includes('.enabled')) {
                 const baseName = name.replace('.enabled', '');
@@ -4844,6 +4878,32 @@ export class InfoBarSettings {
                             <label for="api-include-worldbook" class="checkbox-label">读取世界书</label>
                         </div>
                         <small>启用时将SillyTavern世界书内容注入到自定义API请求中</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="api-enable-armor-breaking" name="apiConfig.enableArmorBreaking" />
+                            <label for="api-enable-armor-breaking" class="checkbox-label">启用破甲提示词</label>
+                        </div>
+                        <small>启用后在智能提示词顶部显示破甲提示词，用于突破AI限制</small>
+                    </div>
+                </div>
+
+                <!-- 🆕 破甲提示词配置区域 -->
+                <div class="settings-group armor-breaking-config-section" style="display: none;">
+                    <h4>🛡️ 破甲提示词配置</h4>
+                    <div class="form-group">
+                        <label>破甲提示词内容</label>
+                        <textarea id="armor-breaking-prompt" name="apiConfig.armorBreakingPrompt"
+                                  rows="6"
+                                  placeholder="请输入破甲提示词内容，将在智能提示词顶部显示..."
+                                  style="width: 100%; min-height: 120px; resize: vertical; font-family: monospace; font-size: 13px;"></textarea>
+                        <small>此提示词将在智能提示词的最顶部显示，用于突破AI的某些限制。请谨慎使用。</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="armor-breaking-stats">
+                            <span class="char-count">字符数: <span id="armor-breaking-char-count">0</span></span>
+                            <span class="word-count">单词数: <span id="armor-breaking-word-count">0</span></span>
+                        </div>
                     </div>
                 </div>
 
@@ -5131,6 +5191,215 @@ export class InfoBarSettings {
                             </div>
                         </div>
 
+                        <!-- 🚀 新增：AI记忆总结设置 -->
+                        <div class="setting-row ai-memory-section">
+                            <h5 style="color: #4CAF50; margin: 0 0 10px 0; font-size: 14px; font-weight: 600;">🧠 AI记忆总结</h5>
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-ai-memory-enabled" />
+                                    <span class="checkbox-text">启用AI记忆总结</span>
+                                </label>
+                                <div class="setting-hint">使用AI智能分析和总结消息内容</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row ai-memory-options" id="content-ai-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #4CAF50; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-ai-message-level-summary" />
+                                    <span class="checkbox-text">消息级别总结</span>
+                                </label>
+                                <div class="setting-hint">为每条重要消息生成智能总结</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row ai-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #4CAF50; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label" for="content-ai-importance-threshold">重要性阈值</label>
+                                <div class="input-group">
+                                    <input type="range" id="content-ai-importance-threshold" min="0.1" max="1.0" step="0.1" value="0.6" />
+                                    <span class="input-unit" id="content-ai-importance-value">60%</span>
+                                </div>
+                                <div class="setting-hint">只总结重要性超过此阈值的消息</div>
+                            </div>
+                        </div>
+
+                        <!-- 🔍 新增：向量化记忆检索设置 -->
+                        <div class="setting-row vectorized-memory-section">
+                            <h5 style="color: #2196F3; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🔍 语义搜索</h5>
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-vectorized-memory-enabled" />
+                                    <span class="checkbox-text">启用语义搜索</span>
+                                </label>
+                                <div class="setting-hint">使用向量化技术进行智能语义搜索</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row vectorized-memory-options" id="content-vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label" for="content-vector-engine">向量化引擎</label>
+                                <select id="content-vector-engine" class="setting-select">
+                                    <option value="transformers">Transformers.js (本地)</option>
+                                    <option value="openai">OpenAI (在线)</option>
+                                </select>
+                                <div class="setting-hint">选择向量化引擎类型</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label" for="content-similarity-threshold">相似度阈值</label>
+                                <div class="input-group">
+                                    <input type="range" id="content-similarity-threshold" min="0.1" max="1.0" step="0.05" value="0.7" />
+                                    <span class="input-unit" id="content-similarity-value">70%</span>
+                                </div>
+                                <div class="setting-hint">语义搜索的最低相似度要求</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label" for="content-max-search-results">最大搜索结果</label>
+                                <div class="input-group">
+                                    <input type="number" id="content-max-search-results" min="5" max="50" value="10" />
+                                    <span class="input-unit">个结果</span>
+                                </div>
+                                <div class="setting-hint">语义搜索返回的最大结果数量</div>
+                            </div>
+                        </div>
+
+                        <!-- 🧠 新增：深度记忆管理设置 -->
+                        <div class="setting-row deep-memory-section">
+                            <h5 style="color: #9C27B0; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🧠 深度记忆管理</h5>
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-deep-memory-enabled" />
+                                    <span class="checkbox-text">启用深度记忆管理</span>
+                                </label>
+                                <div class="setting-hint">基于认知心理学的四层记忆架构管理</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row deep-memory-options" id="content-deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-auto-memory-migration" />
+                                    <span class="checkbox-text">自动记忆迁移</span>
+                                </label>
+                                <div class="setting-hint">根据重要性自动在记忆层级间迁移</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label" for="content-memory-importance-threshold">记忆重要性阈值</label>
+                                <div class="input-group">
+                                    <input type="range" id="content-memory-importance-threshold" min="0.1" max="1.0" step="0.05" value="0.6" />
+                                    <span class="input-unit" id="content-memory-importance-value">60%</span>
+                                </div>
+                                <div class="setting-hint">短期记忆升级为长期记忆的重要性阈值</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-memory-conflict-resolution" />
+                                    <span class="checkbox-text">记忆冲突解决</span>
+                                </label>
+                                <div class="setting-hint">自动检测和解决矛盾的记忆内容</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label" for="content-memory-capacity">记忆容量设置</label>
+                                <div class="memory-capacity-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                                    <div>
+                                        <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">感知记忆</label>
+                                        <input type="number" id="content-sensory-capacity" min="50" max="500" value="100" style="width: 100%;" />
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">短期记忆</label>
+                                        <input type="number" id="content-short-term-capacity" min="200" max="2000" value="500" style="width: 100%;" />
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">长期记忆</label>
+                                        <input type="number" id="content-long-term-capacity" min="1000" max="10000" value="5000" style="width: 100%;" />
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">深度归档</label>
+                                        <input type="number" id="content-deep-archive-capacity" min="10000" max="100000" value="50000" style="width: 100%;" />
+                                    </div>
+                                </div>
+                                <div class="setting-hint">各记忆层级的最大容量设置</div>
+                            </div>
+                        </div>
+
+                        <!-- 🤖 新增：智能记忆分类器设置 -->
+                        <div class="setting-row intelligent-classifier-section">
+                            <h5 style="color: #FF5722; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🤖 智能记忆分类器</h5>
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-intelligent-classifier-enabled" />
+                                    <span class="checkbox-text">启用智能记忆分类器</span>
+                                </label>
+                                <div class="setting-hint">AI驱动的智能记忆分类系统</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row intelligent-classifier-options" id="content-intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-semantic-clustering" />
+                                    <span class="checkbox-text">语义聚类分析</span>
+                                </label>
+                                <div class="setting-hint">基于向量空间的语义聚类</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-temporal-pattern-recognition" />
+                                    <span class="checkbox-text">时序模式识别</span>
+                                </label>
+                                <div class="setting-hint">识别记忆的时间模式和周期性</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-importance-prediction" />
+                                    <span class="checkbox-text">重要性预测</span>
+                                </label>
+                                <div class="setting-hint">预测记忆的未来重要性</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label" for="content-classification-confidence-threshold">分类置信度阈值</label>
+                                <div class="input-group">
+                                    <input type="range" id="content-classification-confidence-threshold" min="0.5" max="1.0" step="0.05" value="0.7" />
+                                    <span class="input-unit" id="content-classification-confidence-value">70%</span>
+                                </div>
+                                <div class="setting-hint">分类决策的最低置信度要求</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-adaptive-learning" />
+                                    <span class="checkbox-text">自适应学习</span>
+                                </label>
+                                <div class="setting-hint">从用户反馈中学习和改进</div>
+                            </div>
+                        </div>
+
                         <!-- 🔧 新增：自动隐藏楼层设置 -->
                         <div class="setting-row">
                             <div class="setting-group">
@@ -5166,15 +5435,66 @@ export class InfoBarSettings {
                 <div class="summary-history-container">
                     <div class="history-section">
                         <h4>📚 总结历史</h4>
+
+                        <!-- 🚀 新增：总结类型筛选 -->
+                        <div class="summary-filter-tabs" style="display: flex; margin-bottom: 15px; border-bottom: 1px solid var(--SmartThemeBorderColor, #333);">
+                            <button class="filter-tab active" data-filter="all" style="background: none; border: none; padding: 8px 16px; color: var(--SmartThemeQuoteColor, #888); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;">全部</button>
+                            <button class="filter-tab" data-filter="traditional" style="background: none; border: none; padding: 8px 16px; color: var(--SmartThemeQuoteColor, #888); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;">传统总结</button>
+                            <button class="filter-tab" data-filter="ai_memory" style="background: none; border: none; padding: 8px 16px; color: var(--SmartThemeQuoteColor, #888); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;">AI记忆</button>
+                        </div>
+
                         <div class="history-selector-group">
                             <label class="setting-label" for="content-summary-history-select">选择总结记录</label>
                             <div class="history-select-row">
                                 <select id="content-summary-history-select" class="setting-select summary-history-select">
                                     <option value="">请选择要查看的总结记录</option>
                                 </select>
+                                <button id="content-upload-to-worldbook-btn" class="btn btn-small" title="上传当前总结到世界书" style="background: var(--SmartThemeAccentColor, #4a9eff); margin-right: 4px;">📚 上传</button>
                                 <button id="content-delete-summary-btn" class="btn btn-small" title="删除当前选择的总结">🗑️ 删除</button>
                             </div>
-                            <div class="setting-hint">选择总结记录后，下方将显示详细内容</div>
+                            <div class="setting-hint">选择总结记录后，下方将显示详细内容。可上传到世界书作为剧情记忆</div>
+                        </div>
+
+                        <!-- 🚀 新增：世界书上传配置 -->
+                        <div class="worldbook-upload-config" style="margin-top: 15px; padding: 12px; background: var(--SmartThemeSurfaceColor, #1a1a1a); border: 1px solid var(--SmartThemeBorderColor, #333); border-radius: 6px;">
+                            <h5 style="margin: 0 0 10px 0; color: var(--SmartThemeAccentColor, #4a9eff);">📚 世界书上传设置</h5>
+
+                            <div class="setting-row">
+                                <label class="setting-label" for="worldbook-auto-upload">自动上传新总结</label>
+                                <input type="checkbox" id="worldbook-auto-upload" class="setting-checkbox">
+                                <div class="setting-hint">启用后，新生成的总结将自动上传到世界书</div>
+                            </div>
+
+                            <div class="setting-row">
+                                <label class="setting-label" for="worldbook-entry-format">条目命名格式</label>
+                                <select id="worldbook-entry-format" class="setting-select">
+                                    <option value="auto">自动命名（剧情总结 #1、AI记忆 #1）</option>
+                                    <option value="floor_range">楼层范围（楼层 #1-10）</option>
+                                    <option value="custom">自定义名称</option>
+                                </select>
+                            </div>
+
+                            <div class="setting-row" id="worldbook-custom-name-row" style="display: none;">
+                                <label class="setting-label" for="worldbook-custom-name">自定义条目名称</label>
+                                <input type="text" id="worldbook-custom-name" class="setting-input" placeholder="输入自定义条目名称">
+                            </div>
+
+                            <div class="setting-row">
+                                <label class="setting-label" for="worldbook-add-timestamp">添加时间戳</label>
+                                <input type="checkbox" id="worldbook-add-timestamp" class="setting-checkbox" checked>
+                                <div class="setting-hint">在条目内容中添加生成时间信息</div>
+                            </div>
+
+                            <div class="setting-row">
+                                <label class="setting-label" for="worldbook-use-tags">使用内容标签</label>
+                                <input type="checkbox" id="worldbook-use-tags" class="setting-checkbox" checked>
+                                <div class="setting-hint">为总结内容添加XML标签以便识别类型</div>
+                            </div>
+
+                            <div class="worldbook-batch-actions" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--SmartThemeBorderColor, #333);">
+                                <button id="worldbook-batch-upload-btn" class="btn btn-small" style="background: var(--SmartThemeAccentColor, #4a9eff);">📤 批量上传所有总结</button>
+                                <span class="setting-hint" style="margin-left: 8px;">将当前聊天的所有总结上传到世界书</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -5423,6 +5743,9 @@ export class InfoBarSettings {
 
             // 同步到全局变量
             window.InfoBarCustomPanels = customPanels;
+
+            // 🔧 新增：清理缓存，确保下次获取映射时重新生成
+            this._cachedCompleteMapping = null;
 
             console.log('[InfoBarSettings] ✅ 所有自定义面板配置已保存');
 
@@ -6735,6 +7058,38 @@ export class InfoBarSettings {
         }
 
         current[keys[keys.length - 1]] = value;
+    }
+
+    /**
+     * 🆕 更新破甲提示词统计信息
+     */
+    updateArmorBreakingStats() {
+        try {
+            const textarea = this.modal.querySelector('#armor-breaking-prompt');
+            const charCountSpan = this.modal.querySelector('#armor-breaking-char-count');
+            const wordCountSpan = this.modal.querySelector('#armor-breaking-word-count');
+
+            if (!textarea || !charCountSpan || !wordCountSpan) return;
+
+            const text = textarea.value || '';
+            const charCount = text.length;
+            const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+
+            charCountSpan.textContent = charCount;
+            wordCountSpan.textContent = wordCount;
+
+            // 根据字符数量设置颜色提示
+            if (charCount > 1000) {
+                charCountSpan.style.color = '#ff6b6b'; // 红色警告
+            } else if (charCount > 500) {
+                charCountSpan.style.color = '#ffa726'; // 橙色提醒
+            } else {
+                charCountSpan.style.color = ''; // 默认颜色
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新破甲提示词统计失败:', error);
+        }
     }
 
     /**
@@ -17236,6 +17591,8 @@ interaction: npc0.name="交互对象", npc0.relationship="关系", npc0.mood="�
 
 🌟 **重要说明：您正在使用自定义API模式处理信息栏数据** 🌟
 
+🚨 **严禁生成剧情内容！只能输出数据分析和面板数据！** 🚨
+
 📋 **核心输出要求**：
 **🚨 必须严格按照以下顺序输出，严禁颠倒 🚨**
 
@@ -17307,10 +17664,17 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
 ❌ 错误：使用英文内容或占位符
 ❌ 错误：interaction面板不使用npc前缀 ← 系统崩溃！
 
+🚨🚨🚨 **严禁生成任何剧情内容！** 🚨🚨🚨
+❌ **严禁输出任何故事情节、对话、场景描述**
+❌ **严禁输出任何叙述性文字**
+❌ **只能输出数据分析和XML格式的面板数据**
+❌ **不要写"张凡用手抹去身上的水珠"这类剧情内容**
+
 ✅ **必须使用中文进行思考和数据生成**
 ✅ **必须基于具体剧情生成真实数据**
 ✅ **必须遵循上述输出顺序和格式要求**
-✅ **interaction面板必须使用npc0.前缀格式**`;
+✅ **interaction面板必须使用npc0.前缀格式**
+✅ **只输出数据分析和面板数据，绝不输出剧情内容**`;
 
             console.log('[InfoBarSettings] ✅ 自定义API系统提示词生成完成');
             return systemPrompt;
@@ -17927,7 +18291,18 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
                     const lastMessage = context.chat[context.chat.length - 1];
                     if (lastMessage && !lastMessage.is_user) {
                         console.log('[InfoBarSettings] 📡 触发消息接收事件进行数据解析...');
-                        context.eventSource.emit('message_received', lastMessage);
+
+                        // 🔧 修复：添加短暂延迟，确保消息内容已经被正确更新
+                        setTimeout(() => {
+                            // 重新获取最新消息，确保获取到更新后的内容
+                            const updatedMessage = context.chat[context.chat.length - 1];
+                            if (updatedMessage && !updatedMessage.is_user) {
+                                console.log('[InfoBarSettings] 🔄 延迟触发消息接收事件，确保数据已更新');
+                                console.log('[InfoBarSettings] 📊 消息内容长度:', updatedMessage.mes?.length || 0);
+                                console.log('[InfoBarSettings] 🔍 包含infobar_data:', updatedMessage.mes?.includes('<infobar_data>') || false);
+                                context.eventSource.emit('message_received', updatedMessage);
+                            }
+                        }, 100); // 100ms延迟
                     }
                 }
             } else {
@@ -18168,13 +18543,191 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
                 summaryWordCount.value = settings.summaryWordCount || 300;
             }
 
+            // 🚀 新增：AI记忆总结设置
+            const aiMemoryEnabled = this.modal.querySelector('#content-ai-memory-enabled');
+            if (aiMemoryEnabled && summaryManager.aiMemorySummarizer) {
+                const aiSettings = summaryManager.aiMemorySummarizer.settings;
+                aiMemoryEnabled.checked = aiSettings.enabled || false;
+                this.handleAIMemoryEnabledChange(aiMemoryEnabled.checked);
+            }
+
+            const aiMessageLevelSummary = this.modal.querySelector('#content-ai-message-level-summary');
+            if (aiMessageLevelSummary && summaryManager.aiMemorySummarizer) {
+                const aiSettings = summaryManager.aiMemorySummarizer.settings;
+                aiMessageLevelSummary.checked = aiSettings.messageLevelSummary || false;
+            }
+
+            const aiImportanceThreshold = this.modal.querySelector('#content-ai-importance-threshold');
+            const aiImportanceValue = this.modal.querySelector('#content-ai-importance-value');
+            if (aiImportanceThreshold && aiImportanceValue && summaryManager.aiMemorySummarizer) {
+                const aiSettings = summaryManager.aiMemorySummarizer.settings;
+                aiImportanceThreshold.value = aiSettings.importanceThreshold || 0.6;
+                aiImportanceValue.textContent = `${Math.round((aiSettings.importanceThreshold || 0.6) * 100)}%`;
+            }
+
+            // 🔍 新增：向量化记忆检索设置
+            const vectorizedMemoryEnabled = this.modal.querySelector('#content-vectorized-memory-enabled');
+            if (vectorizedMemoryEnabled && summaryManager.vectorizedMemoryRetrieval) {
+                const vectorSettings = summaryManager.vectorizedMemoryRetrieval.settings;
+                vectorizedMemoryEnabled.checked = vectorSettings.enabled || false;
+                this.handleVectorizedMemoryEnabledChange(vectorizedMemoryEnabled.checked);
+            }
+
+            const vectorEngineSelect = this.modal.querySelector('#content-vector-engine');
+            if (vectorEngineSelect && summaryManager.vectorizedMemoryRetrieval) {
+                const vectorSettings = summaryManager.vectorizedMemoryRetrieval.settings;
+                vectorEngineSelect.value = vectorSettings.vectorEngine || 'transformers';
+            }
+
+            const similarityThreshold = this.modal.querySelector('#content-similarity-threshold');
+            const similarityValue = this.modal.querySelector('#content-similarity-value');
+            if (similarityThreshold && similarityValue && summaryManager.vectorizedMemoryRetrieval) {
+                const vectorSettings = summaryManager.vectorizedMemoryRetrieval.settings;
+                similarityThreshold.value = vectorSettings.similarityThreshold || 0.7;
+                similarityValue.textContent = `${Math.round((vectorSettings.similarityThreshold || 0.7) * 100)}%`;
+            }
+
+            const maxSearchResults = this.modal.querySelector('#content-max-search-results');
+            if (maxSearchResults && summaryManager.vectorizedMemoryRetrieval) {
+                const vectorSettings = summaryManager.vectorizedMemoryRetrieval.settings;
+                maxSearchResults.value = vectorSettings.maxResults || 10;
+            }
+
+            // 🧠 新增：深度记忆管理设置
+            const deepMemoryEnabled = this.modal.querySelector('#content-deep-memory-enabled');
+            if (deepMemoryEnabled) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+                if (deepMemoryManager) {
+                    const deepMemorySettings = deepMemoryManager.settings;
+                    deepMemoryEnabled.checked = deepMemorySettings.enabled || false;
+                    this.handleDeepMemoryEnabledChange(deepMemoryEnabled.checked);
+                }
+            }
+
+            const autoMemoryMigration = this.modal.querySelector('#content-auto-memory-migration');
+            if (autoMemoryMigration) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+                if (deepMemoryManager) {
+                    const deepMemorySettings = deepMemoryManager.settings;
+                    autoMemoryMigration.checked = deepMemorySettings.autoMemoryMigration || false;
+                }
+            }
+
+            const memoryImportanceThreshold = this.modal.querySelector('#content-memory-importance-threshold');
+            const memoryImportanceValue = this.modal.querySelector('#content-memory-importance-value');
+            if (memoryImportanceThreshold && memoryImportanceValue) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+                if (deepMemoryManager) {
+                    const deepMemorySettings = deepMemoryManager.settings;
+                    memoryImportanceThreshold.value = deepMemorySettings.shortTermToLongTermThreshold || 0.6;
+                    memoryImportanceValue.textContent = `${Math.round((deepMemorySettings.shortTermToLongTermThreshold || 0.6) * 100)}%`;
+                }
+            }
+
+            const memoryConflictResolution = this.modal.querySelector('#content-memory-conflict-resolution');
+            if (memoryConflictResolution) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+                if (deepMemoryManager) {
+                    const deepMemorySettings = deepMemoryManager.settings;
+                    memoryConflictResolution.checked = deepMemorySettings.memoryConflictResolution || false;
+                }
+            }
+
+            // 记忆容量设置
+            const capacityInputs = {
+                'content-sensory-capacity': 'sensoryMemoryCapacity',
+                'content-short-term-capacity': 'shortTermMemoryCapacity',
+                'content-long-term-capacity': 'longTermMemoryCapacity',
+                'content-deep-archive-capacity': 'deepArchiveCapacity'
+            };
+
+            Object.entries(capacityInputs).forEach(([inputId, settingKey]) => {
+                const input = this.modal.querySelector(`#${inputId}`);
+                if (input) {
+                    const infoBarTool = window.SillyTavernInfobar;
+                    const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+                    if (deepMemoryManager) {
+                        const deepMemorySettings = deepMemoryManager.settings;
+                        input.value = deepMemorySettings[settingKey] || input.defaultValue;
+                    }
+                }
+            });
+
+            // 🤖 新增：智能记忆分类器设置
+            const intelligentClassifierEnabled = this.modal.querySelector('#content-intelligent-classifier-enabled');
+            if (intelligentClassifierEnabled) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+                if (intelligentMemoryClassifier) {
+                    const classifierSettings = intelligentMemoryClassifier.settings;
+                    intelligentClassifierEnabled.checked = classifierSettings.enabled || false;
+                    this.handleIntelligentClassifierEnabledChange(intelligentClassifierEnabled.checked);
+                }
+            }
+
+            const semanticClustering = this.modal.querySelector('#content-semantic-clustering');
+            if (semanticClustering) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+                if (intelligentMemoryClassifier) {
+                    const classifierSettings = intelligentMemoryClassifier.settings;
+                    semanticClustering.checked = classifierSettings.semanticClustering || false;
+                }
+            }
+
+            const temporalPatternRecognition = this.modal.querySelector('#content-temporal-pattern-recognition');
+            if (temporalPatternRecognition) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+                if (intelligentMemoryClassifier) {
+                    const classifierSettings = intelligentMemoryClassifier.settings;
+                    temporalPatternRecognition.checked = classifierSettings.temporalPatternRecognition || false;
+                }
+            }
+
+            const importancePrediction = this.modal.querySelector('#content-importance-prediction');
+            if (importancePrediction) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+                if (intelligentMemoryClassifier) {
+                    const classifierSettings = intelligentMemoryClassifier.settings;
+                    importancePrediction.checked = classifierSettings.importancePrediction || false;
+                }
+            }
+
+            const classificationConfidenceThreshold = this.modal.querySelector('#content-classification-confidence-threshold');
+            const classificationConfidenceValue = this.modal.querySelector('#content-classification-confidence-value');
+            if (classificationConfidenceThreshold && classificationConfidenceValue) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+                if (intelligentMemoryClassifier) {
+                    const classifierSettings = intelligentMemoryClassifier.settings;
+                    classificationConfidenceThreshold.value = classifierSettings.classificationConfidenceThreshold || 0.7;
+                    classificationConfidenceValue.textContent = `${Math.round((classifierSettings.classificationConfidenceThreshold || 0.7) * 100)}%`;
+                }
+            }
+
+            const adaptiveLearning = this.modal.querySelector('#content-adaptive-learning');
+            if (adaptiveLearning) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+                if (intelligentMemoryClassifier) {
+                    const classifierSettings = intelligentMemoryClassifier.settings;
+                    adaptiveLearning.checked = classifierSettings.adaptationEnabled || false;
+                }
+            }
+
             // 🔧 新增：自动隐藏楼层设置
             const autoHideEnabled = this.modal.querySelector('#content-auto-hide-enabled');
             if (autoHideEnabled) {
                 autoHideEnabled.checked = settings.autoHideEnabled || false;
                 this.handleAutoHideEnabledChange(autoHideEnabled.checked);
             }
-            
+
             const autoHideThreshold = this.modal.querySelector('#content-auto-hide-threshold');
             if (autoHideThreshold) {
                 autoHideThreshold.value = settings.autoHideThreshold || 30;
@@ -18267,6 +18820,30 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
     }
 
     /**
+     * 🚀 格式化增强的总结标题（支持AI记忆总结）
+     */
+    formatEnhancedSummaryTitle(summary) {
+        // 如果是AI记忆总结
+        if (summary.source === 'ai_memory_summarizer' || summary.type === 'ai_memory') {
+            return summary.title || `AI记忆总结 (${summary.messageCount || 0}条消息)`;
+        }
+
+        // 传统总结
+        const typeMap = {
+            'small': '小总结',
+            'large': '大总结',
+            'manual': '手动总结',
+            'auto': '自动总结'
+        };
+
+        const typeText = typeMap[summary.type] || '总结';
+        const messageRange = summary.messageRange ?
+            ` (${summary.messageRange.start}-${summary.messageRange.end})` : '';
+
+        return `${typeText}${messageRange}`;
+    }
+
+    /**
      * 格式化总结选择框选项
      * 格式：[总结类型] 总结标题 (楼层X-Y) - 时间
      */
@@ -18301,8 +18878,14 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
             // 时间信息
             const timeText = this.formatShortDate(summary.timestamp);
 
-            // 组合格式：[总结类型] 总结标题 (楼层X-Y) - 时间
-            return `[${typeText}] ${title}${floorInfo} - ${timeText}`;
+            // 🚀 新增：世界书上传状态
+            let uploadStatus = '';
+            if (summary.worldBookUpload) {
+                uploadStatus = ' 📚';
+            }
+
+            // 组合格式：[总结类型] 总结标题 (楼层X-Y) - 时间 [上传状态]
+            return `[${typeText}] ${title}${floorInfo} - ${timeText}${uploadStatus}`;
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 格式化总结选择框选项失败:', error);
@@ -18380,15 +18963,23 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
                 return;
             }
 
-            const summaryHistory = await summaryManager.getSummaryHistory();
-            const summary = summaryHistory.find(s => s.id === summaryId);
+            // 🔧 修复：使用增强的总结历史获取方法，支持AI记忆总结
+            const allSummaries = await summaryManager.getEnhancedSummaryHistory();
+            const summary = allSummaries.find(s => s.id === summaryId);
 
             if (!summary) {
-                console.warn('[InfoBarSettings] ⚠️ 未找到总结记录:', summaryId, '当前聊天总结数量:', summaryHistory.length);
-                // 隐藏内容区域，因为该总结不属于当前聊天
+                console.warn('[InfoBarSettings] ⚠️ 未找到总结记录:', summaryId, '总结数量:', allSummaries.length);
+                // 隐藏内容区域，因为该总结不存在
                 this.hideSummaryContent();
                 return;
             }
+
+            console.log('[InfoBarSettings] 📋 找到总结记录:', {
+                id: summary.id,
+                type: summary.type,
+                source: summary.source,
+                hasContent: !!summary.content
+            });
 
             // 显示内容区域
             const contentSection = this.modal.querySelector('#content-summary-content-section');
@@ -18397,13 +18988,16 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
             const bodyElement = this.modal.querySelector('#content-summary-content-body');
 
             if (contentSection && titleElement && dateElement && bodyElement) {
-                titleElement.textContent = this.formatSummaryTitle(summary);
+                // 🔧 修复：使用增强的标题格式化方法
+                titleElement.textContent = this.formatEnhancedSummaryTitle(summary);
                 dateElement.textContent = this.formatDate(summary.timestamp);
                 bodyElement.textContent = summary.content || '暂无内容';
 
                 contentSection.style.display = 'block';
 
                 console.log('[InfoBarSettings] ✅ 总结内容已显示');
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ 未找到内容显示元素');
             }
 
         } catch (error) {
@@ -18458,6 +19052,14 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
                 });
             }
 
+            // 🚀 新增：上传到世界书按钮事件
+            const uploadToWorldBookBtn = this.modal.querySelector('#content-upload-to-worldbook-btn');
+            if (uploadToWorldBookBtn && historySelect) {
+                uploadToWorldBookBtn.addEventListener('click', async () => {
+                    await this.handleUploadSummaryToWorldBook();
+                });
+            }
+
             // 删除当前选择的总结
             const deleteBtn = this.modal.querySelector('#content-delete-summary-btn');
             if (deleteBtn && historySelect) {
@@ -18486,6 +19088,170 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
                         console.error('[InfoBarSettings] ❌ 删除总结失败:', err);
                         this.showNotification('❌ 删除失败', 'error');
                     }
+                });
+            }
+
+            // 🚀 新增：世界书上传配置事件
+            this.bindWorldBookUploadEvents();
+
+            // 🚀 新增：AI记忆总结复选框事件
+            const aiMemoryEnabledCheckbox = this.modal.querySelector('#content-ai-memory-enabled');
+            if (aiMemoryEnabledCheckbox) {
+                aiMemoryEnabledCheckbox.addEventListener('change', (e) => {
+                    this.handleAIMemoryEnabledChange(e.target.checked);
+                });
+            }
+
+            // 🚀 新增：消息级别总结复选框事件
+            const aiMessageLevelCheckbox = this.modal.querySelector('#content-ai-message-level-summary');
+            if (aiMessageLevelCheckbox) {
+                aiMessageLevelCheckbox.addEventListener('change', (e) => {
+                    this.handleAIMessageLevelChange(e.target.checked);
+                });
+            }
+
+            // 🚀 新增：重要性阈值滑块事件
+            const aiImportanceThreshold = this.modal.querySelector('#content-ai-importance-threshold');
+            if (aiImportanceThreshold) {
+                aiImportanceThreshold.addEventListener('input', (e) => {
+                    this.handleAIImportanceThresholdChange(e.target.value);
+                });
+            }
+
+            // 🚀 新增：总结筛选标签事件
+            const filterTabs = this.modal.querySelectorAll('.filter-tab');
+            filterTabs.forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    this.handleFilterTabClick(e.target.dataset.filter);
+                });
+            });
+
+            // 🔍 新增：向量化记忆检索复选框事件
+            const vectorizedMemoryEnabledCheckbox = this.modal.querySelector('#content-vectorized-memory-enabled');
+            if (vectorizedMemoryEnabledCheckbox) {
+                vectorizedMemoryEnabledCheckbox.addEventListener('change', (e) => {
+                    this.handleVectorizedMemoryEnabledChange(e.target.checked);
+                });
+            }
+
+            // 🔍 新增：向量化引擎选择事件
+            const vectorEngineSelect = this.modal.querySelector('#content-vector-engine');
+            if (vectorEngineSelect) {
+                vectorEngineSelect.addEventListener('change', (e) => {
+                    this.handleVectorEngineChange(e.target.value);
+                });
+            }
+
+            // 🔍 新增：相似度阈值滑块事件
+            const similarityThreshold = this.modal.querySelector('#content-similarity-threshold');
+            if (similarityThreshold) {
+                similarityThreshold.addEventListener('input', (e) => {
+                    this.handleSimilarityThresholdChange(e.target.value);
+                });
+            }
+
+            // 🔍 新增：最大搜索结果数量事件
+            const maxSearchResults = this.modal.querySelector('#content-max-search-results');
+            if (maxSearchResults) {
+                maxSearchResults.addEventListener('input', (e) => {
+                    this.handleMaxSearchResultsChange(e.target.value);
+                });
+            }
+
+            // 🧠 新增：深度记忆管理复选框事件
+            const deepMemoryEnabledCheckbox = this.modal.querySelector('#content-deep-memory-enabled');
+            if (deepMemoryEnabledCheckbox) {
+                deepMemoryEnabledCheckbox.addEventListener('change', (e) => {
+                    this.handleDeepMemoryEnabledChange(e.target.checked);
+                });
+            }
+
+            // 🧠 新增：自动记忆迁移复选框事件
+            const autoMemoryMigrationCheckbox = this.modal.querySelector('#content-auto-memory-migration');
+            if (autoMemoryMigrationCheckbox) {
+                autoMemoryMigrationCheckbox.addEventListener('change', (e) => {
+                    this.handleAutoMemoryMigrationChange(e.target.checked);
+                });
+            }
+
+            // 🧠 新增：记忆重要性阈值滑块事件
+            const memoryImportanceThreshold = this.modal.querySelector('#content-memory-importance-threshold');
+            if (memoryImportanceThreshold) {
+                memoryImportanceThreshold.addEventListener('input', (e) => {
+                    this.handleMemoryImportanceThresholdChange(e.target.value);
+                });
+            }
+
+            // 🧠 新增：记忆冲突解决复选框事件
+            const memoryConflictResolutionCheckbox = this.modal.querySelector('#content-memory-conflict-resolution');
+            if (memoryConflictResolutionCheckbox) {
+                memoryConflictResolutionCheckbox.addEventListener('change', (e) => {
+                    this.handleMemoryConflictResolutionChange(e.target.checked);
+                });
+            }
+
+            // 🧠 新增：记忆容量设置事件
+            const capacityInputs = [
+                'content-sensory-capacity',
+                'content-short-term-capacity',
+                'content-long-term-capacity',
+                'content-deep-archive-capacity'
+            ];
+
+            capacityInputs.forEach(inputId => {
+                const input = this.modal.querySelector(`#${inputId}`);
+                if (input) {
+                    input.addEventListener('input', (e) => {
+                        this.handleMemoryCapacityChange(inputId, e.target.value);
+                    });
+                }
+            });
+
+            // 🤖 新增：智能记忆分类器复选框事件
+            const intelligentClassifierEnabledCheckbox = this.modal.querySelector('#content-intelligent-classifier-enabled');
+            if (intelligentClassifierEnabledCheckbox) {
+                intelligentClassifierEnabledCheckbox.addEventListener('change', (e) => {
+                    this.handleIntelligentClassifierEnabledChange(e.target.checked);
+                });
+            }
+
+            // 🤖 新增：语义聚类分析复选框事件
+            const semanticClusteringCheckbox = this.modal.querySelector('#content-semantic-clustering');
+            if (semanticClusteringCheckbox) {
+                semanticClusteringCheckbox.addEventListener('change', (e) => {
+                    this.handleSemanticClusteringChange(e.target.checked);
+                });
+            }
+
+            // 🤖 新增：时序模式识别复选框事件
+            const temporalPatternRecognitionCheckbox = this.modal.querySelector('#content-temporal-pattern-recognition');
+            if (temporalPatternRecognitionCheckbox) {
+                temporalPatternRecognitionCheckbox.addEventListener('change', (e) => {
+                    this.handleTemporalPatternRecognitionChange(e.target.checked);
+                });
+            }
+
+            // 🤖 新增：重要性预测复选框事件
+            const importancePredictionCheckbox = this.modal.querySelector('#content-importance-prediction');
+            if (importancePredictionCheckbox) {
+                importancePredictionCheckbox.addEventListener('change', (e) => {
+                    this.handleImportancePredictionChange(e.target.checked);
+                });
+            }
+
+            // 🤖 新增：分类置信度阈值滑块事件
+            const classificationConfidenceThreshold = this.modal.querySelector('#content-classification-confidence-threshold');
+            if (classificationConfidenceThreshold) {
+                classificationConfidenceThreshold.addEventListener('input', (e) => {
+                    this.handleClassificationConfidenceThresholdChange(e.target.value);
+                });
+            }
+
+            // 🤖 新增：自适应学习复选框事件
+            const adaptiveLearningCheckbox = this.modal.querySelector('#content-adaptive-learning');
+            if (adaptiveLearningCheckbox) {
+                adaptiveLearningCheckbox.addEventListener('change', (e) => {
+                    this.handleAdaptiveLearningChange(e.target.checked);
                 });
             }
 
@@ -19528,10 +20294,29 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
     }
 
     /**
+     * 预加载完整的显示名称映射表 - 🔧 新增：避免运行时重复生成
+     */
+    preloadCompleteDisplayNameMapping() {
+        try {
+            console.log('[InfoBarSettings] 🔧 预加载字段映射缓存...');
+            this.getCompleteDisplayNameMapping();
+            console.log('[InfoBarSettings] ✅ 字段映射缓存预加载完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 预加载字段映射缓存失败:', error);
+        }
+    }
+
+    /**
      * 获取完整的显示名称映射表 - 🔧 修复：同时支持英文和中文字段名映射
      */
     getCompleteDisplayNameMapping() {
-        return {
+        // 🔧 新增：缓存机制，避免重复生成映射
+        if (this._cachedCompleteMapping) {
+            return this._cachedCompleteMapping;
+        }
+
+        // 基础面板映射
+        const baseMapping = {
             personal: {
                 // 🔧 修复：使用实际存在的英文字段key值创建映射
                 'name': '姓名', 'age': '年龄', 'gender': '性别', 'occupation': '职业',
@@ -19994,6 +20779,47 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
                 '备份功能': '备份功能', '同步功能': '同步功能'
             }
         };
+
+        // 🔧 新增：动态添加自定义面板的字段映射
+        try {
+            const customPanels = this.getCustomPanels();
+            for (const [panelId, panelConfig] of Object.entries(customPanels)) {
+                if (panelConfig && panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
+                    // 为每个自定义面板创建字段映射
+                    const customPanelMapping = {};
+
+                    panelConfig.subItems.forEach(subItem => {
+                        if (subItem.key) {
+                            // 🔧 修复：优先使用displayName，如果没有则使用name作为显示名称
+                            const displayName = subItem.displayName || subItem.name || subItem.key;
+
+                            // 使用字段的key作为映射键
+                            customPanelMapping[subItem.key] = displayName;
+
+                            // 🔧 兼容性：同时支持name字段（如果与key不同）
+                            if (subItem.name && subItem.name !== subItem.key) {
+                                customPanelMapping[subItem.name] = displayName;
+                            }
+                        }
+                    });
+
+                    // 将自定义面板映射添加到基础映射中
+                    if (Object.keys(customPanelMapping).length > 0) {
+                        baseMapping[panelId] = customPanelMapping;
+                        // 🔧 修复：只在首次生成时输出日志，避免重复日志
+                        if (!this._cachedCompleteMapping) {
+                            console.log(`[InfoBarSettings] 📊 添加自定义面板字段映射: ${panelId}`, customPanelMapping);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 添加自定义面板字段映射失败:', error);
+        }
+
+        // 🔧 新增：缓存映射结果
+        this._cachedCompleteMapping = baseMapping;
+        return baseMapping;
     }
 
     /**
@@ -28153,6 +28979,726 @@ ${dataExamples}
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 更新世界书配置失败:', error);
             throw error;
+        }
+    }
+
+    /**
+     * 🚀 处理AI记忆总结启用状态变化
+     */
+    handleAIMemoryEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🧠 AI记忆总结启用状态变化:', enabled);
+
+            // 显示/隐藏AI记忆选项
+            const aiMemoryOptions = this.modal.querySelectorAll('.ai-memory-options');
+            aiMemoryOptions.forEach(option => {
+                option.style.display = enabled ? 'block' : 'none';
+            });
+
+            // 更新AI记忆总结器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const summaryManager = infoBarTool?.modules?.summaryManager;
+            if (summaryManager && summaryManager.aiMemorySummarizer) {
+                summaryManager.aiMemorySummarizer.updateSettings({
+                    enabled: enabled
+                });
+            }
+
+            this.showMessage(
+                enabled ? '✅ AI记忆总结已启用' : '❌ AI记忆总结已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理AI记忆总结启用状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 处理消息级别总结变化
+     */
+    handleAIMessageLevelChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 📝 消息级别总结状态变化:', enabled);
+
+            // 更新AI记忆总结器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const summaryManager = infoBarTool?.modules?.summaryManager;
+            if (summaryManager && summaryManager.aiMemorySummarizer) {
+                summaryManager.aiMemorySummarizer.updateSettings({
+                    messageLevelSummary: enabled
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理消息级别总结变化失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 处理重要性阈值变化
+     */
+    handleAIImportanceThresholdChange(value) {
+        try {
+            console.log('[InfoBarSettings] 🎯 重要性阈值变化:', value);
+
+            // 更新显示值
+            const valueDisplay = this.modal.querySelector('#content-ai-importance-value');
+            if (valueDisplay) {
+                valueDisplay.textContent = `${Math.round(value * 100)}%`;
+            }
+
+            // 更新AI记忆总结器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const summaryManager = infoBarTool?.modules?.summaryManager;
+            if (summaryManager && summaryManager.aiMemorySummarizer) {
+                summaryManager.aiMemorySummarizer.updateSettings({
+                    importanceThreshold: parseFloat(value)
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理重要性阈值变化失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 处理筛选标签点击
+     */
+    handleFilterTabClick(filter) {
+        try {
+            console.log('[InfoBarSettings] 🔍 筛选标签点击:', filter);
+
+            // 更新标签状态
+            const filterTabs = this.modal.querySelectorAll('.filter-tab');
+            filterTabs.forEach(tab => {
+                if (tab.dataset.filter === filter) {
+                    tab.classList.add('active');
+                    tab.style.color = 'var(--SmartThemeEmColor, #ff6b6b)';
+                    tab.style.borderBottomColor = 'var(--SmartThemeEmColor, #ff6b6b)';
+                } else {
+                    tab.classList.remove('active');
+                    tab.style.color = 'var(--SmartThemeQuoteColor, #888)';
+                    tab.style.borderBottomColor = 'transparent';
+                }
+            });
+
+            // 筛选总结历史
+            this.filterSummaryHistory(filter);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理筛选标签点击失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 筛选总结历史
+     */
+    async filterSummaryHistory(filter) {
+        try {
+            console.log('[InfoBarSettings] 🔍 筛选总结历史:', filter);
+
+            const infoBarTool = window.SillyTavernInfobar;
+            const summaryManager = infoBarTool?.modules?.summaryManager;
+
+            if (!summaryManager) {
+                console.warn('[InfoBarSettings] ⚠️ SummaryManager未找到');
+                return;
+            }
+
+            // 获取增强的总结历史
+            const allSummaries = await summaryManager.getEnhancedSummaryHistory();
+            console.log('[InfoBarSettings] 📚 获取到总结历史:', allSummaries.length, '条');
+
+            // 根据筛选条件过滤
+            let filteredSummaries = allSummaries;
+            if (filter !== 'all') {
+                filteredSummaries = allSummaries.filter(summary => {
+                    // 根据不同的筛选条件进行过滤
+                    switch (filter) {
+                        case 'traditional':
+                            // 传统总结：包括小总结、大总结、手动总结、自动总结
+                            return summary.source === 'traditional' ||
+                                   summary.type === 'small' ||
+                                   summary.type === 'large' ||
+                                   summary.type === 'manual' ||
+                                   summary.type === 'auto' ||
+                                   !summary.source; // 没有source字段的默认为传统总结
+                        case 'ai_memory':
+                            // AI记忆总结：来自AI记忆总结器的总结
+                            return summary.source === 'ai_memory_summarizer' ||
+                                   summary.type === 'ai_memory';
+                        default:
+                            return true;
+                    }
+                });
+            }
+
+            console.log('[InfoBarSettings] 🔍 筛选后的总结:', filteredSummaries.length, '条');
+
+            // 更新显示
+            this.renderSummaryHistory(filteredSummaries);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 筛选总结历史失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 绑定世界书上传配置事件
+     */
+    bindWorldBookUploadEvents() {
+        try {
+            console.log('[InfoBarSettings] 🔗 绑定世界书上传配置事件...');
+
+            // 条目命名格式变化事件
+            const entryFormatSelect = this.modal.querySelector('#worldbook-entry-format');
+            const customNameRow = this.modal.querySelector('#worldbook-custom-name-row');
+
+            if (entryFormatSelect && customNameRow) {
+                entryFormatSelect.addEventListener('change', (e) => {
+                    if (e.target.value === 'custom') {
+                        customNameRow.style.display = 'block';
+                    } else {
+                        customNameRow.style.display = 'none';
+                    }
+                });
+            }
+
+            // 批量上传按钮事件
+            const batchUploadBtn = this.modal.querySelector('#worldbook-batch-upload-btn');
+            if (batchUploadBtn) {
+                batchUploadBtn.addEventListener('click', async () => {
+                    await this.handleBatchUploadToWorldBook();
+                });
+            }
+
+            console.log('[InfoBarSettings] ✅ 世界书上传配置事件绑定完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 绑定世界书上传配置事件失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 处理单个总结上传到世界书
+     */
+    async handleUploadSummaryToWorldBook() {
+        try {
+            console.log('[InfoBarSettings] 📤 处理单个总结上传到世界书...');
+
+            // 获取选中的总结ID
+            const historySelect = this.modal.querySelector('#content-summary-history-select');
+            const summaryId = historySelect?.value;
+
+            if (!summaryId) {
+                this.showNotification('请先选择一条总结记录', 'info');
+                return;
+            }
+
+            // 获取上传配置
+            const uploadOptions = this.getWorldBookUploadOptions();
+
+            // 显示加载状态
+            this.showNotification('正在上传总结到世界书...', 'info');
+
+            // 获取SummaryManager
+            const infoBarTool = window.SillyTavernInfobar;
+            const summaryManager = infoBarTool?.modules?.summaryManager;
+
+            if (!summaryManager) {
+                throw new Error('SummaryManager未初始化');
+            }
+
+            // 执行上传
+            const result = await summaryManager.uploadSummaryToWorldBook(summaryId, uploadOptions);
+
+            if (result.success) {
+                this.showNotification(`✅ ${result.message}`, 'success');
+
+                // 刷新总结历史显示上传状态
+                await this.loadSummaryHistory();
+
+                // 重新选中当前总结
+                if (historySelect) {
+                    historySelect.value = summaryId;
+                    this.showSummaryContent(summaryId);
+                }
+            } else {
+                this.showNotification(`❌ ${result.message}`, 'error');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 上传总结到世界书失败:', error);
+            this.showNotification(`❌ 上传失败: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * 🚀 处理批量上传到世界书
+     */
+    async handleBatchUploadToWorldBook() {
+        try {
+            console.log('[InfoBarSettings] 📤 处理批量上传到世界书...');
+
+            // 确认操作
+            const confirmed = confirm('确定要将当前聊天的所有总结上传到世界书吗？\n\n这可能需要一些时间，请耐心等待。');
+            if (!confirmed) {
+                return;
+            }
+
+            // 获取所有总结
+            const infoBarTool = window.SillyTavernInfobar;
+            const summaryManager = infoBarTool?.modules?.summaryManager;
+
+            if (!summaryManager) {
+                throw new Error('SummaryManager未初始化');
+            }
+
+            const allSummaries = await summaryManager.getEnhancedSummaryHistory();
+            if (!allSummaries || allSummaries.length === 0) {
+                this.showNotification('当前聊天没有总结记录', 'info');
+                return;
+            }
+
+            // 获取上传配置
+            const uploadOptions = this.getWorldBookUploadOptions();
+
+            // 显示进度
+            this.showNotification(`开始批量上传 ${allSummaries.length} 条总结...`, 'info');
+
+            // 提取所有总结ID
+            const summaryIds = allSummaries.map(s => s.id);
+
+            // 执行批量上传
+            const result = await summaryManager.batchUploadSummariesToWorldBook(summaryIds, uploadOptions);
+
+            if (result.success) {
+                const { success, failed, total } = result.results;
+                this.showNotification(`✅ 批量上传完成: ${success.length}/${total} 成功${failed.length > 0 ? `, ${failed.length} 失败` : ''}`, 'success');
+
+                // 刷新总结历史
+                await this.loadSummaryHistory();
+            } else {
+                this.showNotification(`❌ 批量上传失败: ${result.message}`, 'error');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 批量上传到世界书失败:', error);
+            this.showNotification(`❌ 批量上传失败: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * 🔧 获取世界书上传配置选项
+     */
+    getWorldBookUploadOptions() {
+        try {
+            const entryFormat = this.modal.querySelector('#worldbook-entry-format')?.value || 'auto';
+            const customName = this.modal.querySelector('#worldbook-custom-name')?.value || '';
+            const addTimestamp = this.modal.querySelector('#worldbook-add-timestamp')?.checked !== false;
+            const useContentTags = this.modal.querySelector('#worldbook-use-tags')?.checked !== false;
+
+            return {
+                autoCreateWorldBook: true,
+                bindToChatLore: true,
+                entryNameFormat: entryFormat,
+                customEntryName: entryFormat === 'custom' ? customName : null,
+                addTimestamp: addTimestamp,
+                useContentTags: useContentTags
+            };
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取世界书上传配置失败:', error);
+            return {
+                autoCreateWorldBook: true,
+                bindToChatLore: true,
+                entryNameFormat: 'auto',
+                customEntryName: null,
+                addTimestamp: true,
+                useContentTags: true
+            };
+        }
+    }
+
+    /**
+     * 🔍 处理向量化记忆检索启用状态变化
+     */
+    handleVectorizedMemoryEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🔍 向量化记忆检索启用状态变化:', enabled);
+
+            // 显示/隐藏向量化记忆选项
+            const vectorizedMemoryOptions = this.modal.querySelectorAll('.vectorized-memory-options');
+            vectorizedMemoryOptions.forEach(option => {
+                option.style.display = enabled ? 'block' : 'none';
+            });
+
+            // 更新向量化记忆检索系统设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedMemoryRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+            if (vectorizedMemoryRetrieval) {
+                vectorizedMemoryRetrieval.updateSettings({
+                    enabled: enabled
+                });
+            }
+
+            this.showMessage(
+                enabled ? '✅ 语义搜索已启用' : '❌ 语义搜索已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理向量化记忆检索启用状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🔍 处理向量化引擎变化
+     */
+    handleVectorEngineChange(engine) {
+        try {
+            console.log('[InfoBarSettings] 🚀 向量化引擎变化:', engine);
+
+            // 更新向量化记忆检索系统设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedMemoryRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+            if (vectorizedMemoryRetrieval) {
+                vectorizedMemoryRetrieval.updateSettings({
+                    vectorEngine: engine
+                });
+            }
+
+            this.showMessage(
+                `✅ 向量化引擎已切换为: ${engine === 'transformers' ? 'Transformers.js (本地)' : 'OpenAI (在线)'}`,
+                'success'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理向量化引擎变化失败:', error);
+        }
+    }
+
+    /**
+     * 🔍 处理相似度阈值变化
+     */
+    handleSimilarityThresholdChange(value) {
+        try {
+            console.log('[InfoBarSettings] 🎯 相似度阈值变化:', value);
+
+            // 更新显示值
+            const valueDisplay = this.modal.querySelector('#content-similarity-value');
+            if (valueDisplay) {
+                valueDisplay.textContent = `${Math.round(value * 100)}%`;
+            }
+
+            // 更新向量化记忆检索系统设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedMemoryRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+            if (vectorizedMemoryRetrieval) {
+                vectorizedMemoryRetrieval.updateSettings({
+                    similarityThreshold: parseFloat(value)
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理相似度阈值变化失败:', error);
+        }
+    }
+
+    /**
+     * 🔍 处理最大搜索结果数量变化
+     */
+    handleMaxSearchResultsChange(value) {
+        try {
+            console.log('[InfoBarSettings] 📊 最大搜索结果数量变化:', value);
+
+            // 更新向量化记忆检索系统设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedMemoryRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+            if (vectorizedMemoryRetrieval) {
+                vectorizedMemoryRetrieval.updateSettings({
+                    maxResults: parseInt(value)
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理最大搜索结果数量变化失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 处理深度记忆管理启用状态变化
+     */
+    handleDeepMemoryEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🧠 深度记忆管理启用状态变化:', enabled);
+
+            // 显示/隐藏深度记忆选项
+            const deepMemoryOptions = this.modal.querySelectorAll('.deep-memory-options');
+            deepMemoryOptions.forEach(option => {
+                option.style.display = enabled ? 'block' : 'none';
+            });
+
+            // 更新深度记忆管理器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+            if (deepMemoryManager) {
+                deepMemoryManager.updateSettings({
+                    enabled: enabled
+                });
+            }
+
+            this.showMessage(
+                enabled ? '✅ 深度记忆管理已启用' : '❌ 深度记忆管理已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理深度记忆管理启用状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 处理自动记忆迁移变化
+     */
+    handleAutoMemoryMigrationChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🔄 自动记忆迁移状态变化:', enabled);
+
+            // 更新深度记忆管理器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+            if (deepMemoryManager) {
+                deepMemoryManager.updateSettings({
+                    autoMemoryMigration: enabled
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理自动记忆迁移变化失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 处理记忆重要性阈值变化
+     */
+    handleMemoryImportanceThresholdChange(value) {
+        try {
+            console.log('[InfoBarSettings] 🎯 记忆重要性阈值变化:', value);
+
+            // 更新显示值
+            const valueDisplay = this.modal.querySelector('#content-memory-importance-value');
+            if (valueDisplay) {
+                valueDisplay.textContent = `${Math.round(value * 100)}%`;
+            }
+
+            // 更新深度记忆管理器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+            if (deepMemoryManager) {
+                deepMemoryManager.updateSettings({
+                    shortTermToLongTermThreshold: parseFloat(value)
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理记忆重要性阈值变化失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 处理记忆冲突解决变化
+     */
+    handleMemoryConflictResolutionChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🔧 记忆冲突解决状态变化:', enabled);
+
+            // 更新深度记忆管理器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+            if (deepMemoryManager) {
+                deepMemoryManager.updateSettings({
+                    memoryConflictResolution: enabled
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理记忆冲突解决变化失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 处理记忆容量设置变化
+     */
+    handleMemoryCapacityChange(inputId, value) {
+        try {
+            console.log('[InfoBarSettings] 📊 记忆容量设置变化:', inputId, value);
+
+            const capacityMap = {
+                'content-sensory-capacity': 'sensoryMemoryCapacity',
+                'content-short-term-capacity': 'shortTermMemoryCapacity',
+                'content-long-term-capacity': 'longTermMemoryCapacity',
+                'content-deep-archive-capacity': 'deepArchiveCapacity'
+            };
+
+            const settingKey = capacityMap[inputId];
+            if (!settingKey) return;
+
+            // 更新深度记忆管理器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+            if (deepMemoryManager) {
+                deepMemoryManager.updateSettings({
+                    [settingKey]: parseInt(value)
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理记忆容量设置变化失败:', error);
+        }
+    }
+
+    /**
+     * 🤖 处理智能记忆分类器启用状态变化
+     */
+    handleIntelligentClassifierEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🤖 智能记忆分类器启用状态变化:', enabled);
+
+            // 显示/隐藏智能分类器选项
+            const intelligentClassifierOptions = this.modal.querySelectorAll('.intelligent-classifier-options');
+            intelligentClassifierOptions.forEach(option => {
+                option.style.display = enabled ? 'block' : 'none';
+            });
+
+            // 更新智能记忆分类器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+            if (intelligentMemoryClassifier) {
+                intelligentMemoryClassifier.updateSettings({
+                    enabled: enabled
+                });
+            }
+
+            this.showMessage(
+                enabled ? '✅ 智能记忆分类器已启用' : '❌ 智能记忆分类器已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理智能记忆分类器启用状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🤖 处理语义聚类分析变化
+     */
+    handleSemanticClusteringChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🔍 语义聚类分析状态变化:', enabled);
+
+            // 更新智能记忆分类器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+            if (intelligentMemoryClassifier) {
+                intelligentMemoryClassifier.updateSettings({
+                    semanticClustering: enabled
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理语义聚类分析变化失败:', error);
+        }
+    }
+
+    /**
+     * 🤖 处理时序模式识别变化
+     */
+    handleTemporalPatternRecognitionChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] ⏰ 时序模式识别状态变化:', enabled);
+
+            // 更新智能记忆分类器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+            if (intelligentMemoryClassifier) {
+                intelligentMemoryClassifier.updateSettings({
+                    temporalPatternRecognition: enabled
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理时序模式识别变化失败:', error);
+        }
+    }
+
+    /**
+     * 🤖 处理重要性预测变化
+     */
+    handleImportancePredictionChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🎯 重要性预测状态变化:', enabled);
+
+            // 更新智能记忆分类器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+            if (intelligentMemoryClassifier) {
+                intelligentMemoryClassifier.updateSettings({
+                    importancePrediction: enabled
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理重要性预测变化失败:', error);
+        }
+    }
+
+    /**
+     * 🤖 处理分类置信度阈值变化
+     */
+    handleClassificationConfidenceThresholdChange(value) {
+        try {
+            console.log('[InfoBarSettings] 🎯 分类置信度阈值变化:', value);
+
+            // 更新显示值
+            const valueDisplay = this.modal.querySelector('#content-classification-confidence-value');
+            if (valueDisplay) {
+                valueDisplay.textContent = `${Math.round(value * 100)}%`;
+            }
+
+            // 更新智能记忆分类器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+            if (intelligentMemoryClassifier) {
+                intelligentMemoryClassifier.updateSettings({
+                    classificationConfidenceThreshold: parseFloat(value)
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理分类置信度阈值变化失败:', error);
+        }
+    }
+
+    /**
+     * 🤖 处理自适应学习变化
+     */
+    handleAdaptiveLearningChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🧠 自适应学习状态变化:', enabled);
+
+            // 更新智能记忆分类器设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const intelligentMemoryClassifier = infoBarTool?.modules?.intelligentMemoryClassifier;
+            if (intelligentMemoryClassifier) {
+                intelligentMemoryClassifier.updateSettings({
+                    adaptationEnabled: enabled
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理自适应学习变化失败:', error);
         }
     }
 }
