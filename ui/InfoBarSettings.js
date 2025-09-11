@@ -17432,21 +17432,21 @@ export class InfoBarSettings {
 **必须按照以下顺序输出两个标签：**
 
 1. **FIRST**: <aiThinkProcess><!--五步分析思考--></aiThinkProcess>
-2. **SECOND**: <infobar_data><!--XML紧凑格式数据--></infobar_data>
+2. **SECOND**: <infobar_data><!--操作指令格式数据--></infobar_data>
 
-✅ **XML紧凑格式示例（唯一正确格式）**：
+✅ **操作指令格式示例（唯一正确格式）**：
 <infobar_data>
 <!--
-personal: name="角色名", age="年龄", gender="性别", occupation="职业", status="状态"
-world: time="时间", location="地点", weather="天气", season="季节"
-interaction: npc0.name="交互对象", npc0.relationship="关系", npc0.mood="心情"
+add personal(1 {"1","张凡","2","25","3","男","4","工程师","5","专注工作"})
+add world(1 {"1","现代都市","2","现实世界","3","2024年下午","4","办公室","5","繁忙"})
+add interaction(1 {"1","小雨","2","同事","3","友好","4","讨论项目","5","合作"})
 -->
 </infobar_data>
 
 🚨 **严格要求**：
 1. 必须先输出aiThinkProcess，再输出infobar_data
 2. 内容必须在 <!-- --> 注释中
-3. 必须使用XML紧凑格式：面板名: 字段="值", 字段="值"
+3. 必须使用操作指令格式：add/update 面板名(行号 {"列号","值",...})
 4. 绝对禁止使用表格格式 | 符号
 5. 绝对禁止使用### 标题格式
 6. interaction面板必须使用npc0.前缀格式`;
@@ -17614,7 +17614,7 @@ interaction: npc0.name="交互对象", npc0.relationship="关系", npc0.mood="�
 **第二步：必须后输出面板数据**
 <infobar_data>
 <!--
-[根据上述五步分析，输出具体的面板数据，使用XML紧凑格式]
+[根据上述五步分析，输出具体的面板数据，使用操作指令格式]
 [面板数据基于上方的智能提示词模板生成]
 -->
 </infobar_data>
@@ -17623,7 +17623,7 @@ interaction: npc0.name="交互对象", npc0.relationship="关系", npc0.mood="�
 1. **输出顺序**：必须先输出 <aiThinkProcess>，再输出 <infobar_data>
 2. **注释包裹**：所有内容必须被 <!--  --> 包裹
 3. **中文输出**：所有内容必须使用中文，包括分析过程和数据值
-4. **XML紧凑格式**：面板数据使用格式 面板名: 字段="值", 字段="值"
+4. **操作指令格式**：面板数据使用格式 add/update 面板名(行号 {"列号","值",...})
 5. **具体数据**：避免使用"未知"、"N/A"等占位符，生成具体内容
 
 ${currentDataInfo}
@@ -17645,18 +17645,18 @@ ${currentDataInfo}
 
 <infobar_data>
 <!--
-personal: name="张三", age="25", occupation="程序员", location="办公室", status="工作中"
-world: name="现代都市", type="都市", time="2024年", location="办公大楼"
-interaction: npc0.name="李文静", npc0.type="同事", npc0.status="友好", npc0.relationship="合作伙伴", npc0.activity="讨论项目"
-tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
+add personal(1 {"1","张三","2","25","3","程序员","4","办公室","5","工作中"})
+add world(1 {"1","现代都市","2","都市","3","2024年","4","办公大楼"})
+add interaction(1 {"1","李文静","2","同事","3","友好","4","合作伙伴","5","讨论项目"})
+add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 -->
 </infobar_data>
 
-🚨🚨🚨 **CRITICAL: interaction面板NPC前缀格式强制要求** 🚨🚨🚨
-🔴 **如果输出interaction面板，必须使用npc0.前缀格式！**
+🚨🚨🚨 **CRITICAL: 操作指令格式强制要求** 🚨🚨🚨
+🔴 **所有面板必须使用操作指令格式！**
 🔴 **错误格式将导致系统完全拒绝，不会有任何兼容性处理！**
-🔴 **正确: interaction: npc0.name="江琳", npc0.type="朋友"**
-🔴 **错误: interaction: name="江琳", type="朋友" ← 系统拒绝！**
+🔴 **正确: add interaction(1 {"1","江琳","2","朋友","3","友好"})**
+🔴 **错误: interaction: npc0.name="江琳", npc0.type="朋友" ← 旧格式，系统拒绝！**
 
 ⚠️ **严禁格式错误**：
 ❌ 错误：<aiThinkProcess>内容不被注释包裹</aiThinkProcess>
@@ -17784,7 +17784,7 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
 **格式要求**：
 - 使用中文进行分析和数据生成
 - 内容必须被 <!--  --> 包裹
-- 数据格式: 面板名: 字段="值", 字段="值"
+- 数据格式: add/update 面板名(行号 {"列号","值",...})
 - 避免使用占位符，生成具体内容
 
 **严禁颠倒输出顺序或省略任何标签**`;
@@ -20803,9 +20803,13 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
                         }
                     });
 
-                    // 将自定义面板映射添加到基础映射中
+                    // 🔧 关键修复：合并自定义面板映射，不要覆盖基础映射！
                     if (Object.keys(customPanelMapping).length > 0) {
-                        baseMapping[panelId] = customPanelMapping;
+                        // 使用合并而不是覆盖，确保标准映射不会丢失
+                        baseMapping[panelId] = {
+                            ...(baseMapping[panelId] || {}), // 保留已有的基础映射
+                            ...customPanelMapping              // 添加自定义字段映射
+                        };
                         // 🔧 修复：只在首次生成时输出日志，避免重复日志
                         if (!this._cachedCompleteMapping) {
                             console.log(`[InfoBarSettings] 📊 添加自定义面板字段映射: ${panelId}`, customPanelMapping);
@@ -20819,6 +20823,8 @@ tasks: creation="新任务创建", editing="任务编辑中", status="进行中"
 
         // 🔧 新增：缓存映射结果
         this._cachedCompleteMapping = baseMapping;
+        
+        console.log('[InfoBarSettings] ✅ 完整显示名称映射生成完成:', Object.keys(baseMapping));
         return baseMapping;
     }
 

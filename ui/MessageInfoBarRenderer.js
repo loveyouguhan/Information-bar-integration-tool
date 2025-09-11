@@ -43,10 +43,9 @@ export class MessageInfoBarRenderer {
             'relationship': '关系', 'status': '状态', 'location': '位置',
 
             // 交互对象
-            'npc_name': 'NPC姓名', 'npc_age': 'NPC年龄', 'npc_gender': 'NPC性别',
-            'npc_occupation': 'NPC职业', 'npc_personality': 'NPC性格',
-            'npc_appearance': 'NPC外貌', 'npc_relationship': 'NPC关系',
             'attitude': '态度', 'emotion': '情绪', 'favorability': '好感度',
+            'mood': '情绪状态', 'activity': '当前活动', 'availability': '可用性', 
+            'priority': '优先级', 'trust': '信任度', 'intimacy': '亲密度',
 
             // 世界信息
             'world_name': '世界名称', 'world_type': '世界类型', 'time_period': '时代',
@@ -1842,10 +1841,11 @@ export class MessageInfoBarRenderer {
             const colNumber = parseInt(colMatch[1]);
             console.log(`[MessageInfoBarRenderer] 🔧 转换col_${colNumber}字段 (面板: ${panelKey})`);
 
-            // 根据面板类型和列号映射到系统期望的标准字段名
+            // 🔧 修复：根据面板类型和列号映射到系统期望的标准字段名
+            // 使用硬编码映射，优先级高于用户自定义子项，避免"前置字段"等错误映射
             const standardFieldMappings = {
                 personal: {
-                    1: 'name',        // 姓名
+                    1: 'name',        // 姓名 - 强制映射，避免"前置字段"干扰
                     2: 'age',         // 年龄
                     3: 'gender',      // 性别
                     4: 'occupation',  // 职业
@@ -1866,22 +1866,31 @@ export class MessageInfoBarRenderer {
                     5: 'location',    // 具体位置
                     6: 'time'         // 时间
                 },
+                tasks: {
+                    1: 'creation',    // 任务创建 - 强制映射，避免"1"干扰
+                    2: 'editing',     // 任务编辑
+                    3: 'status',      // 状态管理
+                    4: 'priority',    // 优先级
+                    5: 'deadline',    // 截止日期
+                    6: 'progress',    // 进度跟踪
+                    7: 'categories'   // 分类管理
+                },
                 interaction: {
-                    1: 'npc_name',        // 对象
-                    2: 'npc_occupation',  // 身份
-                    3: 'emotion',         // 情绪
-                    4: 'relationship',    // 关系
-                    5: 'favorability',    // 亲密度
-                    6: 'status',          // 当前行为
-                    7: 'dialogue',        // 对话内容
-                    8: 'action',          // 行动
-                    9: 'reaction',        // 反应
-                    10: 'intention',      // 意图
-                    11: 'background',     // 背景
-                    12: 'environment',    // 环境
-                    13: 'atmosphere',     // 氛围
-                    14: 'time',           // 时间
-                    15: 'location',       // 地点
+                    1: 'name',            // 对象名称 (与InfoBarSettings一致)
+                    2: 'type',            // 对象类型 (与InfoBarSettings一致)
+                    3: 'status',          // 当前状态 (与InfoBarSettings一致)
+                    4: 'relationship',    // 关系类型 (与InfoBarSettings一致)
+                    5: 'intimacy',        // 亲密度 (与InfoBarSettings一致)
+                    6: 'history',         // 历史记录 (与InfoBarSettings一致)
+                    7: 'autoRecord',      // 自动记录 (与InfoBarSettings一致)
+                    8: 'mood',            // 情绪状态
+                    9: 'activity',        // 当前活动
+                    10: 'availability',   // 可用性
+                    11: 'priority',       // 优先级
+                    12: 'location',       // 所在位置
+                    13: 'trust',          // 信任度
+                    14: 'friendship',     // 友谊度
+                    15: 'romance',        // 浪漫度
                     16: 'notes'           // 备注
                 }
             };
@@ -2193,6 +2202,8 @@ export class MessageInfoBarRenderer {
 
             let html = '';
             Object.entries(filteredData).forEach(([fieldName, value]) => {
+                // 仅渲染启用字段
+                if (!this.isFieldEnabled(panelKey, fieldName, panelConfig)) return;
                 if (this.isValidDataValue(value)) {
                     // 获取字段显示名称
                     let displayLabel = this.getFieldDisplayNameFromConfig(panelKey, fieldName, panelConfig);
@@ -2202,7 +2213,8 @@ export class MessageInfoBarRenderer {
                         if (!displayLabel) {
                             displayLabel = this.FIELD_LABELS[standardFieldName] || this.FIELD_LABELS[fieldName];
                             if (!displayLabel) {
-                                displayLabel = this.mapColFieldToDisplayName(fieldName, panelKey) || fieldName;
+                                // 🔧 修复：使用标准回退函数，避免返回错误的字段名
+                                displayLabel = this.getStandardDisplayNameFallback(standardFieldName, panelKey) || this.mapColFieldToDisplayName(fieldName, panelKey) || fieldName;
                             }
                         }
                     }
@@ -2285,6 +2297,8 @@ export class MessageInfoBarRenderer {
 
             // 渲染数据项
             Object.entries(filteredData).forEach(([fieldName, value]) => {
+                // 仅渲染启用字段
+                if (!this.isFieldEnabled(panelKey, fieldName, panelConfig)) return;
                 if (this.isValidDataValue(value)) {
                     let displayLabel = this.getFieldDisplayNameFromConfig(panelKey, fieldName, panelConfig);
                     if (!displayLabel) {
@@ -2293,7 +2307,8 @@ export class MessageInfoBarRenderer {
                         if (!displayLabel) {
                             displayLabel = this.FIELD_LABELS[standardFieldName] || this.FIELD_LABELS[fieldName];
                             if (!displayLabel) {
-                                displayLabel = this.mapColFieldToDisplayName(fieldName, panelKey) || fieldName;
+                                // 🔧 修复：使用标准回退函数，避免返回错误的字段名
+                                displayLabel = this.getStandardDisplayNameFallback(standardFieldName, panelKey) || this.mapColFieldToDisplayName(fieldName, panelKey) || fieldName;
                             }
                         }
                     }
@@ -2384,6 +2399,8 @@ export class MessageInfoBarRenderer {
                     html += `<div class="infobar-npc-details" data-npc-id="${npcId}" style="display: ${displayStyle};">`;
 
                     Object.entries(npcData).forEach(([fieldName, value]) => {
+                        // 仅渲染启用字段
+                        if (!this.isFieldEnabled('interaction', fieldName, panelConfig)) return;
                         if (this.isValidDataValue(value)) {
                             // 🔧 修复：使用统一的字段映射逻辑，支持col_X格式
                             let displayLabel = this.getFieldDisplayNameFromConfig('interaction', fieldName, panelConfig);
@@ -2398,7 +2415,8 @@ export class MessageInfoBarRenderer {
                                     displayLabel = this.FIELD_LABELS[standardFieldName] || this.FIELD_LABELS[fieldName];
                                     if (!displayLabel) {
                                         // 最后备用：使用我的col_X映射
-                                        displayLabel = this.mapColFieldToDisplayName(fieldName, 'interaction') || fieldName;
+                                        // 🔧 修复：使用标准回退函数
+                                        displayLabel = this.getStandardDisplayNameFallback(standardFieldName, 'interaction') || this.mapColFieldToDisplayName(fieldName, 'interaction') || fieldName;
                                     }
                                 }
                             }
@@ -2483,6 +2501,8 @@ export class MessageInfoBarRenderer {
                     html += `<div class="infobar-org-details" data-org-id="${orgId}" style="display: ${displayStyle};">`;
 
                     Object.entries(orgData).forEach(([fieldName, value]) => {
+                        // 仅渲染启用字段
+                        if (!this.isFieldEnabled('organization', fieldName, panelConfig)) return;
                         if (this.isValidDataValue(value)) {
                             // 🔧 修复：使用统一的字段映射逻辑
                             let displayLabel = this.getFieldDisplayNameFromConfig('organization', fieldName, panelConfig);
@@ -2497,7 +2517,8 @@ export class MessageInfoBarRenderer {
                                     displayLabel = this.FIELD_LABELS[standardFieldName] || this.FIELD_LABELS[fieldName];
                                     if (!displayLabel) {
                                         // 最后备用：使用我的字段映射
-                                        displayLabel = this.mapColFieldToDisplayName(fieldName, 'organization') || fieldName;
+                                        // 🔧 修复：使用标准回退函数
+                                        displayLabel = this.getStandardDisplayNameFallback(standardFieldName, 'organization') || this.mapColFieldToDisplayName(fieldName, 'organization') || fieldName;
                                     }
                                 }
                             }
@@ -4169,6 +4190,51 @@ export class MessageInfoBarRenderer {
     }
 
     /**
+     * 🔧 获取启用字段集合（与数据表逻辑对齐）
+     * 规则：仅当 subItem.enabled === true 时视为启用
+     */
+    getEnabledFieldSet(panelKey, panelConfig) {
+        try {
+            if (!panelConfig || !Array.isArray(panelConfig.subItems)) return null;
+            const enabled = new Set();
+            panelConfig.subItems.forEach((subItem, index) => {
+                if (subItem && subItem.enabled === true) {
+                    const nameKey = subItem.name || subItem.key;
+                    if (nameKey) enabled.add(String(nameKey));
+                    // 支持 col_X 字段（自定义/信息面板）
+                    enabled.add(`col_${index + 1}`);
+                    if (subItem.key && subItem.key !== subItem.name) {
+                        enabled.add(String(subItem.key));
+                    }
+                }
+            });
+            return enabled;
+        } catch (error) {
+            console.warn('[MessageInfoBarRenderer] ⚠️ 获取启用字段集合失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🔧 判断字段是否启用
+     */
+    isFieldEnabled(panelKey, fieldName, panelConfig) {
+        try {
+            const enabledSet = this.getEnabledFieldSet(panelKey, panelConfig);
+            // 如果没有配置，默认不过滤（保持兼容）
+            if (!enabledSet || enabledSet.size === 0) return true;
+            if (enabledSet.has(fieldName)) return true;
+            // 将 col_X 转换为标准字段名再尝试匹配
+            const standardName = this.convertColFieldToStandardName(fieldName, panelKey);
+            if (standardName && enabledSet.has(standardName)) return true;
+            return false;
+        } catch (error) {
+            console.warn('[MessageInfoBarRenderer] ⚠️ 判断字段是否启用失败:', error);
+            return true;
+        }
+    }
+
+    /**
      * 获取面板信息
      */
     getPanelInfo(panelKey) {
@@ -4320,8 +4386,16 @@ export class MessageInfoBarRenderer {
      */
     getFieldDisplayNameFromConfig(panelKey, fieldName, panelConfig) {
         try {
-            // 🔧 新增：对于自定义面板的col_X字段，需要特殊处理
-            if (panelConfig && panelConfig.subItems && fieldName.match(/^col_(\d+)$/)) {
+            // 🔧 新增：仅对“自定义面板”应用 col_X -> subItems 的快速映射，
+            // 避免覆盖标准面板（personal/tasks 等）的标准字段名，导致“前置字段”或“1”之类的错误标签
+            const standardPanels = [
+                'personal', 'world', 'interaction', 'inventory', 'abilities',
+                'tasks', 'organization', 'news', 'plot', 'cultivation',
+                'fantasy', 'modern', 'historical', 'magic', 'training'
+            ];
+            const isStandardPanel = standardPanels.includes((panelKey || '').toLowerCase());
+
+            if (!isStandardPanel && panelConfig && panelConfig.subItems && fieldName.match(/^col_(\d+)$/)) {
                 const colMatch = fieldName.match(/^col_(\d+)$/);
                 if (colMatch) {
                     const colIndex = parseInt(colMatch[1]) - 1; // col_1对应索引0
@@ -4419,6 +4493,67 @@ export class MessageInfoBarRenderer {
             
         } catch (error) {
             console.warn('[MessageInfoBarRenderer] ⚠️ 获取统一字段显示名称失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🔧 新增：标准显示名称回退函数 - 确保基础字段有正确的中文显示
+     */
+    getStandardDisplayNameFallback(fieldKey, panelType = null) {
+        try {
+            // 基础字段的硬编码映射表，确保不会返回错误的字段名
+            const standardMappings = {
+                personal: {
+                    'name': '姓名',
+                    'age': '年龄', 
+                    'gender': '性别',
+                    'occupation': '职业',
+                    'appearance': '外貌',
+                    'personality': '性格'
+                },
+                world: {
+                    'name': '世界名称',
+                    'type': '世界类型',
+                    'time': '时间设定',
+                    'location': '地点',
+                    'weather': '天气'
+                },
+                tasks: {
+                    'creation': '任务创建',
+                    'editing': '任务编辑',
+                    'status': '状态管理',
+                    'priority': '优先级'
+                },
+                interaction: {
+                    'name': '对象名称',
+                    'type': '对象类型',
+                    'status': '当前状态',
+                    'relationship': '关系类型',
+                    'intimacy': '亲密度'
+                }
+            };
+
+            // 优先从指定面板查找
+            if (panelType && standardMappings[panelType] && standardMappings[panelType][fieldKey]) {
+                console.log(`[MessageInfoBarRenderer] ✅ 标准回退映射: ${panelType}.${fieldKey} -> ${standardMappings[panelType][fieldKey]}`);
+                return standardMappings[panelType][fieldKey];
+            }
+
+            // 在所有面板中查找
+            for (const [panelId, mapping] of Object.entries(standardMappings)) {
+                if (mapping[fieldKey]) {
+                    console.log(`[MessageInfoBarRenderer] ✅ 跨面板回退映射: ${fieldKey} -> ${mapping[fieldKey]} (来自${panelId}面板)`);
+                    return mapping[fieldKey];
+                }
+            }
+
+            // 如果还是没有找到，返回null
+            console.log(`[MessageInfoBarRenderer] ⚠️ 标准回退映射未找到: ${fieldKey} (面板: ${panelType})`);
+            return null;
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 获取标准显示名称回退失败:', error);
             return null;
         }
     }
@@ -4658,6 +4793,8 @@ export class MessageInfoBarRenderer {
 
             let html = '';
             Object.entries(filteredData).forEach(([fieldName, value]) => {
+                // 仅渲染启用字段
+                if (!this.isFieldEnabled(panelId, fieldName, panelConfig)) return;
                 if (this.isValidDataValue(value)) {
                     // 🔧 修复：对于自定义面板，使用完整的字段映射逻辑
                     let displayLabel = this.getFieldDisplayNameFromConfig(panelId, fieldName, panelConfig);
