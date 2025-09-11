@@ -536,9 +536,15 @@ export class XMLDataParser {
     isOperationCommandFormat(content) {
         if (!content || typeof content !== 'string') return false;
 
-        // 检查是否包含操作指令格式的特征
-        const operationPattern = /^(add|update|delete)\s+\w+\(/m;
-        return operationPattern.test(content.trim());
+        // 检查是否包含操作指令格式的特征 - 支持大小写
+        const operationPattern = /^(add|update|delete|ADD|UPDATE|DELETE)\s+\w+\(/mi;
+        const result = operationPattern.test(content.trim());
+        
+        if (result) {
+            console.log('[XMLDataParser] ✅ 检测到操作指令格式');
+        }
+        
+        return result;
     }
 
     /**
@@ -592,8 +598,8 @@ export class XMLDataParser {
      */
     parseOperationCommand(commandLine) {
         try {
-            // 正则表达式匹配操作指令格式：add persona(1 {"1"，"张三"，"2"，"24"})
-            const operationRegex = /^(add|update|delete)\s+(\w+)\((\d+)(?:\s*\{([^}]*)\})?\)$/;
+            // 正则表达式匹配操作指令格式：add persona(1 {"1"，"张三"，"2"，"24"}) - 支持大小写
+            const operationRegex = /^(add|update|delete|ADD|UPDATE|DELETE)\s+(\w+)\((\d+)(?:\s*\{([^}]*)\})?\)$/i;
             const match = commandLine.match(operationRegex);
 
             if (!match) {
@@ -604,11 +610,13 @@ export class XMLDataParser {
             const [, operation, panelName, rowNumber, dataParams] = match;
 
             const operationData = {
-                type: operation.toLowerCase(), // add, update, delete
+                type: operation.toLowerCase(), // 统一转换为小写
                 panel: panelName,
                 row: parseInt(rowNumber),
                 data: {}
             };
+
+            console.log(`[XMLDataParser] 🔍 解析指令: ${operation.toUpperCase()} ${panelName}(${rowNumber})`);
 
             // 解析数据参数（如果存在）
             if (dataParams && dataParams.trim()) {

@@ -1130,6 +1130,89 @@ ${panelRulesSection}
     }
 
     /**
+     * 🔧 将面板数据格式化为提示词友好的新架构行展示
+     * - 仅用于构建提示词与数据对照信息，不写回存储
+     * - 非交互面板：旧架构对象 → 按子项顺序生成 行1
+     * - 交互面板：旧架构 npcX. 前缀 → 分组为多行
+     */
+    formatPanelRowsForPrompt(panelConfig, panelData) {
+        try {
+            const rows = [];
+            const subItems = Array.isArray(panelConfig?.subItems) ? panelConfig.subItems : [];
+            const panelId = panelConfig?.id || panelConfig?.key || '';
+
+            // 建立 子项key -> 列号 映射（1-based）
+            const keyToCol = new Map();
+            subItems.forEach((subItem, idx) => {
+                if (subItem && subItem.key) keyToCol.set(subItem.key, idx + 1);
+            });
+
+            const getDisplayName = (key) => this.getSubItemDisplayName(panelId, key);
+            const getValue = (rowObj, key) => {
+                const colIdx = keyToCol.get(key);
+                if (colIdx && rowObj[`col_${colIdx}`] !== undefined) return rowObj[`col_${colIdx}`];
+                if (rowObj[key] !== undefined) return rowObj[key];
+                return '';
+            };
+
+            const formatRow = (rowObjRaw) => {
+                const rowObj = rowObjRaw && rowObjRaw.rowData ? rowObjRaw.rowData : rowObjRaw || {};
+                const parts = [];
+                subItems.forEach((subItem, idx) => {
+                    const colIndex = idx + 1;
+                    const display = getDisplayName(subItem.key);
+                    const value = getValue(rowObj, subItem.key);
+                    if (value !== undefined && value !== null && String(value).trim() !== '') {
+                        parts.push(`${colIndex}(${display}): ${this.formatDataValue(value)}`);
+                    }
+                });
+                return parts.join(' | ');
+            };
+
+            if (Array.isArray(panelData)) {
+                // 新架构多行
+                panelData.forEach((row, idx) => {
+                    const line = formatRow(row);
+                    if (line) rows.push(`行${idx + 1}: ${line}`);
+                });
+                return rows;
+            }
+
+            if (panelId === 'interaction' && panelData && typeof panelData === 'object') {
+                // 旧架构 npcX. 前缀 → 分组
+                const npcMap = new Map();
+                Object.entries(panelData).forEach(([k, v]) => {
+                    const m = k.match(/^npc(\d+)\.(.+)$/);
+                    if (m) {
+                        const idx = parseInt(m[1], 10);
+                        const baseKey = m[2];
+                        if (!npcMap.has(idx)) npcMap.set(idx, {});
+                        npcMap.get(idx)[baseKey] = v;
+                    }
+                });
+                const sorted = Array.from(npcMap.keys()).sort((a, b) => a - b);
+                sorted.forEach((idx) => {
+                    const rowObj = npcMap.get(idx);
+                    const line = formatRow(rowObj);
+                    if (line) rows.push(`行${idx + 1}: ${line}`);
+                });
+                if (rows.length > 0) return rows;
+            }
+
+            // 非交互面板旧架构：对象 → 行1
+            if (panelData && typeof panelData === 'object') {
+                const line = formatRow(panelData);
+                if (line) rows.push(`行1: ${line}`);
+            }
+
+            return rows;
+        } catch (e) {
+            console.warn('[SmartPromptSystem] ⚠️ 面板数据格式化失败:', e?.message);
+            return [];
+        }
+    }
+
+    /**
      * 🚀 新增：获取AI记忆增强数据（包含历史记忆和上下文）
      */
     async getAIMemoryEnhancedData(enabledPanels) {
@@ -1786,8 +1869,8 @@ ${panelRulesSection}
             dataInfoParts.push(`记忆深度: ${metadata.memoryDepth || 0}个历史记录`);
             dataInfoParts.push('');
 
-            // 1. 当前数据状态
-            dataInfoParts.push('【📊 当前数据状态】');
+            // 1. 当前数据状态（统一按新架构行视图展示，避免旧架构误导AI）
+            dataInfoParts.push('【📊 当前数据状态（统一行视图）】');
             for (const panel of enabledPanels) {
                 const panelId = panel.id;
                 const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
@@ -1797,25 +1880,10 @@ ${panelRulesSection}
                 dataInfoParts.push(`${panelName}面板 (${panelId}): ${Object.keys(panelData).length > 0 ? '有数据' : '待生成'}`);
 
                 if (Object.keys(panelData).length > 0) {
-                    // 🔧 修复：对交互面板进行格式规范化显示
-                    if (panelId === 'interaction') {
-                        Object.entries(panelData).forEach(([key, value]) => {
-                            const displayValue = this.formatDataValue(value);
-                            // 检查是否已经是正确的 npc 前缀格式
-                            if (key.match(/^npc\d+\./)) {
-                                // 已经是正确格式，直接显示
-                                dataInfoParts.push(`  ${key}: ${displayValue}`);
-                            } else {
-                                // 错误格式，规范化为 npc0 前缀
-                                dataInfoParts.push(`  ${key}: ${displayValue} (已规范化)`);
-                            }
-                        });
-                    } else {
-                        // 非交互面板，正常显示
-                        Object.entries(panelData).forEach(([key, value]) => {
-                            const displayValue = this.formatDataValue(value);
-                            dataInfoParts.push(`  ${key}: ${displayValue}`);
-                        });
+                    // 使用统一的新架构行格式展示
+                    const normalizedRows = this.formatPanelRowsForPrompt(panel, panelData);
+                    if (normalizedRows.length > 0) {
+                        normalizedRows.forEach(line => dataInfoParts.push(`  ${line}`));
                     }
                 }
             }
@@ -1838,22 +1906,28 @@ ${panelRulesSection}
                             const timeAgo = this.formatTimeAgo(entry.timestamp);
                             dataInfoParts.push(`  ${index + 1}. ${timeAgo} (重要性: ${(entry.importance * 100).toFixed(0)}%)`);
 
-                            // 显示关键数据变化
+                            // 显示关键数据变化 - 转换为新架构行视图格式
                             const keyChanges = Object.entries(entry.data).slice(0, 3);
                             keyChanges.forEach(([key, value]) => {
                                 const displayValue = this.formatDataValue(value);
-                                // 🔧 修复：对交互面板历史数据进行格式规范化
+                                // 🔧 修复：将历史数据转换为新架构列号格式，避免误导AI
                                 if (panelKey === 'interaction') {
-                                    if (key.match(/^npc\d+\./)) {
-                                        // 已经是正确格式
-                                        dataInfoParts.push(`     ${key}: ${displayValue}`);
+                                    // 将旧的npc前缀格式转换为新架构描述，但不显示原始键名
+                                    if (key.match(/^npc\d+\.(.+)$/)) {
+                                        const match = key.match(/^npc(\d+)\.(.+)$/);
+                                        const npcIndex = parseInt(match[1]) + 1; // 转为1-based行号
+                                        const fieldName = match[2];
+                                        const fieldDisplayName = this.getSubItemDisplayName(panelKey, fieldName);
+                                        dataInfoParts.push(`     行${npcIndex}数据变化: ${fieldDisplayName} = ${displayValue}`);
                                     } else {
-                                        // 错误格式，规范化显示
-                                        dataInfoParts.push(`     ${key}: ${displayValue} (历史数据原始键)`);
+                                        // 未带前缀的字段，假设为行1
+                                        const fieldDisplayName = this.getSubItemDisplayName(panelKey, key);
+                                        dataInfoParts.push(`     行1数据变化: ${fieldDisplayName || key} = ${displayValue}`);
                                     }
                                 } else {
-                                    // 非交互面板，正常显示
-                                    dataInfoParts.push(`     ${key}: ${displayValue}`);
+                                    // 非交互面板，正常显示但使用友好的显示名
+                                    const fieldDisplayName = this.getSubItemDisplayName(panelKey, key);
+                                    dataInfoParts.push(`     ${fieldDisplayName || key}: ${displayValue}`);
                                 }
                             });
                         });
@@ -1871,18 +1945,24 @@ ${panelRulesSection}
 
                     Object.entries(persistentData).forEach(([key, value]) => {
                         const displayValue = this.formatDataValue(value);
-                        // 🔧 修复：对交互面板持久化数据进行格式规范化
+                        // 🔧 修复：将持久化数据转换为新架构友好格式，避免误导AI
                         if (panelKey === 'interaction') {
-                            if (key.match(/^npc\d+\./)) {
-                                // 已经是正确格式
-                                dataInfoParts.push(`  ${key}: ${displayValue}`);
+                            // 将旧的npc前缀格式转换为友好描述
+                            if (key.match(/^npc\d+\.(.+)$/)) {
+                                const match = key.match(/^npc(\d+)\.(.+)$/);
+                                const npcIndex = parseInt(match[1]) + 1; // 转为1-based行号
+                                const fieldName = match[2];
+                                const fieldDisplayName = this.getSubItemDisplayName(panelKey, fieldName);
+                                dataInfoParts.push(`  行${npcIndex}持久化字段: ${fieldDisplayName} = ${displayValue}`);
                             } else {
-                                // 错误格式，规范化显示
-                                dataInfoParts.push(`  ${key}: ${displayValue} (持久化数据原始键)`);
+                                // 未带前缀的字段，使用友好显示名
+                                const fieldDisplayName = this.getSubItemDisplayName(panelKey, key);
+                                dataInfoParts.push(`  ${fieldDisplayName || key}: ${displayValue}`);
                             }
                         } else {
-                            // 非交互面板，正常显示
-                            dataInfoParts.push(`  ${key}: ${displayValue}`);
+                            // 非交互面板，使用友好显示名
+                            const fieldDisplayName = this.getSubItemDisplayName(panelKey, key);
+                            dataInfoParts.push(`  ${fieldDisplayName || key}: ${displayValue}`);
                         }
                     });
                 }
@@ -2143,20 +2223,25 @@ ${panelRulesSection}
      */
     getSubItemDisplayName(panelId, subItemKey) {
         try {
-            // 🔧 修复：使用InfoBarSettings的完整映射表，确保所有字段都有正确的中文显示
-            if (window.SillyTavernInfobar?.infoBarSettings) {
-                const completeMapping = window.SillyTavernInfobar.infoBarSettings.getCompleteDisplayNameMapping();
+            // 🔧 修复：使用正确的路径访问InfoBarSettings
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+            
+            if (infoBarSettings && infoBarSettings.getCompleteDisplayNameMapping) {
+                const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
                 const panelMapping = completeMapping[panelId];
                 if (panelMapping && panelMapping[subItemKey]) {
+                    console.log(`[SmartPromptSystem] ✅ 映射字段: ${panelId}.${subItemKey} => ${panelMapping[subItemKey]}`);
                     return panelMapping[subItemKey];
                 }
             }
 
-            // 如果没有映射，返回原始键名（保持原样，避免格式化错误）
+            // 如果没有映射，返回原始键名
+            console.warn(`[SmartPromptSystem] ⚠️ 未找到字段映射: ${panelId}.${subItemKey}`);
             return subItemKey;
 
         } catch (error) {
-            console.warn('[SmartPromptSystem] ⚠️ 获取子项显示名称失败:', error);
+            console.error('[SmartPromptSystem] ❌ 获取子项显示名称失败:', error);
             return subItemKey;
         }
     }
@@ -2206,7 +2291,7 @@ ${panelRulesSection}
 ⚠️ 严禁添加未启用的面板或字段
 
 【✅ 数据输出格式（统一要求）】
-- 必须使用“操作指令格式”：add / update / delete
+- 必须使用"操作指令格式"：add / update / delete
 - 列号必须为纯数字（1,2,3, ...），对应面板子项顺序
 - 行号规则：第1行代表现有数据；新增从第2行开始
 - 内容必须位于 <infobar_data><!-- ... --></infobar_data> 注释内部
@@ -2697,12 +2782,16 @@ ${panelRulesSection}
             if (formatType === 'operation_commands') {
                 // 新的操作指令格式
                 return this.parseOperationCommands(dataContent);
-            } else if (formatType === 'legacy_xml') {
-                // 旧的XML格式（向后兼容）
-                return this.parseLegacyXMLFormat(dataContent);
+            } else if (formatType === 'modern_chinese') {
+                // 新的中文字段名格式
+                return this.parseModernChineseFormat(dataContent);
+            } else if (formatType === 'key_value_chinese') {
+                // 键值对格式（支持中文键名）
+                return this.parseKeyValueChineseFormat(dataContent);
             } else {
-                console.warn('[SmartPromptSystem] ⚠️ 未识别的数据格式，尝试通用解析');
-                return this.parseGenericFormat(dataContent);
+                console.warn('[SmartPromptSystem] ⚠️ 未识别的数据格式，仅支持新的操作指令格式');
+                console.warn('[SmartPromptSystem] 📝 数据内容预览:', dataContent.substring(0, 200));
+                return null;
             }
 
         } catch (error) {
@@ -2717,11 +2806,12 @@ ${panelRulesSection}
     detectDataFormat(dataContent) {
         const lines = dataContent.split('\n').filter(line => line.trim());
 
-        // 检查是否包含操作指令格式（新格式优先）
-        const operationPattern = /^(add|update|delete)\s+\w+\(/;
+        // 检查是否包含操作指令格式（新格式优先）- 支持大小写
+        const operationPattern = /^(add|update|delete|ADD|UPDATE|DELETE)\s+\w+\(/i;
         const hasOperationCommands = lines.some(line => operationPattern.test(line.trim()));
 
         if (hasOperationCommands) {
+            console.log('[SmartPromptSystem] ✅ 检测到操作指令格式');
             return 'operation_commands';
         }
 
@@ -2741,13 +2831,7 @@ ${panelRulesSection}
             return 'key_value_chinese';
         }
 
-        // 检查是否是旧的XML格式（保持向后兼容）
-        const xmlPattern = /^\w+:\s*\w+="[^"]*"/;
-        const hasXMLFormat = lines.some(line => xmlPattern.test(line.trim()));
-
-        if (hasXMLFormat) {
-            return 'legacy_xml';
-        }
+        // 🚨 已移除旧XML格式支持 - 强制使用新的操作指令格式
 
         // 🔧 新增：检查是否是JSON对象格式
         if (dataContent.trim().startsWith('{') && dataContent.trim().endsWith('}')) {
@@ -2893,12 +2977,12 @@ ${panelRulesSection}
 
     /**
      * 🔧 解析单个操作指令
-     * 格式：add persona(1 {1，张三，2，24，3，程序员})
+     * 格式：add persona(1 {1，张三，2，24，3，程序员}) - 支持大小写
      */
     parseOperationCommand(commandLine) {
         try {
-            // 正则表达式匹配操作指令格式
-            const operationRegex = /^(add|update|delete)\s+(\w+)\((\d+)(?:\s*\{([^}]*)\})?\)$/;
+            // 正则表达式匹配操作指令格式 - 支持大小写
+            const operationRegex = /^(add|update|delete|ADD|UPDATE|DELETE)\s+(\w+)\((\d+)(?:\s*\{([^}]*)\})?\)$/i;
             const match = commandLine.match(operationRegex);
 
             if (!match) {
@@ -2909,11 +2993,13 @@ ${panelRulesSection}
             const [, operation, panelName, rowNumber, dataParams] = match;
 
             const operationData = {
-                type: operation.toLowerCase(), // add, update, delete
+                type: operation.toLowerCase(), // 统一转换为小写
                 panel: panelName,
                 row: parseInt(rowNumber),
                 data: {}
             };
+
+            console.log(`[SmartPromptSystem] 🔍 解析指令: ${operation.toUpperCase()} ${panelName}(${rowNumber})`);
 
             // 解析数据参数（如果存在）
             if (dataParams && dataParams.trim()) {
@@ -2988,102 +3074,57 @@ ${panelRulesSection}
     }
 
     /**
-     * 🔧 解析旧的XML格式（向后兼容）
+     * 🚨 已禁用：旧XML格式解析（强制使用新格式）
      */
     parseLegacyXMLFormat(dataContent) {
-        try {
-            console.log('[SmartPromptSystem] 🔄 解析旧XML格式（向后兼容）...');
-
-            const panels = {};
-            const lines = dataContent.split('\n').filter(line => line.trim());
-
-            for (const line of lines) {
-                const trimmedLine = line.trim();
-                if (!trimmedLine || trimmedLine.startsWith('//') || trimmedLine.startsWith('#')) {
-                    continue; // 跳过空行和注释
-                }
-
-                // 解析面板行格式：panelId: field1="value1", field2="value2"
-                const colonIndex = trimmedLine.indexOf(':');
-                if (colonIndex === -1) continue;
-
-                const panelId = trimmedLine.substring(0, colonIndex).trim();
-                const fieldsStr = trimmedLine.substring(colonIndex + 1).trim();
-
-                if (!panels[panelId]) {
-                    panels[panelId] = {};
-                }
-
-                // 解析字段
-                this.parseFieldsString(fieldsStr, panels[panelId]);
+        console.error('[SmartPromptSystem] 🚨 检测到旧XML格式数据解析尝试');
+        console.error('[SmartPromptSystem] 📝 数据内容:', dataContent.substring(0, 200));
+        console.error('[SmartPromptSystem] 💡 旧XML格式已被完全禁用，请使用操作指令格式');
+        console.error('[SmartPromptSystem] ✅ 正确格式: add interaction(1 {"1","张三","2","朋友","3","友好"})');
+        
+        return {
+            panels: {},
+            format: 'legacy_xml_disabled',
+            error: '旧XML格式已被禁用，请使用操作指令格式',
+            metadata: {
+                timestamp: Date.now(),
+                source: 'ai-message',
+                panelCount: 0
             }
-
-            console.log(`[SmartPromptSystem] ✅ 解析了 ${Object.keys(panels).length} 个面板的数据（旧格式）`);
-
-            return {
-                panels,
-                format: 'legacy_xml',
-                metadata: {
-                    timestamp: Date.now(),
-                    source: 'ai-message',
-                    panelCount: Object.keys(panels).length
-                }
-            };
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 解析旧XML格式失败:', error);
-            return null;
-        }
+        };
     }
 
     /**
-     * 🔧 解析通用格式
+     * 🚨 已弃用：通用格式解析（强制使用新格式）
      */
     parseGenericFormat(dataContent) {
-        try {
-            console.log('[SmartPromptSystem] 🔄 尝试通用格式解析...');
-
-            // 尝试作为旧格式解析
-            const legacyResult = this.parseLegacyXMLFormat(dataContent);
-            if (legacyResult && legacyResult.panels && Object.keys(legacyResult.panels).length > 0) {
-                legacyResult.format = 'generic_legacy';
-                return legacyResult;
+        console.warn('[SmartPromptSystem] 🚨 检测到未支持的数据格式');
+        console.warn('[SmartPromptSystem] 📝 请使用操作指令格式：add/update/delete 面板名(行号 {"列号","值"})');
+        console.warn('[SmartPromptSystem] 💡 示例：add interaction(1 {"1","张三","2","朋友","3","友好"})');
+        
+        return {
+            panels: {},
+            format: 'unsupported',
+            error: '不支持的数据格式，请使用操作指令格式',
+            metadata: {
+                timestamp: Date.now(),
+                source: 'ai-message',
+                panelCount: 0
             }
-
-            console.warn('[SmartPromptSystem] ⚠️ 无法解析数据内容');
-            return null;
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 通用格式解析失败:', error);
-            return null;
-        }
+        };
     }
 
     /**
-     * 🔧 解析字段字符串（旧格式支持）
+     * 🚨 已弃用：旧格式字段解析（不再支持）
      */
     parseFieldsString(fieldsStr, panelData) {
-        try {
-            // 🔧 修复：改进正则表达式以正确处理带数字的子项名称
-            // 支持格式：key="value", key1="value", 测试子项1="value", npc0.name="value"
-            const fieldRegex = /([\u4e00-\u9fa5\w]+(?:\.[\u4e00-\u9fa5\w]+)?)="([^"]*?)"/g;
-            let match;
-
-            while ((match = fieldRegex.exec(fieldsStr)) !== null) {
-                const [, key, value] = match;
-
-                // 🔧 修复：验证key的有效性，确保不会将数字单独解析为key
-                if (this.isValidFieldKey(key)) {
-                    panelData[key] = value;
-                    console.log(`[SmartPromptSystem] ✅ 解析字段: ${key} = "${value}"`);
-                } else {
-                    console.warn(`[SmartPromptSystem] ⚠️ 跳过无效字段key: ${key}`);
-                }
-            }
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 解析字段字符串失败:', error);
-        }
+        console.warn('[SmartPromptSystem] 🚨 检测到尝试解析旧格式字段');
+        console.warn('[SmartPromptSystem] 📝 字段内容:', fieldsStr);
+        console.warn('[SmartPromptSystem] 💡 请使用新的操作指令格式：add/update/delete 面板名(行号 {"列号","值"})');
+        console.error('[SmartPromptSystem] ❌ 旧格式字段解析已被禁用，请更新AI提示词模板');
+        
+        // 不执行任何解析，直接返回
+        return;
     }
 
     /**
@@ -3307,10 +3348,21 @@ ${panelRulesSection}
             if (Array.isArray(currentPanelData)) {
                 panelArray = [...currentPanelData];
             } else if (currentPanelData && typeof currentPanelData === 'object') {
-                // 将对象格式转换为数组格式
-                const keys = Object.keys(currentPanelData).map(k => parseInt(k)).filter(k => !isNaN(k)).sort((a, b) => a - b);
-                panelArray = keys.map(k => currentPanelData[k]);
-                console.log(`[SmartPromptSystem] 🔄 将对象格式转换为数组格式: ${keys.length}行`);
+                // 🔧 修复：区分新架构数组对象和旧架构键值对象
+                const numericKeys = Object.keys(currentPanelData)
+                    .map(k => parseInt(k))
+                    .filter(k => !isNaN(k));
+                
+                if (numericKeys.length > 0) {
+                    // 新架构：对象键为数字索引 {0: {col_1: ...}, 1: {...}}
+                    const sortedKeys = numericKeys.sort((a, b) => a - b);
+                    panelArray = sortedKeys.map(k => currentPanelData[k]);
+                    console.log(`[SmartPromptSystem] 🔄 新架构对象转数组格式: ${sortedKeys.length}行`);
+                } else {
+                    // 旧架构：直接键值对 {name: "用户", age: "25岁"}，转为单行数组，保留原始数据
+                    panelArray = [currentPanelData];
+                    console.log(`[SmartPromptSystem] 🔄 旧架构对象转数组格式: 1行 (保留原始数据)`);
+                }
             }
 
             // 确保数组有足够的行
@@ -3348,10 +3400,21 @@ ${panelRulesSection}
             if (Array.isArray(currentPanelData)) {
                 panelArray = [...currentPanelData];
             } else if (currentPanelData && typeof currentPanelData === 'object') {
-                // 将对象格式转换为数组格式
-                const keys = Object.keys(currentPanelData).map(k => parseInt(k)).filter(k => !isNaN(k)).sort((a, b) => a - b);
-                panelArray = keys.map(k => currentPanelData[k]);
-                console.log(`[SmartPromptSystem] 🔄 将对象格式转换为数组格式: ${keys.length}行`);
+                // 🔧 修复：区分新架构数组对象和旧架构键值对象
+                const numericKeys = Object.keys(currentPanelData)
+                    .map(k => parseInt(k))
+                    .filter(k => !isNaN(k));
+                
+                if (numericKeys.length > 0) {
+                    // 新架构：对象键为数字索引 {0: {col_1: ...}, 1: {...}}
+                    const sortedKeys = numericKeys.sort((a, b) => a - b);
+                    panelArray = sortedKeys.map(k => currentPanelData[k]);
+                    console.log(`[SmartPromptSystem] 🔄 新架构对象转数组格式: ${sortedKeys.length}行`);
+                } else {
+                    // 旧架构：直接键值对 {name: "用户", age: "25岁"}，转为单行数组，保留原始数据
+                    panelArray = [currentPanelData];
+                    console.log(`[SmartPromptSystem] 🔄 旧架构对象转数组格式: 1行 (保留原始数据)`);
+                }
             }
 
             // 确保数组有足够的行
@@ -3389,10 +3452,21 @@ ${panelRulesSection}
             if (Array.isArray(currentPanelData)) {
                 panelArray = [...currentPanelData];
             } else if (currentPanelData && typeof currentPanelData === 'object') {
-                // 将对象格式转换为数组格式
-                const keys = Object.keys(currentPanelData).map(k => parseInt(k)).filter(k => !isNaN(k)).sort((a, b) => a - b);
-                panelArray = keys.map(k => currentPanelData[k]);
-                console.log(`[SmartPromptSystem] 🔄 将对象格式转换为数组格式: ${keys.length}行`);
+                // 🔧 修复：区分新架构数组对象和旧架构键值对象
+                const numericKeys = Object.keys(currentPanelData)
+                    .map(k => parseInt(k))
+                    .filter(k => !isNaN(k));
+                
+                if (numericKeys.length > 0) {
+                    // 新架构：对象键为数字索引 {0: {col_1: ...}, 1: {...}}
+                    const sortedKeys = numericKeys.sort((a, b) => a - b);
+                    panelArray = sortedKeys.map(k => currentPanelData[k]);
+                    console.log(`[SmartPromptSystem] 🔄 新架构对象转数组格式: ${sortedKeys.length}行`);
+                } else {
+                    // 旧架构：直接键值对 {name: "用户", age: "25岁"}，转为单行数组，保留原始数据
+                    panelArray = [currentPanelData];
+                    console.log(`[SmartPromptSystem] 🔄 旧架构对象转数组格式: 1行 (保留原始数据)`);
+                }
             } else {
                 console.log(`[SmartPromptSystem] ℹ️ 面板数据为空，无需删除`);
                 return;
@@ -4168,7 +4242,7 @@ update plot(1 {"4":"新的剧情发展"}) ← 更新现有剧情数据
 
 3. **格式规范要求**：
    - **严格遵循【信息栏数据格式规范】**
-   - 使用“操作指令格式”（add/update/delete；列号为纯数字），不要使用旧键值对/XML紧凑/JSON/嵌套XML
+   - 使用"操作指令格式"（add/update/delete；列号为纯数字），不要使用旧键值对/XML紧凑/JSON/嵌套XML
    - 🔥🔥🔥 **严禁使用Markdown格式**：禁止 - **标题**、**粗体**、列表符号
    - 生成真实、具体的数据内容，避免"未知"、"N/A"等占位符
    - 确保数据与当前剧情和角色状态一致
