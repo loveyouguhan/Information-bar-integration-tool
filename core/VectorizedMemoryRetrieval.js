@@ -678,12 +678,20 @@ export class VectorizedMemoryRetrieval {
                 throw new Error('Transformers.js引擎未初始化');
             }
             
+            // 🔧 修复：检查是否为fallback模式
             if (this.vectorEngines.transformers === 'fallback') {
+                return await this.vectorizeWithFallback(text);
+            }
+            
+            // 🔧 新增：确保transformers是函数类型
+            if (typeof this.vectorEngines.transformers !== 'function') {
+                console.warn('[VectorizedMemoryRetrieval] ⚠️ Transformers引擎类型错误，降级到fallback模式');
                 return await this.vectorizeWithFallback(text);
             }
             
             // 🔧 新增：角色扮演优化 - 智能检测面板类型并设置上下文
             if (this.isRoleplayModeSupported() && 
+                typeof this.vectorEngines.transformers === 'function' &&
                 typeof this.vectorEngines.transformers.setPanelContext === 'function') {
                 
                 const detectedPanel = this.detectPanelType(text);
@@ -691,6 +699,11 @@ export class VectorizedMemoryRetrieval {
                     console.log('[VectorizedMemoryRetrieval] 🎯 检测到面板类型:', detectedPanel);
                     this.vectorEngines.transformers.setPanelContext(detectedPanel);
                 }
+            }
+            
+            // 🔧 修复：再次确保transformers是函数后再调用
+            if (typeof this.vectorEngines.transformers !== 'function') {
+                throw new Error('Transformers引擎不是有效的函数');
             }
             
             // 使用Transformers.js生成嵌入

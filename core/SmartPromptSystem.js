@@ -281,10 +281,10 @@ export class SmartPromptSystem {
 数据操作员五步分析过程：
 0. 操作模式确定：确定需要执行的操作类型（ADD/UPDATE/DELETE）（禁止修改此步骤名称！）
 1. 剧情数据分析：当前剧情中涉及哪些数据变化？新增、修改还是删除？（禁止修改此步骤名称！）
-2. 操作目标识别：确定需要操作的面板、行号和具体数据内容（禁止修改此步骤名称！）
-3. 操作指令规划：规划具体的操作指令格式和参数，确保所有值都用双引号包裹（禁止修改此步骤名称！）
-4. 数据一致性检查：确保操作后的数据逻辑正确且符合剧情（禁止修改此步骤名称！）
-5. 指令格式验证：确认操作指令格式正确且可执行，所有值必须用双引号包裹（禁止修改此步骤名称！）
+2. 操作目标识别：确定需要执行哪些操作指令，涉及的数据表和行号（禁止修改此步骤名称！）
+3. 操作指令规划：规划具体的add/update/delete指令格式和参数，确保所有值都用双引号包裹（禁止修改此步骤名称！）
+4. 数据一致性检查：确保操作指令执行后的数据逻辑正确且符合剧情（禁止修改此步骤名称！）
+5. 指令格式验证：确认所有操作指令格式正确且可执行，列号为纯数字，值用双引号包裹（禁止修改此步骤名称！）
 
 ❌❌❌ 严禁自创步骤如："识别核心需求"、"解析剧情文本" 等！❌❌❌
 ✅✅✅ 必须完全按照上述数据操作员五步进行分析！✅✅✅
@@ -344,12 +344,12 @@ add interaction(1 {"1","小王","2","朋友","3","友好","4","开心"})
 位置：建议放在回复的最后部分，不影响正常的剧情叙述
 **infobar_data的内容必须严格遵循aiThinkProcess中五步思考的分析结果**
 
-【⚠️ XML紧凑格式详细示例 ⚠️】
+【⚠️ 操作指令格式详细示例 ⚠️】
 
 ❌ 错误格式示例1 - 缺少注释包装：
 <infobar_data>
-personal: name="张三", age="25"
-world: name="现代都市"
+add personal(1 {"1","张三","2","25"})
+add world(1 {"1","现代都市"})
 </infobar_data>
 
 ❌ 错误格式示例2 - 使用了错误标签名：
@@ -375,8 +375,8 @@ world: name="现代都市"
 ❌ 错误格式示例5 - 生成了未启用的面板：
 <infobar_data>
 <!--
-personal: name="张三", age="25"
-未启用面板: data="不应该出现"
+add personal(1 {"1","张三","2","25"})
+add 未启用面板(1 {"1","不应该出现"})
 -->
 </infobar_data>
 
@@ -436,8 +436,8 @@ interaction: npc0.姓名="小雨", npc0.关系="朋友", npc0.态度="友好", n
 数据操作员五步分析过程：
 0. 操作模式确定：需要执行ADD和UPDATE操作（步骤名称禁止修改）
 1. 剧情数据分析：张三从家里来到办公室工作，需要添加新的工作任务记录，更新个人位置信息，同事小雨前来询问进度需要记录交互（步骤名称禁止修改）
-2. 操作目标识别：personal面板第1行需要更新位置，tasks面板需要添加新任务记录，interaction面板需要添加小雨的交互记录（步骤名称禁止修改）
-3. 操作指令规划：update personal(1 {"4"，"办公室"})，add tasks(2 {"1"，"项目开发"，"2"，"进行中"})，add interaction(2 {"1"，"小雨"，"2"，"同事"，"3"，"友好"})（步骤名称禁止修改）
+2. 操作目标识别：需要执行update personal(1)更新位置，add tasks(1)添加新任务记录，add interaction(1)添加小雨的交互记录（步骤名称禁止修改）
+3. 操作指令规划：update personal(1 {"4","办公室"})，add tasks(1 {"1","项目开发","2","进行中"})，add interaction(1 {"1","小雨","2","同事","3","友好"})（步骤名称禁止修改）
 4. 数据一致性检查：位置更新符合剧情，任务记录合理，交互对象信息完整（步骤名称禁止修改）
 5. 指令格式验证：所有操作指令格式正确，参数完整，所有值都用双引号包裹，可正常执行（步骤名称禁止修改）
 
@@ -625,12 +625,19 @@ ${panelRulesSection}
         // 生成数据信息
         const currentDataInfo = await this.generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy);
 
-        // 生成增量指令
+        // 🔧 修复：生成详细的增量指令，强调缺失字段补充
         let incrementalInstructions = '';
         if (missingDataFields.length > 0) {
             incrementalInstructions = this.generateIncrementalInstructions(missingDataFields, enabledPanels);
+            incrementalInstructions += `
+
+🚨🚨🚨 **重要提醒：检测到 ${missingDataFields.length} 个面板有缺失字段需要补充！** 🚨🚨🚨
+
+⚠️ 即使是增量更新模式，也必须补充这些缺失字段！
+⚠️ 请为每个缺失字段生成符合当前剧情的具体内容！
+⚠️ 不要输出"未知"、"待定"等占位符！`;
         } else {
-            incrementalInstructions = '无缺失字段，仅输出有变化的数据';
+            incrementalInstructions = '✅ 无缺失字段检测到，仅输出有变化的数据';
         }
 
         // 组合模板
@@ -661,10 +668,29 @@ ${panelRulesSection}
      * 生成增量指令
      */
     generateIncrementalInstructions(missingDataFields, enabledPanels) {
-        let instructions = '需要补充的字段：\n';
+        let instructions = '🔍 **缺失字段详细列表（必须补充）**：\n\n';
+        
         for (const field of missingDataFields) {
-            instructions += `• ${field.panelName}: ${field.missingSubItems.map(s => s.displayName).join(', ')}\n`;
+            instructions += `📋 **${field.panelName}** 面板缺失字段：\n`;
+            
+            field.missingSubItems.forEach((subItem, index) => {
+                // 🔧 新增：显示更详细的缺失字段信息
+                if (subItem.emptyRows !== undefined && subItem.totalRows !== undefined) {
+                    instructions += `  ${index + 1}. ${subItem.displayName} (${subItem.emptyRows}/${subItem.totalRows}行为空，${subItem.emptyPercentage}%空白率)\n`;
+                } else {
+                    instructions += `  ${index + 1}. ${subItem.displayName}\n`;
+                }
+            });
+            
+            instructions += '\n';
         }
+        
+        instructions += `📊 **补充要求**：
+• 总计 ${missingDataFields.reduce((sum, field) => sum + field.missingSubItems.length, 0)} 个字段需要补充
+• 必须基于当前剧情生成具体、真实的内容
+• 使用操作指令格式：add/update 面板名(行号 {"列号","值",...})
+• 严禁使用"未知"、"待补充"、"空"等占位符`;
+        
         return instructions;
     }
 
@@ -1508,21 +1534,60 @@ ${panelRulesSection}
                 console.log(`[SmartPromptSystem] 🔍 检查面板 ${panel.id}(${panelKey}): 数据存在=${!!panelData}`);
 
                 if (panelData) {
-                    // 实际存在的字段数
-                    const actualFields = Object.keys(panelData);
-                    const validFields = Object.values(panelData).filter(value =>
-                        value !== null && value !== undefined && value !== ''
-                    );
-
-                    console.log(`[SmartPromptSystem] 📊 面板 ${panel.id}: 实际字段=${actualFields.length}, 有效字段=${validFields.length}`);
-
-                    // 使用实际字段数和配置字段数的最大值，防止覆盖率超过100%
                     const configuredFieldCount = panel.subItems ? panel.subItems.length : 0;
-                    const actualFieldCount = actualFields.length;
-                    const maxFieldCount = Math.max(configuredFieldCount, actualFieldCount);
+                    
+                    // 🔧 修复：正确处理多行数据格式的覆盖率计算
+                    if (Array.isArray(panelData)) {
+                        console.log(`[SmartPromptSystem] 📊 面板 ${panel.id}: 多行数据格式，行数=${panelData.length}`);
+                        
+                        let totalCells = 0;
+                        let validCells = 0;
+                        
+                        // 计算每一行每个字段的有效性
+                        panelData.forEach((row, rowIndex) => {
+                            if (row && typeof row === 'object') {
+                                if (panel.subItems) {
+                                    // 按配置的子项统计
+                                    panel.subItems.forEach(subItem => {
+                                        totalCells++;
+                                        const value = row[subItem.key];
+                                        if (value && typeof value === 'string' && value.trim() !== '') {
+                                            validCells++;
+                                        }
+                                    });
+                                } else {
+                                    // 按实际字段统计
+                                    Object.values(row).forEach(value => {
+                                        totalCells++;
+                                        if (value && typeof value === 'string' && value.trim() !== '') {
+                                            validCells++;
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                        
+                        totalFields += totalCells;
+                        existingFields += validCells;
+                        
+                        console.log(`[SmartPromptSystem] 📊 面板 ${panel.id}: 总单元格=${totalCells}, 有效单元格=${validCells}, 覆盖率=${totalCells > 0 ? Math.round((validCells/totalCells)*100) : 0}%`);
+                        
+                    } else {
+                        // 传统键值对格式
+                        const actualFields = Object.keys(panelData);
+                        const validFields = Object.values(panelData).filter(value =>
+                            value !== null && value !== undefined && value !== ''
+                        );
 
-                    totalFields += maxFieldCount;
-                    existingFields += validFields.length;
+                        console.log(`[SmartPromptSystem] 📊 面板 ${panel.id}: 实际字段=${actualFields.length}, 有效字段=${validFields.length}`);
+
+                        // 使用实际字段数和配置字段数的最大值，防止覆盖率超过100%
+                        const actualFieldCount = actualFields.length;
+                        const maxFieldCount = Math.max(configuredFieldCount, actualFieldCount);
+
+                        totalFields += maxFieldCount;
+                        existingFields += validFields.length;
+                    }
                 } else {
                     // 没有数据的面板，使用配置的字段数
                     const configuredFieldCount = panel.subItems ? panel.subItems.length : 0;
@@ -2420,15 +2485,15 @@ ${panelRulesSection}
 可用字段: ${interactionFields.join(', ')}
 
 ✅ 正确示例（NPC角色信息 - 每个NPC都有完整字段）:
-- npc0.name="奥兰多教授", npc0.type="教授", npc0.status="友善", npc0.relationship="导师", npc0.intimacy="尊敬", npc0.history="长期指导学习"
-- npc1.name="马尔科姆", npc1.type="学生", npc1.status="冷淡", npc1.relationship="同学", npc1.intimacy="疏远", npc1.history="课堂上有过争执"
-- npc2.name="瓦里安血棘", npc2.type="战士", npc2.status="敌对", npc2.relationship="敌人", npc2.intimacy="仇恨", npc2.history="多次战斗冲突"
+- add interaction(1 {"1","奥兰多教授","2","教授","3","友善","4","导师","5","尊敬","6","长期指导学习"})
+- add interaction(2 {"1","马尔科姆","2","学生","3","冷淡","4","同学","5","疏远","6","课堂上有过争执"})
+- add interaction(3 {"1","瓦里安血棘","2","战士","3","敌对","4","敌人","5","仇恨","6","多次战斗冲突"})
 
 🚨 **注意：每个NPC都必须包含相同的字段集合！如果某个字段没有信息，使用"未知"或"暂无"填充！**
 
 ❌ 错误示例（用户角色信息误填入交互对象）:
-- npc0.name="用户角色名", npc0.relationship="自己" ← 这是错误的！
-- npc0.name="我", npc0.status="自信" ← 用户信息不应出现在交互对象面板！
+- add interaction(1 {"1","用户角色名","4","自己"}) ← 这是错误的！
+- add interaction(1 {"1","我","3","自信"}) ← 用户信息不应出现在交互对象面板！
 
 🔍 角色区分要点：
 - 个人信息面板 = 用户角色数据（玩家自己）
@@ -2823,11 +2888,21 @@ ${panelRulesSection}
             return 'modern_chinese';
         }
 
-        // 🔧 新增：检查是否是键值对格式（支持中文键名）
-        const keyValuePattern = /^[\u4e00-\u9fff\w]+\s*[:=]\s*.+/;
-        const hasKeyValueFormat = lines.some(line => keyValuePattern.test(line.trim()));
+        // 🔧 修复：检查是否是键值对格式（排除旧XML格式）
+        const keyValuePattern = /^[\u4e00-\u9fff\w]+\s*[:=]\s*[^"'<>=,]+$/;
+        const hasKeyValueFormat = lines.some(line => {
+            const trimmed = line.trim();
+            // 🚨 重要：排除旧格式（包含引号、逗号、XML标签的行）
+            if (trimmed.includes('="') || trimmed.includes("='") || 
+                trimmed.includes('<') || trimmed.includes('>') ||
+                trimmed.includes(',') || trimmed.includes('npc')) {
+                return false;
+            }
+            return keyValuePattern.test(trimmed);
+        });
 
         if (hasKeyValueFormat) {
+            console.log('[SmartPromptSystem] ✅ 检测到纯键值对格式（非旧XML格式）');
             return 'key_value_chinese';
         }
 
@@ -2848,11 +2923,13 @@ ${panelRulesSection}
     }
 
     /**
-     * 🚀 解析新的中文字段名格式
+     * 🚨 已废弃：旧格式兼容性解析（建议移除）
+     * ⚠️ 此函数解析旧的 "面板名: 字段名=值" 格式，应该强制使用操作指令格式
      */
     parseModernChineseFormat(dataContent) {
         try {
-            console.log('[SmartPromptSystem] 🚀 开始解析新的中文字段名格式...');
+            console.warn('[SmartPromptSystem] ⚠️ 检测到旧格式数据，建议使用操作指令格式...');
+            console.warn('[SmartPromptSystem] 🔧 建议格式: add personal(1 {"1","张三","2","25"})');
 
             const result = {};
             const lines = dataContent.split('\n').filter(line => line.trim());
@@ -2863,7 +2940,7 @@ ${panelRulesSection}
                     continue;
                 }
 
-                // 匹配格式：面板名: 字段名=值
+                // ⚠️ 兼容旧格式：面板名: 字段名=值 （建议废弃）
                 const match = trimmedLine.match(/^(.+?):\s*(.+?)=(.+)$/);
                 if (match) {
                     const [, panelName, fieldName, value] = match;
@@ -2896,6 +2973,17 @@ ${panelRulesSection}
         try {
             console.log('[SmartPromptSystem] 🚀 开始解析键值对中文格式...');
 
+            // 🚨 严格验证：检查是否包含旧格式特征
+            if (dataContent.includes('="') || dataContent.includes("='") || 
+                dataContent.includes('npc0.') || dataContent.includes('npc1.') ||
+                dataContent.includes('<') || dataContent.includes('>') ||
+                dataContent.includes('personal:') || dataContent.includes('world:') ||
+                dataContent.includes('interaction:')) {
+                console.error('[SmartPromptSystem] 🚨 检测到旧格式特征，拒绝解析键值对格式');
+                console.error('[SmartPromptSystem] 🚨 数据内容预览:', dataContent.substring(0, 200));
+                return null;
+            }
+
             const result = {};
             const lines = dataContent.split('\n').filter(line => line.trim());
             let currentPanel = 'default';
@@ -2906,9 +2994,17 @@ ${panelRulesSection}
                     continue;
                 }
 
-                // 匹配格式：字段名: 值 或 字段名=值
-                const colonMatch = trimmedLine.match(/^(.+?):\s*(.+)$/);
-                const equalsMatch = trimmedLine.match(/^(.+?)=(.+)$/);
+                // 🚨 二次验证：每行都检查旧格式特征
+                if (trimmedLine.includes('="') || trimmedLine.includes("='") || 
+                    trimmedLine.includes('npc') || trimmedLine.includes(',') ||
+                    trimmedLine.includes('<') || trimmedLine.includes('>')) {
+                    console.warn('[SmartPromptSystem] ⚠️ 跳过疑似旧格式的行:', trimmedLine);
+                    continue;
+                }
+
+                // 匹配格式：字段名: 值 或 字段名=值（但排除复杂值）
+                const colonMatch = trimmedLine.match(/^(.+?):\s*([^"'<>=,]+)$/);
+                const equalsMatch = trimmedLine.match(/^(.+?)=([^"'<>=,]+)$/);
                 
                 if (colonMatch || equalsMatch) {
                     const match = colonMatch || equalsMatch;
@@ -3598,20 +3694,27 @@ ${panelRulesSection}
                 return missingFields;
             }
 
-            // 与DataTable一致：从 chatData 的 infobar_data.panels 提取现有数据
-            const currentChatId = dataCore.getCurrentChatId?.();
-            const chatData = currentChatId ? await dataCore.getChatData(currentChatId) : null;
-            const panels = this.extractPanelsFromChatData(chatData) || {};
+            // 🔧 修复：直接从数据核心获取当前面板数据，支持多行数据格式
+            const currentPanelData = await this.getCurrentPanelData(enabledPanels);
+            const panels = currentPanelData || {};
 
             for (const panel of enabledPanels) {
                 const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
                 const panelData = panels[panelKey] || panels[panel.id];
 
-                if (!panelData || Object.keys(panelData).length === 0) {
+                // 🔧 修复：检查panel.subItems是否存在，避免undefined错误
+                if (!panel.subItems || !Array.isArray(panel.subItems)) {
+                    console.warn(`[SmartPromptSystem] ⚠️ 面板 ${panel.id || panel} 的subItems不存在或格式不正确，跳过`);
+                    continue;
+                }
+
+                // 🔧 修复：支持多行数据格式的空字段检测
+                if (!panelData || (Array.isArray(panelData) && panelData.length === 0) || 
+                    (!Array.isArray(panelData) && Object.keys(panelData).length === 0)) {
                     // 整个面板都缺失
                     missingFields.push({
                         panelId: panel.id,
-                        panelKey: panelKey, // 🔧 修复：添加实际使用的panelKey，自定义面板使用key
+                        panelKey: panelKey,
                         panelName: panel.name,
                         missingSubItems: panel.subItems.map(subItem => ({
                             key: subItem.key,
@@ -3621,30 +3724,73 @@ ${panelRulesSection}
                     continue;
                 }
 
-                // 检查子项是否缺失
+                // 🔧 新增：检查多行数据格式中的空字段
                 const missingSubItems = [];
-                // 交互对象面板需要识别 npcX.<key> 形式
-                let interactionBaseFields = null;
-                if (panel.id === 'interaction') {
-                    interactionBaseFields = new Set();
-                    Object.keys(panelData).forEach(k => {
-                        const m = k.match(/^npc\d+\.(.+)$/);
-                        if (m && m[1]) interactionBaseFields.add(m[1]);
-                    });
-                }
-
-                for (const subItem of panel.subItems) {
-                    const key = subItem.key;
-                    let present = false;
-                    if (panel.id === 'interaction') {
-                        // 只要任意 npcX.key 存在，就视为该字段已存在
-                        present = interactionBaseFields && interactionBaseFields.has(key);
-                    } else {
-                        present = Object.prototype.hasOwnProperty.call(panelData, key);
+                
+                // 处理数组格式的面板数据（多行数据）
+                if (Array.isArray(panelData)) {
+                    console.log(`[SmartPromptSystem] 🔍 检查面板 ${panel.id} 的多行数据，共 ${panelData.length} 行`);
+                    
+                    // 统计每个字段在所有行中的空值情况
+                    const fieldStats = {};
+                    
+                    for (const subItem of panel.subItems) {
+                        const key = subItem.key;
+                        let totalRows = panelData.length;
+                        let emptyRows = 0;
+                        let hasAnyValidData = false;
+                        
+                        // 检查每一行的这个字段
+                        panelData.forEach((row, rowIndex) => {
+                            if (row && typeof row === 'object') {
+                                const value = row[key];
+                                if (!value || (typeof value === 'string' && value.trim() === '')) {
+                                    emptyRows++;
+                                } else {
+                                    hasAnyValidData = true;
+                                }
+                            } else {
+                                emptyRows++;
+                            }
+                        });
+                        
+                        fieldStats[key] = {
+                            totalRows,
+                            emptyRows,
+                            hasAnyValidData,
+                            emptyPercentage: totalRows > 0 ? (emptyRows / totalRows) * 100 : 100
+                        };
+                        
+                        // 🎯 判断标准：如果字段在所有行中都为空，或者空值比例过高（>50%），则认为缺失
+                        if (!hasAnyValidData || fieldStats[key].emptyPercentage > 50) {
+                            const displayName = subItem.name || this.getSubItemDisplayName(panel.id, key);
+                            missingSubItems.push({ 
+                                key, 
+                                displayName,
+                                emptyRows,
+                                totalRows,
+                                emptyPercentage: Math.round(fieldStats[key].emptyPercentage)
+                            });
+                        }
                     }
-                    if (!present) {
-                        const displayName = subItem.name || this.getSubItemDisplayName(panel.id, key);
-                        missingSubItems.push({ key, displayName });
+                    
+                    console.log(`[SmartPromptSystem] 📊 面板 ${panel.id} 字段统计:`, fieldStats);
+                    
+                } else {
+                    // 处理传统键值对格式的面板数据
+                    for (const subItem of panel.subItems) {
+                        const key = subItem.key;
+                        let hasValidData = false;
+                        
+                        if (Object.prototype.hasOwnProperty.call(panelData, key)) {
+                            const value = panelData[key];
+                            hasValidData = value && value.trim() !== '';
+                        }
+                        
+                        if (!hasValidData) {
+                            const displayName = subItem.name || this.getSubItemDisplayName(panel.id, key);
+                            missingSubItems.push({ key, displayName });
+                        }
                     }
                 }
 
@@ -4221,11 +4367,11 @@ update plot(1 {"4":"新的剧情发展"}) ← 更新现有剧情数据
    - **必须根据【信息栏数据格式规范】生成具体内容**
    - **必须严格遵循上述aiThinkProcess中五步分析的结果**
 
-   🚨🚨🚨 **CRITICAL：必须使用XML紧凑格式，系统将拒绝所有其他格式** 🚨🚨🚨
+   🚨🚨🚨 **CRITICAL：必须使用操作指令格式，系统将拒绝所有其他格式** 🚨🚨🚨
 
    ✅ **正确格式（唯一可接受）**：
-   - personal: name="张三", age="25", occupation="程序员"
-   - world: name="现代都市", type="都市", time="2024年"
+   - add personal(1 {"1","张三","2","25","3","程序员"})
+   - add world(1 {"1","现代都市","2","都市","3","2024年"})
 
    ❌❌❌ **系统将完全拒绝以下格式（导致数据解析失败）** ❌❌❌：
    - ❌ JSON格式：{"角色": "我", "时间": "下午"}
@@ -4281,9 +4427,9 @@ update plot(1 {"4":"新的剧情发展"}) ← 更新现有剧情数据
    </aiThinkProcess>
 
    <infobar_data>
-   personal: name="艾莉丝", age="23", location="图书馆"（内容没有被<!--和-->包裹）
-   world: name="魔法学院", time="下午", atmosphere="安静"
-   interaction: npc0.姓名="马克教授", npc0.关系="导师", npc0.态度="友善"
+   add personal(1 {"1","艾莉丝","2","23","4","图书馆"})（内容没有被<!--和-->包裹）
+   add world(1 {"1","魔法学院","6","下午","7","安静"})
+   add interaction(1 {"1","马克教授","4","导师","3","友善"})
    </infobar_data>
 
 5. **🚨 关键输出位置要求 🚨**：
@@ -4462,6 +4608,19 @@ infobar_data标签（独立输出，必须后输出）
 
         try {
             console.log('[SmartPromptSystem] 🔍 开始严格格式验证...');
+
+            // 🚨 首先进行全局旧格式检测
+            if (dataContent.includes('="') || dataContent.includes("='") || 
+                dataContent.includes('npc0.') || dataContent.includes('npc1.') ||
+                /\w+:\s*\w+="/.test(dataContent)) {
+                const errorMsg = `🚨🚨🚨 CRITICAL FORMAT ERROR: 检测到旧XML格式数据！
+❌ 当前错误格式包含: ${dataContent.includes('="') ? '"属性=值"格式' : ''}${dataContent.includes('npc0.') ? ' NPC前缀格式' : ''}
+✅ 正确格式示例: add interaction(1 {"1","江琳","2","朋友","3","开心"})
+🚨 系统已完全移除兼容性处理！AI必须输出正确格式！`;
+                
+                console.error('[SmartPromptSystem] 🚨 CRITICAL FORMAT ERROR:', errorMsg);
+                throw new Error(errorMsg);
+            }
 
             // 检查是否包含interaction面板数据
             const lines = dataContent.split('\n').filter(line => line.trim());

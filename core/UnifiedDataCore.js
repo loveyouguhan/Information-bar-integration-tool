@@ -3554,8 +3554,103 @@ export class UnifiedDataCore {
                 }
                 console.log('[UnifiedDataCore] 🧹 已清理模板解析器缓存');
             }
+
+            // 🔧 新增：清理AI记忆数据库和快照（修复数据一致性问题）
+            await this.cleanupAIMemoryAndSnapshots(chatId, panelId, fieldKey, scope);
+
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 清理模块缓存失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：清理AI记忆数据和数据快照（修复数据一致性问题）
+     */
+    async cleanupAIMemoryAndSnapshots(chatId, panelId, fieldKey, scope) {
+        try {
+            console.log('[UnifiedDataCore] 🧠 开始清理AI记忆数据和快照...', { chatId, panelId, fieldKey, scope });
+
+            // 1. 清理AI记忆数据库
+            if (window.SillyTavernInfobar?.modules?.aiMemoryDatabaseInjector) {
+                const aiMemoryDB = window.SillyTavernInfobar.modules.aiMemoryDatabaseInjector;
+                if (scope === 'panel' && typeof aiMemoryDB.clearMemoryDatabase === 'function') {
+                    // 面板级别清理：清空整个记忆数据库
+                    const cleared = aiMemoryDB.clearMemoryDatabase();
+                    console.log('[UnifiedDataCore] 🧠 已清理AI记忆数据库:', cleared ? '✅ 成功' : '❌ 失败');
+                } else if (scope === 'field' && typeof aiMemoryDB.clearMemoryByField === 'function') {
+                    // 字段级别清理：尝试清理特定字段相关记忆
+                    await aiMemoryDB.clearMemoryByField(panelId, fieldKey);
+                    console.log('[UnifiedDataCore] 🧠 已清理字段相关AI记忆');
+                }
+            }
+
+            // 2. 清理AI总结缓存
+            if (window.SillyTavernInfobar?.modules?.aiMemorySummarizer) {
+                const aiSummarizer = window.SillyTavernInfobar.modules.aiMemorySummarizer;
+                if (aiSummarizer.summaryCache && scope === 'panel') {
+                    // 面板级别：清空总结缓存
+                    aiSummarizer.summaryCache.clear();
+                    console.log('[UnifiedDataCore] 🧠 已清理AI总结缓存');
+                }
+            }
+
+            // 3. 清理向量化记忆检索索引
+            if (window.SillyTavernInfobar?.modules?.vectorizedMemoryRetrieval) {
+                const vectorRetrieval = window.SillyTavernInfobar.modules.vectorizedMemoryRetrieval;
+                if (scope === 'panel') {
+                    // 面板级别：重建索引
+                    if (vectorRetrieval.vectorIndex) {
+                        vectorRetrieval.vectorIndex = [];
+                        console.log('[UnifiedDataCore] 🧠 已清理向量索引');
+                    }
+                    if (vectorRetrieval.memoryIndex) {
+                        vectorRetrieval.memoryIndex.clear();
+                        console.log('[UnifiedDataCore] 🧠 已清理记忆索引');
+                    }
+                    // 触发索引重建
+                    if (typeof vectorRetrieval.buildMemoryIndex === 'function') {
+                        setTimeout(() => {
+                            vectorRetrieval.buildMemoryIndex().catch(err => {
+                                console.warn('[UnifiedDataCore] ⚠️ 重建记忆索引失败:', err);
+                            });
+                        }, 1000);
+                        console.log('[UnifiedDataCore] 🧠 已安排记忆索引重建');
+                    }
+                }
+            }
+
+            // 4. 清理深度记忆管理数据
+            if (window.SillyTavernInfobar?.modules?.deepMemoryManager) {
+                const deepMemory = window.SillyTavernInfobar.modules.deepMemoryManager;
+                if (scope === 'panel' && typeof deepMemory.clearAllMemories === 'function') {
+                    await deepMemory.clearAllMemories();
+                    console.log('[UnifiedDataCore] 🧠 已清理深度记忆管理数据');
+                } else if (scope === 'panel' && deepMemory.memoryCache) {
+                    // 清理深度记忆缓存
+                    deepMemory.memoryCache.clear();
+                    console.log('[UnifiedDataCore] 🧠 已清理深度记忆缓存');
+                }
+            }
+
+            // 5. 清理数据快照
+            if (window.SillyTavernInfobar?.modules?.dataSnapshotManager) {
+                const snapshotManager = window.SillyTavernInfobar.modules.dataSnapshotManager;
+                if (scope === 'panel' && typeof snapshotManager.clearDataCore === 'function') {
+                    await snapshotManager.clearDataCore(chatId);
+                    console.log('[UnifiedDataCore] 📸 已清理数据快照');
+                }
+                // 清理快照缓存
+                if (snapshotManager.snapshotCache) {
+                    snapshotManager.snapshotCache.clear();
+                    console.log('[UnifiedDataCore] 📸 已清理快照缓存');
+                }
+            }
+
+            console.log('[UnifiedDataCore] ✅ AI记忆数据和快照清理完成');
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理AI记忆数据和快照失败:', error);
+            // 不抛出错误，避免影响主流程
         }
     }
 

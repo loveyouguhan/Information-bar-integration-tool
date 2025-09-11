@@ -272,6 +272,10 @@ export class PanelRuleManager {
             filterType: rule.filterType || 'none',
             filterValue: rule.filterValue || 'all',
             description: rule.description || '',
+            // 🔧 保留并持久化规则编辑界面的三类规则文本
+            updateRule: (rule.updateRule ?? '').toString(),
+            addRule: (rule.addRule ?? '').toString(),
+            deleteRule: (rule.deleteRule ?? '').toString(),
             conditions: rule.conditions || [],
             actions: rule.actions || []
         };

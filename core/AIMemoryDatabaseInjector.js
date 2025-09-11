@@ -179,12 +179,20 @@ export class AIMemoryDatabaseInjector {
             // 从总结管理器获取记忆
             if (this.summaryManager) {
                 try {
-                    // 尝试获取最近的总结记忆
-                    const summaries = await this.summaryManager.getRecentSummaries?.(20) || [];
-                    for (const summary of summaries) {
+                    // 🔧 修复：使用正确的方法名获取总结记忆
+                    let summaries = [];
+                    if (typeof this.summaryManager.getEnhancedSummaryHistory === 'function') {
+                        summaries = await this.summaryManager.getEnhancedSummaryHistory() || [];
+                    } else if (typeof this.summaryManager.getSummaryHistory === 'function') {
+                        summaries = await this.summaryManager.getSummaryHistory() || [];
+                    }
+                    
+                    // 限制数量
+                    const recentSummaries = summaries.slice(0, 20);
+                    for (const summary of recentSummaries) {
                         await this.addToMemoryDatabase('summary', summary);
                     }
-                    console.log(`[AIMemoryDatabaseInjector] 📥 加载了 ${summaries.length} 个总结记忆`);
+                    console.log(`[AIMemoryDatabaseInjector] 📥 加载了 ${recentSummaries.length} 个总结记忆`);
                 } catch (error) {
                     console.warn('[AIMemoryDatabaseInjector] ⚠️ 从总结管理器加载记忆失败:', error.message);
                 }
@@ -193,12 +201,12 @@ export class AIMemoryDatabaseInjector {
             // 从深度记忆管理器获取记忆
             if (this.deepMemoryManager) {
                 try {
-                    // 尝试获取重要的深度记忆
-                    const deepMemories = await this.deepMemoryManager.getImportantMemories?.(10) || [];
-                    for (const memory of deepMemories) {
+                    // 🔧 修复：使用正确的方法名获取深度记忆
+                    const recentMemories = await this.deepMemoryManager.getRecentMemories?.(10) || [];
+                    for (const memory of recentMemories) {
                         await this.addToMemoryDatabase('deep', memory);
                     }
-                    console.log(`[AIMemoryDatabaseInjector] 📥 加载了 ${deepMemories.length} 个深度记忆`);
+                    console.log(`[AIMemoryDatabaseInjector] 📥 加载了 ${recentMemories.length} 个深度记忆`);
                 } catch (error) {
                     console.warn('[AIMemoryDatabaseInjector] ⚠️ 从深度记忆管理器加载记忆失败:', error.message);
                 }
@@ -1136,10 +1144,27 @@ export class AIMemoryDatabaseInjector {
         try {
             if (!this.summaryManager) return;
             
-            const recentSummaries = await this.summaryManager.getRecentSummaries(10);
+            // 🔧 修复：使用正确的方法名和安全调用
+            let summaries = [];
+            if (typeof this.summaryManager.getEnhancedSummaryHistory === 'function') {
+                // 优先使用增强的总结历史（包含AI记忆总结）
+                summaries = await this.summaryManager.getEnhancedSummaryHistory();
+            } else if (typeof this.summaryManager.getSummaryHistory === 'function') {
+                // 降级到基础总结历史
+                summaries = await this.summaryManager.getSummaryHistory();
+            } else {
+                console.warn('[AIMemoryDatabaseInjector] ⚠️ 总结管理器没有可用的获取方法');
+                return;
+            }
+            
+            // 限制数量并处理
+            const recentSummaries = summaries.slice(0, 10);
             for (const summary of recentSummaries) {
                 await this.addToMemoryDatabase('summary_sync', summary);
             }
+            
+            console.log(`[AIMemoryDatabaseInjector] ✅ 成功同步 ${recentSummaries.length} 个总结记忆`);
+            
         } catch (error) {
             console.warn('[AIMemoryDatabaseInjector] ⚠️ 与总结管理器同步失败:', error.message);
         }
@@ -1152,10 +1177,19 @@ export class AIMemoryDatabaseInjector {
         try {
             if (!this.deepMemoryManager) return;
             
-            const importantMemories = await this.deepMemoryManager.getImportantMemories(5);
-            for (const memory of importantMemories) {
+            // 🔧 修复：使用正确的方法名和安全调用
+            if (typeof this.deepMemoryManager.getRecentMemories !== 'function') {
+                console.warn('[AIMemoryDatabaseInjector] ⚠️ 深度记忆管理器没有getRecentMemories方法');
+                return;
+            }
+            
+            const recentMemories = await this.deepMemoryManager.getRecentMemories(5);
+            for (const memory of recentMemories) {
                 await this.addToMemoryDatabase('deep_sync', memory);
             }
+            
+            console.log(`[AIMemoryDatabaseInjector] ✅ 成功同步 ${recentMemories.length} 个深度记忆`);
+            
         } catch (error) {
             console.warn('[AIMemoryDatabaseInjector] ⚠️ 与深度记忆管理器同步失败:', error.message);
         }
