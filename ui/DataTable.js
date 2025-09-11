@@ -497,7 +497,6 @@ export class DataTable {
         };
         return iconMap[panelId] || '📋';
     }
-
     /**
      * 获取子项显示名称 - 使用统一的完整映射表
      */
@@ -957,7 +956,6 @@ export class DataTable {
 
         return baseMapping;
     }
-
     /**
      * 创建动态表格 - 支持所有类型的面板
      */
@@ -1169,18 +1167,32 @@ export class DataTable {
                     // 从数据项中获取对应字段的值
                     let value = '';
                     if (dataItem.rowData) {
-                        // 尝试多种字段名匹配方式
+                        // 🔧 修复：增强字段名匹配，支持旧架构字段名
                         const possibleFieldNames = [
                             item.name,
                             item.key,
                             `col_${colIndex + 1}`,
-                            `_${item.name.match(/_(\d+)$/)?.[1] || ''}`
-                        ].filter(name => name);
+                            `_${item.name.match(/_(\d+)$/)?.[1] || ''}`,
+                            // 🆕 添加旧架构字段名映射
+                            this.mapDisplayNameToLegacyField(item.name, panel.key),
+                            this.mapDisplayNameToLegacyField(item.key, panel.key)
+                        ].filter(name => name && name !== item.name && name !== item.key); // 去重
 
-                        for (const fieldName of possibleFieldNames) {
-                            if (dataItem.rowData[fieldName] !== undefined) {
+                        // 先尝试原始字段名
+                        for (const fieldName of [item.name, item.key]) {
+                            if (fieldName && dataItem.rowData[fieldName] !== undefined) {
                                 value = dataItem.rowData[fieldName];
                                 break;
+                            }
+                        }
+
+                        // 如果没找到，尝试其他可能的字段名
+                        if (value === '' || value === undefined) {
+                            for (const fieldName of possibleFieldNames) {
+                                if (fieldName && dataItem.rowData[fieldName] !== undefined) {
+                                    value = dataItem.rowData[fieldName];
+                                    break;
+                                }
                             }
                         }
                     }
@@ -1307,8 +1319,26 @@ export class DataTable {
 
                 // 生成数据行
                 const dataRow = panel.subItems.map((item, itemIndex) => {
-                    const colKey = fieldMapping[item.name] || `col_${itemIndex + 1}`;
-                    const value = dataItem.rowData?.[colKey] || '-';
+                    // 🔧 修复：增强字段匹配，支持旧架构字段名
+                    let value = '-';
+                    let colKey = `col_${itemIndex + 1}`;
+
+                    const possibleFieldNames = [
+                        item.name,
+                        item.key,
+                        fieldMapping[item.name],
+                        `col_${itemIndex + 1}`,
+                        this.mapDisplayNameToLegacyField(item.name, 'interaction')
+                    ].filter(name => name);
+
+                    for (const fieldName of possibleFieldNames) {
+                        if (dataItem.rowData?.[fieldName] !== undefined) {
+                            value = dataItem.rowData[fieldName];
+                            colKey = fieldName;
+                            break;
+                        }
+                    }
+
                     const formattedValue = this.formatCellValue(value);
                     const { adaptiveWidth } = columnAnalysis[itemIndex];
 
@@ -1388,7 +1418,6 @@ export class DataTable {
             return this.createEmptyTable(panel);
         }
     }
-
     /**
      * 获取面板子项的数据值
      */
@@ -1887,7 +1916,6 @@ export class DataTable {
             return null;
         }
     }
-
     /**
      * 🚀 获取统一字段映射系统
      */
@@ -2384,7 +2412,6 @@ export class DataTable {
             console.error('[DataTable] ❌ 处理单元格点击失败:', error);
         }
     }
-
     /**
      * 🆕 处理表格字段名称点击事件
      */
@@ -2786,7 +2813,6 @@ export class DataTable {
         // 尝试从其他属性获取
         return tableGroup.getAttribute('data-panel-id') || null;
     }
-
     /**
      * 🆕 显示单元格操作菜单
      */
@@ -3161,7 +3187,6 @@ export class DataTable {
             this.showErrorMessage('移动面板失败: ' + error.message);
         }
     }
-
     /**
      * 🆕 显示增加面板对话框
      */
@@ -3661,7 +3686,6 @@ export class DataTable {
             </div>
         `;
     }
-
     /**
      * 初始化表格列配置
      */
@@ -3949,27 +3973,78 @@ export class DataTable {
                         }
                     });
                 } else if (panelData && typeof panelData === 'object') {
-                    // 🔧 处理单行数据格式（向后兼容）
+                    // 🔧 处理单行数据格式（向后兼容）- 修复旧架构数据显示
                     console.log(`[DataTable] 📊 检测到单行数据格式: ${panelName}`);
 
-                    Object.entries(panelData).forEach(([fieldName, fieldValue]) => {
-                        // 跳过元数据字段
-                        if (['lastUpdated', 'source'].includes(fieldName)) {
+                    // 🆕 特殊处理：交互对象和组织关系面板的多数据前缀格式（npcX. / orgX.）
+                    if (panelName === 'interaction' || panelName === 'organization') {
+                        const multiRowData = this.convertPrefixDataToMultiRow(panelData, panelName);
+
+                        if (multiRowData.length > 0) {
+                            console.log(`[DataTable] 🔄 ${panelName}面板前缀数据转换: ${multiRowData.length}行`);
+
+                            // 为每行前缀数据创建表格项（转换为表格可识别的格式）
+                            multiRowData.forEach((rowData, rowIndex) => {
+                                const rowContent = this.formatRowData(rowData);
+
+                                transformedData.push({
+                                    id: idCounter++,
+                                    timestamp: panelData.lastUpdated || Date.now(),
+                                    category: 'panel',
+                                    panel: panelName,
+                                    title: `${panelName} - 行${rowIndex + 1}`,
+                                    field: `row_${rowIndex + 1}`,
+                                    content: rowContent,
+                                    status: 'active',
+                                    source: panelData.source || 'legacy-prefix-multirow',
+                                    rowIndex: rowIndex,
+                                    rowData: rowData
+                                });
+                            });
+
+                            // 已按前缀完成转换，跳过默认单行合并
                             return;
                         }
+                    }
 
+                    // 🆕 默认：将旧架构数据组合成完整的行数据，而不是分割成单独字段
+                    const cleanRowData = {};
+                    let hasValidData = false;
+
+                    // 提取有效的数据字段（排除元数据）
+                    Object.entries(panelData).forEach(([fieldName, fieldValue]) => {
+                        // 跳过元数据字段和空值
+                        if (!['lastUpdated', 'source', 'enabled'].includes(fieldName) && 
+                            fieldValue !== null && 
+                            fieldValue !== undefined && 
+                            String(fieldValue).trim() !== '') {
+                            cleanRowData[fieldName] = fieldValue;
+                            hasValidData = true;
+                        }
+                    });
+
+                    // 如果有有效数据，创建一个完整的行数据项
+                    if (hasValidData) {
+                        const rowContent = this.formatRowData(cleanRowData);
+                        
                         transformedData.push({
                             id: idCounter++,
                             timestamp: panelData.lastUpdated || Date.now(),
                             category: 'panel',
                             panel: panelName,
-                            title: `${panelName} - ${fieldName}`,
-                            field: fieldName,
-                            content: String(fieldValue),
+                            title: `${panelName} - 第1行`,
+                            field: 'row_1',
+                            content: rowContent,
                             status: 'active',
-                            source: panelData.source || 'single-row'
+                            source: panelData.source || 'legacy-single-row',
+                            rowIndex: 0,
+                            rowData: cleanRowData  // 🔑 关键修复：提供完整的行数据
                         });
-                    });
+                        
+                        console.log(`[DataTable] ✅ 旧架构数据转换: ${panelName}`, cleanRowData);
+                    } else {
+                        console.log(`[DataTable] ⚠️ 面板 ${panelName} 没有有效数据`);
+                    }
                 }
             });
 
@@ -3983,7 +4058,7 @@ export class DataTable {
     }
 
     /**
-     * 🚀 格式化行数据为显示内容
+     * 🚀 格式化行数据为显示内容（支持新旧架构）
      * @param {Object} rowData - 行数据对象
      * @returns {string} 格式化后的内容
      */
@@ -3991,8 +4066,8 @@ export class DataTable {
         try {
             const parts = [];
 
-            // 按列号排序显示
-            const sortedEntries = Object.entries(rowData)
+            // 🔧 检查是否为新架构（col_X格式）
+            const colFields = Object.entries(rowData)
                 .filter(([key]) => key.startsWith('col_'))
                 .sort(([a], [b]) => {
                     const numA = parseInt(a.replace('col_', ''));
@@ -4000,16 +4075,367 @@ export class DataTable {
                     return numA - numB;
                 });
 
-            sortedEntries.forEach(([key, value]) => {
-                const colNum = key.replace('col_', '');
-                parts.push(`列${colNum}: ${value}`);
-            });
+            if (colFields.length > 0) {
+                // 新架构数据：显示col_X格式
+                colFields.forEach(([key, value]) => {
+                    if (this.isValidDisplayValue(value)) {
+                        const colNum = key.replace('col_', '');
+                        parts.push(`列${colNum}: ${value}`);
+                    }
+                });
+            } else {
+                // 🆕 旧架构数据：转换旧字段名为显示名称
+                const legacyFields = this.convertLegacyFieldsToDisplay(rowData);
+                legacyFields.forEach(({ displayName, value }) => {
+                    if (this.isValidDisplayValue(value)) {
+                        parts.push(`${displayName}: ${value}`);
+                    }
+                });
+            }
 
-            return parts.length > 0 ? parts.join(' | ') : JSON.stringify(rowData);
+            return parts.length > 0 ? parts.join(' | ') : '暂无有效数据';
 
         } catch (error) {
             console.error('[DataTable] ❌ 格式化行数据失败:', error);
             return JSON.stringify(rowData);
+        }
+    }
+    /**
+     * 🆕 将旧架构字段转换为显示格式
+     * @param {Object} rowData - 行数据对象
+     * @returns {Array} 转换后的字段数组
+     */
+    convertLegacyFieldsToDisplay(rowData) {
+        try {
+            const legacyFields = [];
+            
+            // 🔧 旧架构字段映射表（按常见字段优先级排序）
+            const legacyFieldMappings = {
+                // 个人信息面板
+                'name': '姓名',
+                'age': '年龄', 
+                'gender': '性别',
+                'occupation': '职业',
+                'appearance': '外貌',
+                'personality': '性格',
+                'background': '背景',
+                'status': '状态',
+                'location': '位置',
+                'emotion': '情绪',
+                'relationship': '关系',
+                'notes': '备注',
+                
+                // 世界信息面板
+                'world_name': '世界名称',
+                'type': '类型',
+                'genre': '风格',
+                'geography': '地理环境',
+                'locations': '重要地点',
+                'time': '时间设定',
+                'culture': '文化',
+                'theme': '主题',
+                'history': '历史',
+                
+                // 交互对象面板
+                'name': 'NPC名称',
+                'type': 'NPC类型', 
+                'relation': '关系类型',
+                'status': '当前状态',
+                'description': '描述',
+                'notes': '备注',
+                'extra': '额外信息',
+                'npc_name': 'NPC名称',
+                'npc_type': 'NPC类型',
+                'current_state': '当前状态',
+                'relation_type': '关系类型',
+                'intimacy': '亲密度',
+                'interaction_history': '历史记录',
+                'auto_notes': '自动记录',
+                
+                // 任务状态面板
+                'task_name': '任务名称',
+                'task_type': '任务类型',
+                'task_status': '任务状态',
+                'progress': '进度',
+                'deadline': '截止时间',
+                'priority': '优先级',
+                'description': '描述',
+                
+                // 组织关系面板
+                'name': '组织名称',
+                'type': '组织类型',
+                'level': '层级',
+                'leader': '负责人',
+                'description': '描述',
+                'org_name': '组织名称',
+                'org_type': '组织类型',
+                'hierarchy': '层级',
+                'leader': '负责人',
+                'member_count': '成员数量',
+                
+                // 物品清单面板
+                'item_name': '物品名称',
+                'item_type': '物品类型',
+                'quantity': '数量',
+                'condition': '状态',
+                'value': '价值',
+                'special_properties': '特殊属性',
+                
+                // 能力属性面板
+                'ability_name': '能力名称',
+                'level': '等级',
+                'experience': '经验值',
+                'category': '类别',
+                'effect': '效果'
+            };
+
+            // 按字段名排序处理，确保显示顺序一致
+            const sortedFields = Object.entries(rowData)
+                .filter(([key, value]) => 
+                    key !== 'enabled' && 
+                    key !== 'lastUpdated' && 
+                    !key.startsWith('_') &&
+                    this.isValidDisplayValue(value)
+                )
+                .sort(([a], [b]) => {
+                    // 优先显示有映射的字段
+                    const aMapped = legacyFieldMappings[a] ? 1 : 0;
+                    const bMapped = legacyFieldMappings[b] ? 1 : 0;
+                    if (aMapped !== bMapped) return bMapped - aMapped;
+                    
+                    // 其次按字母顺序
+                    return a.localeCompare(b);
+                });
+
+            sortedFields.forEach(([fieldKey, value]) => {
+                const displayName = legacyFieldMappings[fieldKey] || fieldKey;
+                legacyFields.push({ displayName, value });
+                console.log(`[DataTable] 🔄 旧字段转换: ${fieldKey} => ${displayName}`);
+            });
+
+            return legacyFields;
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 转换旧架构字段失败:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 🔧 检查值是否适合显示
+     * @param {*} value - 要检查的值
+     * @returns {boolean}
+     */
+    isValidDisplayValue(value) {
+        return value !== null && 
+               value !== undefined && 
+               value !== '' && 
+               String(value).trim() !== '' &&
+               String(value).trim() !== '-';
+    }
+
+    /**
+     * 🆕 将中文显示名称映射回旧架构字段名
+     * @param {string} displayName - 中文显示名称
+     * @param {string} panelKey - 面板键名
+     * @returns {string} 旧架构字段名
+     */
+    mapDisplayNameToLegacyField(displayName, panelKey) {
+        try {
+            // 反向映射表：中文显示名 -> 旧架构字段名
+            const reverseMappings = {
+                // 个人信息面板
+                '姓名': 'name',
+                '年龄': 'age', 
+                '性别': 'gender',
+                '职业': 'occupation',
+                '外貌': 'appearance',
+                '性格': 'personality',
+                '背景': 'background',
+                '状态': 'status',
+                '位置': 'location',
+                '情绪': 'emotion',
+                '关系': 'relationship',
+                '备注': 'notes',
+                
+                // 世界信息面板
+                '世界名称': 'name',
+                '类型': 'type',
+                '风格': 'genre',
+                '地理环境': 'geography',
+                '重要地点': 'locations',
+                '时间设定': 'time',
+                '文化': 'culture',
+                '主题': 'theme',
+                '历史': 'history',
+                
+                // 交互对象面板
+                'NPC名称': 'name',
+                '对象名称': 'name', 
+                'NPC类型': 'type',
+                '对象类型': 'type', 
+                '关系类型': 'relation',
+                '当前状态': 'status',
+                '描述': 'description',
+                '备注': 'notes',
+                '额外信息': 'extra',
+                '亲密度': 'intimacy',
+                '历史记录': 'history',
+                '自动记录': 'autoRecord',
+                
+                // 组织关系面板
+                '组织名称': 'name',
+                '组织类型': 'type',
+                '层级': 'level',
+                '层级结构': 'hierarchy',
+                '负责人': 'leader',
+                '职位设置': 'positions',
+                '成员管理': 'members',
+                '描述': 'description',
+                
+                // 任务状态面板
+                '任务创建': 'creation',
+                '任务编辑': 'editing',
+                '任务删除': 'deletion',
+                '任务完成': 'completion',
+                '通知提醒': 'notifications',
+                '列表视图': 'listView',
+                '排序功能': 'sorting',
+
+                // 新闻事件面板
+                '突发新闻': 'breaking',
+                '政治新闻': 'politics',
+                '经济新闻': 'economy',
+                '官方公告': 'official',
+                '新闻创建': 'creation',
+
+                // 物品清单面板
+                '物品存储': 'storage',
+                '物品取出': 'retrieval',
+                '物品整理': 'organization',
+                '武器装备': 'weapons',
+                '防具装备': 'armor',
+                '容量管理': 'capacity',
+
+                // 能力属性面板
+                '力量属性': 'strength',
+                '敏捷属性': 'agility',
+                '智力属性': 'intelligence',
+                '剑术技能': 'swordsmanship',
+                '魔法技能': 'magic',
+
+                // 剧情进展面板
+                '主线剧情': 'mainStory',
+                '支线任务': 'sideQuests',
+                '子剧情': 'subplots',
+                '背景说明': 'exposition',
+
+                // 修炼境界面板
+                '炼气期': 'qiRefining',
+                '筑基期': 'foundation',
+                '金丹期': 'goldenCore',
+                '呼吸法': 'breathingTechnique',
+                '灵力值': 'spiritualPower',
+
+                // 奇幻设定面板
+                '人类种族': 'human',
+                '精灵种族': 'elf',
+                '矮人种族': 'dwarf',
+                '火系魔法': 'fireMagic',
+
+                // 现代背景面板
+                '城市环境': 'city',
+                '区域设定': 'district',
+                '交通工具': 'transport',
+                '职业工作': 'job',
+                '收入水平': 'income',
+                '智能手机': 'smartphone',
+                '社交媒体': 'social',
+
+                // 历史背景面板
+                '朝代背景': 'dynasty',
+                '历史时期': 'period',
+                '社会阶层': 'class',
+                '家族背景': 'family',
+                '教育程度': 'education',
+                '武艺修为': 'martial',
+                '服饰风格': 'clothing',
+                '职业身份': 'profession',
+
+                // 魔法系统面板
+                '塑能系': 'evocation',
+                '幻术系': 'illusion',
+                '戏法法术': 'cantrip',
+                '法术等级': 'level',
+                '法力值': 'mana',
+                '法术书': 'spellbook',
+                '火元素': 'fire',
+                '等级1': 'level1',
+
+                // 通用字段
+                '名称': 'name',
+                '类型': 'type',
+                '状态': 'status',
+                '描述': 'description',
+                '备注': 'notes'
+            };
+
+            return reverseMappings[displayName] || null;
+        } catch (error) {
+            console.warn('[DataTable] ⚠️ 显示名称映射失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🆕 将前缀数据转换为多行数据（处理 npcX. / orgX. 格式）
+     * @param {Object} panelData - 面板数据对象
+     * @param {string} panelName - 面板名称 
+     * @returns {Array} 多行数据数组
+     */
+    convertPrefixDataToMultiRow(panelData, panelName) {
+        try {
+            console.log(`[DataTable] 🔄 开始转换${panelName}面板的前缀数据...`);
+            
+            const prefixPattern = panelName === 'interaction' ? /^npc(\d+)\.(.+)$/ : /^org(\d+)\.(.+)$/;
+            const multiRowMap = new Map(); // 使用Map按索引组织数据
+            
+            // 🔍 扫描所有前缀字段
+            Object.entries(panelData).forEach(([fieldName, fieldValue]) => {
+                const match = fieldName.match(prefixPattern);
+                if (match) {
+                    const [, index, fieldKey] = match;
+                    const rowIndex = parseInt(index);
+                    
+                    if (!multiRowMap.has(rowIndex)) {
+                        multiRowMap.set(rowIndex, {});
+                    }
+                    
+                    // 🔧 保持旧字段名，让formatRowData进行转换显示
+                    multiRowMap.get(rowIndex)[fieldKey] = fieldValue;
+                    
+                    console.log(`[DataTable] 🔍 前缀字段提取: ${fieldName} -> ${fieldKey} = "${fieldValue}"`);
+                }
+            });
+            
+            // 🔄 将Map转换为数组，确保按索引顺序
+            const multiRowData = [];
+            const sortedIndices = Array.from(multiRowMap.keys()).sort((a, b) => a - b);
+            
+            sortedIndices.forEach(index => {
+                const rowData = multiRowMap.get(index);
+                if (Object.keys(rowData).length > 0) {
+                    multiRowData.push(rowData);
+                    console.log(`[DataTable] ✅ 转换行${index}:`, rowData);
+                }
+            });
+            
+            console.log(`[DataTable] 🎉 ${panelName}面板前缀数据转换完成: ${multiRowData.length}行`);
+            return multiRowData;
+            
+        } catch (error) {
+            console.error('[DataTable] ❌ 前缀数据转换失败:', error);
+            return [];
         }
     }
 
@@ -4257,7 +4683,6 @@ export class DataTable {
             console.error(`[DataTable] ❌ 更新面板组数据失败 (${panelId}):`, error);
         }
     }
-
     /**
      * 🔧 通用数据更新方法 - 基于统一字段映射
      */
@@ -4280,26 +4705,58 @@ export class DataTable {
                 cells.forEach((cell, cellIndex) => {
                     const property = cell.getAttribute('data-property');
                     let colKey;
-                    let value = '-';
+                    let value;
+                    let updated = false;
 
-                    if (property && fieldMapping[property]) {
-                        // 使用字段映射
-                        colKey = fieldMapping[property];
-                        value = dataItem.rowData?.[colKey] || '-';
+                    // 🔧 修复：增强字段匹配，支持旧架构字段名（仅当新值存在时才更新）
+                    if (property) {
+                        const possibleFieldNames = [
+                            property,
+                            fieldMapping[property],
+                            `col_${cellIndex + 1}`,
+                            this.mapDisplayNameToLegacyField(property, panelId)
+                        ].filter(name => name);
+
+                        for (const fieldName of possibleFieldNames) {
+                            if (dataItem.rowData?.[fieldName] !== undefined) {
+                                value = dataItem.rowData[fieldName];
+                                colKey = fieldName;
+                                updated = true;
+                                break;
+                            }
+                        }
                     } else if (fieldNames && fieldNames[cellIndex]) {
-                        // 使用字段名称数组
-                        colKey = fieldMapping[fieldNames[cellIndex]] || `col_${cellIndex + 1}`;
-                        value = dataItem.rowData?.[colKey] || '-';
-                    } else {
-                        // 降级方案：使用列索引
-                        colKey = `col_${cellIndex + 1}`;
-                        value = dataItem.rowData?.[colKey] || '-';
+                        const fieldName = fieldNames[cellIndex];
+                        const possibleFieldNames = [
+                            fieldName,
+                            fieldMapping[fieldName],
+                            `col_${cellIndex + 1}`,
+                            this.mapDisplayNameToLegacyField(fieldName, panelId)
+                        ].filter(name => name);
+
+                        for (const fn of possibleFieldNames) {
+                            if (dataItem.rowData?.[fn] !== undefined) {
+                                value = dataItem.rowData[fn];
+                                colKey = fn;
+                                updated = true;
+                                break;
+                            }
+                        }
                     }
 
-                    cell.textContent = value;
-                    cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
+                    // 如果没有找到对应的新值，保持现有显示，跳过
+                    if (!updated) {
+                        console.log(`[DataTable] ↪ 跳过无更新字段: ${panelId}.${property || `col_${cellIndex + 1}`}`);
+                        return;
+                    }
 
-                    console.log(`[DataTable] 🔍 ${panelId}字段更新: ${property} -> ${colKey} = "${value}"`);
+                    // 执行更新
+                    const currentValue = cell.textContent?.trim() || '';
+                    if (String(currentValue) !== String(value)) {
+                        cell.textContent = value;
+                        cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
+                        console.log(`[DataTable] 🔍 ${panelId}字段更新: ${property} -> ${colKey} = "${value}"`);
+                    }
                 });
             });
 
@@ -4420,21 +4877,37 @@ export class DataTable {
                     cell.setAttribute('data-cell-id', cellId);
 
                     let colKey;
-                    let value = '-';
+                    let value;
+                    let updated = false;
 
-                    if (property && fieldMapping[property]) {
-                        // 使用精确的字段映射
-                        colKey = fieldMapping[property];
-                        value = dataItem.rowData?.[colKey] || '-';
-                    } else {
-                        // 降级方案：使用列索引
-                        colKey = `col_${cellIndex + 1}`;
-                        value = dataItem.rowData?.[colKey] || '-';
+                    // 🔧 修复：增强字段匹配，支持旧架构字段名（仅当新值存在时才更新）
+                    if (property) {
+                        const possibleFieldNames = [
+                            property,
+                            fieldMapping[property],
+                            `col_${cellIndex + 1}`,
+                            this.mapDisplayNameToLegacyField(property, panelId)
+                        ].filter(name => name);
+
+                        for (const fieldName of possibleFieldNames) {
+                            if (dataItem.rowData?.[fieldName] !== undefined) {
+                                value = dataItem.rowData[fieldName];
+                                colKey = fieldName;
+                                updated = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // 如果没有找到对应的新值，保持现有显示，跳过
+                    if (!updated) {
+                        console.log(`[DataTable] ↪ 跳过无更新字段: ${panelId}.${property || `col_${cellIndex + 1}`}`);
+                        return;
                     }
 
                     // 只在值发生变化时更新DOM
                     const currentValue = cell.textContent?.trim() || '';
-                    if (currentValue !== value) {
+                    if (String(currentValue) !== String(value)) {
                         cell.textContent = value;
                         cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
 
@@ -4612,8 +5085,26 @@ export class DataTable {
 
                 // 生成数据行
                 const dataRow = panel.subItems.map((item, itemIndex) => {
-                    const colKey = fieldMapping[item.name] || `col_${itemIndex + 1}`;
-                    const value = dataItem.rowData?.[colKey] || '-';
+                    // 🔧 修复：增强字段匹配，支持旧架构字段名
+                    let value = '-';
+                    let colKey = `col_${itemIndex + 1}`;
+
+                    const possibleFieldNames = [
+                        item.name,
+                        item.key,
+                        fieldMapping[item.name],
+                        `col_${itemIndex + 1}`,
+                        this.mapDisplayNameToLegacyField(item.name, 'organization')
+                    ].filter(name => name);
+
+                    for (const fieldName of possibleFieldNames) {
+                        if (dataItem.rowData?.[fieldName] !== undefined) {
+                            value = dataItem.rowData[fieldName];
+                            colKey = fieldName;
+                            break;
+                        }
+                    }
+
                     const formattedValue = this.formatCellValue(value);
                     const { adaptiveWidth } = columnAnalysis[itemIndex];
 
@@ -4695,7 +5186,6 @@ export class DataTable {
             return this.createEmptyTable(panel);
         }
     }
-
     /**
      * 🔧 新增：按组织分组数据 - 类似NPC分组逻辑
      */
@@ -5169,7 +5659,6 @@ export class DataTable {
             pageNumbersContainer.appendChild(pageBtn);
         }
     }
-
     /**
      * 绑定事件
      */
@@ -5645,7 +6134,6 @@ export class DataTable {
             return color; // 返回原始颜色
         }
     }
-
     /**
      * 处理点击事件
      */
@@ -6110,7 +6598,6 @@ export class DataTable {
             errorCount: this.errorCount
         };
     }
-
     /**
      * 🆕 显示编辑单元格对话框
      */
@@ -6605,7 +7092,6 @@ export class DataTable {
             return [];
         }
     }
-
     /**
      * 🆕 构建历史记录键
      */
@@ -7078,7 +7564,6 @@ export class DataTable {
         console.warn('[DataTable] ⚠️ 无法提取规则内容，规则格式:', existingRule);
         return '';
     }
-
     /**
      * 🆕 保存字段规则
      */
@@ -7547,7 +8032,6 @@ export class DataTable {
             console.error('[DataTable] ❌ 显示删除字段确认对话框失败:', error);
         }
     }
-
     /**
      * 🆕 绑定删除字段对话框事件
      */
@@ -7864,7 +8348,6 @@ export class DataTable {
             console.error('[DataTable] ❌ 清理字段数据失败:', error);
         }
     }
-
     /**
      * 🆕 显示添加字段对话框
      */
@@ -8330,37 +8813,39 @@ export class DataTable {
         try {
             console.log('[DataTable] 🗑️ 执行删除数据操作:', cellInfo);
 
-            // 获取数据管理器
-            const unifiedDataCore = window.InfoBarData;
-            if (!unifiedDataCore) {
-                throw new Error('统一数据核心未找到');
+            // 🔧 修复：将中文显示名转换为实际字段名
+            let actualFieldName = cellInfo.property;
+            
+            // 尝试映射中文显示名到旧架构字段名
+            const legacyFieldName = this.mapDisplayNameToLegacyField(cellInfo.property, cellInfo.panelId);
+            if (legacyFieldName) {
+                actualFieldName = legacyFieldName;
+                console.log(`[DataTable] 🔄 字段名映射: "${cellInfo.property}" -> "${actualFieldName}"`);
             }
 
-            // 清空单元格数据
-            const panelData = unifiedDataCore.getAllPanelData()[cellInfo.panelId];
-            if (panelData && panelData[cellInfo.rowIndex]) {
-                const fieldKey = `col_${cellInfo.columnIndex + 1}`;
-                if (panelData[cellInfo.rowIndex][fieldKey] !== undefined) {
-                    panelData[cellInfo.rowIndex][fieldKey] = '';
-                    console.log('[DataTable] 🗑️ 已清空单元格数据');
-
-                    // 刷新表格显示
-                    this.refreshTableStructure();
-
-                    this.showSuccessMessage('数据已删除');
-                } else {
-                    this.showErrorMessage('未找到要删除的数据');
-                }
-            } else {
-                this.showErrorMessage('未找到数据行');
+            // 构建删除的键名
+            let dataKey = actualFieldName;
+            if (cellInfo.npcId) {
+                dataKey = `${cellInfo.npcId}.${actualFieldName}`;
+            } else if (cellInfo.orgId) {
+                dataKey = `${cellInfo.orgId}.${actualFieldName}`;
             }
+
+            console.log(`[DataTable] 🔑 删除键名: "${dataKey}"`);
+
+            // 使用统一数据核心删除数据
+            await this.dataCore.deletePanelField(cellInfo.panelId, dataKey);
+
+            // 刷新表格显示
+            await this.refreshTableData();
+
+            this.showSuccessMessage(`字段 "${cellInfo.property}" 的数据已删除`);
 
         } catch (error) {
             console.error('[DataTable] ❌ 删除数据失败:', error);
             this.showErrorMessage('删除数据失败: ' + error.message);
         }
     }
-
     /**
      * 销毁组件
      */
@@ -8823,7 +9308,6 @@ export class DataTable {
             console.error('[DataTable] ❌ 显示删除字段确认对话框失败:', error);
         }
     }
-
     /**
      * 🔧 新增：显示删除数据行确认对话框
      */
@@ -8957,13 +9441,25 @@ export class DataTable {
         try {
             console.log('[DataTable] 🗑️ 执行删除字段数据:', cellInfo);
 
-            // 构建删除的键名
-            let dataKey = cellInfo.property;
-            if (cellInfo.npcId) {
-                dataKey = `${cellInfo.npcId}.${cellInfo.property}`;
-            } else if (cellInfo.orgId) {
-                dataKey = `${cellInfo.orgId}.${cellInfo.property}`;
+            // 🔧 修复：将中文显示名转换为实际字段名
+            let actualFieldName = cellInfo.property;
+            
+            // 尝试映射中文显示名到旧架构字段名
+            const legacyFieldName = this.mapDisplayNameToLegacyField(cellInfo.property, cellInfo.panelId);
+            if (legacyFieldName) {
+                actualFieldName = legacyFieldName;
+                console.log(`[DataTable] 🔄 字段名映射: "${cellInfo.property}" -> "${actualFieldName}"`);
             }
+
+            // 构建删除的键名
+            let dataKey = actualFieldName;
+            if (cellInfo.npcId) {
+                dataKey = `${cellInfo.npcId}.${actualFieldName}`;
+            } else if (cellInfo.orgId) {
+                dataKey = `${cellInfo.orgId}.${actualFieldName}`;
+            }
+
+            console.log(`[DataTable] 🔑 删除键名: "${dataKey}"`);
 
             // 删除数据
             await this.dataCore.deletePanelField(cellInfo.panelId, dataKey);
@@ -9241,7 +9737,6 @@ export class DataTable {
             this.showErrorMessage('导出预设配置失败: ' + error.message);
         }
     }
-
     /**
      * 🆕 导入预设配置
      */
