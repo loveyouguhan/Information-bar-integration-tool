@@ -2312,6 +2312,21 @@ export class DataTable {
                 orgId: orgId || '无'
             });
 
+            // 解析单元格位置信息（用于多行数据识别）
+            const cellId = cellElement.getAttribute('data-cell-id') || '';
+            // 形如: `${panel.key}_${rowIndex}_${actualColIndex}_${item.name}`
+            let parsedRowIndex = undefined;
+            let parsedColumnIndex = undefined;
+            try {
+                const parts = cellId.split('_');
+                if (parts.length >= 3) {
+                    // 倒数第三个是行索引，倒数第二个是列索引
+                    // e.g. [panel, rowIndex, colIndex, ...]
+                    parsedRowIndex = parseInt(parts[1]);
+                    parsedColumnIndex = parseInt(parts[2]);
+                }
+            } catch {}
+
             // 显示操作选项菜单
             this.showCellActionMenu(cellElement, {
                 panelId,
@@ -2319,7 +2334,9 @@ export class DataTable {
                 value,
                 npcId: extractedNpcId,
                 orgId,
-                event
+                event,
+                rowIndex: isNaN(parsedRowIndex) ? undefined : parsedRowIndex,
+                columnIndex: isNaN(parsedColumnIndex) ? undefined : parsedColumnIndex
             });
 
         } catch (error) {
@@ -2726,6 +2743,26 @@ export class DataTable {
 
         // 尝试从其他属性获取
         return tableGroup.getAttribute('data-panel-id') || null;
+    }
+
+    /**
+     * 🆕 解析在数据存储中的实际键名（优先 col_X，其次英文，再次原名）
+     */
+    resolveDataKeyForPanel(panelId, property) {
+        try {
+            // 1) 动态字段映射（col_X）
+            const fieldMapping = this.getFieldMapping(panelId) || {};
+            if (fieldMapping[property]) return fieldMapping[property];
+
+            // 2) 英文字段名
+            const english = this.dataCore?.getEnglishFieldName?.(property, panelId);
+            if (english) return english;
+
+            // 3) 原字段名
+            return property;
+        } catch (e) {
+            return property;
+        }
     }
     /**
      * 🆕 显示单元格操作菜单
@@ -4622,7 +4659,7 @@ export class DataTable {
                     let value;
                     let updated = false;
 
-                    // 🔧 修复：增强字段匹配，支持旧架构字段名（仅当新值存在时才更新）
+                    // 🔧 修复：增强字段匹配，支持字段删除后的单元格清空
                     if (property) {
                         const possibleFieldNames = [
                             property,
@@ -4632,8 +4669,8 @@ export class DataTable {
                         ].filter(name => name);
 
                         for (const fieldName of possibleFieldNames) {
-                            if (dataItem.rowData?.[fieldName] !== undefined) {
-                                value = dataItem.rowData[fieldName];
+                            if (dataItem.rowData?.hasOwnProperty(fieldName)) {
+                                value = dataItem.rowData[fieldName] || '';  // 支持空值和删除后的清空
                                 colKey = fieldName;
                                 updated = true;
                                 break;
@@ -4649,8 +4686,8 @@ export class DataTable {
                         ].filter(name => name);
 
                         for (const fn of possibleFieldNames) {
-                            if (dataItem.rowData?.[fn] !== undefined) {
-                                value = dataItem.rowData[fn];
+                            if (dataItem.rowData?.hasOwnProperty(fn)) {
+                                value = dataItem.rowData[fn] || '';  // 支持空值和删除后的清空
                                 colKey = fn;
                                 updated = true;
                                 break;
@@ -4658,9 +4695,14 @@ export class DataTable {
                         }
                     }
 
-                    // 如果没有找到对应的新值，保持现有显示，跳过
+                    // 🔧 修复：如果字段完全不存在于数据中，清空单元格内容
                     if (!updated) {
-                        console.log(`[DataTable] ↪ 跳过无更新字段: ${panelId}.${property || `col_${cellIndex + 1}`}`);
+                        const currentValue = cell.textContent?.trim() || '';
+                        if (currentValue !== '') {
+                            cell.textContent = '';
+                            cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: 已删除`);
+                            console.log(`[DataTable] 🗑️ ${panelId}字段已清空: ${property || `col_${cellIndex + 1}`}`);
+                        }
                         return;
                     }
 
@@ -6656,6 +6698,7 @@ export class DataTable {
                 panelId: cellInfo.panelId,
                 property: cellInfo.property,
                 npcId: cellInfo.npcId,
+                rowIndex: cellInfo.rowIndex,
                 oldValue,
                 newValue
             });
@@ -6928,6 +6971,20 @@ export class DataTable {
                 // 如果显示值获取失败，从数据核心获取
                 const panelData = await this.dataCore.getPanelData(cellInfo.panelId);
                 console.log('[DataTable] 📊 面板数据:', panelData);
+
+                // 支持新架构多行：当 panelData 是数组时根据 rowIndex 精确取值
+                if (Array.isArray(panelData)) {
+                    const rowIndex = (cellInfo.rowIndex !== undefined && cellInfo.rowIndex !== null)
+                        ? cellInfo.rowIndex
+                        : 0;
+                    const rowObj = panelData[rowIndex] || panelData[0] || {};
+                    // 支持 col_X 与 英文字段名
+                    const resolvedKey = this.resolveDataKeyForPanel(cellInfo.panelId, cellInfo.property);
+                    const value = rowObj[resolvedKey] ?? rowObj[cellInfo.property] ?? '';
+                    console.log('[DataTable] 🎯 多行面板字段值:', { rowIndex, value });
+                    return value;
+                }
+
                 const value = this.getPanelItemValue(panelData, { name: cellInfo.property }) || '';
                 console.log('[DataTable] 🎯 面板字段值:', value);
                 return value;
@@ -6959,8 +7016,18 @@ export class DataTable {
                         if (rowNpcId === cellInfo.npcId) {
                             return cell.textContent.trim();
                         }
+                    } else if (cellInfo.rowIndex !== undefined) {
+                        // 多行数据：匹配行索引
+                        const row = cell.closest('tr');
+                        const rowIndexAttr = row?.getAttribute('data-row-index');
+                        if (rowIndexAttr !== null && rowIndexAttr !== undefined) {
+                            const rowIndex = parseInt(rowIndexAttr);
+                            if (!isNaN(rowIndex) && rowIndex === cellInfo.rowIndex) {
+                                return cell.textContent.trim();
+                            }
+                        }
                     } else {
-                        // 非NPC表格，直接返回值
+                        // 单行数据或无法确定行：返回第一个匹配值
                         return cell.textContent.trim();
                     }
                 }
@@ -7069,7 +7136,13 @@ export class DataTable {
                 await this.dataCore.updatePanelField(cellInfo.panelId, fullFieldName, newValue);
             } else {
                 // 更新面板数据
-                await this.dataCore.updatePanelField(cellInfo.panelId, cellInfo.property, newValue);
+                if (cellInfo.rowIndex !== undefined && cellInfo.rowIndex !== null) {
+                    // 多行数据：写入指定行（按存储键）
+                    const resolvedKey = this.resolveDataKeyForPanel(cellInfo.panelId, cellInfo.property);
+                    await this.dataCore.updatePanelRowField?.(cellInfo.panelId, cellInfo.rowIndex, resolvedKey, newValue);
+                } else {
+                    await this.dataCore.updatePanelField(cellInfo.panelId, cellInfo.property, newValue);
+                }
 
                 // 🔧 修复：如果是自定义子项，同时更新面板配置中的子项数据
                 await this.updateCustomSubItemValue(cellInfo, newValue);
@@ -7184,6 +7257,15 @@ export class DataTable {
      */
     async refreshTableData() {
         try {
+            // 重新加载当前聊天数据并重建 this.data / filteredData
+            const currentChatId = this.dataCore.getCurrentChatId();
+            if (currentChatId) {
+                const chatData = await this.dataCore.getChatData(currentChatId);
+                this.data = this.transformPanelData(chatData);
+                this.applyFilters();
+                console.log('[DataTable] 🔄 数据已重新加载，条目数:', this.data.length);
+            }
+
             // 更新分组表格数据
             await this.updateGroupedTablesData();
             console.log('[DataTable] 🔄 表格数据已刷新');
@@ -8709,7 +8791,7 @@ export class DataTable {
             console.log('[DataTable] 🗑️ 显示删除数据确认对话框:', cellInfo);
 
             // 简单的确认对话框
-            const confirmed = confirm(`确定要删除单元格数据吗？\n\n面板：${cellInfo.panelId}\n字段：${cellInfo.fieldName || cellInfo.property}`);
+            const confirmed = confirm(`确定要删除单元格数据吗？\n\n面板：${cellInfo.panelId}\n字段：${cellInfo.fieldName || cellInfo.property}${cellInfo.rowIndex !== undefined ? `\n行：${cellInfo.rowIndex + 1}` : ''}`);
 
             if (confirmed) {
                 this.executeDeleteData(cellInfo);
@@ -8737,18 +8819,23 @@ export class DataTable {
                 console.log(`[DataTable] 🔄 字段名映射: "${cellInfo.property}" -> "${actualFieldName}"`);
             }
 
-            // 构建删除的键名
-            let dataKey = actualFieldName;
-            if (cellInfo.npcId) {
-                dataKey = `${cellInfo.npcId}.${actualFieldName}`;
-            } else if (cellInfo.orgId) {
-                dataKey = `${cellInfo.orgId}.${actualFieldName}`;
+            // 多行数据：优先按行删除
+            if (cellInfo.rowIndex !== undefined && cellInfo.rowIndex !== null) {
+                // 解析实际数据键（col_X 或 英文键）
+                const resolvedKey = this.resolveDataKeyForPanel(cellInfo.panelId, actualFieldName);
+                await this.dataCore.deletePanelRowField?.(cellInfo.panelId, cellInfo.rowIndex, resolvedKey);
+            } else {
+                // 构建删除的键名
+                let dataKey = this.resolveDataKeyForPanel(cellInfo.panelId, actualFieldName);
+                if (cellInfo.npcId) {
+                    dataKey = `${cellInfo.npcId}.${actualFieldName}`;
+                } else if (cellInfo.orgId) {
+                    dataKey = `${cellInfo.orgId}.${actualFieldName}`;
+                }
+                console.log(`[DataTable] 🔑 删除键名: "${dataKey}"`);
+                // 使用统一数据核心删除数据
+                await this.dataCore.deletePanelField(cellInfo.panelId, dataKey);
             }
-
-            console.log(`[DataTable] 🔑 删除键名: "${dataKey}"`);
-
-            // 使用统一数据核心删除数据
-            await this.dataCore.deletePanelField(cellInfo.panelId, dataKey);
 
             // 刷新表格显示
             await this.refreshTableData();
@@ -9398,13 +9485,17 @@ export class DataTable {
             console.log('[DataTable] 🗂️ 执行删除数据行:', cellInfo);
 
             if (cellInfo.npcId) {
-                // 删除整个NPC的所有数据
+                // 删除整个NPC的所有数据（行级别）
                 await this.deleteNpcData(cellInfo.panelId, cellInfo.npcId);
                 this.showSuccessMessage(`NPC "${this.getNpcDisplayName(cellInfo.npcId)}" 的所有数据已删除`);
             } else if (cellInfo.orgId) {
-                // 删除整个组织的所有数据
+                // 删除整个组织的所有数据（行级别）
                 await this.deleteOrgData(cellInfo.panelId, cellInfo.orgId);
                 this.showSuccessMessage(`组织 "${this.getOrgDisplayName(cellInfo.orgId)}" 的所有数据已删除`);
+            } else if (cellInfo.rowIndex !== undefined && cellInfo.rowIndex !== null) {
+                // 多行数据：仅删除选中行
+                await this.dataCore.deletePanelRow?.(cellInfo.panelId, cellInfo.rowIndex);
+                this.showSuccessMessage(`已删除第 ${cellInfo.rowIndex + 1} 行数据`);
             } else {
                 // 删除整个面板的数据
                 await this.deletePanelData(cellInfo.panelId);
@@ -9472,7 +9563,22 @@ export class DataTable {
                     }
                 }
             } else {
-                // 获取整个面板的数据
+                // 普通面板：支持多行数据
+                if (Array.isArray(panelData)) {
+                    const idx = (cellInfo.rowIndex !== undefined && cellInfo.rowIndex !== null) ? cellInfo.rowIndex : 0;
+                    const rowObj = panelData[idx] || {};
+                    return { ...rowObj };
+                }
+                // 兼容：对象格式且键为数字索引 {0: {...}, 1: {...}}
+                const numericKeys = Object.keys(panelData)
+                    .filter(k => /^\d+$/.test(k))
+                    .sort((a, b) => parseInt(a) - parseInt(b));
+                if (numericKeys.length > 0) {
+                    const idx = (cellInfo.rowIndex !== undefined && cellInfo.rowIndex !== null) ? cellInfo.rowIndex : 0;
+                    const key = numericKeys[idx];
+                    return key ? { ...panelData[key] } : {};
+                }
+                // 单行数据
                 return panelData;
             }
 
