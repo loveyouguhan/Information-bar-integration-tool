@@ -2580,6 +2580,81 @@ export class UnifiedDataCore {
     }
 
     /**
+     * 🆕 更新多行面板的指定行字段值
+     * @param {string} panelId
+     * @param {number} rowIndex - 0-based 行索引
+     * @param {string} fieldName
+     * @param {any} newValue
+     */
+    async updatePanelRowField(panelId, rowIndex, fieldName, newValue) {
+        try {
+            if (rowIndex === undefined || rowIndex === null || isNaN(parseInt(rowIndex))) {
+                return await this.updatePanelField(panelId, fieldName, newValue);
+            }
+
+            const chatId = this.getCurrentChatId();
+            if (!chatId) throw new Error('无法获取当前聊天ID');
+
+            // 字段名映射（支持中文）
+            const englishFieldName = this.getEnglishFieldName(fieldName, panelId);
+            const actualFieldName = englishFieldName || fieldName;
+
+            // 读取现有面板数据
+            let panelData = await this.getPanelData(panelId);
+            if (!Array.isArray(panelData)) {
+                // 兼容：将对象/空值转成数组结构
+                if (panelData && typeof panelData === 'object') {
+                    panelData = [panelData];
+                } else {
+                    panelData = [];
+                }
+            }
+
+            // 确保数组长度
+            while (panelData.length <= rowIndex) panelData.push({});
+
+            const oldValue = panelData[rowIndex]?.[actualFieldName];
+            if (!panelData[rowIndex]) panelData[rowIndex] = {};
+            panelData[rowIndex][actualFieldName] = newValue;
+
+            // 写回（跳过合并逻辑）
+            await this.writePanelDataWithoutMerge(this.getCurrentChatId(), panelId, panelData);
+
+            // 历史记录键：针对行的细化
+            const historyKey = `panel:${panelId}:row${rowIndex}:${actualFieldName}`;
+            await this.addFieldHistory(historyKey, {
+                timestamp: Date.now(),
+                oldValue,
+                newValue,
+                panelId,
+                fieldName: actualFieldName,
+                rowIndex,
+                chatId,
+                source: 'USER_EDIT',
+                note: '用户手动编辑（多行）'
+            });
+
+            // 触发事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('panel_row_field_updated', {
+                    panelId,
+                    rowIndex,
+                    fieldName,
+                    oldValue,
+                    newValue,
+                    timestamp: Date.now()
+                });
+            }
+
+            return true;
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 更新多行面板字段失败:', error);
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    /**
      * 🆕 更新NPC字段
      * @param {string} npcId - NPC ID
      * @param {string} fieldName - 字段名
@@ -2795,6 +2870,97 @@ export class UnifiedDataCore {
 
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 删除面板字段失败:', error);
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🆕 删除多行面板的指定行
+     * @param {string} panelId
+     * @param {number} rowIndex - 0-based
+     */
+    async deletePanelRow(panelId, rowIndex) {
+        try {
+            const chatId = this.getCurrentChatId();
+            if (!chatId) throw new Error('当前聊天ID未找到');
+
+            let panelData = await this.getPanelData(panelId);
+            if (!Array.isArray(panelData)) {
+                // 兼容：对象型按数字键处理
+                if (panelData && typeof panelData === 'object') {
+                    const keys = Object.keys(panelData).filter(k => /^\d+$/.test(k)).sort((a,b)=>parseInt(a)-parseInt(b));
+                    if (keys.length > 0) {
+                        const arr = keys.map(k => panelData[k]);
+                        panelData = arr;
+                    } else {
+                        // 单行：清空
+                        await this.writePanelDataWithoutMerge(chatId, panelId, {});
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            }
+
+            if (rowIndex < 0 || rowIndex >= panelData.length) return true;
+
+            // 删除该行
+            panelData.splice(rowIndex, 1);
+
+            // 写回
+            await this.writePanelDataWithoutMerge(chatId, panelId, panelData);
+
+            // 触发事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('panel_row_deleted', {
+                    panelId,
+                    rowIndex,
+                    timestamp: Date.now()
+                });
+            }
+
+            return true;
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 删除面板行失败:', error);
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🆕 删除多行面板指定行的字段
+     */
+    async deletePanelRowField(panelId, rowIndex, fieldName) {
+        try {
+            const chatId = this.getCurrentChatId();
+            if (!chatId) throw new Error('当前聊天ID未找到');
+
+            const englishFieldName = this.getEnglishFieldName(fieldName, panelId);
+            const actualFieldName = englishFieldName || fieldName;
+
+            let panelData = await this.getPanelData(panelId);
+            if (!Array.isArray(panelData)) return true; // 非多行，交由 deletePanelField 处理
+
+            if (!panelData[rowIndex]) return true;
+            const oldValue = panelData[rowIndex][actualFieldName];
+            if (oldValue === undefined) return true;
+
+            delete panelData[rowIndex][actualFieldName];
+            await this.writePanelDataWithoutMerge(chatId, panelId, panelData);
+
+            if (this.eventSystem) {
+                this.eventSystem.emit('panel_row_field_deleted', {
+                    panelId,
+                    rowIndex,
+                    fieldName: actualFieldName,
+                    timestamp: Date.now()
+                });
+            }
+
+            return true;
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 删除多行面板字段失败:', error);
             this.handleError(error);
             throw error;
         }
