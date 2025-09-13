@@ -49,6 +49,10 @@ export class NPCManagementPanel {
         this.syncToWorldBook = this.syncToWorldBook.bind(this);
         this.toggleWorldBookSync = this.toggleWorldBookSync.bind(this);
         this.updateWorldBookSyncUI = this.updateWorldBookSyncUI.bind(this);
+        
+        // 🚀 新增：自动同步相关方法绑定
+        this.setupAutoSyncListeners = this.setupAutoSyncListeners.bind(this);
+        this.handleDataUpdated = this.handleDataUpdated.bind(this);
 
         try { this.init(); } catch (e) { console.error('[NPCPanel] 初始化失败', e); }
         
@@ -72,6 +76,9 @@ export class NPCManagementPanel {
 
         // 🚀 新增：加载同步设置
         this.loadSyncSettings();
+
+        // 🚀 新增：监听数据更新事件，实现自动同步
+        this.setupAutoSyncListeners();
 
         // 事件绑定
         this.container.addEventListener('click', (e) => {
@@ -402,9 +409,10 @@ export class NPCManagementPanel {
             this.updateSyncUI();
         }).catch(error => {
             console.error('[NPCPanel] ❌ 打开面板时刷新数据失败:', error);
-            this.render(); // 即使刷新失败也要显示界面
-            this.updateSyncUI();
-        });
+        this.render(); // 即使刷新失败也要显示界面
+        this.updateSyncUI();
+        this.updateWorldBookSyncUI(); // 🌍 更新世界书同步UI
+    });
     }
 
     /**
@@ -412,10 +420,18 @@ export class NPCManagementPanel {
      */
     loadSyncSettings() {
         try {
+            // 加载数据同步设置
             const savedAutoSync = localStorage.getItem('npcPanel_autoSync');
             if (savedAutoSync !== null) {
                 this.autoSyncEnabled = savedAutoSync === 'true';
-                console.log('[NPCPanel] 📂 加载同步设置:', this.autoSyncEnabled ? '开启' : '关闭');
+                console.log('[NPCPanel] 📂 加载数据同步设置:', this.autoSyncEnabled ? '开启' : '关闭');
+            }
+
+            // 加载世界书同步设置
+            const savedWorldBookSync = localStorage.getItem('npcPanel_worldBookSync');
+            if (savedWorldBookSync !== null) {
+                this.worldBookSyncEnabled = savedWorldBookSync === 'true';
+                console.log('[NPCPanel] 📂 加载世界书同步设置:', this.worldBookSyncEnabled ? '开启' : '关闭');
             }
         } catch (error) {
             console.error('[NPCPanel] ❌ 加载同步设置失败:', error);
@@ -452,6 +468,57 @@ export class NPCManagementPanel {
             }
         } catch (error) {
             console.error('[NPCPanel] ❌ 强制刷新数据失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：设置自动同步监听器
+     */
+    setupAutoSyncListeners() {
+        if (!this.eventSystem) {
+            console.warn('[NPCPanel] ⚠️ 事件系统不可用，无法设置自动同步监听器');
+            return;
+        }
+
+        // 监听data:updated事件，当AI返回更新interaction面板数据时触发
+        this.eventSystem.on('data:updated', this.handleDataUpdated);
+        
+        console.log('[NPCPanel] 🎧 自动同步监听器已设置');
+    }
+
+    /**
+     * 🚀 新增：处理数据更新事件
+     */
+    async handleDataUpdated(payload) {
+        try {
+            // 检查是否开启了数据同步
+            if (!this.autoSyncEnabled) {
+                console.log('[NPCPanel] ⏸️ 数据同步已关闭，跳过自动同步');
+                return;
+            }
+
+            // 检查是否有interaction面板数据更新
+            const panelsData = payload?.dataEntry?.data || payload?.panelFields || payload?.data || {};
+            const interactionData = panelsData.interaction;
+            
+            if (!interactionData || Object.keys(interactionData).length === 0) {
+                console.log('[NPCPanel] ℹ️ 没有interaction数据更新，跳过自动同步');
+                return;
+            }
+
+            console.log('[NPCPanel] 🔄 检测到interaction数据更新，触发自动同步');
+
+            // 执行数据同步
+            await this.syncNow();
+
+            // 如果开启了世界书同步，同步完成后执行世界书同步
+            if (this.worldBookSyncEnabled) {
+                console.log('[NPCPanel] 🌍 数据同步完成，触发自动世界书同步');
+                await this.syncToWorldBook();
+            }
+
+        } catch (error) {
+            console.error('[NPCPanel] ❌ 自动同步处理失败:', error);
         }
     }
 
@@ -1044,6 +1111,9 @@ export class NPCManagementPanel {
         this.worldBookSyncEnabled = !this.worldBookSyncEnabled;
         this.updateWorldBookSyncUI();
         
+        // 保存设置到本地存储
+        localStorage.setItem('npcPanel_worldBookSync', this.worldBookSyncEnabled.toString());
+        
         console.log('[NPCPanel] 🌍 世界书同步开关:', this.worldBookSyncEnabled ? '开启' : '关闭');
         
         if (this.worldBookSyncEnabled) {
@@ -1114,6 +1184,13 @@ export class NPCManagementPanel {
                 } catch (error) {
                     console.error(`[NPCPanel] ❌ 处理NPC "${npc.name}" 失败:`, error);
                 }
+            }
+
+            // 同步完成后立即执行一次去重：
+            try {
+                await worldBookManager.deduplicateWorldBookEntries(worldBookName, worldBookData);
+            } catch (e) {
+                console.warn('[NPCPanel] ⚠️ 去重失败（忽略）:', e);
             }
 
             // 绑定世界书到当前聊天（如果是新创建的）

@@ -4695,14 +4695,9 @@ export class DataTable {
                         }
                     }
 
-                    // 🔧 修复：如果字段完全不存在于数据中，清空单元格内容
+                    // 如果没有找到对应的新值，保持现有显示，跳过
                     if (!updated) {
-                        const currentValue = cell.textContent?.trim() || '';
-                        if (currentValue !== '') {
-                            cell.textContent = '';
-                            cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: 已删除`);
-                            console.log(`[DataTable] 🗑️ ${panelId}字段已清空: ${property || `col_${cellIndex + 1}`}`);
-                        }
+                        console.log(`[DataTable] ↪ 跳过无更新字段: ${panelId}.${property || `col_${cellIndex + 1}`}`);
                         return;
                     }
 

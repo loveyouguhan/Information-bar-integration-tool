@@ -406,6 +406,9 @@ export class InfoBarSettings {
                 throw new Error('配置管理器未初始化');
             }
 
+            // 🔧 新增：初始化自定义API任务队列
+            await this.initializeCustomAPITaskQueue();
+
             // 创建UI
             this.createUI();
 
@@ -427,6 +430,31 @@ export class InfoBarSettings {
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 初始化失败:', error);
             this.handleError(error);
+        }
+    }
+
+    /**
+     * 🔧 新增：初始化自定义API任务队列
+     */
+    async initializeCustomAPITaskQueue() {
+        try {
+            console.log('[InfoBarSettings] 🔄 初始化自定义API任务队列...');
+
+            // 动态导入任务队列模块
+            const { CustomAPITaskQueue } = await import('../core/CustomAPITaskQueue.js');
+
+            // 创建任务队列实例
+            this.customAPITaskQueue = new CustomAPITaskQueue({
+                infoBarSettings: this,
+                eventSystem: this.eventSystem
+            });
+
+            console.log('[InfoBarSettings] ✅ 自定义API任务队列初始化完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化自定义API任务队列失败:', error);
+            // 如果任务队列初始化失败，继续使用原有逻辑
+            this.customAPITaskQueue = null;
         }
     }
 
@@ -3838,13 +3866,6 @@ export class InfoBarSettings {
         // 使用子项的name作为表单字段名，确保能被collectFormData收集
         const fieldName = subItem.name || subItem.key || subItem.id;
 
-        // 🆕 检查是否支持多行数据
-        const isMultiRow = subItem.multiRow === true;
-        const multiRowId = `${subItem.id}_multirow`;
-
-        // 🆕 检查字段是否适合多行数据（基于字段名判断）
-        const multiRowSuggestions = this.detectMultiRowSuggestion(fieldName);
-
         return `
             <div class="sub-item">
                 <div class="checkbox-wrapper">
@@ -3854,71 +3875,13 @@ export class InfoBarSettings {
                            ${isEnabled ? 'checked' : ''} />
                     <label for="${subItem.id}" class="checkbox-label">
                         ${subItem.name}
-                        ${multiRowSuggestions ? '<span class="multirow-indicator" title="建议启用多行数据模式">📋</span>' : ''}
                     </label>
-                </div>
-                
-                <!-- 🆕 多行数据配置选项 -->
-                <div class="multirow-config" style="
-                    margin-top: 4px;
-                    margin-left: 20px;
-                    font-size: 0.85em;
-                    display: ${isEnabled ? 'block' : 'none'};
-                ">
-                    <div class="multirow-checkbox-wrapper">
-                        <input type="checkbox"
-                               id="${multiRowId}"
-                               name="${fieldName}_multirow"
-                               class="multirow-checkbox"
-                               ${isMultiRow ? 'checked' : ''} />
-                        <label for="${multiRowId}" class="multirow-label">
-                            📝 多行数据模式 
-                            <span class="multirow-help" title="启用后，新数据将追加而不是覆盖现有内容">(?)</span>
-                        </label>
-                    </div>
-                    ${multiRowSuggestions ? `
-                    <div class="multirow-suggestion" style="
-                        color: rgba(255,255,255,0.7);
-                        font-size: 0.8em;
-                        margin-top: 2px;
-                    ">💡 ${multiRowSuggestions}</div>
-                    ` : ''}
                 </div>
             </div>
         `;
     }
 
-    /**
-     * 🆕 检测字段是否适合多行数据模式
-     * @param {string} fieldName - 字段名
-     * @returns {string|null} 建议文本或null
-     */
-    detectMultiRowSuggestion(fieldName) {
-        const fieldLower = fieldName.toLowerCase();
-        
-        // 适合多行数据的字段类型
-        const multiRowIndicators = {
-            '记录': '适合记录多个条目',
-            '历史': '适合记录历史事件',
-            '事件': '适合记录多个事件',
-            '经历': '适合记录多个经历',
-            '活动': '适合记录多个活动',
-            '对话': '适合记录对话内容',
-            'log': '适合记录日志条目',
-            'history': '适合记录历史记录',
-            'events': '适合记录事件列表',
-            'notes': '适合记录多条笔记',
-            'achievements': '适合记录多项成就'
-        };
 
-        for (const [keyword, suggestion] of Object.entries(multiRowIndicators)) {
-            if (fieldLower.includes(keyword)) {
-                return suggestion;
-            }
-        }
-
-        return null;
-    }
 
     /**
      * 收集基础面板表单数据（不包含子项）
@@ -4026,40 +3989,33 @@ export class InfoBarSettings {
                     const checkbox = this.modal.querySelector(`input[name="${subItemName}"]`);
                     const isEnabled = checkbox ? checkbox.checked : true; // 如果找不到复选框，默认启用
 
-                    // 🆕 获取多行数据配置
-                    const multiRowCheckbox = this.modal.querySelector(`input[name="${subItemName}_multirow"]`);
-                    const isMultiRow = multiRowCheckbox ? multiRowCheckbox.checked : false;
-
                     const subItem = {
                         id: subItemId,
                         name: subItemName,
                         key: subItemName.toLowerCase().replace(/\s+/g, '_'), // 名称转换为键名
                         displayName: subItemName, // 保存用户输入的显示名称
                         enabled: isEnabled, // 🔧 修复：使用复选框的真实状态
-                        multiRow: isMultiRow, // 🆕 添加多行数据配置
                         value: '', // 添加默认值字段
                         panelId: currentPanelId // 🔧 修复：添加面板归属标记
                     };
 
-                    console.log(`[InfoBarSettings] 📊 收集子项: ${subItemName} enabled=${isEnabled} multiRow=${isMultiRow} panelId=${currentPanelId}`);
+                    console.log(`[InfoBarSettings] 📊 收集子项: ${subItemName} enabled=${isEnabled} panelId=${currentPanelId}`);
                     subItems.push(subItem);
                 }
             });
 
-            // 🔧 修复：只从当前面板的自定义子项区域收集多行数据设置
+            // 🔧 修复：只从当前面板的自定义子项区域收集子项设置
             const currentPanelContent = this.modal.querySelector(`[data-content="${currentPanelId}"]`);
             if (currentPanelContent) {
                 const customSubItemsArea = currentPanelContent.querySelector('.custom-sub-items-area');
                 if (customSubItemsArea) {
                     const existingSubItems = customSubItemsArea.querySelectorAll('.sub-item');
                     existingSubItems.forEach(subItemElement => {
-                        const checkbox = subItemElement.querySelector('input[type="checkbox"]:not(.multirow-checkbox)');
-                        const multiRowCheckbox = subItemElement.querySelector('.multirow-checkbox');
+                        const checkbox = subItemElement.querySelector('input[type="checkbox"]');
 
-                        if (checkbox && multiRowCheckbox) {
+                        if (checkbox) {
                             const fieldName = checkbox.getAttribute('name');
                             const isEnabled = checkbox.checked;
-                            const isMultiRow = multiRowCheckbox.checked;
 
                             // 🔧 修复：提取子项名称，去除面板前缀
                             const subItemName = fieldName.replace(`${currentPanelId}.`, '').replace('.enabled', '');
@@ -4071,7 +4027,6 @@ export class InfoBarSettings {
 
                             if (existingSubItem) {
                                 // 更新已存在的子项
-                                existingSubItem.multiRow = isMultiRow;
                                 existingSubItem.enabled = isEnabled;
                             } else {
                                 // 🔧 修复：只添加属于当前面板的子项
@@ -4082,12 +4037,11 @@ export class InfoBarSettings {
                                         key: subItemName.toLowerCase().replace(/\s+/g, '_'),
                                         displayName: subItemName,
                                         enabled: isEnabled,
-                                        multiRow: isMultiRow,
                                         value: '',
                                         panelId: currentPanelId // 🔧 修复：添加面板归属标记
                                     };
                                     subItems.push(subItem);
-                                    console.log(`[InfoBarSettings] 📊 收集现有子项多行配置: ${subItemName} enabled=${isEnabled} multiRow=${isMultiRow} panelId=${currentPanelId}`);
+                                    console.log(`[InfoBarSettings] 📊 收集现有子项配置: ${subItemName} enabled=${isEnabled} panelId=${currentPanelId}`);
                                 }
                             }
                         }
@@ -13956,6 +13910,17 @@ export class InfoBarSettings {
                 }
             },
             {
+                id: 'flat',
+                name: '扁平式',
+                description: '简洁扁平的顶部栏，支持一键展开/收起',
+                icon: '📋',
+                preview: {
+                    layout: 'flat',
+                    position: 'bottom',
+                    integration: 'separate'
+                }
+            },
+            {
                 id: 'conversation-wrapped',
                 name: '对话包裹式',
                 description: '将整个对话内容包裹在信息栏框架中',
@@ -14056,6 +14021,11 @@ export class InfoBarSettings {
                 return `
                     <div class="demo-chat">💬</div>
                     <div class="demo-infobar">📊</div>
+                `;
+            case 'flat':
+                return `
+                    <div class="demo-chat">💬</div>
+                    <div class="demo-infobar">—📊—</div>
                 `;
             case 'wrapped':
                 return `
@@ -14201,6 +14171,19 @@ export class InfoBarSettings {
                     layout: 'bottom',
                     integration: 'separate',
                     animation: 'slideUp',
+                    autoHide: false,
+                    collapsible: true
+                }
+            },
+            {
+                id: 'flat',
+                name: '扁平式',
+                description: '简洁扁平的顶部栏，支持一键展开/收起',
+                config: {
+                    position: 'end',
+                    layout: 'flat',
+                    integration: 'separate',
+                    animation: 'none',
                     autoHide: false,
                     collapsible: true
                 }
@@ -15828,8 +15811,19 @@ export class InfoBarSettings {
 
             console.log('[InfoBarSettings] 🤖 主API生成完成，开始处理信息栏数据...');
 
-            // 使用自定义API处理剧情内容
-            await this.processWithCustomAPI(latestAIMessage.mes);
+            // 🔧 优化：使用任务队列处理，避免频繁并发调用
+            if (this.customAPITaskQueue) {
+                console.log('[InfoBarSettings] 📋 使用任务队列处理信息栏数据生成');
+                this.customAPITaskQueue.addTask({
+                    type: 'INFOBAR_DATA',
+                    data: { content: latestAIMessage.mes },
+                    source: 'generation_ended'
+                });
+            } else {
+                // 回退到原有逻辑
+                console.log('[InfoBarSettings] ⚠️ 任务队列不可用，使用原有逻辑');
+                await this.processWithCustomAPI(latestAIMessage.mes);
+            }
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理生成结束事件失败:', error);
@@ -16036,8 +16030,19 @@ export class InfoBarSettings {
 
             console.log('[InfoBarSettings] 🤖 检测到新的AI消息，准备处理...');
 
-            // 使用自定义API处理剧情内容
-            await this.processWithCustomAPI(latestAIMessage.mes);
+            // 🔧 优化：使用任务队列处理，避免频繁并发调用
+            if (this.customAPITaskQueue) {
+                console.log('[InfoBarSettings] 📋 使用任务队列处理信息栏数据生成');
+                this.customAPITaskQueue.addTask({
+                    type: 'INFOBAR_DATA',
+                    data: { content: latestAIMessage.mes },
+                    source: 'message_received'
+                });
+            } else {
+                // 回退到原有逻辑
+                console.log('[InfoBarSettings] ⚠️ 任务队列不可用，使用原有逻辑');
+                await this.processWithCustomAPI(latestAIMessage.mes);
+            }
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理消息接收事件失败:', error);
@@ -16228,9 +16233,36 @@ export class InfoBarSettings {
     }
 
     /**
+     * 🔧 新增：直接处理自定义API调用（供任务队列使用）
+     * 避免任务队列的循环调用
+     */
+    async processWithCustomAPIDirectly(plotContent) {
+        return await this.processWithCustomAPIInternal(plotContent);
+    }
+
+    /**
      * 使用自定义API处理剧情内容
      */
     async processWithCustomAPI(plotContent) {
+        // 🔧 优化：如果有任务队列，使用任务队列处理
+        if (this.customAPITaskQueue) {
+            console.log('[InfoBarSettings] 📋 使用任务队列处理自定义API调用');
+            this.customAPITaskQueue.addTask({
+                type: 'INFOBAR_DATA',
+                data: { content: plotContent },
+                source: 'direct_call'
+            });
+            return;
+        }
+
+        // 否则直接处理
+        return await this.processWithCustomAPIInternal(plotContent);
+    }
+
+    /**
+     * 🔧 内部方法：实际的自定义API处理逻辑
+     */
+    async processWithCustomAPIInternal(plotContent) {
         try {
             // 并发保护：防止重复触发
             if (this._customAPIProcessing) {
@@ -18175,14 +18207,15 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             model: apiConfig.model,
             messages: messages,
             temperature: apiConfig.temperature || 0.7,
-            max_tokens: Math.min(apiConfig.maxTokens || 4000, 8000) // 🔧 使用用户设置，最大限制8000
+            max_tokens: apiConfig.maxTokens || 4000 // 🔧 修复：移除硬编码限制，完全使用用户设置
         };
-        
+
         console.log('[InfoBarSettings] 🔧 API请求参数:', {
             model: requestBody.model,
             temperature: requestBody.temperature,
             max_tokens: requestBody.max_tokens, // 🔧 显示实际使用的最大令牌数
-            messagesCount: messages.length
+            messagesCount: messages.length,
+            userConfiguredMaxTokens: apiConfig.maxTokens // 🔧 显示用户配置的令牌数
         });
         
         const requestUrl = `${baseUrl}/v1/chat/completions`;

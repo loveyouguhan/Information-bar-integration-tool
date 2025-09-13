@@ -717,6 +717,8 @@ export class MessageInfoBarRenderer {
             switch (style.id) {
                 case 'end-generated':
                     return await this.generateEndGeneratedStyle(infobarData, messageId, enabledPanels, defaultCollapsed);
+                case 'flat':
+                    return await this.generateFlatStyle(infobarData, messageId, enabledPanels, defaultCollapsed);
                 case 'conversation-wrapped':
                     return await this.generateWrappedStyle(infobarData, messageId, enabledPanels, defaultCollapsed);
                 case 'floating':
@@ -847,6 +849,11 @@ export class MessageInfoBarRenderer {
                 config: { position: 'end', layout: 'bottom', integration: 'separate' }
             },
             {
+                id: 'flat',
+                name: '扁平式',
+                config: { position: 'end', layout: 'flat', integration: 'separate' }
+            },
+            {
                 id: 'conversation-wrapped',
                 name: '对话包裹式',
                 config: { position: 'wrapper', layout: 'frame', integration: 'integrated' }
@@ -914,6 +921,28 @@ export class MessageInfoBarRenderer {
 
         } catch (error) {
             console.error('[MessageInfoBarRenderer] ❌ 生成结尾生成式风格失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 生成扁平式风格HTML（不额外包裹整体，仅改变面板为扁平UI）
+     */
+    async generateFlatStyle(infobarData, messageId, enabledPanels, defaultCollapsed) {
+        try {
+            const panelsHtml = await this.generatePanelsContent(infobarData, enabledPanels, defaultCollapsed);
+
+            // 仅输出容器 + 面板，具体扁平视觉通过CSS作用于各面板
+            return `
+                <div class="infobar-container infobar-style-flat" data-message-id="${messageId}" ${this.getThemeStyles()}>
+                    <div class="infobar-panels">
+                        ${panelsHtml}
+                    </div>
+                </div>
+            `;
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 生成扁平式风格失败:', error);
             return '';
         }
     }
@@ -2593,6 +2622,10 @@ export class MessageInfoBarRenderer {
 
             switch (style.id) {
                 case 'end-generated':
+                    infoBarElement = this.insertEndGeneratedStyle(messageElement, infoBarHtml);
+                    break;
+                case 'flat':
+                    // 与结尾生成式相同的插入位置（消息末尾）
                     infoBarElement = this.insertEndGeneratedStyle(messageElement, infoBarHtml);
                     break;
                 case 'conversation-wrapped':
