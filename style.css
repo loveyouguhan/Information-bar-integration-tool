@@ -5633,6 +5633,101 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 
 /* ========== 信息栏风格样式 ========== */
 
+/* 扁平式风格 */
+.infobar-style-flat {
+    margin: 10px 0;
+    background: var(--infobar-bg, var(--bg-primary));
+    border: 1px solid var(--infobar-border, var(--border-color));
+    border-radius: 10px;
+}
+
+.flat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--infobar-border, var(--border-color));
+    background: var(--infobar-bg, var(--bg-secondary));
+    color: var(--infobar-text, var(--text-primary));
+}
+
+.flat-title {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.flat-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.flat-toggle {
+    border: 1px solid var(--infobar-border, var(--border-color));
+    background: var(--infobar-bg, var(--bg-primary));
+    color: var(--infobar-text, var(--text-primary));
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.infobar-style-flat .infobar-panels {
+    padding: 12px 14px;
+}
+
+/* 扁平式下的各面板扁平UI */
+.infobar-style-flat .infobar-panel {
+    background: var(--infobar-bg, var(--bg-primary));
+    border: 1px solid var(--infobar-border, var(--border-color));
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+
+.infobar-style-flat .infobar-panel:last-child {
+    margin-bottom: 0;
+}
+
+.infobar-style-flat .infobar-panel-header {
+    background: var(--infobar-bg, var(--bg-secondary));
+    color: var(--infobar-text, var(--text-primary));
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--infobar-border, var(--border-color));
+}
+
+.infobar-style-flat .infobar-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.infobar-style-flat .infobar-panel-content {
+    padding: 10px 12px;
+}
+
+.infobar-style-flat .infobar-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: var(--infobar-bg, var(--bg-primary));
+}
+
+.infobar-style-flat .infobar-item + .infobar-item {
+    margin-top: 6px;
+}
+
+.infobar-style-flat .infobar-item-label {
+    color: var(--infobar-text, var(--text-secondary));
+    min-width: 84px;
+}
+
+.infobar-style-flat .infobar-item-value {
+    color: var(--infobar-text, var(--text-primary));
+}
+
 /* 对话包裹式风格 */
 .infobar-style-wrapped {
     margin: 10px 0;
