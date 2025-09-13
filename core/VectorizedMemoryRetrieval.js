@@ -151,7 +151,7 @@ export class VectorizedMemoryRetrieval {
     async initializeVectorEngines() {
         try {
             console.log('[VectorizedMemoryRetrieval] 🚀 初始化向量化引擎:', this.settings.vectorEngine);
-            
+
             switch (this.settings.vectorEngine) {
                 case 'transformers':
                     await this.initializeTransformersEngine();
@@ -161,11 +161,26 @@ export class VectorizedMemoryRetrieval {
                     break;
                 default:
                     console.warn('[VectorizedMemoryRetrieval] ⚠️ 未知的向量化引擎:', this.settings.vectorEngine);
+                    // 设置为fallback模式
+                    this.vectorEngines[this.settings.vectorEngine] = 'fallback';
             }
-            
+
+            // 检查初始化结果
+            const engine = this.vectorEngines[this.settings.vectorEngine];
+            if (engine === 'fallback') {
+                console.log('[VectorizedMemoryRetrieval] 🔄 向量化引擎已设置为fallback模式');
+            } else if (typeof engine === 'function') {
+                console.log('[VectorizedMemoryRetrieval] ✅ 向量化引擎初始化成功');
+            } else {
+                console.log('[VectorizedMemoryRetrieval] ⚠️ 向量化引擎状态未知，将使用fallback模式');
+                this.vectorEngines[this.settings.vectorEngine] = 'fallback';
+            }
+
         } catch (error) {
             console.error('[VectorizedMemoryRetrieval] ❌ 初始化向量化引擎失败:', error);
-            throw error;
+            // 不抛出错误，而是设置为fallback模式
+            console.log('[VectorizedMemoryRetrieval] 🔄 降级到fallback模式');
+            this.vectorEngines[this.settings.vectorEngine] = 'fallback';
         }
     }
 
@@ -677,15 +692,18 @@ export class VectorizedMemoryRetrieval {
             if (!this.vectorEngines.transformers) {
                 throw new Error('Transformers.js引擎未初始化');
             }
-            
+
             // 🔧 修复：检查是否为fallback模式
             if (this.vectorEngines.transformers === 'fallback') {
+                console.log('[VectorizedMemoryRetrieval] 🔄 使用fallback模式进行向量化');
                 return await this.vectorizeWithFallback(text);
             }
-            
-            // 🔧 新增：确保transformers是函数类型
+
+            // 🔧 修复：确保transformers是函数类型，如果不是则静默降级
             if (typeof this.vectorEngines.transformers !== 'function') {
-                console.warn('[VectorizedMemoryRetrieval] ⚠️ Transformers引擎类型错误，降级到fallback模式');
+                console.log('[VectorizedMemoryRetrieval] 🔄 Transformers引擎不可用，使用fallback模式');
+                // 设置为fallback模式，避免重复检查
+                this.vectorEngines.transformers = 'fallback';
                 return await this.vectorizeWithFallback(text);
             }
             
@@ -701,10 +719,7 @@ export class VectorizedMemoryRetrieval {
                 }
             }
             
-            // 🔧 修复：再次确保transformers是函数后再调用
-            if (typeof this.vectorEngines.transformers !== 'function') {
-                throw new Error('Transformers引擎不是有效的函数');
-            }
+            // 此时transformers已确认为函数类型
             
             // 使用Transformers.js生成嵌入
             const output = await this.vectorEngines.transformers(text, {

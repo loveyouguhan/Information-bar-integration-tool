@@ -1019,12 +1019,12 @@ export class NPCDatabaseManager {
             
             // 🔒 额外验证：确保返回的NPC都属于当前聊天
             const verifiedNpcs = npcs.filter(npc => {
-                // 如果NPC有lastChatId字段，必须匹配当前聊天
-                if (npc.lastChatId && npc.lastChatId !== currentChatId) {
-                    console.warn(`[NPCDB] ⚠️ 发现跨聊天NPC数据: ${npc.name} (${npc.lastChatId} != ${currentChatId})`);
-                    return false;
+                // 严格隔离：必须明确属于当前聊天
+                const belongsToCurrentChat = npc.lastChatId === currentChatId;
+                if (!belongsToCurrentChat) {
+                    console.warn(`[NPCDB] ⚠️ 过滤跨聊天或未绑定聊天的NPC: ${npc.name} (${npc.lastChatId} != ${currentChatId})`);
                 }
-                return true;
+                return belongsToCurrentChat;
             });
 
             if (verifiedNpcs.length !== npcs.length) {

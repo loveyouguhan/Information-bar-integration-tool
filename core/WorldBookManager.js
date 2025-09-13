@@ -1472,23 +1472,35 @@ export class WorldBookManager {
     }
 
     /**
-     * 🔍 获取或创建目标世界书
+     * 🔍 获取或创建目标世界书（优先使用角色绑定的主世界书）
      */
     async getOrCreateTargetWorldBook(autoCreate = true) {
         try {
-            // 1. 尝试获取当前角色绑定的世界书
-            const currentWorldBook = await this.getCurrentCharacterWorldBook();
-            if (currentWorldBook) {
-                console.log('[WorldBookManager] 📚 使用现有角色世界书:', currentWorldBook.name);
+            // 1. 优先获取当前角色绑定的主世界书
+            const primaryWorldBook = await this.getPrimaryCharacterWorldBook();
+            if (primaryWorldBook) {
+                console.log('[WorldBookManager] 📚 使用角色主世界书:', primaryWorldBook.name);
                 return {
                     success: true,
-                    worldBookName: currentWorldBook.name,
-                    worldBookData: currentWorldBook.data,
+                    worldBookName: primaryWorldBook.name,
+                    worldBookData: primaryWorldBook.data,
                     isNewWorldBook: false
                 };
             }
 
-            // 2. 如果没有现有世界书且允许自动创建
+            // 2. 尝试获取当前聊天绑定的世界书
+            const chatWorldBook = await this.getCurrentCharacterWorldBook();
+            if (chatWorldBook) {
+                console.log('[WorldBookManager] 📚 使用聊天绑定的世界书:', chatWorldBook.name);
+                return {
+                    success: true,
+                    worldBookName: chatWorldBook.name,
+                    worldBookData: chatWorldBook.data,
+                    isNewWorldBook: false
+                };
+            }
+
+            // 3. 如果没有现有世界书且允许自动创建
             if (autoCreate) {
                 const newWorldBook = await this.createCharacterWorldBook();
                 return {
@@ -1499,7 +1511,7 @@ export class WorldBookManager {
                 };
             }
 
-            // 3. 不允许自动创建时返回错误
+            // 4. 不允许自动创建时返回错误
             return {
                 success: false,
                 error: '当前角色没有绑定世界书，且未启用自动创建'
@@ -1511,6 +1523,84 @@ export class WorldBookManager {
                 success: false,
                 error: error.message
             };
+        }
+    }
+
+    /**
+     * 📚 获取角色卡绑定的主世界书
+     */
+    async getPrimaryCharacterWorldBook() {
+        try {
+            // 获取SillyTavern上下文
+            const context = window.SillyTavern?.getContext?.();
+            if (!context) {
+                console.warn('[WorldBookManager] ⚠️ 无法获取SillyTavern上下文');
+                return null;
+            }
+
+            // 检查当前角色的世界书设置
+            const character = context.characters?.[context.characterId];
+            if (character && character.data && character.data.extensions) {
+                // SillyTavern使用 world 字段存储角色绑定的世界书名称
+                const worldInfo = character.data.extensions.world_info || character.data.extensions.world;
+                if (worldInfo) {
+                    console.log('[WorldBookManager] 📚 找到角色卡绑定的世界书:', worldInfo);
+                    
+                    try {
+                        let worldData = null;
+                        if (typeof context.loadWorldInfo === 'function') {
+                            worldData = await context.loadWorldInfo(worldInfo);
+                        }
+
+                        return {
+                            name: worldInfo,
+                            data: worldData || { entries: {} },
+                            source: 'character_card'
+                        };
+                    } catch (loadError) {
+                        console.warn('[WorldBookManager] ⚠️ 加载角色世界书失败:', loadError);
+                    }
+                }
+            }
+
+            // 检查全局世界书设置中是否有角色专属世界书
+            const worldInfoSelect = document.querySelector('#world_info');
+            if (worldInfoSelect && context.name2) {
+                const characterName = context.name2;
+                const options = Array.from(worldInfoSelect.options);
+                
+                // 查找以角色名开头的世界书（角色专属世界书）
+                const characterWorldBook = options.find(opt => 
+                    opt.text && opt.text.toLowerCase().startsWith(characterName.toLowerCase()) && opt.selected
+                );
+                
+                if (characterWorldBook) {
+                    const worldBookName = characterWorldBook.text;
+                    console.log('[WorldBookManager] 📚 找到角色专属世界书:', worldBookName);
+                    
+                    try {
+                        let worldData = null;
+                        if (typeof context.loadWorldInfo === 'function') {
+                            worldData = await context.loadWorldInfo(worldBookName);
+                        }
+
+                        return {
+                            name: worldBookName,
+                            data: worldData || { entries: {} },
+                            source: 'character_specific'
+                        };
+                    } catch (loadError) {
+                        console.warn('[WorldBookManager] ⚠️ 加载角色专属世界书失败:', loadError);
+                    }
+                }
+            }
+
+            console.log('[WorldBookManager] 📚 未找到角色绑定的主世界书');
+            return null;
+
+        } catch (error) {
+            console.error('[WorldBookManager] ❌ 获取角色主世界书失败:', error);
+            return null;
         }
     }
 
@@ -1673,20 +1763,16 @@ export class WorldBookManager {
     }
 
     /**
-     * 🏷️ 生成世界书名称
+     * 🏷️ 生成世界书名称（角色专属，不基于聊天ID）
      */
     generateWorldBookName(characterInfo) {
-        const { characterName, formattedDate } = characterInfo;
+        const { characterName } = characterInfo;
 
-        // 如果有格式化的日期，使用角色名+日期
-        if (formattedDate) {
-            return `${characterName} ${formattedDate}`;
-        }
-
-        // 否则使用角色名+当前时间戳
-        const now = new Date();
-        const timeStr = now.toISOString().slice(2, 16).replace(/[-:T]/g, '').replace(/(\d{6})(\d{4})/, '$1 $2');
-        return `${characterName} ${timeStr}`;
+        // 使用角色名作为世界书基础名称
+        const baseName = characterName || 'Unknown';
+        
+        // 生成角色专属世界书名称（不包含时间戳，确保唯一性）
+        return `${baseName} - InfoBar`;
     }
 
     /**
@@ -1792,16 +1878,6 @@ export class WorldBookManager {
 
             console.log('[WorldBookManager] ✅ 找到SillyTavern世界书API');
 
-            // 获取新条目
-            const newEntries = Object.values(worldBookData.entries || {}).filter(entry =>
-                entry.createdBy === 'information_bar_integration_tool'
-            );
-
-            if (newEntries.length === 0) {
-                console.log('[WorldBookManager] ℹ️ 没有新条目需要添加');
-                return true;
-            }
-
             // 加载当前世界书数据
             let currentWorldData = null;
             if (worldInfoAPI.loadWorldInfo) {
@@ -1821,9 +1897,111 @@ export class WorldBookManager {
                 };
             }
 
-            // 添加新条目到现有数据
-            for (const entry of newEntries) {
-                const entryId = `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            // 获取要处理的条目
+            const incomingEntries = worldBookData.entries || {};
+            
+            // 对每个传入条目执行智能UPSERT（创建或更新）
+            for (const [entryId, entry] of Object.entries(incomingEntries)) {
+                if (entry.createdBy !== 'information_bar_integration_tool') {
+                    continue; // 跳过非插件创建的条目
+                }
+
+                // 🔍 查找现有条目 - 多重匹配策略
+                let targetEntryId = null;
+                let targetEntry = null;
+
+                // 1. 首先尝试通过npcId精确匹配（最可靠）
+                if (entry.summaryType === 'npc' && entry.npcId) {
+                    for (const [existingId, existingEntry] of Object.entries(currentWorldData.entries)) {
+                        if (existingEntry.npcId === entry.npcId) {
+                            targetEntryId = existingId;
+                            targetEntry = existingEntry;
+                            console.log(`[WorldBookManager] 🎯 通过NPC ID "${entry.npcId}" 找到现有条目: ${existingId}`);
+                            break;
+                        }
+                    }
+                }
+
+                // 2. 如果npcId匹配失败，尝试通过summaryId匹配
+                if (!targetEntryId && entry.summaryId) {
+                    for (const [existingId, existingEntry] of Object.entries(currentWorldData.entries)) {
+                        if (existingEntry.summaryId === entry.summaryId) {
+                            targetEntryId = existingId;
+                            targetEntry = existingEntry;
+                            console.log(`[WorldBookManager] 🎯 通过summaryId "${entry.summaryId}" 找到现有条目: ${existingId}`);
+                            break;
+                        }
+                    }
+                }
+
+                // 3. 最后尝试通过名称和类型匹配（兜底策略）
+                if (!targetEntryId && entry.summaryType === 'npc') {
+                    const entryName = (entry.comment || '').toLowerCase().trim();
+                    for (const [existingId, existingEntry] of Object.entries(currentWorldData.entries)) {
+                        const existingName = (existingEntry.comment || '').toLowerCase().trim();
+                        const isNpcEntry = existingEntry.summaryType === 'npc' || 
+                                         (existingEntry.createdBy === 'information_bar_integration_tool' && !existingEntry.summaryType);
+                        
+                        if (isNpcEntry && entryName && existingName === entryName) {
+                            targetEntryId = existingId;
+                            targetEntry = existingEntry;
+                            console.log(`[WorldBookManager] 🎯 通过名称 "${entryName}" 找到现有条目: ${existingId}`);
+                            break;
+                        }
+                    }
+                }
+
+                if (targetEntryId && targetEntry) {
+                    // 🔄 更新现有条目
+                    console.log(`[WorldBookManager] 🔄 更新现有条目: ${targetEntryId}`);
+                    
+                    // 🔧 重要：构建关键词列表，确保包含NPC名称
+                    const keywords = [];
+                    const finalSummaryType = entry.summaryType || targetEntry.summaryType || 'npc';
+                    const finalNpcName = entry.npcName || targetEntry.npcName;
+                    
+                    if (finalSummaryType === 'npc' && finalNpcName) {
+                        keywords.push(finalNpcName); // 添加NPC名称作为主要关键词
+                    }
+                    
+                    // 合并现有关键词和新关键词
+                    const existingKeywords = targetEntry.key || [];
+                    const newKeywords = entry.keywords || [];
+                    [...existingKeywords, ...newKeywords].forEach(keyword => {
+                        if (keyword && !keywords.includes(keyword)) {
+                            keywords.push(keyword);
+                        }
+                    });
+                    
+                    const updatedEntry = {
+                        ...targetEntry,
+                        key: keywords.length > 0 ? keywords : (targetEntry.key || []),
+                        comment: entry.comment || targetEntry.comment,
+                        content: entry.content || targetEntry.content,
+                        order: entry.order || targetEntry.order,
+                        // 🔧 根据条目类型设置向量化：NPC条目使用关键词模式，总结条目使用向量化
+                        vectorized: finalSummaryType === 'npc' ? false : true,
+                        // 🔧 重要：更新自定义字段
+                        summaryId: entry.summaryId || targetEntry.summaryId,
+                        summaryType: finalSummaryType,
+                        summarySource: entry.summarySource || targetEntry.summarySource,
+                        npcId: entry.npcId || targetEntry.npcId,
+                        npcName: finalNpcName,
+                        sourceType: entry.sourceType || targetEntry.sourceType,
+                        // 更新时间戳
+                        updatedAt: Date.now(),
+                        updatedBy: 'information_bar_integration_tool',
+                        // 保留创建信息
+                        createdAt: targetEntry.createdAt || entry.createdAt || Date.now(),
+                        createdBy: targetEntry.createdBy || 'information_bar_integration_tool'
+                    };
+
+                    currentWorldData.entries[targetEntryId] = updatedEntry;
+
+                } else {
+                    // ➕ 创建新条目
+                    const newEntryId = `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                    console.log(`[WorldBookManager] ➕ 创建新条目: ${newEntryId}`);
 
                 // 使用createWorldInfoEntry创建条目
                 let newEntry = null;
@@ -1839,7 +2017,7 @@ export class WorldBookManager {
                 // 如果createWorldInfoEntry失败，手动创建条目
                 if (!newEntry) {
                     newEntry = {
-                        uid: entryId,
+                            uid: newEntryId,
                         key: entry.keywords || [],
                         keysecondary: [],
                         comment: entry.comment || entry.title || '总结条目',
@@ -1875,17 +2053,43 @@ export class WorldBookManager {
                     };
                 }
 
-                // 填充条目数据
+                    // 填充条目数据 - 保留所有自定义字段
+                    // 🔧 重要：构建关键词列表，确保包含NPC名称
+                    const keywords = [];
+                    if (entry.summaryType === 'npc' && entry.npcName) {
+                        keywords.push(entry.npcName); // 添加NPC名称作为主要关键词
+                    }
+                    if (entry.keywords && Array.isArray(entry.keywords)) {
+                        entry.keywords.forEach(keyword => {
+                            if (keyword && !keywords.includes(keyword)) {
+                                keywords.push(keyword);
+                            }
+                        });
+                    }
+                    
                 Object.assign(newEntry, {
-                    key: entry.keywords || [],
+                        key: keywords.length > 0 ? keywords : (entry.keywords || []),
                     comment: entry.comment || entry.title || '总结条目',
                     content: entry.content || '',
-                    createdBy: 'information_bar_integration_tool'
+                        createdBy: 'information_bar_integration_tool',
+                        // 🔧 根据条目类型设置向量化：NPC条目使用关键词模式，总结条目使用向量化
+                        vectorized: entry.summaryType === 'npc' ? false : true,
+                        // 🔧 重要：保留自定义NPC字段
+                        summaryId: entry.summaryId,
+                        summaryType: entry.summaryType,
+                        summarySource: entry.summarySource,
+                        npcId: entry.npcId,
+                        npcName: entry.npcName,
+                        sourceType: entry.sourceType,
+                        // 保留时间戳
+                        createdAt: entry.createdAt || Date.now(),
+                        updatedAt: entry.updatedAt,
+                        updatedBy: entry.updatedBy
                 });
 
                 // 添加到世界书数据
-                currentWorldData.entries[entryId] = newEntry;
-                console.log(`[WorldBookManager] ➕ 添加条目: ${newEntry.comment}`);
+                    currentWorldData.entries[newEntryId] = newEntry;
+                }
             }
 
             // 保存世界书数据
@@ -2604,7 +2808,7 @@ export class WorldBookManager {
     }
 
     /**
-     * 🔍 查找现有的世界书条目
+     * 🔍 查找现有的世界书条目（优化NPC匹配逻辑）
      */
     findExistingWorldBookEntry(worldBookData, entryData) {
         try {
@@ -2615,15 +2819,48 @@ export class WorldBookManager {
                 [entryData.keywords?.toLowerCase().trim()].filter(Boolean);
 
             for (const [entryId, entry] of Object.entries(entries)) {
-                // 🎯 匹配条件1：条目名称完全匹配
-                const entryName = (entry.comment || '').toLowerCase().trim();
-                if (entryName && targetName && entryName === targetName) {
-                    console.log('[WorldBookManager] 🎯 通过名称匹配找到现有条目:', entryName);
+                // 🎯 最高优先级：NPC ID精确匹配
+                if (entryData.summaryType === 'npc' && 
+                    entry.summaryType === 'npc' && 
+                    entryData.npcId && entry.npcId && 
+                    entryData.npcId === entry.npcId) {
+                    console.log('[WorldBookManager] 🎯 通过NPC ID精确匹配找到现有条目:', entryData.npcId);
                     return { entryId, entry };
                 }
 
-                // 🎯 匹配条件2：主关键词匹配
-                if (targetKeywords.length > 0) {
+                // 🎯 次优先级：summaryId匹配（用于其他类型的条目）
+                if (entryData.summaryId && entry.summaryId && 
+                    entryData.summaryId === entry.summaryId) {
+                    console.log('[WorldBookManager] 🎯 通过summaryId匹配找到现有条目:', entryData.summaryId);
+                    return { entryId, entry };
+                }
+
+                // 🎯 NPC特殊处理：当旧条目缺少自定义字段时退化到名称匹配
+                if (entryData.summaryType === 'npc') {
+                    const entryIsNpc = entry.summaryType === 'npc' || (!entry.summaryType && entry.createdBy === 'information_bar_integration_tool');
+                    if (entryIsNpc) {
+                        // 如果旧条目无 npcId，则用名称做一次兜底匹配
+                        const entryNpcName = (entry.npcName || entry.comment || '').toLowerCase().trim();
+                        if (entryNpcName && targetName && entryNpcName === targetName) {
+                            console.log('[WorldBookManager] 🎯 通过NPC名称兜底匹配旧条目:', entryNpcName);
+                            return { entryId, entry };
+                        }
+                    }
+                }
+
+                // 🎯 备用匹配：条目名称完全匹配
+                const entryName = (entry.comment || '').toLowerCase().trim();
+                if (entryName && targetName && entryName === targetName) {
+                    // 额外检查：确保是同一类型的条目
+                    if (entryData.summaryType === entry.summaryType || 
+                        (!entryData.summaryType && !entry.summaryType)) {
+                    console.log('[WorldBookManager] 🎯 通过名称匹配找到现有条目:', entryName);
+                    return { entryId, entry };
+                    }
+                }
+
+                // 🎯 关键词匹配（仅用于非NPC类型或作为最后手段）
+                if (targetKeywords.length > 0 && entryData.summaryType !== 'npc') {
                     const entryKeywords = Array.isArray(entry.key) ? 
                         entry.key.map(k => k.toLowerCase().trim()) : 
                         [entry.key?.toLowerCase().trim()].filter(Boolean);
@@ -2635,19 +2872,6 @@ export class WorldBookManager {
 
                     if (hasOverlap) {
                         console.log('[WorldBookManager] 🎯 通过关键词匹配找到现有条目:', entryKeywords);
-                        return { entryId, entry };
-                    }
-                }
-
-                // 🎯 匹配条件3：NPC特殊标识
-                if (entry.createdBy === 'information_bar_integration_tool' && 
-                    entry.summaryType === 'npc' && 
-                    entryData.summaryType === 'npc') {
-                    
-                    // 检查是否是同一个NPC（通过内容中的特征匹配）
-                    const entryContent = (entry.content || '').toLowerCase();
-                    if (targetName && entryContent.includes(targetName)) {
-                        console.log('[WorldBookManager] 🎯 通过NPC内容匹配找到现有条目');
                         return { entryId, entry };
                     }
                 }
@@ -2673,23 +2897,53 @@ export class WorldBookManager {
                 throw new Error(`条目 ${entryId} 不存在`);
             }
 
+            // 🔧 重要：构建关键词列表，确保包含NPC名称
+            const keywords = [];
+            const finalSummaryType = entryData.summaryType || existingEntry.summaryType;
+            const finalNpcName = entryData.npcName || existingEntry.npcName;
+            
+            if (finalSummaryType === 'npc' && finalNpcName) {
+                keywords.push(finalNpcName); // 添加NPC名称作为主要关键词
+            }
+            
+            // 合并现有关键词和新关键词
+            const existingKeywords = existingEntry.key || [];
+            const newKeywords = entryData.keywords || [];
+            [...existingKeywords, ...newKeywords].forEach(keyword => {
+                if (keyword && !keywords.includes(keyword)) {
+                    keywords.push(keyword);
+                }
+            });
+
             // 更新条目数据（保留原有的重要属性）
             const updatedEntry = {
                 ...existingEntry,
-                key: entryData.keywords,
+                key: keywords.length > 0 ? keywords : (entryData.keywords || existingEntry.key || []),
                 content: entryData.content,
                 comment: entryData.entryName,
                 order: entryData.order,
+                // 🔧 根据条目类型设置向量化：NPC条目使用关键词模式，总结条目使用向量化
+                vectorized: finalSummaryType === 'npc' ? false : true,
                 // 更新自定义属性
                 summaryId: entryData.summaryId,
-                summaryType: entryData.summaryType,
+                summaryType: finalSummaryType,
                 summarySource: entryData.summarySource,
+                // NPC专属字段
+                npcId: entryData.npcId,
+                npcName: finalNpcName,
+                sourceType: entryData.sourceType,
+                // 元数据
                 updatedBy: 'information_bar_integration_tool',
                 updatedAt: Date.now(),
                 // 保留创建信息
                 createdBy: existingEntry.createdBy || 'information_bar_integration_tool',
                 createdAt: existingEntry.createdAt || Date.now()
             };
+
+            // 兼容旧条目：若缺少summaryType则补齐
+            if (!updatedEntry.summaryType && entryData.summaryType) {
+                updatedEntry.summaryType = entryData.summaryType;
+            }
 
             // 更新世界书数据
             worldBookData.entries[entryId] = updatedEntry;
@@ -2725,10 +2979,23 @@ export class WorldBookManager {
             // 生成唯一的条目ID
             const entryId = `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+            // 🔧 重要：构建关键词列表，确保包含NPC名称
+            const keywords = [];
+            if (entryData.summaryType === 'npc' && entryData.npcName) {
+                keywords.push(entryData.npcName); // 添加NPC名称作为主要关键词
+            }
+            if (entryData.keywords && Array.isArray(entryData.keywords)) {
+                entryData.keywords.forEach(keyword => {
+                    if (keyword && !keywords.includes(keyword)) {
+                        keywords.push(keyword);
+                    }
+                });
+            }
+
             // 创建条目对象
             const newEntry = {
                 uid: entryId,
-                key: entryData.keywords,
+                key: keywords.length > 0 ? keywords : (entryData.keywords || []),
                 content: entryData.content,
                 comment: entryData.entryName,
                 constant: true,      // 非常驻
@@ -2743,10 +3010,17 @@ export class WorldBookManager {
                 excludeRecursion: false,
                 preventRecursion: false,
                 delayUntilRecursion: false,
+                // 🔧 根据条目类型设置向量化：NPC条目使用关键词模式，总结条目使用向量化
+                vectorized: entryData.summaryType === 'npc' ? false : true,
                 // 自定义属性
                 summaryId: entryData.summaryId,
                 summaryType: entryData.summaryType,
                 summarySource: entryData.summarySource,
+                // NPC专属字段
+                npcId: entryData.npcId,
+                npcName: entryData.npcName,
+                sourceType: entryData.sourceType,
+                // 元数据
                 createdBy: 'information_bar_integration_tool',
                 createdAt: Date.now()
             };
@@ -2783,25 +3057,66 @@ export class WorldBookManager {
             console.log('[WorldBookManager] 🧹 开始清理重复的世界书条目...');
 
             const entries = worldBookData.entries || {};
-            const duplicateGroups = new Map(); // 名称 -> 条目数组
+            const npcGroups = new Map(); // npcId -> 条目数组
+            const nameGroups = new Map(); // 名称 -> 条目数组
             let removedCount = 0;
             const removedEntries = [];
 
-            // 🔍 按名称分组找出重复项
+            // 🔍 分别按NPC ID和名称分组
             for (const [entryId, entry] of Object.entries(entries)) {
                 if (entry.createdBy !== 'information_bar_integration_tool') continue;
 
+                // NPC条目：按npcId分组
+                if (entry.summaryType === 'npc' && entry.npcId) {
+                    if (!npcGroups.has(entry.npcId)) {
+                        npcGroups.set(entry.npcId, []);
+                    }
+                    npcGroups.get(entry.npcId).push({ entryId, entry });
+                } else {
+                    // 其他条目：按名称分组
                 const entryName = (entry.comment || '').toLowerCase().trim();
-                if (!entryName) continue;
-
-                if (!duplicateGroups.has(entryName)) {
-                    duplicateGroups.set(entryName, []);
+                    if (entryName) {
+                        if (!nameGroups.has(entryName)) {
+                            nameGroups.set(entryName, []);
+                        }
+                        nameGroups.get(entryName).push({ entryId, entry });
+                    }
                 }
-                duplicateGroups.get(entryName).push({ entryId, entry });
             }
 
-            // 🗑️ 处理重复项：保留最新的，删除旧的
-            for (const [entryName, group] of duplicateGroups.entries()) {
+            // 🗑️ 处理NPC重复项：按npcId去重
+            for (const [npcId, group] of npcGroups.entries()) {
+                if (group.length <= 1) continue; // 没有重复
+
+                console.log(`[WorldBookManager] 🔍 发现重复NPC条目 (ID: ${npcId}): ${group.length} 个`);
+
+                // 按创建/更新时间排序，保留最新的
+                group.sort((a, b) => {
+                    const timeA = a.entry.updatedAt || a.entry.createdAt || 0;
+                    const timeB = b.entry.updatedAt || b.entry.createdAt || 0;
+                    return timeB - timeA; // 最新的在前
+                });
+
+                // 保留第一个（最新的），删除其余的
+                const toKeep = group[0];
+                const toRemove = group.slice(1);
+
+                console.log(`[WorldBookManager] 🗑️ 保留NPC条目: ${toKeep.entryId} (${toKeep.entry.npcName}), 删除: ${toRemove.length} 个重复项`);
+
+                for (const item of toRemove) {
+                    delete worldBookData.entries[item.entryId];
+                    removedCount++;
+                    removedEntries.push({
+                        entryId: item.entryId,
+                        entryName: item.entry.comment || item.entry.npcName,
+                        npcId: item.entry.npcId,
+                        createdAt: item.entry.createdAt
+                    });
+                }
+            }
+
+            // 🗑️ 处理其他重复项：按名称去重
+            for (const [entryName, group] of nameGroups.entries()) {
                 if (group.length <= 1) continue; // 没有重复
 
                 console.log(`[WorldBookManager] 🔍 发现重复条目 "${entryName}": ${group.length} 个`);

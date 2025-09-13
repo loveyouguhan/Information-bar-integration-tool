@@ -569,10 +569,12 @@ ${messageContent}
                 provider: apiConfig.provider,
                 model: apiConfig.model,
                 baseUrl: apiConfig.baseUrl,      // 🔧 显示baseUrl配置
-                endpoint: apiConfig.endpoint,    // 🔧 显示endpoint配置  
+                endpoint: apiConfig.endpoint,    // 🔧 显示endpoint配置
                 format: apiConfig.format,        // 🔧 显示接口格式
-                maxTokens: apiConfig.maxTokens || 4000,  // 🔧 显示最大令牌数设置
-                temperature: apiConfig.temperature || 0.7  // 🔧 显示温度设置
+                maxTokens: apiConfig.maxTokens,  // 🔧 修复：显示用户实际设置的最大令牌数
+                temperature: apiConfig.temperature,  // 🔧 修复：显示用户实际设置的温度
+                defaultMaxTokens: apiConfig.maxTokens || 4000,  // 🔧 显示默认值处理
+                defaultTemperature: apiConfig.temperature || 0.7  // 🔧 显示默认值处理
             });
 
             // 🔧 修复：使用正确的API调用方法
@@ -595,7 +597,7 @@ ${messageContent}
                     endpoint: apiConfig.endpoint,
                     baseUrl: apiConfig.baseUrl || apiConfig.endpoint,  // 🔧 fallback到endpoint
                     format: apiConfig.format,    // 🔧 添加format配置
-                    maxTokens: apiConfig.maxTokens || 4000,  // 使用用户设置的最大令牌数
+                    maxTokens: apiConfig.maxTokens || 4000,  // 🔧 修复：确保使用用户设置的最大令牌数
                     temperature: apiConfig.temperature || 0.7,
                     headers: apiConfig.headers,
                     // 🔧 确保传递完整配置

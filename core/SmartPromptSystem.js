@@ -424,6 +424,69 @@ interaction: npc0.姓名="小雨", npc0.关系="朋友", npc0.态度="友好", n
 -->
 </infobar_data>
 
+🔥🔥🔥 错误格式示例10 - 行号未被括号包裹（系统将完全拒绝处理）：
+<infobar_data>
+<!--
+add personal 1 {"1","张三","2","25","3","程序员"}
+add world 1 {"1","现代都市","2","办公室"}
+add interaction 1 {"1","小雨","2","同事","3","友好"}
+-->
+</infobar_data>
+
+🔥🔥🔥 错误格式示例11 - 行号列号混淆使用（系统将完全拒绝处理）：
+<infobar_data>
+<!--
+add personal({"1":"张三","2":"25","3":"程序员"})
+add world({"1":"现代都市","2":"办公室"})
+add interaction({"1":"小雨","2":"同事","3":"友好"})
+-->
+</infobar_data>
+
+🔥🔥🔥 错误格式示例12 - 列号格式错误（系统将完全拒绝处理）：
+<infobar_data>
+<!--
+add personal(1 {1,"张三",2,"25",3,"程序员"})
+add world(1 {1,"现代都市",2,"办公室"})
+add interaction(1 {1,"小雨",2,"同事",3,"友好"})
+-->
+</infobar_data>
+
+🔥🔥🔥 错误格式示例13 - 行号位置错误（系统将完全拒绝处理）：
+<infobar_data>
+<!--
+add personal{"1","张三","2","25","3","程序员"}(1)
+add world{"1","现代都市","2","办公室"}(1)
+add interaction{"1","小雨","2","同事","3","友好"}(1)
+-->
+</infobar_data>
+
+🔥🔥🔥 错误格式示例14 - 数据结构中行号列号混乱（系统将完全拒绝处理）：
+<infobar_data>
+<!--
+'add_personal_1 {"1": "姓名", "2": "175", "3": "男", "4": "学生", "5": "高兴", "6": "冷静"}'
+'add_world_1 {"1": "《青春期头号玩家》", "2": "现代日本高中", "3": "火车", "4": "晴朗"}'
+'add_interaction_1 {"1": "小王", "2": "依赖", "3": "兄妹", "4": "已经接触，友好"}'
+-->
+</infobar_data>
+
+🔥🔥🔥 错误格式示例15 - 行号未使用括号且格式混乱（系统将完全拒绝处理）：
+<infobar_data>
+<!--
+add personal 1 {"1","姓名","2","175","3","男","4","学生","5","高兴","6","冷静"}
+add world 1 {"1","《青春期头号玩家》","2","现代日本高中","3","火车","4","晴朗"}
+add interaction 1 {"1","小王","2","依赖","3","兄妹","4","已经接触，友好"}
+-->
+</infobar_data>
+
+🔥🔥🔥 错误格式示例16 - 列号当作行号使用（系统将完全拒绝处理）：
+<infobar_data>
+<!--
+add personal({"1": "1", "2": "姓名", "3": "175", "4": "男"})
+add world({"1": "1", "2": "《青春期头号玩家》", "3": "现代日本高中"})
+add interaction({"1": "1", "2": "小王", "3": "依赖", "4": "兄妹"})
+-->
+</infobar_data>
+
 🚨 **以上格式是错误的！系统已移除兼容性处理，将完全拒绝处理！**
 
 ✅ 正确格式示例 - 严格遵守输出顺序和注释包裹格式：
@@ -4610,14 +4673,49 @@ infobar_data标签（独立输出，必须后输出）
             console.log('[SmartPromptSystem] 🔍 开始严格格式验证...');
 
             // 🚨 首先进行全局旧格式检测
-            if (dataContent.includes('="') || dataContent.includes("='") || 
+            if (dataContent.includes('="') || dataContent.includes("='") ||
                 dataContent.includes('npc0.') || dataContent.includes('npc1.') ||
                 /\w+:\s*\w+="/.test(dataContent)) {
                 const errorMsg = `🚨🚨🚨 CRITICAL FORMAT ERROR: 检测到旧XML格式数据！
 ❌ 当前错误格式包含: ${dataContent.includes('="') ? '"属性=值"格式' : ''}${dataContent.includes('npc0.') ? ' NPC前缀格式' : ''}
 ✅ 正确格式示例: add interaction(1 {"1","江琳","2","朋友","3","开心"})
 🚨 系统已完全移除兼容性处理！AI必须输出正确格式！`;
-                
+
+                console.error('[SmartPromptSystem] 🚨 CRITICAL FORMAT ERROR:', errorMsg);
+                throw new Error(errorMsg);
+            }
+
+            // 🚨 新增：检测行号格式错误
+            if (/add\s+\w+\s+\d+\s+\{/.test(dataContent) || /add\s+\w+\{.*\}\(\d+\)/.test(dataContent)) {
+                const errorMsg = `🚨🚨🚨 CRITICAL FORMAT ERROR: 检测到行号格式错误！
+❌ 错误格式1: add panel 1 {...} (行号未被括号包裹)
+❌ 错误格式2: add panel{...}(1) (行号位置错误)
+✅ 正确格式: add panel(1 {...})
+🚨 系统已完全移除兼容性处理！AI必须输出正确格式！`;
+
+                console.error('[SmartPromptSystem] 🚨 CRITICAL FORMAT ERROR:', errorMsg);
+                throw new Error(errorMsg);
+            }
+
+            // 🚨 新增：检测列号格式错误
+            if (/\{\s*\d+\s*,/.test(dataContent) || /\{\s*"\d+"\s*:\s*"/.test(dataContent)) {
+                const errorMsg = `🚨🚨🚨 CRITICAL FORMAT ERROR: 检测到列号格式错误！
+❌ 错误格式1: {1,"值",2,"值"} (列号未被双引号包裹)
+❌ 错误格式2: {"1":"值","2":"值"} (使用了JSON键值对格式)
+✅ 正确格式: {"1","值","2","值"}
+🚨 系统已完全移除兼容性处理！AI必须输出正确格式！`;
+
+                console.error('[SmartPromptSystem] 🚨 CRITICAL FORMAT ERROR:', errorMsg);
+                throw new Error(errorMsg);
+            }
+
+            // 🚨 新增：检测行号列号混淆使用
+            if (/add\s+\w+\(\s*\{/.test(dataContent) && !/add\s+\w+\(\s*\d+\s+\{/.test(dataContent)) {
+                const errorMsg = `🚨🚨🚨 CRITICAL FORMAT ERROR: 检测到行号列号混淆使用！
+❌ 错误格式: add panel({"1","值","2","值"}) (缺少行号)
+✅ 正确格式: add panel(1 {"1","值","2","值"})
+🚨 系统已完全移除兼容性处理！AI必须输出正确格式！`;
+
                 console.error('[SmartPromptSystem] 🚨 CRITICAL FORMAT ERROR:', errorMsg);
                 throw new Error(errorMsg);
             }
