@@ -1149,10 +1149,21 @@ export class SummaryPanel {
     }
 
     /**
-     * 刷新总结历史
+     * 刷新总结历史（加入去抖，避免短时间内频繁刷新）
      */
     async refreshSummaryHistory() {
-        await this.loadSummaryHistory();
+        try {
+            if (this._refreshTimer) {
+                clearTimeout(this._refreshTimer);
+            }
+            this._refreshTimer = setTimeout(async () => {
+                await this.loadSummaryHistory();
+            }, 400);
+        } catch (e) {
+            console.error('[SummaryPanel] 刷新总结历史失败:', e);
+            // 兜底直接加载一次
+            await this.loadSummaryHistory();
+        }
     }
 
     /**
