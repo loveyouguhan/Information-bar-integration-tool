@@ -584,7 +584,7 @@ add organization(1 {"1","科技公司","2","私企","3","工程师","4","技术�
     getCorePromptTemplate() {
         // 🚀 获取动态面板规则并注入到提示词中
         const panelRulesSection = this.generatePanelRulesSection();
-        
+
         return `【数据操作员模式】
 
 你是专业数据整理员，使用操作指令格式处理数据：
@@ -732,28 +732,31 @@ ${panelRulesSection}
      */
     generateIncrementalInstructions(missingDataFields, enabledPanels) {
         let instructions = '🔍 **缺失字段详细列表（必须补充）**：\n\n';
-        
+
         for (const field of missingDataFields) {
             instructions += `📋 **${field.panelName}** 面板缺失字段：\n`;
-            
+
             field.missingSubItems.forEach((subItem, index) => {
-                // 🔧 新增：显示更详细的缺失字段信息
+                // 🔧 新增：显示更详细的缺失字段信息（含行号）
+                const hasRows = Array.isArray(subItem.missingRows) && subItem.missingRows.length > 0;
                 if (subItem.emptyRows !== undefined && subItem.totalRows !== undefined) {
-                    instructions += `  ${index + 1}. ${subItem.displayName} (${subItem.emptyRows}/${subItem.totalRows}行为空，${subItem.emptyPercentage}%空白率)\n`;
+                    instructions += `  ${index + 1}. ${subItem.displayName} (${subItem.emptyRows}/${subItem.totalRows}行为空，${subItem.emptyPercentage}%空白率${hasRows ? `；缺失行: ${subItem.missingRows.join(',')}` : ''})\n`;
+                } else if (hasRows) {
+                    instructions += `  ${index + 1}. ${subItem.displayName}（缺失行: ${subItem.missingRows.join(',')}）\n`;
                 } else {
                     instructions += `  ${index + 1}. ${subItem.displayName}\n`;
                 }
             });
-            
+
             instructions += '\n';
         }
-        
+
         instructions += `📊 **补充要求**：
 • 总计 ${missingDataFields.reduce((sum, field) => sum + field.missingSubItems.length, 0)} 个字段需要补充
 • 必须基于当前剧情生成具体、真实的内容
 • 使用操作指令格式：add/update 面板名(行号 {"列号","值",...})
 • 严禁使用"未知"、"待补充"、"空"等占位符`;
-        
+
         return instructions;
     }
 
@@ -1151,12 +1154,9 @@ ${panelRulesSection}
                 if (sourceData) {
                     // 🔧 修复：处理新的多行数据格式
                     if (Array.isArray(sourceData) && sourceData.length > 0) {
-                        // 新的多行数据格式：转换为键值对格式用于统计
-                        const convertedData = this.convertMultiRowDataToKeyValue(sourceData, panel);
-                        if (Object.keys(convertedData).length > 0) {
-                            currentData[panelKey] = convertedData;
-                            console.log(`[SmartPromptSystem] 📊 面板 ${panelId}(${panelKey}): 多行数据转换后保留 ${Object.keys(convertedData).length} 个字段`);
-                        }
+                        // 保留多行数据原始数组，交由后续统计/缺失检测按列号或key解析
+                        currentData[panelKey] = sourceData;
+                        console.log(`[SmartPromptSystem] 📊 面板 ${panelId}(${panelKey}): 保留多行数据 ${sourceData.length} 行用于统计`);
                     } else if (typeof sourceData === 'object' && Object.keys(sourceData).length > 0) {
                         // 旧的键值对格式：使用启用字段过滤
                         const filteredPanelData = this.filterByEnabledFields(panelId, sourceData, panel);
@@ -1218,7 +1218,35 @@ ${panelRulesSection}
         }
     }
 
+
     /**
+
+     * 统一按 subItems 顺序读取一行中的字段值（优先 key，其次 col_N）
+     */
+    getRowValueBySubItem(rowRaw, subItem, panelConfig) {
+        try {
+            const row = rowRaw && rowRaw.rowData ? rowRaw.rowData : (rowRaw || {});
+            const key = subItem?.key;
+            let value = key ? row[key] : undefined;
+            if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
+                // 尝试 col_N
+                let colIndex = -1;
+                if (Array.isArray(panelConfig?.subItems) && key) {
+                    colIndex = panelConfig.subItems.findIndex(si => si && si.key === key);
+                }
+                if (colIndex >= 0) {
+                    const colKey = `col_${colIndex + 1}`;
+                    if (row[colKey] !== undefined) value = row[colKey];
+                }
+            }
+            if (value === undefined || value === null) return '';
+            return typeof value === 'string' ? value : String(value);
+        } catch (e) {
+            return '';
+        }
+    }
+
+     /**
      * 🔧 将面板数据格式化为提示词友好的新架构行展示
      * - 仅用于构建提示词与数据对照信息，不写回存储
      * - 非交互面板：旧架构对象 → 按子项顺序生成 行1
@@ -1598,23 +1626,23 @@ ${panelRulesSection}
 
                 if (panelData) {
                     const configuredFieldCount = panel.subItems ? panel.subItems.length : 0;
-                    
+
                     // 🔧 修复：正确处理多行数据格式的覆盖率计算
                     if (Array.isArray(panelData)) {
                         console.log(`[SmartPromptSystem] 📊 面板 ${panel.id}: 多行数据格式，行数=${panelData.length}`);
-                        
+
                         let totalCells = 0;
                         let validCells = 0;
-                        
+
                         // 计算每一行每个字段的有效性
                         panelData.forEach((row, rowIndex) => {
                             if (row && typeof row === 'object') {
                                 if (panel.subItems) {
-                                    // 按配置的子项统计
+                                    // 按配置的子项统计（支持 col_N 与 key 两种存储）
                                     panel.subItems.forEach(subItem => {
                                         totalCells++;
-                                        const value = row[subItem.key];
-                                        if (value && typeof value === 'string' && value.trim() !== '') {
+                                        const value = this.getRowValueBySubItem(row, subItem, panel);
+                                        if (typeof value === 'string' && value.trim() !== '') {
                                             validCells++;
                                         }
                                     });
@@ -1629,12 +1657,12 @@ ${panelRulesSection}
                                 }
                             }
                         });
-                        
+
                         totalFields += totalCells;
                         existingFields += validCells;
-                        
+
                         console.log(`[SmartPromptSystem] 📊 面板 ${panel.id}: 总单元格=${totalCells}, 有效单元格=${validCells}, 覆盖率=${totalCells > 0 ? Math.round((validCells/totalCells)*100) : 0}%`);
-                        
+
                     } else {
                         // 传统键值对格式
                         const actualFields = Object.keys(panelData);
@@ -1679,7 +1707,10 @@ ${panelRulesSection}
                 console.log(`[SmartPromptSystem] 🔄 选择增量更新: ${reason}`);
             } else {
                 // 20%-60%之间，根据具体情况智能判断
-                const missingPanels = enabledPanels.filter(panel => !currentPanelData[panel.id]);
+                const missingPanels = enabledPanels.filter(panel => {
+                    const k = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+                    return !currentPanelData[k] && !currentPanelData[panel.id];
+                });
                 console.log(`[SmartPromptSystem] 🔍 缺失面板数量: ${missingPanels.length}/${enabledPanels.length}`);
 
                 if (missingPanels.length > enabledPanels.length / 2) {
@@ -2354,7 +2385,7 @@ ${panelRulesSection}
             // 🔧 修复：使用正确的路径访问InfoBarSettings
             const infoBarTool = window.SillyTavernInfobar;
             const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
-            
+
             if (infoBarSettings && infoBarSettings.getCompleteDisplayNameMapping) {
                 const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
                 const panelMapping = completeMapping[panelId];
@@ -2956,7 +2987,7 @@ ${panelRulesSection}
         const hasKeyValueFormat = lines.some(line => {
             const trimmed = line.trim();
             // 🚨 重要：排除旧格式（包含引号、逗号、XML标签的行）
-            if (trimmed.includes('="') || trimmed.includes("='") || 
+            if (trimmed.includes('="') || trimmed.includes("='") ||
                 trimmed.includes('<') || trimmed.includes('>') ||
                 trimmed.includes(',') || trimmed.includes('npc')) {
                 return false;
@@ -3015,7 +3046,7 @@ ${panelRulesSection}
                         result[cleanPanelName] = {};
                     }
                     result[cleanPanelName][cleanFieldName] = cleanValue;
-                    
+
                     console.log(`[SmartPromptSystem] ✅ 解析中文格式: ${cleanPanelName}.${cleanFieldName}=${cleanValue}`);
                 }
             }
@@ -3037,7 +3068,7 @@ ${panelRulesSection}
             console.log('[SmartPromptSystem] 🚀 开始解析键值对中文格式...');
 
             // 🚨 严格验证：检查是否包含旧格式特征
-            if (dataContent.includes('="') || dataContent.includes("='") || 
+            if (dataContent.includes('="') || dataContent.includes("='") ||
                 dataContent.includes('npc0.') || dataContent.includes('npc1.') ||
                 dataContent.includes('<') || dataContent.includes('>') ||
                 dataContent.includes('personal:') || dataContent.includes('world:') ||
@@ -3058,7 +3089,7 @@ ${panelRulesSection}
                 }
 
                 // 🚨 二次验证：每行都检查旧格式特征
-                if (trimmedLine.includes('="') || trimmedLine.includes("='") || 
+                if (trimmedLine.includes('="') || trimmedLine.includes("='") ||
                     trimmedLine.includes('npc') || trimmedLine.includes(',') ||
                     trimmedLine.includes('<') || trimmedLine.includes('>')) {
                     console.warn('[SmartPromptSystem] ⚠️ 跳过疑似旧格式的行:', trimmedLine);
@@ -3068,7 +3099,7 @@ ${panelRulesSection}
                 // 匹配格式：字段名: 值 或 字段名=值（但排除复杂值）
                 const colonMatch = trimmedLine.match(/^(.+?):\s*([^"'<>=,]+)$/);
                 const equalsMatch = trimmedLine.match(/^(.+?)=([^"'<>=,]+)$/);
-                
+
                 if (colonMatch || equalsMatch) {
                     const match = colonMatch || equalsMatch;
                     const [, fieldName, value] = match;
@@ -3079,7 +3110,7 @@ ${panelRulesSection}
                         result[currentPanel] = {};
                     }
                     result[currentPanel][cleanFieldName] = cleanValue;
-                    
+
                     console.log(`[SmartPromptSystem] ✅ 解析键值对: ${currentPanel}.${cleanFieldName}=${cleanValue}`);
                 }
             }
@@ -3240,7 +3271,7 @@ ${panelRulesSection}
         console.error('[SmartPromptSystem] 📝 数据内容:', dataContent.substring(0, 200));
         console.error('[SmartPromptSystem] 💡 旧XML格式已被完全禁用，请使用操作指令格式');
         console.error('[SmartPromptSystem] ✅ 正确格式: add interaction(1 {"1","张三","2","朋友","3","友好"})');
-        
+
         return {
             panels: {},
             format: 'legacy_xml_disabled',
@@ -3260,7 +3291,7 @@ ${panelRulesSection}
         console.warn('[SmartPromptSystem] 🚨 检测到未支持的数据格式');
         console.warn('[SmartPromptSystem] 📝 请使用操作指令格式：add/update/delete 面板名(行号 {"列号","值"})');
         console.warn('[SmartPromptSystem] 💡 示例：add interaction(1 {"1","张三","2","朋友","3","友好"})');
-        
+
         return {
             panels: {},
             format: 'unsupported',
@@ -3281,7 +3312,7 @@ ${panelRulesSection}
         console.warn('[SmartPromptSystem] 📝 字段内容:', fieldsStr);
         console.warn('[SmartPromptSystem] 💡 请使用新的操作指令格式：add/update/delete 面板名(行号 {"列号","值"})');
         console.error('[SmartPromptSystem] ❌ 旧格式字段解析已被禁用，请更新AI提示词模板');
-        
+
         // 不执行任何解析，直接返回
         return;
     }
@@ -3511,7 +3542,7 @@ ${panelRulesSection}
                 const numericKeys = Object.keys(currentPanelData)
                     .map(k => parseInt(k))
                     .filter(k => !isNaN(k));
-                
+
                 if (numericKeys.length > 0) {
                     // 新架构：对象键为数字索引 {0: {col_1: ...}, 1: {...}}
                     const sortedKeys = numericKeys.sort((a, b) => a - b);
@@ -3563,7 +3594,7 @@ ${panelRulesSection}
                 const numericKeys = Object.keys(currentPanelData)
                     .map(k => parseInt(k))
                     .filter(k => !isNaN(k));
-                
+
                 if (numericKeys.length > 0) {
                     // 新架构：对象键为数字索引 {0: {col_1: ...}, 1: {...}}
                     const sortedKeys = numericKeys.sort((a, b) => a - b);
@@ -3615,7 +3646,7 @@ ${panelRulesSection}
                 const numericKeys = Object.keys(currentPanelData)
                     .map(k => parseInt(k))
                     .filter(k => !isNaN(k));
-                
+
                 if (numericKeys.length > 0) {
                     // 新架构：对象键为数字索引 {0: {col_1: ...}, 1: {...}}
                     const sortedKeys = numericKeys.sort((a, b) => a - b);
@@ -3772,7 +3803,7 @@ ${panelRulesSection}
                 }
 
                 // 🔧 修复：支持多行数据格式的空字段检测
-                if (!panelData || (Array.isArray(panelData) && panelData.length === 0) || 
+                if (!panelData || (Array.isArray(panelData) && panelData.length === 0) ||
                     (!Array.isArray(panelData) && Object.keys(panelData).length === 0)) {
                     // 整个面板都缺失
                     missingFields.push({
@@ -3789,67 +3820,85 @@ ${panelRulesSection}
 
                 // 🔧 新增：检查多行数据格式中的空字段
                 const missingSubItems = [];
-                
+
                 // 处理数组格式的面板数据（多行数据）
                 if (Array.isArray(panelData)) {
                     console.log(`[SmartPromptSystem] 🔍 检查面板 ${panel.id} 的多行数据，共 ${panelData.length} 行`);
-                    
-                    // 统计每个字段在所有行中的空值情况
+
+                    // 统计每个字段在所有行中的空值情况，并记录“每行是否已有其它字段数据”
                     const fieldStats = {};
-                    
+                    const rowHasAnyData = panelData.map((row) => {
+                        if (!(row && typeof row === 'object')) return false;
+                        for (const si of panel.subItems) {
+                            const v = this.getRowValueBySubItem(row, si, panel);
+                            if (typeof v === 'string' ? v.trim() !== '' : (v !== undefined && v !== null && String(v).trim() !== '')) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    });
+
                     for (const subItem of panel.subItems) {
                         const key = subItem.key;
                         let totalRows = panelData.length;
                         let emptyRows = 0;
                         let hasAnyValidData = false;
-                        
-                        // 检查每一行的这个字段
+                        const missingRows = [];
+
+                        // 检查每一行的这个字段（支持 col_N 与 key 两种存储）
                         panelData.forEach((row, rowIndex) => {
                             if (row && typeof row === 'object') {
-                                const value = row[key];
-                                if (!value || (typeof value === 'string' && value.trim() === '')) {
-                                    emptyRows++;
-                                } else {
+                                const value = this.getRowValueBySubItem(row, subItem, panel);
+                                const filled = typeof value === 'string' ? value.trim() !== '' : (value !== undefined && value !== null && String(value).trim() !== '');
+                                if (filled) {
                                     hasAnyValidData = true;
+                                } else {
+                                    emptyRows++;
+                                    if (rowHasAnyData[rowIndex]) missingRows.push(rowIndex + 1); // 1-based 行号
                                 }
                             } else {
                                 emptyRows++;
                             }
                         });
-                        
+
                         fieldStats[key] = {
                             totalRows,
                             emptyRows,
                             hasAnyValidData,
-                            emptyPercentage: totalRows > 0 ? (emptyRows / totalRows) * 100 : 100
+                            emptyPercentage: totalRows > 0 ? (emptyRows / totalRows) * 100 : 100,
+                            missingRows
                         };
-                        
-                        // 🎯 判断标准：如果字段在所有行中都为空，或者空值比例过高（>50%），则认为缺失
-                        if (!hasAnyValidData || fieldStats[key].emptyPercentage > 50) {
+
+                        // 🎯 判断标准：
+                        // 1) 若该字段在“已有数据的行”存在缺失，则列为缺失并携带缺失行号
+                        // 2) 或者该字段整体空/空白率>50%
+                        if (missingRows.length > 0 || !hasAnyValidData || fieldStats[key].emptyPercentage > 50) {
                             const displayName = subItem.name || this.getSubItemDisplayName(panel.id, key);
-                            missingSubItems.push({ 
-                                key, 
+                            missingSubItems.push({
+                                key,
                                 displayName,
                                 emptyRows,
                                 totalRows,
-                                emptyPercentage: Math.round(fieldStats[key].emptyPercentage)
+                                emptyRows,
+                                emptyPercentage: Math.round(fieldStats[key].emptyPercentage),
+                                missingRows
                             });
                         }
                     }
-                    
+
                     console.log(`[SmartPromptSystem] 📊 面板 ${panel.id} 字段统计:`, fieldStats);
-                    
+
                 } else {
                     // 处理传统键值对格式的面板数据
                     for (const subItem of panel.subItems) {
                         const key = subItem.key;
                         let hasValidData = false;
-                        
+
                         if (Object.prototype.hasOwnProperty.call(panelData, key)) {
                             const value = panelData[key];
                             hasValidData = value && value.trim() !== '';
                         }
-                        
+
                         if (!hasValidData) {
                             const displayName = subItem.name || this.getSubItemDisplayName(panel.id, key);
                             missingSubItems.push({ key, displayName });
@@ -3998,6 +4047,20 @@ ${forcedPanelsText.trim()}
                 } else {
                     subItemTemplates.push(`${subItem.key}="【请填写${subItem.displayName}的具体内容】"`);
                 }
+            // 行级缺失补充模板：为存在数据的行补齐该列（根据 subItems 计算列号）
+            try {
+                const panelCfg = enabledPanels.find(p => p.id === field.panelId) || {};
+                const keyToCol = new Map((panelCfg.subItems || []).map((si, idx) => [si?.key, idx + 1]));
+                for (const subItem of field.missingSubItems) {
+                    if (Array.isArray(subItem.missingRows) && subItem.missingRows.length > 0) {
+                        const colIndex = keyToCol.get(subItem.key) || 1;
+                        subItem.missingRows.forEach(r => {
+                            prefilledTemplate += `update ${panelKey}(${r} {"${colIndex}","${subItem.displayName}"})\n`;
+                        });
+                    }
+                }
+            } catch (e) { /* ignore */ }
+
             }
 
             prefilledTemplate += subItemTemplates.join(', ') + '\n';
@@ -4045,7 +4108,12 @@ ${prefilledTemplate.trim()}
             const panelKey = field.panelKey || field.panelId;
             finalReminder += `☑️ ${field.panelName} (${panelKey}) - 是否已包含在<infobar_data>中？\n`;
             for (const subItem of field.missingSubItems) {
-                finalReminder += `   ☑️ ${subItem.key}="具体内容" - 是否已填写？\n`;
+                const hasRows = Array.isArray(subItem.missingRows) && subItem.missingRows.length > 0;
+                if (hasRows) {
+                    finalReminder += `   ☑️ 行[${subItem.missingRows.join(',')}] ${subItem.key}="具体内容" - 是否已填写？\n`;
+                } else {
+                    finalReminder += `   ☑️ ${subItem.key}="具体内容" - 是否已填写？\n`;
+                }
             }
         }
 
@@ -4806,7 +4874,7 @@ infobar_data标签（独立输出，必须后输出）
     generatePanelRulesSection() {
         try {
             const now = Date.now();
-            
+
             // 检查缓存是否有效
             if (this.rulesCacheExpiry > now && this.rulesCache.has('panelRulesSection')) {
                 console.log('[SmartPromptSystem] 📋 使用缓存的面板规则');
@@ -4816,7 +4884,7 @@ infobar_data标签（独立输出，必须后输出）
             console.log('[SmartPromptSystem] 🔄 生成面板规则部分...');
 
             const rulesSection = this.collectAndFormatPanelRules();
-            
+
             // 缓存结果
             this.rulesCache.set('panelRulesSection', rulesSection);
             this.rulesCacheExpiry = now + this.rulesCacheTTL;
@@ -4841,7 +4909,7 @@ infobar_data标签（独立输出，必须后输出）
             // 1. 收集面板规则
             if (this.panelRuleManager) {
                 const allPanelRules = this.panelRuleManager.getAllPanelRules?.() || new Map();
-                
+
                 for (const [panelId, rule] of allPanelRules) {
                     if (rule && (rule.description || rule.updateRule || rule.addRule || rule.deleteRule)) {
                         panelRules.push(this.formatPanelRule(panelId, rule));
@@ -4852,7 +4920,7 @@ infobar_data标签（独立输出，必须后输出）
             // 2. 收集字段规则（通过AIDataExposure或直接从FieldRuleManager）
             if (this.fieldRuleManager) {
                 const allFieldRules = this.fieldRuleManager.getAllFieldRules?.() || new Map();
-                
+
                 for (const [fieldKey, rule] of allFieldRules) {
                     if (rule && rule.examples && rule.examples.length > 0) {
                         fieldRules.push(this.formatFieldRule(fieldKey, rule));
@@ -5025,7 +5093,7 @@ infobar_data标签（独立输出，必须后输出）
     handleError(error) {
         this.errorCount++;
         console.error('[SmartPromptSystem] ❌ 系统错误:', error);
-        
+
         if (this.eventSystem) {
             this.eventSystem.emit('system:error', {
                 module: 'SmartPromptSystem',
