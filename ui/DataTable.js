@@ -4000,7 +4000,30 @@ export class DataTable {
             });
 
             console.log(`[DataTable] ✅ 转换完成，共 ${transformedData.length} 条面板数据`);
-            return transformedData;
+
+            // 🔧 修复：交互对象去重（同名同类型同关系/状态视为同一NPC行）
+            const seen = new Set();
+            const deduped = [];
+            transformedData.forEach(item => {
+                if (item.panel !== 'interaction' || !item.rowData) {
+                    deduped.push(item);
+                    return;
+                }
+                const r = item.rowData || {};
+                const key = JSON.stringify([
+                    r.col_1 || r['NPC名称'] || '',
+                    r.col_2 || r['对象类型'] || '',
+                    r.col_4 || r['关系类型'] || '',
+                    r.col_3 || r['当前状态'] || ''
+                ]);
+                if (seen.has(key)) {
+                    return; // 跳过重复
+                }
+                seen.add(key);
+                deduped.push(item);
+            });
+
+            return deduped;
 
         } catch (error) {
             console.error('[DataTable] ❌ 转换面板数据格式失败:', error);

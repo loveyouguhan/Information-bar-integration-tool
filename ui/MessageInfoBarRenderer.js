@@ -1857,84 +1857,43 @@ export class MessageInfoBarRenderer {
     }
 
     /**
-     * 🔧 将col_X格式的字段名转换为系统期望的标准字段名
+     * 🔧 将 col_X 尽量转换为“面板配置中声明的真实字段键”（优先 subItems.key）。
+     * 目的：与 DataTable 配置保持一致，避免硬编码映射造成错位。
      */
     convertColFieldToStandardName(fieldName, panelKey) {
         try {
-            // 检查是否是col_X格式
             const colMatch = fieldName.match(/^col_(\d+)$/);
-            if (!colMatch) {
-                return fieldName; // 不是col_X格式，直接返回
-            }
+            if (!colMatch) return fieldName; // 非 col_X，直接返回
 
-            const colNumber = parseInt(colMatch[1]);
-            console.log(`[MessageInfoBarRenderer] 🔧 转换col_${colNumber}字段 (面板: ${panelKey})`);
+            const colNumber = parseInt(colMatch[1], 10);
+            console.log(`[MessageInfoBarRenderer] 🔧 解析列字段: col_${colNumber} (面板: ${panelKey})`);
 
-            // 🔧 修复：根据面板类型和列号映射到系统期望的标准字段名
-            // 使用硬编码映射，优先级高于用户自定义子项，避免"前置字段"等错误映射
-            const standardFieldMappings = {
-                personal: {
-                    1: 'name',        // 姓名 - 强制映射，避免"前置字段"干扰
-                    2: 'age',         // 年龄
-                    3: 'gender',      // 性别
-                    4: 'occupation',  // 职业
-                    5: 'appearance',  // 外貌
-                    6: 'personality', // 性格
-                    7: 'status',      // 心理状态
-                    8: 'location',    // 当前状态
-                    9: 'background',  // 特殊能力
-                    10: 'relationship', // 当前行为
-                    11: 'emotion',    // 关系
-                    12: 'notes'       // 备注
-                },
-                world: {
-                    1: 'world_name',  // 世界名称
-                    2: 'world_type',  // 世界类型
-                    3: 'culture',     // 风格
-                    4: 'geography',   // 地点
-                    5: 'location',    // 具体位置
-                    6: 'time'         // 时间
-                },
-                tasks: {
-                    1: 'creation',    // 任务创建 - 强制映射，避免"1"干扰
-                    2: 'editing',     // 任务编辑
-                    3: 'status',      // 状态管理
-                    4: 'priority',    // 优先级
-                    5: 'deadline',    // 截止日期
-                    6: 'progress',    // 进度跟踪
-                    7: 'categories'   // 分类管理
-                },
-                interaction: {
-                    1: 'name',            // 对象名称 (与InfoBarSettings一致)
-                    2: 'type',            // 对象类型 (与InfoBarSettings一致)
-                    3: 'status',          // 当前状态 (与InfoBarSettings一致)
-                    4: 'relationship',    // 关系类型 (与InfoBarSettings一致)
-                    5: 'intimacy',        // 亲密度 (与InfoBarSettings一致)
-                    6: 'history',         // 历史记录 (与InfoBarSettings一致)
-                    7: 'autoRecord',      // 自动记录 (与InfoBarSettings一致)
-                    8: 'mood',            // 情绪状态
-                    9: 'activity',        // 当前活动
-                    10: 'availability',   // 可用性
-                    11: 'priority',       // 优先级
-                    12: 'location',       // 所在位置
-                    13: 'trust',          // 信任度
-                    14: 'friendship',     // 友谊度
-                    15: 'romance',        // 浪漫度
-                    16: 'notes'           // 备注
+            // 1) 优先从 DataTable 的启用面板配置中解析 subItems
+            const dataTable = window.SillyTavernInfobar?.modules?.dataTable;
+            let panelConfig = null;
+            try {
+                const enabled = dataTable?.getAllEnabledPanels?.();
+                if (Array.isArray(enabled)) {
+                    panelConfig = enabled.find(p => p?.key === panelKey || p?.id === panelKey);
+                } else if (enabled && typeof enabled === 'object') {
+                    panelConfig = enabled[panelKey];
                 }
-            };
-
-            const panelMapping = standardFieldMappings[panelKey];
-            if (panelMapping && panelMapping[colNumber]) {
-                const standardName = panelMapping[colNumber];
-                console.log(`[MessageInfoBarRenderer] ✅ col_${colNumber} -> ${standardName} (面板: ${panelKey})`);
-                return standardName;
+            } catch (e) {
+                console.warn('[MessageInfoBarRenderer] ⚠️ 获取启用面板配置失败:', e?.message);
             }
 
-            // 如果没有找到映射，返回原字段名
-            console.log(`[MessageInfoBarRenderer] ⚠️ col_${colNumber} 无标准映射 (面板: ${panelKey})`);
-            return fieldName;
+            if (panelConfig && Array.isArray(panelConfig.subItems)) {
+                const subItem = panelConfig.subItems[colNumber - 1]; // col_1 对应索引0
+                if (subItem && (subItem.key || subItem.name)) {
+                    const resolved = subItem.key || subItem.name;
+                    console.log(`[MessageInfoBarRenderer] ✅ col_${colNumber} -> ${resolved} (来自面板配置)`);
+                    return resolved;
+                }
+            }
 
+            // 2) 找不到配置映射时，保持 col_X 原样，后续用 mapColFieldToDisplayName 获取显示名
+            console.log(`[MessageInfoBarRenderer] ⚠️ 未从配置解析到字段，保留原始: col_${colNumber}`);
+            return fieldName;
         } catch (error) {
             console.error('[MessageInfoBarRenderer] ❌ col_X字段转换失败:', error);
             return fieldName;
@@ -4254,12 +4213,40 @@ export class MessageInfoBarRenderer {
     isFieldEnabled(panelKey, fieldName, panelConfig) {
         try {
             const enabledSet = this.getEnabledFieldSet(panelKey, panelConfig);
-            // 如果没有配置，默认不过滤（保持兼容）
-            if (!enabledSet || enabledSet.size === 0) return true;
-            if (enabledSet.has(fieldName)) return true;
-            // 将 col_X 转换为标准字段名再尝试匹配
+
+            // 🔧 新增：若字段不在配置子项列表中，则默认显示（避免新增列被意外隐藏）
+            const subItems = Array.isArray(panelConfig?.subItems) ? panelConfig.subItems : [];
+            if (subItems.length === 0) return true; // 无配置则不过滤
+
+            const allSet = new Set();
+            subItems.forEach((subItem, index) => {
+                if (!subItem) return;
+                if (subItem.name) allSet.add(String(subItem.name));
+                if (subItem.key) allSet.add(String(subItem.key));
+                allSet.add(`col_${index + 1}`);
+            });
+
             const standardName = this.convertColFieldToStandardName(fieldName, panelKey);
-            if (standardName && enabledSet.has(standardName)) return true;
+
+            // 🛡️ 强制保障：个人信息面板中的“姓名”永不被误隐藏（支持 name/姓名/col_1 任一形式）
+            if (panelKey === 'personal') {
+                const cand = [String(fieldName || ''), String(standardName || '')];
+                if (cand.includes('name') || cand.includes('姓名') || cand.includes('col_1')) {
+                    return true;
+                }
+            }
+
+            const isKnownField = allSet.has(fieldName) || allSet.has(standardName);
+
+            if (!isKnownField) {
+                // 新增未配置的字段：默认显示
+                return true;
+            }
+
+            // 对已配置字段，遵循启用集合
+            if (!enabledSet || enabledSet.size === 0) return true;
+            if (enabledSet.has(fieldName) || (standardName && enabledSet.has(standardName))) return true;
+
             return false;
         } catch (error) {
             console.warn('[MessageInfoBarRenderer] ⚠️ 判断字段是否启用失败:', error);
@@ -4627,9 +4614,29 @@ export class MessageInfoBarRenderer {
             'fantasy', 'modern', 'historical', 'magic', 'training'
         ];
 
+        // 🔧 修复：支持自定义面板别名映射（configs.customPanels[*].key）
+        const aliasMap = {};
+        Object.entries(enabledPanels).forEach(([id, cfg]) => {
+            if (cfg && typeof cfg === 'object') {
+                const isStandard = standardPanels.includes((id || '').toLowerCase());
+                const aliasKey = (cfg.key || '').toString().toLowerCase();
+                if (!isStandard && aliasKey) {
+                    aliasMap[aliasKey] = id; // 例如 key='nearby' -> id='test'
+                }
+            }
+        });
+
         Object.entries(panels).forEach(([panelId, panelData]) => {
-            if (!standardPanels.includes(panelId.toLowerCase()) && enabledPanels[panelId]) {
-                customPanels.push([panelId, panelData]);
+            const lower = (panelId || '').toLowerCase();
+            if (standardPanels.includes(lower)) return;
+
+            // 直接命中或通过别名解析到真实ID
+            const resolvedId = enabledPanels[panelId]
+                ? panelId
+                : (aliasMap[lower] || null);
+
+            if (resolvedId && enabledPanels[resolvedId]) {
+                customPanels.push([resolvedId, panelData]);
             }
         });
 
