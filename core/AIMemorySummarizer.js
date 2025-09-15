@@ -23,7 +23,9 @@ export class AIMemorySummarizer {
         // AI总结设置
         this.settings = {
             enabled: true,                     // 🔧 修复：启用AI总结以增加记忆数据积累
-            messageLevelSummary: true,         // 消息级别总结
+            // 当跟随楼层时，不进行消息级别总结，交由SummaryManager按楼层触发
+            followSummaryFloor: true,          // ✅ 跟随用户配置的楼层进行记忆总结
+            messageLevelSummary: true,         // 消息级别总结（当followSummaryFloor=true时将被短路）
             batchSize: 5,                      // 批量处理大小
             importanceThreshold: 0.6,          // 重要性阈值
             summaryCache: true,                // 启用总结缓存
@@ -186,22 +188,31 @@ export class AIMemorySummarizer {
      */
     async handleMessageReceived(data) {
         try {
-            if (!this.settings.enabled || !this.settings.messageLevelSummary) {
+            if (!this.settings.enabled) {
                 return;
             }
-            
+
+            // 跟随楼层：完全交由 SummaryManager 按楼层触发，不在消息级别单独调用自定义API
+            if (this.settings.followSummaryFloor === true) {
+                return;
+            }
+
+            if (!this.settings.messageLevelSummary) {
+                return;
+            }
+
             if (this.isProcessing) {
                 // 添加到处理队列
                 this.processingQueue.push(data);
                 return;
             }
-            
+
             console.log('[AIMemorySummarizer] 📝 处理新消息的AI总结...');
             await this.processMessageSummary(data);
-            
+
             // 处理队列中的消息
             await this.processQueue();
-            
+
         } catch (error) {
             console.error('[AIMemorySummarizer] ❌ 处理消息接收事件失败:', error);
         }

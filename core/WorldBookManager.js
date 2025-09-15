@@ -250,13 +250,24 @@ export class WorldBookManager {
     async readWorldBooksFromSillyTavern() {
             const worldBooks = [];
 
-        // 🎯 优先级读取策略：先尝试最可靠的方法
+        // 🎯 优先级读取策略：避免无效的HTTP请求，优先使用本地/上下文数据
         const readStrategies = [
-            () => this.readWorldBooksFromAPI(),
             () => this.readWorldBooksFromContext(),
             () => this.readWorldBooksFromDOM(),
             () => this.readWorldBooksFromGlobal()
         ];
+
+        // 仅当检测到可用的SillyTavern世界书API时，才尝试HTTP API
+        try {
+            const api = this.getSillyTavernWorldInfoAPI();
+            if (api) {
+                readStrategies.push(() => this.readWorldBooksFromAPI());
+            } else {
+                console.log('[WorldBookManager] ℹ️ 未检测到SillyTavern世界书API，跳过HTTP接口读取');
+            }
+        } catch (e) {
+            console.log('[WorldBookManager] ℹ️ 世界书API检测失败，跳过HTTP接口读取');
+        }
         
         let lastError = null;
         
@@ -289,13 +300,31 @@ export class WorldBookManager {
     async readWorldBooksFromAPI() {
         try {
             console.log('[WorldBookManager] 📡 尝试从API读取世界书...');
-            
-            const response = await fetch('/api/worldinfo/list', {
+
+            // 🚀 修复：检查SillyTavern的世界书API端点
+            let apiEndpoint = '/api/worldinfo/list';
+
+            // 检查SillyTavern是否有世界书API
+            if (window.SillyTavern && window.SillyTavern.getContext) {
+                const context = window.SillyTavern.getContext();
+                if (context && context.worldInfoData) {
+                    // 直接从SillyTavern上下文获取世界书数据
+                    console.log('[WorldBookManager] ✅ 从SillyTavern上下文获取世界书数据');
+                    return this.parseWorldBookData(context.worldInfoData);
+                }
+            }
+
+            // 尝试API调用，但处理404错误
+            const response = await fetch(apiEndpoint, {
                 method: 'GET',
                 headers: this.getRequestHeaders()
             });
-            
+
             if (!response.ok) {
+                if (response.status === 404) {
+                    console.log('[WorldBookManager] ⚠️ 世界书API不可用，跳过API读取');
+                    return [];
+                }
                 throw new Error(`API请求失败: ${response.status}`);
             }
             
@@ -325,6 +354,40 @@ export class WorldBookManager {
         } catch (error) {
             console.warn('[WorldBookManager] ⚠️ API读取失败:', error);
             throw error;
+        }
+    }
+
+    /**
+     * 🚀 新增：解析世界书数据
+     */
+    parseWorldBookData(worldInfoData) {
+        try {
+            if (!worldInfoData) {
+                console.log('[WorldBookManager] ⚠️ 世界书数据为空');
+                return [];
+            }
+
+            const worldBooks = [];
+
+            // 处理不同格式的世界书数据
+            if (Array.isArray(worldInfoData)) {
+                // 如果是数组格式
+                worldInfoData.forEach((item, index) => {
+                    worldBooks.push(this.formatWorldBookData(`WorldBook_${index}`, item, 'context'));
+                });
+            } else if (typeof worldInfoData === 'object') {
+                // 如果是对象格式
+                Object.keys(worldInfoData).forEach(key => {
+                    worldBooks.push(this.formatWorldBookData(key, worldInfoData[key], 'context'));
+                });
+            }
+
+            console.log(`[WorldBookManager] ✅ 从上下文解析到 ${worldBooks.length} 个世界书`);
+            return worldBooks;
+
+        } catch (error) {
+            console.error('[WorldBookManager] ❌ 解析世界书数据失败:', error);
+            return [];
         }
     }
 

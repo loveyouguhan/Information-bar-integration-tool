@@ -100,17 +100,28 @@ export class SmartPromptSystem {
     async initPromptTemplate() {
         console.log('[SmartPromptSystem] 📝 初始化提示词模板...');
 
-        // 从提示词文件读取模板
         try {
-            const response = await fetch('./scripts/extensions/third-party/Information bar integration tool/提示词');
-            if (response.ok) {
-                this.promptTemplate = await response.text();
-                console.log('[SmartPromptSystem] ✅ 提示词模板加载成功');
-            } else {
-                throw new Error('无法加载提示词文件');
+            // 优先读取扩展设置中的自定义模板路径（仅当显式配置时才发起网络请求）
+            const extensionSettings = this.context?.extensionSettings?.['Information bar integration tool'] || {};
+            const promptPath = extensionSettings.promptTemplatePath;
+
+            if (typeof promptPath === 'string' && promptPath.trim()) {
+                console.log('[SmartPromptSystem] 📄 检测到自定义模板路径，尝试加载:', promptPath);
+                const response = await fetch(promptPath);
+                if (response.ok) {
+                    this.promptTemplate = await response.text();
+                    console.log('[SmartPromptSystem] ✅ 提示词模板从自定义文件加载成功');
+                    return;
+                } else {
+                    throw new Error(`无法加载提示词文件: ${promptPath} (${response.status})`);
+                }
             }
+
+            // 未配置自定义路径：直接使用内置模板，避免404网络请求
+            this.promptTemplate = this.getDefaultPromptTemplate();
+            console.log('[SmartPromptSystem] ✅ 使用内置默认提示词模板');
         } catch (error) {
-            console.warn('[SmartPromptSystem] ⚠️ 使用内置提示词模板:', error);
+            console.warn('[SmartPromptSystem] ⚠️ 使用内置提示词模板(降级):', error);
             this.promptTemplate = this.getDefaultPromptTemplate();
         }
     }
