@@ -21,16 +21,18 @@ export class VectorizedMemoryRetrieval {
         
         // 向量化设置
         this.settings = {
-            enabled: false,                    // 是否启用向量化检索
+            enabled: true,                     // 🔧 修复：启用向量化检索
             vectorEngine: 'transformers',      // 向量化引擎类型
             embeddingModel: 'Supabase/gte-small', // 嵌入模型
             vectorDimensions: 384,             // 向量维度
             maxCacheSize: 1000,                // 最大缓存大小
-            similarityThreshold: 0.7,          // 相似度阈值
-            maxResults: 10,                    // 最大返回结果数
+            similarityThreshold: 0.6,          // 🔧 降低相似度阈值，提高搜索覆盖率
+            maxResults: 15,                    // 🔧 增加最大返回结果数
             batchSize: 50,                     // 批量处理大小
             autoVectorize: true,               // 自动向量化新记忆
-            useLocalStorage: true              // 使用本地存储
+            useLocalStorage: true,             // 使用本地存储
+            fallbackMode: true,                // 🔧 新增：启用fallback模式
+            enableBasicSearch: true            // 🔧 新增：启用基础搜索作为备选
         };
         
         // 向量化引擎
@@ -891,9 +893,19 @@ export class VectorizedMemoryRetrieval {
                 filterByTimeRange = null
             } = options;
 
+            // 🔧 新增：检查是否启用
+            if (!this.settings.enabled) {
+                console.log('[VectorizedMemoryRetrieval] ⚠️ 向量化检索已禁用，使用基础搜索');
+                return await this.basicSearch(query, options);
+            }
+
             // 向量化查询
             const queryVector = await this.vectorizeText(query);
             if (!queryVector) {
+                console.log('[VectorizedMemoryRetrieval] ⚠️ 查询向量化失败，降级到基础搜索');
+                if (this.settings.enableBasicSearch) {
+                    return await this.basicSearch(query, options);
+                }
                 throw new Error('查询向量化失败');
             }
 
@@ -1388,5 +1400,152 @@ export class VectorizedMemoryRetrieval {
             isIndexing: this.isIndexing,
             errorCount: this.errorCount
         };
+    }
+
+    /**
+     * 🔧 新增：基础搜索方法（fallback）
+     */
+    async basicSearch(query, options = {}) {
+        try {
+            console.log('[VectorizedMemoryRetrieval] 🔍 使用基础搜索模式:', query);
+
+            const {
+                maxResults = this.settings.maxResults,
+                includeMetadata = true
+            } = options;
+
+            const results = [];
+            const queryLower = query.toLowerCase();
+            const queryWords = queryLower.split(/\s+/).filter(word => word.length > 1);
+
+            // 搜索深度记忆管理器中的记忆
+            if (this.deepMemoryManager) {
+                const memoryLayers = this.deepMemoryManager.memoryLayers;
+
+                // 搜索各个记忆层
+                for (const [layerName, layer] of Object.entries(memoryLayers)) {
+                    if (layer && layer.size > 0) {
+                        for (const [id, memory] of layer) {
+                            const content = memory.content || '';
+                            const relevance = this.calculateBasicRelevance(content, queryWords);
+
+                            if (relevance > 0.3) {
+                                results.push({
+                                    id: id,
+                                    content: content,
+                                    similarity: relevance,
+                                    layer: layerName,
+                                    importance: memory.importance || 0,
+                                    timestamp: memory.timestamp || Date.now(),
+                                    metadata: includeMetadata ? memory.metadata : null
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 搜索AI记忆总结
+            if (this.aiMemorySummarizer && this.aiMemorySummarizer.memorySummaries) {
+                for (const summary of this.aiMemorySummarizer.memorySummaries) {
+                    const content = summary.content || '';
+                    const relevance = this.calculateBasicRelevance(content, queryWords);
+
+                    if (relevance > 0.3) {
+                        results.push({
+                            id: summary.id || 'summary_' + Date.now(),
+                            content: content,
+                            similarity: relevance,
+                            layer: 'ai_summary',
+                            importance: 0.8,
+                            timestamp: summary.timestamp || Date.now(),
+                            metadata: includeMetadata ? summary : null
+                        });
+                    }
+                }
+            }
+
+            // 按相似度排序并限制结果数量
+            const sortedResults = results
+                .sort((a, b) => b.similarity - a.similarity)
+                .slice(0, maxResults);
+
+            console.log(`[VectorizedMemoryRetrieval] ✅ 基础搜索完成，找到 ${sortedResults.length} 个结果`);
+
+            return {
+                results: sortedResults,
+                query: query,
+                searchTime: Date.now() - Date.now(),
+                method: 'basic_search',
+                totalResults: results.length
+            };
+
+        } catch (error) {
+            console.error('[VectorizedMemoryRetrieval] ❌ 基础搜索失败:', error);
+            return {
+                results: [],
+                query: query,
+                searchTime: 0,
+                method: 'basic_search',
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * 🔧 新增：计算基础相关性
+     */
+    calculateBasicRelevance(content, queryWords) {
+        if (!content || !queryWords.length) return 0;
+
+        const contentLower = content.toLowerCase();
+        let score = 0;
+        let matches = 0;
+
+        for (const word of queryWords) {
+            if (contentLower.includes(word)) {
+                matches++;
+                // 完整词匹配得分更高
+                const wordRegex = new RegExp(`\\b${word}\\b`, 'gi');
+                const wordMatches = (contentLower.match(wordRegex) || []).length;
+                score += wordMatches * 0.3;
+
+                // 部分匹配也有分数
+                if (wordMatches === 0 && contentLower.includes(word)) {
+                    score += 0.1;
+                }
+            }
+        }
+
+        // 匹配词汇比例
+        const matchRatio = matches / queryWords.length;
+        score += matchRatio * 0.5;
+
+        // 内容长度权重（较短的内容如果匹配度高，相关性更高）
+        const lengthFactor = Math.min(1, 100 / content.length);
+        score *= (1 + lengthFactor * 0.2);
+
+        return Math.min(1, score);
+    }
+
+    /**
+     * 🔧 新增：简化的搜索相似记忆方法
+     */
+    searchSimilarMemories(query, maxResults = 5) {
+        try {
+            console.log('[VectorizedMemoryRetrieval] 🔍 搜索相似记忆:', query);
+
+            // 使用基础搜索
+            return this.basicSearch(query, { maxResults }).then(result => {
+                return result.results || [];
+            }).catch(error => {
+                console.error('[VectorizedMemoryRetrieval] ❌ 搜索相似记忆失败:', error);
+                return [];
+            });
+
+        } catch (error) {
+            console.error('[VectorizedMemoryRetrieval] ❌ 搜索相似记忆失败:', error);
+            return [];
+        }
     }
 }

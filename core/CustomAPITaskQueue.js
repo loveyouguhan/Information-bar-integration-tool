@@ -404,14 +404,53 @@ export class CustomAPITaskQueue {
      * 执行记忆处理任务
      */
     async executeMemoryTask(task) {
-        const memoryManager = window.SillyTavernInfobar?.modules?.memoryManager;
-        if (!memoryManager) {
+        const deepMemoryManager = window.SillyTavernInfobar?.modules?.deepMemoryManager;
+        const aiMemoryInjector = window.SillyTavernInfobar?.modules?.aiMemoryDatabaseInjector;
+
+        if (!deepMemoryManager && !aiMemoryInjector) {
             console.log('[CustomAPITaskQueue] ℹ️ 记忆管理模块不可用，跳过记忆处理任务');
             return;
         }
 
         console.log('[CustomAPITaskQueue] 🧠 执行记忆处理任务');
-        // 这里可以添加具体的记忆处理逻辑
+
+        try {
+            const content = task.data?.content;
+            if (!content || content.length < 10) {
+                console.log('[CustomAPITaskQueue] ⚠️ 记忆内容太短，跳过处理');
+                return;
+            }
+
+            // 使用深度记忆管理器处理记忆
+            if (deepMemoryManager && deepMemoryManager.settings.enabled) {
+                const memoryData = {
+                    content: content,
+                    type: 'ai_response',
+                    source: 'custom_api_task',
+                    metadata: {
+                        taskId: task.id,
+                        timestamp: Date.now()
+                    }
+                };
+
+                await deepMemoryManager.addMemoryToSensoryLayer(memoryData);
+                console.log('[CustomAPITaskQueue] ✅ 记忆已添加到深度记忆管理器');
+            }
+
+            // 使用AI记忆数据库注入器处理记忆
+            if (aiMemoryInjector && aiMemoryInjector.initialized) {
+                await aiMemoryInjector.addToMemoryDatabase('ai_response', {
+                    content: content,
+                    importance: 0.6,
+                    source: 'custom_api_task'
+                });
+                console.log('[CustomAPITaskQueue] ✅ 记忆已添加到AI记忆数据库');
+            }
+
+        } catch (error) {
+            console.error('[CustomAPITaskQueue] ❌ 记忆处理任务失败:', error);
+            throw error;
+        }
     }
 
     /**

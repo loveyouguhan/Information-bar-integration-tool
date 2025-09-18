@@ -30,6 +30,12 @@ export class EventSystem {
         this.messagePollingInterval = null;
         this.lastMessageCount = 0;
 
+        // 🔧 新增：记忆处理优化
+        this.memoryProcessingEnabled = true;
+        this.immediateMemoryProcessing = true;
+        this.memoryProcessingQueue = [];
+        this.memoryProcessingInProgress = false;
+
         // 事件统计
         this.eventStats = {
             emitted: 0,
@@ -573,6 +579,9 @@ export class EventSystem {
 
             // 添加轮询机制作为备用方案
             this.startMessagePolling();
+
+            // 🔧 新增：启动记忆处理监听
+            this.startMemoryProcessingListener();
 
             console.log('[EventSystem] 🔗 SillyTavern消息事件绑定完成');
 
@@ -1429,6 +1438,178 @@ export class EventSystem {
         } catch (error) {
             console.error('[EventSystem] ❌ 过滤面板数据失败:', error);
             return parsedData; // 降级处理：返回原始数据
+        }
+    }
+
+    /**
+     * 🔧 新增：启动记忆处理监听器
+     */
+    startMemoryProcessingListener() {
+        try {
+            console.log('[EventSystem] 🧠 启动记忆处理监听器...');
+
+            // 监听SillyTavern的消息事件，直接触发记忆处理
+            if (this.sillyTavernEventSource) {
+                // 监听消息发送事件
+                this.sillyTavernEventSource.on('message_sent', (data) => {
+                    this.triggerMemoryProcessing('user_message', data);
+                });
+
+                // 监听消息接收事件
+                this.sillyTavernEventSource.on('message_received', (data) => {
+                    this.triggerMemoryProcessing('ai_message', data);
+                });
+            }
+
+            // 启动定时记忆处理检查
+            this.startMemoryProcessingTimer();
+
+            console.log('[EventSystem] ✅ 记忆处理监听器启动完成');
+
+        } catch (error) {
+            console.error('[EventSystem] ❌ 启动记忆处理监听器失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：触发记忆处理
+     */
+    async triggerMemoryProcessing(messageType, messageData) {
+        try {
+            if (!this.memoryProcessingEnabled) return;
+
+            console.log('[EventSystem] 🧠 触发记忆处理:', messageType);
+
+            // 获取记忆处理模块
+            const infoBarTool = window.SillyTavernInfobar;
+            if (!infoBarTool?.modules) return;
+
+            const aiMemorySummarizer = infoBarTool.modules.summaryManager?.aiMemorySummarizer;
+            const deepMemoryManager = infoBarTool.modules.deepMemoryManager;
+            const intelligentMemoryClassifier = infoBarTool.modules.intelligentMemoryClassifier;
+
+            // 准备记忆数据
+            const memoryData = {
+                message: this.extractMessageContent(messageData) || '',
+                isUser: messageType === 'user_message',
+                timestamp: Date.now(),
+                messageType: messageType,
+                originalData: messageData
+            };
+
+            // 只处理有内容的消息
+            if (!memoryData.message || memoryData.message.length < 10) {
+                console.log('[EventSystem] ⚠️ 消息内容太短，跳过记忆处理');
+                return;
+            }
+
+            console.log('[EventSystem] 📝 处理记忆数据:', {
+                messageType: messageType,
+                contentLength: memoryData.message.length,
+                isUser: memoryData.isUser
+            });
+
+            // 立即处理模式
+            if (this.immediateMemoryProcessing) {
+                // 触发AI记忆总结
+                if (aiMemorySummarizer && aiMemorySummarizer.handleMessageReceived) {
+                    await aiMemorySummarizer.handleMessageReceived(memoryData);
+                }
+
+                // 触发深度记忆管理
+                if (deepMemoryManager && deepMemoryManager.handleMessageReceived) {
+                    await deepMemoryManager.handleMessageReceived(memoryData);
+                }
+
+                // 触发智能记忆分类
+                if (intelligentMemoryClassifier && intelligentMemoryClassifier.handleMemoryAdded) {
+                    await intelligentMemoryClassifier.handleMemoryAdded({ memory: memoryData });
+                }
+            } else {
+                // 队列处理模式
+                this.memoryProcessingQueue.push(memoryData);
+            }
+
+        } catch (error) {
+            console.error('[EventSystem] ❌ 触发记忆处理失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：启动记忆处理定时器
+     */
+    startMemoryProcessingTimer() {
+        try {
+            // 每5秒检查一次记忆处理队列
+            setInterval(async () => {
+                if (this.memoryProcessingQueue.length > 0 && !this.memoryProcessingInProgress) {
+                    await this.processMemoryQueue();
+                }
+            }, 5000);
+
+            console.log('[EventSystem] ⏰ 记忆处理定时器已启动');
+
+        } catch (error) {
+            console.error('[EventSystem] ❌ 启动记忆处理定时器失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理记忆队列
+     */
+    async processMemoryQueue() {
+        try {
+            if (this.memoryProcessingInProgress || this.memoryProcessingQueue.length === 0) {
+                return;
+            }
+
+            this.memoryProcessingInProgress = true;
+            console.log('[EventSystem] 🔄 开始处理记忆队列，队列长度:', this.memoryProcessingQueue.length);
+
+            const infoBarTool = window.SillyTavernInfobar;
+            if (!infoBarTool?.modules) return;
+
+            const aiMemorySummarizer = infoBarTool.modules.summaryManager?.aiMemorySummarizer;
+            const deepMemoryManager = infoBarTool.modules.deepMemoryManager;
+            const intelligentMemoryClassifier = infoBarTool.modules.intelligentMemoryClassifier;
+
+            // 批量处理队列中的记忆
+            const batchSize = 3;
+            while (this.memoryProcessingQueue.length > 0) {
+                const batch = this.memoryProcessingQueue.splice(0, batchSize);
+
+                for (const memoryData of batch) {
+                    try {
+                        // 触发AI记忆总结
+                        if (aiMemorySummarizer && aiMemorySummarizer.handleMessageReceived) {
+                            await aiMemorySummarizer.handleMessageReceived(memoryData);
+                        }
+
+                        // 触发深度记忆管理
+                        if (deepMemoryManager && deepMemoryManager.handleMessageReceived) {
+                            await deepMemoryManager.handleMessageReceived(memoryData);
+                        }
+
+                        // 触发智能记忆分类
+                        if (intelligentMemoryClassifier && intelligentMemoryClassifier.handleMemoryAdded) {
+                            await intelligentMemoryClassifier.handleMemoryAdded({ memory: memoryData });
+                        }
+
+                    } catch (error) {
+                        console.error('[EventSystem] ❌ 处理单个记忆失败:', error);
+                    }
+                }
+
+                // 批次间短暂延迟，避免阻塞
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            console.log('[EventSystem] ✅ 记忆队列处理完成');
+
+        } catch (error) {
+            console.error('[EventSystem] ❌ 处理记忆队列失败:', error);
+        } finally {
+            this.memoryProcessingInProgress = false;
         }
     }
 }

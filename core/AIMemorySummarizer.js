@@ -23,17 +23,18 @@ export class AIMemorySummarizer {
         // AI总结设置
         this.settings = {
             enabled: true,                     // 🔧 修复：启用AI总结以增加记忆数据积累
-            // 当跟随楼层时，不进行消息级别总结，交由SummaryManager按楼层触发
-            followSummaryFloor: true,          // ✅ 跟随用户配置的楼层进行记忆总结
-            messageLevelSummary: true,         // 消息级别总结（当followSummaryFloor=true时将被短路）
-            batchSize: 5,                      // 批量处理大小
-            importanceThreshold: 0.6,          // 重要性阈值
+            // 🔧 修改：启用消息级别处理，不再跟随楼层触发
+            followSummaryFloor: false,         // ❌ 不跟随楼层，改为消息级别触发
+            messageLevelSummary: true,         // ✅ 启用消息级别总结，每条重要消息都会触发
+            batchSize: 3,                      // 🔧 减小批量处理大小，提高响应速度
+            importanceThreshold: 0.5,          // 🔧 降低重要性阈值，处理更多消息
             summaryCache: true,                // 启用总结缓存
             preventDuplication: true,          // 防重复机制
             memoryClassification: true,        // 记忆分类
             autoTagging: true,                 // 自动标记
             maxSummaryLength: 200,             // 最大总结长度
-            minSummaryLength: 50               // 最小总结长度
+            minSummaryLength: 30,              // 🔧 降低最小总结长度
+            immediateProcessing: true          // 🔧 新增：立即处理模式
         };
         
         // 缓存和状态管理
@@ -189,25 +190,33 @@ export class AIMemorySummarizer {
     async handleMessageReceived(data) {
         try {
             if (!this.settings.enabled) {
-                return;
-            }
-
-            // 跟随楼层：完全交由 SummaryManager 按楼层触发，不在消息级别单独调用自定义API
-            if (this.settings.followSummaryFloor === true) {
+                console.log('[AIMemorySummarizer] ⚠️ AI记忆总结已禁用');
                 return;
             }
 
             if (!this.settings.messageLevelSummary) {
+                console.log('[AIMemorySummarizer] ⚠️ 消息级别总结已禁用');
+                return;
+            }
+
+            // 🔧 修改：移除楼层跟随限制，启用消息级别处理
+            console.log('[AIMemorySummarizer] 📝 接收到新消息，准备处理AI总结...');
+
+            // 🔧 新增：立即处理模式
+            if (this.settings.immediateProcessing && !this.isProcessing) {
+                console.log('[AIMemorySummarizer] ⚡ 立即处理模式：直接处理当前消息');
+                await this.processMessageSummary(data);
                 return;
             }
 
             if (this.isProcessing) {
                 // 添加到处理队列
                 this.processingQueue.push(data);
+                console.log('[AIMemorySummarizer] 📋 消息已添加到处理队列，队列长度:', this.processingQueue.length);
                 return;
             }
 
-            console.log('[AIMemorySummarizer] 📝 处理新消息的AI总结...');
+            console.log('[AIMemorySummarizer] 📝 开始处理新消息的AI总结...');
             await this.processMessageSummary(data);
 
             // 处理队列中的消息
@@ -224,26 +233,49 @@ export class AIMemorySummarizer {
     async processMessageSummary(messageData) {
         try {
             this.isProcessing = true;
-            
+
             const context = SillyTavern.getContext();
-            if (!context || !context.chat) return;
-            
+            if (!context || !context.chat) {
+                console.log('[AIMemorySummarizer] ⚠️ 无法获取聊天上下文');
+                return;
+            }
+
             const currentMessageCount = context.chat.length;
-            const newMessages = context.chat.slice(this.lastProcessedMessageId);
-            
-            if (newMessages.length === 0) return;
-            
-            console.log('[AIMemorySummarizer] 🔍 分析新消息:', newMessages.length, '条');
-            
+
+            // 🔧 修改：优化消息处理逻辑
+            let messagesToProcess;
+            if (this.settings.immediateProcessing && messageData) {
+                // 立即处理模式：只处理最新的几条消息
+                const startIndex = Math.max(0, currentMessageCount - this.settings.batchSize);
+                messagesToProcess = context.chat.slice(startIndex);
+                console.log('[AIMemorySummarizer] ⚡ 立即处理模式：处理最新', messagesToProcess.length, '条消息');
+            } else {
+                // 批量处理模式：处理所有未处理的消息
+                messagesToProcess = context.chat.slice(this.lastProcessedMessageId);
+                console.log('[AIMemorySummarizer] 📦 批量处理模式：处理', messagesToProcess.length, '条新消息');
+            }
+
+            if (messagesToProcess.length === 0) {
+                console.log('[AIMemorySummarizer] ℹ️ 没有新消息需要处理');
+                return;
+            }
+
+            console.log('[AIMemorySummarizer] 🔍 开始分析消息:', messagesToProcess.length, '条');
+
             // 批量处理消息
-            const batches = this.createMessageBatches(newMessages);
-            
+            const batches = this.createMessageBatches(messagesToProcess);
+
             for (const batch of batches) {
                 await this.processBatchSummary(batch);
             }
-            
-            this.lastProcessedMessageId = currentMessageCount;
-            
+
+            // 🔧 修改：更新处理进度
+            if (!this.settings.immediateProcessing) {
+                this.lastProcessedMessageId = currentMessageCount;
+            }
+
+            console.log('[AIMemorySummarizer] ✅ 消息总结处理完成');
+
         } catch (error) {
             console.error('[AIMemorySummarizer] ❌ 处理消息总结失败:', error);
         } finally {

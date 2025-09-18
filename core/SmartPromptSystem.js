@@ -46,6 +46,9 @@ export class SmartPromptSystem {
         this.initialized = false;
         this.errorCount = 0;
 
+        // 🧠 启用状态（默认启用，可通过提示词设置控制）
+        this.enabled = true;
+
         console.log('[SmartPromptSystem] 🏗️ 构造函数完成');
     }
 
@@ -598,22 +601,37 @@ add organization(1 {"1","科技公司","2","私企","3","工程师","4","技术�
 
         return `【数据操作员模式】
 
-你是专业数据整理员，使用操作指令格式处理数据：
+🚨🚨🚨 **CRITICAL FORMAT REQUIREMENT** 🚨🚨🚨
+你是专业数据整理员，必须严格使用操作指令格式处理数据：
 • ADD: add 面板名(行号 {"1","值1","2","值2"})
 • UPDATE: update 面板名(行号 {"1","新值"})
 • DELETE: delete 面板名(行号)
 
+🔴🔴🔴 **FORBIDDEN FORMATS - WILL CAUSE SYSTEM FAILURE** 🔴🔴🔴
+❌ 绝对禁止：{"1.人类种族":"已选择"}
+❌ 绝对禁止：{"角色":"张三","状态":"工作中"}
+❌ 绝对禁止：{"1":"值1","2":"值2"} (缺少面板名和行号)
+❌ 绝对禁止：personal: {"name":"张三"}
+❌ 绝对禁止：任何JSON对象格式
+
+✅ 唯一正确格式：add personal(1 {"1","张三","2","25","3","程序员"})
+✅ 唯一正确格式：update world(1 {"1","现代都市","2","繁华"})
+
 ${panelRulesSection}
 
-输出要求：
+🚨 **MANDATORY OUTPUT REQUIREMENTS** 🚨
 1. 先输出思考过程：<aiThinkProcess><!--五步分析...--></aiThinkProcess>
 2. 再输出数据：<infobar_data><!--操作指令...--></infobar_data>
 3. 列号必须为纯数字："1","2","3"...
 4. 内容必须在<!--和-->内
+5. 绝对禁止使用JSON格式或键值对格式
 
-示例：
+✅ 正确示例：
 <aiThinkProcess><!--五步分析：1.剧情分析 2.数据识别 3.操作确定 4.格式检查 5.逻辑验证--></aiThinkProcess>
-<infobar_data><!--add interaction(1 {"1","张三","2","朋友","3","友好"})--></infobar_data>`;
+<infobar_data><!--add interaction(1 {"1","张三","2","朋友","3","友好"})--></infobar_data>
+
+❌ 错误示例（系统将拒绝）：
+<infobar_data><!--{"1.人类种族":"已选择","2.精灵种族":"未选择"}--></infobar_data>`;
     }
 
     /**
@@ -622,6 +640,15 @@ ${panelRulesSection}
     getFullUpdateTemplate() {
         return `【全量更新模式】
 
+🚨🚨🚨 **CRITICAL FORMAT ENFORCEMENT** 🚨🚨🚨
+❌ 绝对禁止：{"1.人类种族":"已选择","2.精灵种族":"未选择"}
+❌ 绝对禁止：{"角色":"张三","状态":"工作中"}
+❌ 绝对禁止：任何JSON键值对格式
+❌ 绝对禁止：{"1":"值1","2":"值2"} (缺少面板名和行号)
+
+✅ 唯一正确格式：add fantasy(1 {"1","人类种族","2","精灵种族","3","矮人种族","4","火系魔法"})
+✅ 唯一正确格式：add personal(1 {"1","张三","2","25","3","程序员"})
+
 🚨 **强制要求：必须输出所有启用面板的数据** 🚨
 
 生成所有启用面板的完整数据，确保：
@@ -629,12 +656,18 @@ ${panelRulesSection}
 • 数据与剧情一致
 • 使用操作指令格式
 • **不得遗漏任何面板**
+• **绝对不能使用JSON格式**
 
 {PANEL_DATA_TEMPLATE}
 
 {CURRENT_DATA_INFO}
 
 {FIELD_CONSTRAINTS}
+
+🔥🔥🔥 **FINAL FORMAT CHECK** 🔥🔥🔥
+每个面板必须严格使用：add 面板名(1 {"1","值1","2","值2",...})
+列号必须是纯数字："1","2","3"...
+如果使用错误格式，数据将被完全拒绝！
 
 ⚠️ **重要提醒**：上述面板模板中的每一个面板都必须在输出中包含，不得省略任何面板！`;
     }
@@ -1788,6 +1821,7 @@ ${panelRulesSection}
                             key !== 'required' &&
                             key !== 'memoryInject' &&
                             key !== 'prompts' &&
+                            !key.startsWith('custom_field_') && // 🔧 修复：排除custom_field字段，这些字段应该只通过subItems管理
                             typeof panel[key] === 'object' &&
                             panel[key].enabled !== undefined
                         );
@@ -2459,6 +2493,7 @@ ${panelRulesSection}
 【📋 增量更新模式约束】
 ⚠️ 只输出发生变化的字段，保持未变化字段不输出
 ⚠️ 严禁添加未启用的面板或字段
+⚠️ 严禁使用custom_field_开头的字段
 
 【✅ 数据输出格式（统一要求）】
 - 必须使用"操作指令格式"：add / update / delete
@@ -2535,6 +2570,7 @@ ${panelRulesSection}
 ❌ **严禁添加不在上述列表中的字段**（如：current_action、mood、activity等）
 ❌ **严禁跨面板使用字段**（如：不能在personal面板使用world面板的location字段）
 ❌ **严禁使用英文字段名或自创字段**
+❌ **严禁使用custom_field_开头的字段**（如：custom_field_1234567890等）
 ❌ **严禁使用占位符**（如："未知"、"N/A"、"待补全"）
 
 **✅ 正确做法：**
@@ -2639,6 +2675,23 @@ ${panelRulesSection}
             }
 
             console.log('[SmartPromptSystem] ✅ 插件已启用，继续提示词注入流程');
+
+            // 🧠 检查智能提示词系统是否启用
+            const promptSettings = extensionSettings.promptSettings || {};
+            const isSmartPromptEnabled = this.enabled && promptSettings.mode !== 'custom';
+
+            if (!isSmartPromptEnabled) {
+                console.log('[SmartPromptSystem] ℹ️ 智能提示词系统已禁用或使用自定义提示词模式，跳过智能提示词注入');
+
+                // 如果使用自定义提示词模式，注入自定义提示词
+                if (promptSettings.mode === 'custom' && promptSettings.customContent) {
+                    await this.injectCustomPrompt(promptSettings.customContent);
+                }
+
+                return;
+            }
+
+            console.log('[SmartPromptSystem] ✅ 智能提示词系统已启用，继续智能提示词注入流程');
 
             // 🔧 新增：执行面板记忆注入（独立于API模式，始终执行）
             await this.injectPanelDataToMemory();
@@ -2976,6 +3029,24 @@ ${panelRulesSection}
     detectDataFormat(dataContent) {
         const lines = dataContent.split('\n').filter(line => line.trim());
 
+        // 🚨 新增：检查是否包含禁止的错误格式
+        const forbiddenPatterns = [
+            /"\d+\.[^"]+"\s*:\s*"[^"]+"/,  // "1.人类种族":"已选择"
+            /"\d+"\s*:\s*"[^"]+"/,         // "1":"值1"
+            /"[^"]+"\s*:\s*"[^"]+"/,       // "角色":"张三"
+            /\{\s*"[^"]+"\s*:\s*"[^"]+"\s*\}/  // {"key":"value"}
+        ];
+
+        const hasForbiddenFormat = lines.some(line =>
+            forbiddenPatterns.some(pattern => pattern.test(line.trim()))
+        );
+
+        if (hasForbiddenFormat) {
+            console.error('[SmartPromptSystem] 🚨 检测到禁止的错误格式！');
+            console.error('[SmartPromptSystem] 📝 错误内容:', dataContent.substring(0, 200));
+            return 'forbidden_format';
+        }
+
         // 检查是否包含操作指令格式（新格式优先）- 支持大小写
         const operationPattern = /^(add|update|delete|ADD|UPDATE|DELETE)\s+\w+\(/i;
         const hasOperationCommands = lines.some(line => operationPattern.test(line.trim()));
@@ -3293,6 +3364,50 @@ ${panelRulesSection}
                 panelCount: 0
             }
         };
+    }
+
+    /**
+     * 🚨 处理禁止的错误格式
+     */
+    handleForbiddenFormat(dataContent) {
+        console.error('[SmartPromptSystem] 🚨 检测到禁止的错误格式！');
+        console.error('[SmartPromptSystem] 📝 错误内容:', dataContent);
+        console.error('[SmartPromptSystem] ❌ 禁止格式示例: {"1.人类种族":"已选择"}');
+        console.error('[SmartPromptSystem] ✅ 正确格式示例: add fantasy(1 {"1","人类种族","2","精灵种族"})');
+
+        // 显示用户友好的错误提示
+        this.showFormatErrorNotification();
+
+        return {
+            panels: {},
+            format: 'forbidden',
+            error: '检测到禁止的格式！请使用操作指令格式：add 面板名(行号 {"列号","值"})',
+            metadata: {
+                timestamp: Date.now(),
+                source: 'ai-message',
+                panelCount: 0,
+                errorType: 'forbidden_format'
+            }
+        };
+    }
+
+    /**
+     * 显示格式错误通知
+     */
+    showFormatErrorNotification() {
+        try {
+            // 尝试显示用户友好的错误提示
+            if (typeof toastr !== 'undefined') {
+                toastr.error('AI返回了错误的数据格式！请检查自定义API配置。', '格式错误', {
+                    timeOut: 10000,
+                    extendedTimeOut: 5000
+                });
+            } else {
+                console.error('[SmartPromptSystem] 🚨 格式错误：AI返回了禁止的数据格式');
+            }
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 显示错误通知失败:', error);
+        }
     }
 
     /**
@@ -4728,11 +4843,126 @@ infobar_data标签（独立输出，必须后输出）
 
 
     /**
+     * 🧠 生成数据状态部分（始终包含在提示词中）
+     */
+    async generateDataStatusSection() {
+        try {
+            console.log('[SmartPromptSystem] 📊 生成数据状态部分...');
+
+            // 获取启用的面板配置
+            const enabledPanels = await this.getEnabledPanels();
+
+            if (enabledPanels.length === 0) {
+                return '【📊 当前数据状态（统一行视图）】\n没有启用的面板。\n';
+            }
+
+            // 获取AI记忆增强数据
+            const memoryEnhancedData = await this.getAIMemoryEnhancedData(enabledPanels);
+
+            // 智能分析更新策略
+            const updateStrategy = await this.analyzeUpdateStrategy(enabledPanels, memoryEnhancedData.current);
+
+            // 生成数据状态信息（只包含数据状态部分）
+            const dataStatusInfo = await this.generateDataStatusOnly(memoryEnhancedData, updateStrategy);
+
+            console.log('[SmartPromptSystem] ✅ 数据状态部分生成完成');
+            return dataStatusInfo;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 生成数据状态部分失败:', error);
+            return '【📊 当前数据状态（统一行视图）】\n数据获取失败。\n';
+        }
+    }
+
+    /**
+     * 🧠 生成仅包含数据状态的信息（不包含其他记忆增强内容）
+     */
+    async generateDataStatusOnly(memoryEnhancedData, updateStrategy) {
+        try {
+            const { current = {} } = memoryEnhancedData || {};
+            const enabledPanels = await this.getEnabledPanels();
+
+            const dataInfoParts = [];
+
+            // 只生成当前数据状态部分
+            dataInfoParts.push('【📊 当前数据状态（统一行视图）】');
+            for (const panel of enabledPanels) {
+                const panelId = panel.id;
+                const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+                const panelName = this.getBasicPanelDisplayName(panelId);
+                const panelData = current[panelKey] || current[panelId] || {};
+
+                dataInfoParts.push(`${panelName}面板 (${panelId}): ${Object.keys(panelData).length > 0 ? '有数据' : '待生成'}`);
+
+                if (Object.keys(panelData).length > 0) {
+                    // 使用统一的新架构行格式展示
+                    const normalizedRows = this.formatPanelRowsForPrompt(panel, panelData);
+                    if (normalizedRows.length > 0) {
+                        normalizedRows.forEach(line => dataInfoParts.push(`  ${line}`));
+                    }
+                }
+            }
+            dataInfoParts.push('');
+
+            return dataInfoParts.join('\n');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 生成数据状态信息失败:', error);
+            return '【📊 当前数据状态（统一行视图）】\n数据获取失败。\n';
+        }
+    }
+
+    /**
+     * 🧠 注入自定义提示词
+     */
+    async injectCustomPrompt(customContent) {
+        try {
+            console.log('[SmartPromptSystem] 🧠 注入自定义提示词...');
+
+            if (!customContent || !customContent.trim()) {
+                console.log('[SmartPromptSystem] ⚠️ 自定义提示词内容为空，跳过注入');
+                return;
+            }
+
+            // 📌 生成最终提示词前缀：AI记忆增强数据（含【📊 当前数据状态】）+ 缺失字段详细列表
+            const enabledPanels = await this.getEnabledPanels();
+            const memoryEnhancedData = await this.getAIMemoryEnhancedData(enabledPanels);
+            const updateStrategy = await this.analyzeUpdateStrategy(enabledPanels, memoryEnhancedData.current);
+
+            // 🧠 AI记忆增强数据（包含【📊 当前数据状态（统一行视图）】及历史/持久化/上下文记忆、AI生成指导）
+            const memoryEnhancedInfo = await this.generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy);
+
+            // 🔍 缺失字段详细列表（若存在）
+            const missingFields = await this.detectMissingDataFields(enabledPanels);
+            let missingInstructions = '';
+            if (Array.isArray(missingFields) && missingFields.length > 0) {
+                missingInstructions = '\n' + this.generateIncrementalInstructions(missingFields, enabledPanels);
+            }
+
+            // 合并：AI记忆增强数据 + 缺失字段列表 + 自定义提示词内容
+            const fullPrompt = [memoryEnhancedInfo, missingInstructions, customContent.trim()].filter(Boolean).join('\n');
+
+            // 使用与智能提示词相同的注入机制
+            await this.injectPromptToAPI(fullPrompt);
+
+            this.lastInjectionTime = Date.now();
+            this.injectionActive = true;
+
+            console.log('[SmartPromptSystem] ✅ 自定义提示词（含数据状态）注入成功');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 注入自定义提示词失败:', error);
+            throw error;
+        }
+    }
+
+    /**
      * 获取系统状态
      */
     getStatus() {
         return {
             initialized: this.initialized,
+            enabled: this.enabled,
             errorCount: this.errorCount,
             injectionActive: this.injectionActive,
             lastInjectionTime: this.lastInjectionTime,
