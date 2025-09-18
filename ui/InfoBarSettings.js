@@ -495,6 +495,12 @@ export class InfoBarSettings {
                             <div class="nav-item" data-nav="api">
                                 自定义API
                             </div>
+                            <div class="nav-item" data-nav="promptSettings">
+                                提示词设置
+                            </div>
+                            <div class="nav-item" data-nav="memoryEnhancement">
+                                记忆增强
+                            </div>
                             <div class="nav-item" data-nav="panelManagement">
                                 面板管理
                             </div>
@@ -569,6 +575,12 @@ export class InfoBarSettings {
                             </div>
                             <div class="content-panel" data-content="api">
                                 ${this.createAPIPanel()}
+                            </div>
+                            <div class="content-panel" data-content="promptSettings">
+                                ${this.createPromptSettingsPanel()}
+                            </div>
+                            <div class="content-panel" data-content="memoryEnhancement">
+                                ${this.createMemoryEnhancementPanel()}
                             </div>
                             <div class="content-panel" data-content="panelManagement">
                                 ${this.createPanelManagementPanel()}
@@ -729,7 +741,7 @@ export class InfoBarSettings {
                         <div class="setting-group">
                             <h4>📍 提示词插入位置</h4>
                             <div class="setting-desc" style="margin-bottom: 12px;">选择信息栏提示词在对话中的插入位置，不同位置对对话的影响程度不同。</div>
-                            
+
                             <div class="prompt-position-config">
                                 <div class="form-group">
                                     <label for="prompt-position-mode" class="control-label">插入位置</label>
@@ -741,14 +753,14 @@ export class InfoBarSettings {
                                         <option value="atDepthAssistant">@ D🤖 - 助手角色消息</option>
                                     </select>
                                 </div>
-                                
+
                                 <div class="form-group depth-control" style="display: none;">
                                     <label for="prompt-position-depth" class="control-label">插入深度</label>
-                                    <input type="number" id="prompt-position-depth" name="basic.promptPosition.depth" 
+                                    <input type="number" id="prompt-position-depth" name="basic.promptPosition.depth"
                                            class="form-control" min="0" max="10" value="0" step="1">
                                     <div class="setting-desc">深度 0 为提示词底部，数字越大越靠前</div>
                                 </div>
-                                
+
                                 <div class="position-description">
                                     <div id="position-desc-afterCharacter" class="desc-item active">
                                         <span class="desc-impact">🔸 较大影响</span>
@@ -1020,17 +1032,17 @@ export class InfoBarSettings {
         try {
             const depthControl = this.modal.querySelector('.depth-control');
             const descriptions = this.modal.querySelectorAll('.position-description .desc-item');
-            
+
             // 显示/隐藏深度控制
             if (mode.startsWith('atDepth')) {
                 depthControl.style.display = 'block';
             } else {
                 depthControl.style.display = 'none';
             }
-            
+
             // 更新描述文本
             descriptions.forEach(desc => desc.classList.remove('active'));
-            
+
             if (mode === 'beforeCharacter') {
                 this.modal.querySelector('#position-desc-beforeCharacter')?.classList.add('active');
             } else if (mode === 'afterCharacter') {
@@ -1038,9 +1050,9 @@ export class InfoBarSettings {
             } else if (mode.startsWith('atDepth')) {
                 this.modal.querySelector('#position-desc-atDepth')?.classList.add('active');
             }
-            
+
             console.log(`[InfoBarSettings] 📍 提示词位置模式变更为: ${mode}`);
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理提示词位置模式变更失败:', error);
         }
@@ -1077,6 +1089,31 @@ export class InfoBarSettings {
             this.modal.addEventListener('keyup', (e) => {
                 if (e.target.id === 'armor-breaking-prompt') {
                     this.updateArmorBreakingStats();
+                }
+            });
+
+            // 🧠 提示词设置事件
+            this.modal.addEventListener('change', (e) => {
+                if (e.target.name === 'promptSettings.mode') {
+                    this.handlePromptModeChange(e.target.value);
+                }
+            });
+
+            this.modal.addEventListener('input', (e) => {
+                if (e.target.id === 'custom-prompt-content') {
+                    this.updateCustomPromptStats();
+                }
+            });
+
+            this.modal.addEventListener('keyup', (e) => {
+                if (e.target.id === 'custom-prompt-content') {
+                    this.updateCustomPromptStats();
+                }
+            });
+
+            this.modal.addEventListener('click', (e) => {
+                if (e.target.id === 'refresh-preview-btn') {
+                    this.refreshPromptPreview();
                 }
             });
 
@@ -1843,7 +1880,7 @@ export class InfoBarSettings {
             // 创建对话框背景
             const dialogOverlay = document.createElement('div');
             dialogOverlay.className = 'custom-panel-dialog-overlay';
-            
+
             // 🔧 设置完美居中样式 - 参考面板规则编辑界面
             dialogOverlay.style.cssText = `
                 position: fixed;
@@ -1862,7 +1899,7 @@ export class InfoBarSettings {
                 visibility: visible;
                 transition: opacity 0.3s ease;
             `;
-            
+
             dialogOverlay.innerHTML = `
                 <div class="custom-panel-dialog" style="
                     background: var(--theme-bg-primary, #2a2a2a);
@@ -1989,7 +2026,7 @@ export class InfoBarSettings {
 
             // 添加到页面
             document.body.appendChild(dialogOverlay);
-            
+
             // 🔧 添加显示动画
             setTimeout(() => {
                 dialogOverlay.style.opacity = '1';
@@ -2005,7 +2042,7 @@ export class InfoBarSettings {
             const defaultKey = this.generateKeyFromName('新建面板');
             const uniqueKey = this.ensureUniqueKey(defaultKey, customPanels);
             document.getElementById('new-panel-key').value = uniqueKey;
-            
+
             console.log('  生成的默认键名:', defaultKey, '->', uniqueKey);
 
             // 🔧 防护：确保默认值不被覆盖
@@ -2015,7 +2052,7 @@ export class InfoBarSettings {
                 console.log('[InfoBarSettings] 🔍 对话框延迟检查(500ms后):');
                 console.log('  面板名称当前值:', currentName);
                 console.log('  键名当前值:', currentKey);
-                
+
                 // 如果值被意外修改，恢复默认值
                 if (currentName !== '新建面板') {
                     console.warn('[InfoBarSettings] ⚠️ 检测到面板名称被异常修改，恢复默认值');
@@ -2048,7 +2085,7 @@ export class InfoBarSettings {
             // 面板名称变化时自动生成键名
             const nameInput = document.getElementById('new-panel-name');
             const keyInput = document.getElementById('new-panel-key');
-            
+
             nameInput.addEventListener('input', (e) => {
                 const name = e.target.value.trim();
                 console.log('[InfoBarSettings] 🔍 面板名称输入变化:', name);
@@ -2799,7 +2836,7 @@ export class InfoBarSettings {
             // 创建对话框背景
             const dialogOverlay = document.createElement('div');
             dialogOverlay.className = 'sub-item-dialog-overlay';
-            
+
             // 🔧 设置完美居中样式 - 参考面板规则编辑界面
             dialogOverlay.style.cssText = `
                 position: fixed;
@@ -2818,7 +2855,7 @@ export class InfoBarSettings {
                 visibility: visible;
                 transition: opacity 0.3s ease;
             `;
-            
+
             dialogOverlay.innerHTML = `
                 <div class="sub-item-dialog" style="
                     background: var(--theme-bg-primary, #2a2a2a);
@@ -2913,7 +2950,7 @@ export class InfoBarSettings {
 
             // 添加到页面
             document.body.appendChild(dialogOverlay);
-            
+
             // 🔧 添加显示动画
             setTimeout(() => {
                 dialogOverlay.style.opacity = '1';
@@ -3261,19 +3298,98 @@ export class InfoBarSettings {
      */
     performRemoveSubItem(subItemForm, subItemId) {
         try {
-            // 移除子项表单
+            // 1) 先从UI移除
             subItemForm.remove();
 
-            // 检查是否还有子项，如果没有则显示空状态消息
+            // 2) 读取当前编辑的面板信息
+            const current = this.currentEditingPanel || {};
+            const panelId = current.id;
+            const panelType = current.type;
+
+            // 3) 获取被删子项的名称/键名，便于多条件匹配
+            const nameInput = subItemForm.querySelector?.('.sub-item-name');
+            const subItemName = (nameInput?.value || '').trim();
+            const subItemKey = subItemName ? subItemName.toLowerCase().replace(/\s+/g, '_') : null;
+
+            // 4) 更新空状态显示
             const container = this.modal.querySelector('.sub-items-container');
             const remainingSubItems = container.querySelectorAll('.sub-item-form');
             const emptyMessage = container.querySelector('.empty-sub-items');
-
             if (remainingSubItems.length === 0 && emptyMessage) {
                 emptyMessage.style.display = 'block';
             }
 
-            console.log('[InfoBarSettings] 🗑️ 删除子项成功:', subItemId);
+            // 5) 持久化删除到配置（根因：之前仅删UI，未写入配置，切换后又被配置恢复）
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            if (!extensionSettings['Information bar integration tool']) {
+                extensionSettings['Information bar integration tool'] = {};
+            }
+
+            if (!panelId) {
+                console.warn('[InfoBarSettings] ⚠️ 无法确定当前面板ID，跳过持久化删除');
+            } else if (panelType === 'custom') {
+                // 自定义面板：从 customPanels 与 根级镜像配置 同步删除
+                const customPanels = this.getCustomPanels();
+                const panel = customPanels[panelId];
+                if (panel && Array.isArray(panel.subItems)) {
+                    const before = panel.subItems.length;
+                    panel.subItems = panel.subItems.filter(item =>
+                        item.id !== subItemId && item.key !== subItemKey && item.name !== subItemName
+                    );
+                    const after = panel.subItems.length;
+                    console.log(`[InfoBarSettings] 🧹 自定义面板 ${panelId} 子项已从内存删除: ${before} -> ${after}`);
+
+                    // 根级镜像（用于数据表格/其他模块读取）
+                    const mirrorKey = panel.key || panelId;
+                    if (!extensionSettings['Information bar integration tool'][mirrorKey]) {
+                        extensionSettings['Information bar integration tool'][mirrorKey] = { enabled: panel.enabled !== false };
+                    }
+                    extensionSettings['Information bar integration tool'][mirrorKey].subItems = panel.subItems;
+                }
+            } else if (panelType === 'basic') {
+                // 基础面板：写入根级配置的 subItems
+                const panelConfig = extensionSettings['Information bar integration tool'][panelId];
+                if (panelConfig && Array.isArray(panelConfig.subItems)) {
+                    const before = panelConfig.subItems.length;
+                    panelConfig.subItems = panelConfig.subItems.filter(item =>
+                        item.id !== subItemId && item.key !== subItemKey && item.name !== subItemName
+                    );
+                    const after = panelConfig.subItems.length;
+                    console.log(`[InfoBarSettings] 🧹 基础面板 ${panelId} 子项已从配置删除: ${before} -> ${after}`);
+                }
+            }
+
+            // 6) 保存并更新计数/通知
+            if (typeof context.saveSettingsDebounced === 'function') {
+                context.saveSettingsDebounced();
+            }
+
+            if (panelId) {
+                // 更新面板计数显示
+                this.updatePanelConfigCount(panelId);
+
+                // 立即刷新相关UI，避免“影子字段”仍显示
+                if (panelType === 'basic') {
+                    this.refreshBasicPanelContent(panelId);
+                } else if (panelType === 'custom') {
+                    // 重新渲染自定义面板区块（导航与内容）
+                    this.refreshNavigation();
+                }
+
+                // 通知其他模块（如数据表格）
+                if (this.eventSystem) {
+                    this.eventSystem.emit('panel:config:changed', {
+                        panelId,
+                        panelType: panelType || 'custom',
+                        subItemRemoved: true,
+                        removedId: subItemId,
+                        timestamp: Date.now()
+                    });
+                }
+            }
+
+            console.log('[InfoBarSettings] 🗑️ 删除子项成功（已持久化）:', { panelId, panelType, subItemId, subItemName });
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 执行删除子项操作失败:', error);
@@ -4482,6 +4598,11 @@ export class InfoBarSettings {
                 this.initSummaryPanelContent();
             }
 
+            // 🧠 新增：记忆增强面板特殊处理
+            if (contentType === 'memoryEnhancement') {
+                this.initMemoryEnhancementPanelContent();
+            }
+
             console.log(`[InfoBarSettings] 📑 切换到内容: ${contentType}`);
 
         } catch (error) {
@@ -4629,18 +4750,18 @@ export class InfoBarSettings {
             // 🔧 修复：处理自定义面板启用/禁用状态
             if (name && name.endsWith('.enabled')) {
                 const panelId = name.replace('.enabled', '');
-                
+
                 // 检查是否是自定义面板
                 const customPanels = this.getCustomPanels();
                 if (customPanels[panelId]) {
                     console.log(`[InfoBarSettings] 🔧 更新自定义面板状态: ${panelId}.enabled = ${checked}`);
                     customPanels[panelId].enabled = checked;
                     customPanels[panelId].updatedAt = Date.now();
-                    
+
                     // 立即保存到配置
                     this.saveCustomPanel(customPanels[panelId]);
                     console.log(`[InfoBarSettings] ✅ 自定义面板 ${panelId} 状态已保存: ${checked ? '启用' : '禁用'}`);
-                    
+
                     // 🔧 修复：正确更新状态徽章（使用当前面板的状态徽章）
                     const activeContentPanel = this.modal.querySelector(`.content-panel[data-content="${panelId}"]`);
                     if (activeContentPanel) {
@@ -4652,7 +4773,7 @@ export class InfoBarSettings {
                         } else {
                             console.log(`[InfoBarSettings] ⚠️ 未找到状态徽章: ${panelId}`);
                         }
-                        
+
                         // 子项区域始终保持可见，不根据启用状态隐藏
                         console.log(`[InfoBarSettings] 📋 子项区域保持可见，用户可以查看所有可配置项`);
                     } else {
@@ -4880,6 +5001,354 @@ export class InfoBarSettings {
                             ⏳ 未测试连接
                         </div>
                         <small>显示API连接和模型加载状态</small>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 创建记忆增强面板
+     */
+    createMemoryEnhancementPanel() {
+        return `
+            <div class="content-header">
+                <h3>🧠 记忆增强</h3>
+                <div class="header-description">
+                    <p>配置四层记忆架构：AI记忆总结、语义搜索、深度记忆管理、智能记忆分类器</p>
+                </div>
+            </div>
+
+            <div class="content-body">
+                <!-- 🚀 AI记忆总结设置 -->
+                <div class="setting-row ai-memory-section">
+                    <h5 style="color: #4CAF50; margin: 0 0 10px 0; font-size: 14px; font-weight: 600;">🧠 AI记忆总结</h5>
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-ai-memory-enabled" />
+                            <span class="checkbox-text">启用AI记忆总结</span>
+                        </label>
+                        <div class="setting-hint">使用AI智能分析和总结消息内容</div>
+                    </div>
+                </div>
+
+                <div class="setting-row ai-memory-options" id="memory-ai-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #4CAF50; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-ai-message-level-summary" />
+                            <span class="checkbox-text">消息级别总结</span>
+                        </label>
+                        <div class="setting-hint">为每条重要消息生成智能总结</div>
+                    </div>
+                </div>
+
+                <div class="setting-row ai-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #4CAF50; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-ai-importance-threshold">重要性阈值</label>
+                        <div class="input-group">
+                            <input type="range" id="memory-ai-importance-threshold" min="0.1" max="1.0" step="0.1" value="0.6" />
+                            <span class="input-unit" id="memory-ai-importance-value">60%</span>
+                        </div>
+                        <div class="setting-hint">只总结重要性超过此阈值的消息</div>
+                    </div>
+                </div>
+
+                <!-- 🔍 语义搜索设置 -->
+                <div class="setting-row vectorized-memory-section">
+                    <h5 style="color: #2196F3; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🔍 语义搜索</h5>
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-vectorized-memory-enabled" />
+                            <span class="checkbox-text">启用语义搜索</span>
+                        </label>
+                        <div class="setting-hint">使用向量化技术进行智能语义搜索</div>
+                    </div>
+                </div>
+
+                <div class="setting-row vectorized-memory-options" id="memory-vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-vector-engine">向量化引擎</label>
+                        <select id="memory-vector-engine" class="setting-select">
+                            <option value="transformers">Transformers.js (本地)</option>
+                            <option value="openai">OpenAI (在线)</option>
+                        </select>
+                        <div class="setting-hint">选择向量化引擎类型</div>
+                    </div>
+                </div>
+
+                <div class="setting-row vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-similarity-threshold">相似度阈值</label>
+                        <div class="input-group">
+                            <input type="range" id="memory-similarity-threshold" min="0.1" max="1.0" step="0.05" value="0.7" />
+                            <span class="input-unit" id="memory-similarity-value">70%</span>
+                        </div>
+                        <div class="setting-hint">语义搜索的最低相似度要求</div>
+                    </div>
+                </div>
+
+                <div class="setting-row vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-max-search-results">最大搜索结果</label>
+                        <div class="input-group">
+                            <input type="number" id="memory-max-search-results" min="5" max="50" value="10" />
+                            <span class="input-unit">个结果</span>
+                        </div>
+                        <div class="setting-hint">语义搜索返回的最大结果数量</div>
+                    </div>
+                </div>
+
+                <!-- 🧠 深度记忆管理设置 -->
+                <div class="setting-row deep-memory-section">
+                    <h5 style="color: #9C27B0; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🧠 深度记忆管理</h5>
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-deep-memory-enabled" />
+                            <span class="checkbox-text">启用深度记忆管理</span>
+                        </label>
+                        <div class="setting-hint">基于认知心理学的四层记忆架构管理</div>
+                    </div>
+                </div>
+
+                <div class="setting-row deep-memory-options" id="memory-deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-auto-memory-migration" />
+                            <span class="checkbox-text">自动记忆迁移</span>
+                        </label>
+                        <div class="setting-hint">根据重要性自动在记忆层级间迁移</div>
+                    </div>
+                </div>
+
+                <div class="setting-row deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-memory-importance-threshold">记忆重要性阈值</label>
+                        <div class="input-group">
+                            <input type="range" id="memory-memory-importance-threshold" min="0.1" max="1.0" step="0.05" value="0.6" />
+                            <span class="input-unit" id="memory-memory-importance-value">60%</span>
+                        </div>
+                        <div class="setting-hint">短期记忆升级为长期记忆的重要性阈值</div>
+                    </div>
+                </div>
+
+                <div class="setting-row deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-memory-conflict-resolution" />
+                            <span class="checkbox-text">记忆冲突解决</span>
+                        </label>
+                        <div class="setting-hint">自动检测和解决矛盾的记忆内容</div>
+                    </div>
+                </div>
+
+                <div class="setting-row deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-memory-capacity">记忆容量设置</label>
+                        <div class="memory-capacity-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                            <div>
+                                <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">感知记忆</label>
+                                <input type="number" id="memory-sensory-capacity" min="50" max="500" value="100" style="width: 100%;" />
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">短期记忆</label>
+                                <input type="number" id="memory-short-term-capacity" min="200" max="2000" value="500" style="width: 100%;" />
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">长期记忆</label>
+                                <input type="number" id="memory-long-term-capacity" min="1000" max="10000" value="5000" style="width: 100%;" />
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">深度归档</label>
+                                <input type="number" id="memory-deep-archive-capacity" min="10000" max="100000" value="50000" style="width: 100%;" />
+                            </div>
+                        </div>
+                        <div class="setting-hint">各记忆层级的最大容量设置</div>
+                    </div>
+                </div>
+
+                <!-- 🤖 智能记忆分类器设置 -->
+                <div class="setting-row intelligent-classifier-section">
+                    <h5 style="color: #FF5722; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🤖 智能记忆分类器</h5>
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-intelligent-classifier-enabled" />
+                            <span class="checkbox-text">启用智能记忆分类器</span>
+                        </label>
+                        <div class="setting-hint">AI驱动的智能记忆分类系统</div>
+                    </div>
+                </div>
+
+                <div class="setting-row intelligent-classifier-options" id="memory-intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-semantic-clustering" />
+                            <span class="checkbox-text">语义聚类分析</span>
+                        </label>
+                        <div class="setting-hint">基于向量空间的语义聚类</div>
+                    </div>
+                </div>
+
+                <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-temporal-pattern-recognition" />
+                            <span class="checkbox-text">时序模式识别</span>
+                        </label>
+                        <div class="setting-hint">识别记忆的时间模式和周期性</div>
+                    </div>
+                </div>
+
+                <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-importance-prediction" />
+                            <span class="checkbox-text">重要性预测</span>
+                        </label>
+                        <div class="setting-hint">预测记忆的未来重要性</div>
+                    </div>
+                </div>
+
+                <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-classification-confidence-threshold">分类置信度阈值</label>
+                        <div class="input-group">
+                            <input type="range" id="memory-classification-confidence-threshold" min="0.5" max="1.0" step="0.05" value="0.7" />
+                            <span class="input-unit" id="memory-classification-confidence-value">70%</span>
+                        </div>
+                        <div class="setting-hint">分类决策的最低置信度要求</div>
+                    </div>
+                </div>
+
+                <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-adaptive-learning" />
+                            <span class="checkbox-text">自适应学习</span>
+                        </label>
+                        <div class="setting-hint">从用户反馈中学习和改进</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 创建提示词设置面板
+     */
+    createPromptSettingsPanel() {
+        return `
+            <div class="content-header">
+                <h3>🧠 提示词设置</h3>
+                <div class="header-description">
+                    <p>配置AI提示词的生成方式：智能提示词或自定义提示词</p>
+                </div>
+            </div>
+
+            <div class="content-body">
+                <!-- 提示词模式选择 -->
+                <div class="settings-group">
+                    <h4>📋 提示词模式</h4>
+                    <div class="prompt-mode-selector">
+                        <div class="mode-option">
+                            <input type="radio" id="smart-prompt-mode" name="promptSettings.mode" value="smart" checked />
+                            <label for="smart-prompt-mode" class="mode-label">
+                                <div class="mode-icon">🧠</div>
+                                <div class="mode-content">
+                                    <h5>智能提示词</h5>
+                                    <p>使用智能提示词系统自动生成优化的提示词内容</p>
+                                </div>
+                            </label>
+                        </div>
+                        <div class="mode-option">
+                            <input type="radio" id="custom-prompt-mode" name="promptSettings.mode" value="custom" />
+                            <label for="custom-prompt-mode" class="mode-label">
+                                <div class="mode-icon">✏️</div>
+                                <div class="mode-content">
+                                    <h5>自定义提示词</h5>
+                                    <p>使用您自定义的提示词内容，关闭智能提示词系统</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 智能提示词配置区域 -->
+                <div class="settings-group smart-prompt-config" id="smart-prompt-config">
+                    <h4>🧠 智能提示词配置</h4>
+                    <div class="smart-prompt-info">
+                        <div class="info-card">
+                            <div class="info-icon">✅</div>
+                            <div class="info-content">
+                                <h5>智能提示词已启用</h5>
+                                <p>系统将根据当前面板配置和数据状态自动生成优化的提示词</p>
+                                <ul>
+                                    <li>自动分析数据完整性</li>
+                                    <li>智能选择更新策略</li>
+                                    <li>动态生成格式约束</li>
+                                    <li>优化AI响应质量</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 自定义提示词配置区域 -->
+                <div class="settings-group custom-prompt-config" id="custom-prompt-config" style="display: none;">
+                    <h4>✏️ 自定义提示词配置</h4>
+                    <div class="form-group">
+                        <label>自定义提示词内容</label>
+                        <textarea id="custom-prompt-content" name="promptSettings.customContent"
+                                  rows="12"
+                                  placeholder="请输入您的自定义提示词内容...
+
+示例：
+你是一个专业的数据整理员，请根据用户的对话内容，提取并整理相关信息。
+
+输出格式要求：
+1. 使用操作指令格式：add 面板名(行号 {&quot;列号&quot;,&quot;值&quot;})
+2. 确保数据准确性和完整性
+3. 保持格式的一致性
+
+请开始处理..."
+                                  style="width: 100%; min-height: 300px; resize: vertical; font-family: monospace; font-size: 13px;"></textarea>
+                        <small>自定义提示词将完全替代智能提示词系统。请确保包含必要的格式要求和指导说明。</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="custom-prompt-stats">
+                            <span class="char-count">字符数: <span id="custom-prompt-char-count">0</span></span>
+                            <span class="word-count">单词数: <span id="custom-prompt-word-count">0</span></span>
+                            <span class="line-count">行数: <span id="custom-prompt-line-count">0</span></span>
+                        </div>
+                    </div>
+                    <div class="custom-prompt-warning">
+                        <div class="warning-icon">⚠️</div>
+                        <div class="warning-content">
+                            <h5>注意事项</h5>
+                            <p>启用自定义提示词后，智能提示词系统将被完全关闭。请确保您的自定义提示词包含：</p>
+                            <ul>
+                                <li>明确的数据提取指导</li>
+                                <li>正确的输出格式要求</li>
+                                <li>必要的约束和限制说明</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 提示词预览区域 -->
+                <div class="settings-group">
+                    <h4>👁️ 提示词预览</h4>
+                    <div class="prompt-preview-container">
+                        <div class="preview-toolbar">
+                            <button class="btn btn-secondary" id="refresh-preview-btn">
+                                <i class="fas fa-refresh"></i> 刷新预览
+                            </button>
+                            <span class="preview-status" id="preview-status">准备就绪</span>
+                        </div>
+                        <div class="prompt-preview" id="prompt-preview">
+                            <div class="preview-placeholder">
+                                点击"刷新预览"查看当前提示词内容
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -5145,214 +5614,7 @@ export class InfoBarSettings {
                             </div>
                         </div>
 
-                        <!-- 🚀 新增：AI记忆总结设置 -->
-                        <div class="setting-row ai-memory-section">
-                            <h5 style="color: #4CAF50; margin: 0 0 10px 0; font-size: 14px; font-weight: 600;">🧠 AI记忆总结</h5>
-                            <div class="setting-group">
-                                <label class="setting-label">
-                                    <input type="checkbox" id="content-ai-memory-enabled" />
-                                    <span class="checkbox-text">启用AI记忆总结</span>
-                                </label>
-                                <div class="setting-hint">使用AI智能分析和总结消息内容</div>
-                            </div>
-                        </div>
 
-                        <div class="setting-row ai-memory-options" id="content-ai-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #4CAF50; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label">
-                                    <input type="checkbox" id="content-ai-message-level-summary" />
-                                    <span class="checkbox-text">消息级别总结</span>
-                                </label>
-                                <div class="setting-hint">为每条重要消息生成智能总结</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row ai-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #4CAF50; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label" for="content-ai-importance-threshold">重要性阈值</label>
-                                <div class="input-group">
-                                    <input type="range" id="content-ai-importance-threshold" min="0.1" max="1.0" step="0.1" value="0.6" />
-                                    <span class="input-unit" id="content-ai-importance-value">60%</span>
-                                </div>
-                                <div class="setting-hint">只总结重要性超过此阈值的消息</div>
-                            </div>
-                        </div>
-
-                        <!-- 🔍 新增：向量化记忆检索设置 -->
-                        <div class="setting-row vectorized-memory-section">
-                            <h5 style="color: #2196F3; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🔍 语义搜索</h5>
-                            <div class="setting-group">
-                                <label class="setting-label">
-                                    <input type="checkbox" id="content-vectorized-memory-enabled" />
-                                    <span class="checkbox-text">启用语义搜索</span>
-                                </label>
-                                <div class="setting-hint">使用向量化技术进行智能语义搜索</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row vectorized-memory-options" id="content-vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label" for="content-vector-engine">向量化引擎</label>
-                                <select id="content-vector-engine" class="setting-select">
-                                    <option value="transformers">Transformers.js (本地)</option>
-                                    <option value="openai">OpenAI (在线)</option>
-                                </select>
-                                <div class="setting-hint">选择向量化引擎类型</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label" for="content-similarity-threshold">相似度阈值</label>
-                                <div class="input-group">
-                                    <input type="range" id="content-similarity-threshold" min="0.1" max="1.0" step="0.05" value="0.7" />
-                                    <span class="input-unit" id="content-similarity-value">70%</span>
-                                </div>
-                                <div class="setting-hint">语义搜索的最低相似度要求</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label" for="content-max-search-results">最大搜索结果</label>
-                                <div class="input-group">
-                                    <input type="number" id="content-max-search-results" min="5" max="50" value="10" />
-                                    <span class="input-unit">个结果</span>
-                                </div>
-                                <div class="setting-hint">语义搜索返回的最大结果数量</div>
-                            </div>
-                        </div>
-
-                        <!-- 🧠 新增：深度记忆管理设置 -->
-                        <div class="setting-row deep-memory-section">
-                            <h5 style="color: #9C27B0; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🧠 深度记忆管理</h5>
-                            <div class="setting-group">
-                                <label class="setting-label">
-                                    <input type="checkbox" id="content-deep-memory-enabled" />
-                                    <span class="checkbox-text">启用深度记忆管理</span>
-                                </label>
-                                <div class="setting-hint">基于认知心理学的四层记忆架构管理</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row deep-memory-options" id="content-deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label">
-                                    <input type="checkbox" id="content-auto-memory-migration" />
-                                    <span class="checkbox-text">自动记忆迁移</span>
-                                </label>
-                                <div class="setting-hint">根据重要性自动在记忆层级间迁移</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label" for="content-memory-importance-threshold">记忆重要性阈值</label>
-                                <div class="input-group">
-                                    <input type="range" id="content-memory-importance-threshold" min="0.1" max="1.0" step="0.05" value="0.6" />
-                                    <span class="input-unit" id="content-memory-importance-value">60%</span>
-                                </div>
-                                <div class="setting-hint">短期记忆升级为长期记忆的重要性阈值</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label">
-                                    <input type="checkbox" id="content-memory-conflict-resolution" />
-                                    <span class="checkbox-text">记忆冲突解决</span>
-                                </label>
-                                <div class="setting-hint">自动检测和解决矛盾的记忆内容</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row deep-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label" for="content-memory-capacity">记忆容量设置</label>
-                                <div class="memory-capacity-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-                                    <div>
-                                        <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">感知记忆</label>
-                                        <input type="number" id="content-sensory-capacity" min="50" max="500" value="100" style="width: 100%;" />
-                                    </div>
-                                    <div>
-                                        <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">短期记忆</label>
-                                        <input type="number" id="content-short-term-capacity" min="200" max="2000" value="500" style="width: 100%;" />
-                                    </div>
-                                    <div>
-                                        <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">长期记忆</label>
-                                        <input type="number" id="content-long-term-capacity" min="1000" max="10000" value="5000" style="width: 100%;" />
-                                    </div>
-                                    <div>
-                                        <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">深度归档</label>
-                                        <input type="number" id="content-deep-archive-capacity" min="10000" max="100000" value="50000" style="width: 100%;" />
-                                    </div>
-                                </div>
-                                <div class="setting-hint">各记忆层级的最大容量设置</div>
-                            </div>
-                        </div>
-
-                        <!-- 🤖 新增：智能记忆分类器设置 -->
-                        <div class="setting-row intelligent-classifier-section">
-                            <h5 style="color: #FF5722; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🤖 智能记忆分类器</h5>
-                            <div class="setting-group">
-                                <label class="setting-label">
-                                    <input type="checkbox" id="content-intelligent-classifier-enabled" />
-                                    <span class="checkbox-text">启用智能记忆分类器</span>
-                                </label>
-                                <div class="setting-hint">AI驱动的智能记忆分类系统</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row intelligent-classifier-options" id="content-intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label">
-                                    <input type="checkbox" id="content-semantic-clustering" />
-                                    <span class="checkbox-text">语义聚类分析</span>
-                                </label>
-                                <div class="setting-hint">基于向量空间的语义聚类</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label">
-                                    <input type="checkbox" id="content-temporal-pattern-recognition" />
-                                    <span class="checkbox-text">时序模式识别</span>
-                                </label>
-                                <div class="setting-hint">识别记忆的时间模式和周期性</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label">
-                                    <input type="checkbox" id="content-importance-prediction" />
-                                    <span class="checkbox-text">重要性预测</span>
-                                </label>
-                                <div class="setting-hint">预测记忆的未来重要性</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label" for="content-classification-confidence-threshold">分类置信度阈值</label>
-                                <div class="input-group">
-                                    <input type="range" id="content-classification-confidence-threshold" min="0.5" max="1.0" step="0.05" value="0.7" />
-                                    <span class="input-unit" id="content-classification-confidence-value">70%</span>
-                                </div>
-                                <div class="setting-hint">分类决策的最低置信度要求</div>
-                            </div>
-                        </div>
-
-                        <div class="setting-row intelligent-classifier-options" style="display: none; margin-left: 20px; border-left: 2px solid #FF5722; padding-left: 15px;">
-                            <div class="setting-group">
-                                <label class="setting-label">
-                                    <input type="checkbox" id="content-adaptive-learning" />
-                                    <span class="checkbox-text">自适应学习</span>
-                                </label>
-                                <div class="setting-hint">从用户反馈中学习和改进</div>
-                            </div>
-                        </div>
 
                         <!-- 🔧 新增：自动隐藏楼层设置 -->
                         <div class="setting-row">
@@ -6471,6 +6733,9 @@ export class InfoBarSettings {
             console.log('[InfoBarSettings] 📍 恢复提示词位置UI状态:', promptPositionMode);
             this.handlePromptPositionModeChange(promptPositionMode);
 
+            // 🧠 加载提示词设置
+            await this.loadPromptSettings();
+
             console.log('[InfoBarSettings] ✅ 设置加载完成');
 
         } catch (error) {
@@ -6513,6 +6778,13 @@ export class InfoBarSettings {
 
             if (element.type === 'checkbox') {
                 element.checked = Boolean(value);
+            } else if (element.type === 'radio') {
+                // 🔧 修复：单选框特殊处理，只设置checked状态，不修改value属性
+                if (element.value === value) {
+                    element.checked = true;
+                } else {
+                    element.checked = false;
+                }
             } else if (element.type === 'range') {
                 element.value = value;
                 const valueSpan = element.nextElementSibling;
@@ -6588,6 +6860,15 @@ export class InfoBarSettings {
 
             // 保存基础设置表单数据（不包含基础面板属性）
             Object.assign(extensionSettings['Information bar integration tool'], formData);
+
+            // 额外收集记忆增强面板的设置（这些控件大多没有 name，需要单独处理）
+            if (typeof this.collectMemoryEnhancementFormData === 'function') {
+                const memoryEnhancementData = this.collectMemoryEnhancementFormData();
+                if (memoryEnhancementData && typeof memoryEnhancementData === 'object') {
+                    extensionSettings['Information bar integration tool'].memoryEnhancement = memoryEnhancementData;
+                    console.log('[InfoBarSettings] 🧠 已收集记忆增强设置并写入配置');
+                }
+            }
 
             // 🔧 修复：智能恢复基础面板属性配置，保留子项启用状态
             Object.keys(preservedBasicPanelConfigs).forEach(panelId => {
@@ -6705,6 +6986,10 @@ export class InfoBarSettings {
             let value;
             if (element.type === 'checkbox') {
                 value = element.checked;
+            } else if (element.type === 'radio') {
+                // 仅采集被选中的单选项，避免未选项覆盖
+                if (!element.checked) return;
+                value = element.value;
             } else if (element.type === 'number' || element.type === 'range') {
                 value = parseFloat(element.value) || 0;
             } else {
@@ -6751,6 +7036,62 @@ export class InfoBarSettings {
         console.log('[InfoBarSettings] 📊 表单数据收集完成，包含', Object.keys(formData).length, '个配置项');
         return formData;
     }
+
+    /**
+     * 收集记忆增强面板的设置（使用元素ID）
+     */
+    collectMemoryEnhancementFormData() {
+        try {
+            const getBool = (id) => !!this.modal.querySelector(`#${id}`)?.checked;
+            const getNum = (id) => {
+                const el = this.modal.querySelector(`#${id}`);
+                if (!el) return undefined;
+                const v = el.type === 'number' ? parseInt(el.value, 10) : parseFloat(el.value);
+                return isNaN(v) ? undefined : v;
+            };
+            const getVal = (id) => this.modal.querySelector(`#${id}`)?.value;
+
+            const data = {
+                ai: {
+                    enabled: getBool('memory-ai-memory-enabled'),
+                    messageLevelSummary: getBool('memory-ai-message-level-summary'),
+                    importanceThreshold: getNum('memory-ai-importance-threshold')
+                },
+                vector: {
+                    enabled: getBool('memory-vectorized-memory-enabled'),
+                    vectorEngine: getVal('memory-vector-engine'),
+                    similarityThreshold: getNum('memory-similarity-threshold'),
+                    maxResults: getNum('memory-max-search-results')
+                },
+                deep: {
+                    enabled: getBool('memory-deep-memory-enabled'),
+                    autoMemoryMigration: getBool('memory-auto-memory-migration'),
+                    memoryImportanceThreshold: getNum('memory-memory-importance-threshold'),
+                    conflictResolution: getBool('memory-memory-conflict-resolution'),
+                    capacities: {
+                        sensory: getNum('memory-sensory-capacity'),
+                        shortTerm: getNum('memory-short-term-capacity'),
+                        longTerm: getNum('memory-long-term-capacity'),
+                        deepArchive: getNum('memory-deep-archive-capacity')
+                    }
+                },
+                classifier: {
+                    enabled: getBool('memory-intelligent-classifier-enabled'),
+                    semanticClustering: getBool('memory-semantic-clustering'),
+                    temporalPatternRecognition: getBool('memory-temporal-pattern-recognition'),
+                    importancePrediction: getBool('memory-importance-prediction'),
+                    classificationConfidenceThreshold: getNum('memory-classification-confidence-threshold'),
+                    adaptiveLearning: getBool('memory-adaptive-learning')
+                }
+            };
+
+            return data;
+        } catch (err) {
+            console.error('[InfoBarSettings] ❌ 收集记忆增强表单失败:', err);
+            return undefined;
+        }
+    }
+
 
     /**
      * 加载自定义面板子项的勾选状态到表单
@@ -7279,7 +7620,7 @@ export class InfoBarSettings {
             if (configManager) {
                 console.log('[InfoBarSettings] 🗑️ 清空配置管理器所有数据...');
                 if (configManager.configCache) configManager.configCache.clear();
-                
+
                 // 调用配置管理器的清空方法
                 if (typeof configManager.clearAllData === 'function') {
                     await configManager.clearAllData();
@@ -7289,9 +7630,9 @@ export class InfoBarSettings {
             // === 第4步：完全清空 SillyTavern extensionSettings ===
             if (context && context.extensionSettings) {
                 console.log('[InfoBarSettings] 🗑️ 清空SillyTavern扩展设置...');
-                
+
                 let clearedConfigs = 0;
-                
+
                 // 清理所有可能的扩展配置键名变体
                 const configKeysToDelete = [
                     'Information bar integration tool',
@@ -7314,7 +7655,7 @@ export class InfoBarSettings {
 
                 // 扫描所有扩展配置，查找可能遗漏的信息栏相关配置
                 const allExtensionKeys = Object.keys(context.extensionSettings);
-                const suspiciousKeys = allExtensionKeys.filter(key => 
+                const suspiciousKeys = allExtensionKeys.filter(key =>
                     key.toLowerCase().includes('infobar') ||
                     key.toLowerCase().includes('information') ||
                     key.toLowerCase().includes('bar') ||
@@ -7335,9 +7676,9 @@ export class InfoBarSettings {
                         }
                     }
                 });
-                
+
                 console.log(`[InfoBarSettings] 📊 总共清理了 ${clearedConfigs} 个扩展配置`);
-                
+
                 // 保存清空的设置
                 if (typeof context.saveSettings === 'function') {
                     await context.saveSettings();
@@ -7347,7 +7688,7 @@ export class InfoBarSettings {
             // === 第5步：清空localStorage中的所有相关数据 ===
             console.log('[InfoBarSettings] 🗑️ 清空localStorage相关数据...');
             const keysToRemove = [];
-            
+
             // 增强的模式匹配列表
             const patterns = [
                 'Information bar integration tool',
@@ -7362,27 +7703,27 @@ export class InfoBarSettings {
                 'integration',
                 'backup_'
             ];
-            
+
             // 扫描所有localStorage键
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
                 if (key) {
                     const keyLower = key.toLowerCase();
-                    
+
                     // 检查是否匹配任何模式
                     const shouldRemove = patterns.some(pattern => {
                         const patternLower = pattern.toLowerCase();
                         return keyLower.includes(patternLower);
                     });
-                    
+
                     if (shouldRemove) {
                         keysToRemove.push(key);
                     }
                 }
             }
-            
+
             console.log(`[InfoBarSettings] 📊 找到 ${keysToRemove.length} 个要删除的localStorage键`);
-            
+
             // 删除找到的所有相关键
             keysToRemove.forEach(key => {
                 try {
@@ -7396,19 +7737,19 @@ export class InfoBarSettings {
 
             // === 第6步：重置全局变量和模块状态 ===
             console.log('[InfoBarSettings] 🔄 重置全局变量和模块状态...');
-            
+
             let destroyedModules = 0;
             let clearedGlobals = 0;
-            
+
             // 清理全局对象
             if (window.SillyTavernInfobar) {
                 console.log('[InfoBarSettings] 🔍 发现 window.SillyTavernInfobar，开始深度清理...');
-                
+
                 // 停止所有定时器和清理模块状态
                 if (window.SillyTavernInfobar.modules) {
                     const moduleNames = Object.keys(window.SillyTavernInfobar.modules);
                     console.log('[InfoBarSettings] 📊 发现模块:', moduleNames);
-                    
+
                     Object.entries(window.SillyTavernInfobar.modules).forEach(([name, module]) => {
                         try {
                             if (module) {
@@ -7416,7 +7757,7 @@ export class InfoBarSettings {
                                 if (module.eventSystem && typeof module.eventSystem.removeAllListeners === 'function') {
                                     module.eventSystem.removeAllListeners();
                                 }
-                                
+
                                 // 清理定时器
                                 if (module.syncTimer) {
                                     clearInterval(module.syncTimer);
@@ -7426,17 +7767,17 @@ export class InfoBarSettings {
                                     clearInterval(module.backupTimer);
                                     module.backupTimer = null;
                                 }
-                                
+
                                 // 清理缓存
                                 if (module.cache && typeof module.cache.clear === 'function') {
                                     module.cache.clear();
                                 }
-                                
+
                                 // 调用模块销毁方法
                                 if (typeof module.destroy === 'function') {
                                     module.destroy();
                                 }
-                                
+
                                 destroyedModules++;
                                 console.log(`[InfoBarSettings] ✅ 模块 ${name} 已销毁`);
                             }
@@ -7445,7 +7786,7 @@ export class InfoBarSettings {
                         }
                     });
                 }
-                
+
                 // 清理事件系统
                 if (window.SillyTavernInfobar.eventSource) {
                     try {
@@ -7456,13 +7797,13 @@ export class InfoBarSettings {
                         console.warn('[InfoBarSettings] ⚠️ 清理事件系统失败:', e);
                     }
                 }
-                
+
                 // 完全清空全局对象
                 delete window.SillyTavernInfobar;
                 clearedGlobals++;
                 console.log('[InfoBarSettings] ✅ window.SillyTavernInfobar 已完全删除');
             }
-            
+
             // 清理其他可能的全局引用
             const globalReferencesToClear = [
                 'InfoBarData',
@@ -7472,7 +7813,7 @@ export class InfoBarSettings {
                 'SillyTavernInfoBarData',
                 'InfoBarIntegrationTool'
             ];
-            
+
             globalReferencesToClear.forEach(refName => {
                 if (window[refName]) {
                     delete window[refName];
@@ -7480,7 +7821,7 @@ export class InfoBarSettings {
                     console.log(`[InfoBarSettings] ✅ 已清理全局引用: window.${refName}`);
                 }
             });
-            
+
             console.log(`[InfoBarSettings] 📊 全局清理统计: 销毁模块 ${destroyedModules} 个，清理全局引用 ${clearedGlobals} 个`);
 
             // === 第7步：清理chatMetadata中的残留数据 ===
@@ -7493,7 +7834,7 @@ export class InfoBarSettings {
 
             // === 第9步：清理事件监听器 ===
             console.log('[InfoBarSettings] 🗑️ 清理所有事件监听器...');
-            
+
             // 移除DOM事件监听器
             document.removeEventListener('input', this.handleInput);
             document.removeEventListener('change', this.handleChange);
@@ -7508,10 +7849,10 @@ export class InfoBarSettings {
 
             // === 第11步：显示成功消息并自动刷新页面 ===
             const successMessage = '✅ 插件已完全初始化到刚安装的状态！\n\n页面将在3秒后自动刷新以重新加载插件...';
-            
+
             // 使用原生alert确保消息显示
             alert(successMessage);
-            
+
             // 延迟刷新给用户时间看到消息
             setTimeout(() => {
                 console.log('[InfoBarSettings] 🔄 自动刷新页面...');
@@ -7520,7 +7861,7 @@ export class InfoBarSettings {
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 初始化插件失败:', error);
-            
+
             // 确保错误消息能显示
             const errorMessage = '❌ 插件初始化失败: ' + error.message + '\n\n建议手动刷新页面后重试。';
             alert(errorMessage);
@@ -7533,7 +7874,7 @@ export class InfoBarSettings {
     async clearChatMetadataInfobarData() {
         try {
             console.log('[InfoBarSettings] 🗑️ 开始清理chatMetadata中的信息栏数据...');
-            
+
             const context = SillyTavern?.getContext?.();
             if (!context) {
                 console.warn('[InfoBarSettings] ⚠️ SillyTavern上下文不可用，跳过chatMetadata清理');
@@ -7568,8 +7909,8 @@ export class InfoBarSettings {
 
             // === 2. 扫描并清理所有chat_*格式的数据 ===
             const allKeys = Object.keys(chatMetadata);
-            const chatKeys = allKeys.filter(key => 
-                key.startsWith('chat_') && 
+            const chatKeys = allKeys.filter(key =>
+                key.startsWith('chat_') &&
                 (key.includes('infobar') || key.includes('information') || key.includes('panel'))
             );
 
@@ -7582,7 +7923,7 @@ export class InfoBarSettings {
             // === 3. 清理panels.*格式的面板数据（核心问题） ===
             const panelsKeys = allKeys.filter(key => key.startsWith('panels.'));
             console.log(`[InfoBarSettings] 🔍 发现 ${panelsKeys.length} 个panels.*键:`, panelsKeys);
-            
+
             panelsKeys.forEach(key => {
                 delete chatMetadata[key];
                 clearedCount++;
@@ -7590,9 +7931,9 @@ export class InfoBarSettings {
             });
 
             // === 4. 清理所有包含信息栏相关的键 ===
-            const infobarRelatedKeys = allKeys.filter(key => 
+            const infobarRelatedKeys = allKeys.filter(key =>
                 !key.startsWith('panels.') && // 排除已处理的panels.*键
-                !specificInfobarKeys.includes(key) && 
+                !specificInfobarKeys.includes(key) &&
                 !chatKeys.includes(key) && (
                     key.toLowerCase().includes('infobar') ||
                     key.toLowerCase().includes('information') ||
@@ -7644,7 +7985,7 @@ export class InfoBarSettings {
     async clearSTScriptVariables() {
         try {
             console.log('[InfoBarSettings] 🗑️ 开始清理STScript变量...');
-            
+
             const context = SillyTavern?.getContext?.();
             if (!context || typeof context.executeSlashCommands !== 'function') {
                 console.warn('[InfoBarSettings] ⚠️ STScript功能不可用，跳过变量清理');
@@ -7659,10 +8000,10 @@ export class InfoBarSettings {
                 const currentValue = context.substituteParams('{{getvar::infobar}}');
                 if (currentValue && currentValue.trim() && !currentValue.includes('{{getvar::')) {
                     console.log('[InfoBarSettings] 🔍 发现主infobar变量，内容长度:', currentValue.length);
-                    
+
                     // 强制清理主infobar变量 - 使用空值覆盖
                     await context.executeSlashCommands('/setvar key=infobar value=""');
-                    
+
                     // 验证清理结果
                     const afterClear = context.substituteParams('{{getvar::infobar}}');
                     if (!afterClear || afterClear.trim() === '' || afterClear.includes('{{getvar::')) {
@@ -7692,13 +8033,13 @@ export class InfoBarSettings {
 
             // === 3. 清理所有面板相关的分散变量 ===
             const panelNames = [
-                'personal', 'world', 'interaction', 'tasks', 'inventory', 'abilities', 
-                'organization', 'news', 'plot', 'cultivation', 'fantasy', 'modern', 
+                'personal', 'world', 'interaction', 'tasks', 'inventory', 'abilities',
+                'organization', 'news', 'plot', 'cultivation', 'fantasy', 'modern',
                 'historical', 'magic', 'training'
             ];
 
             const commonFieldNames = [
-                'name', 'age', 'gender', 'appearance', 'posture', 'mood', 'location', 'room', 
+                'name', 'age', 'gender', 'appearance', 'posture', 'mood', 'location', 'room',
                 'environment', 'object', 'health', 'energy', 'consciousness', 'type', 'genre',
                 'description', 'status', 'priority', 'deadline', 'progress', 'category',
                 'weapons', 'armor', 'items', 'storage', 'capacity', 'strength', 'agility',
@@ -14989,7 +15330,7 @@ export class InfoBarSettings {
 
         // 使用正确的Gemini API端点
         const modelsUrl = `${baseUrl}/v1beta/models?key=${apiKey}`;
-        
+
         console.log('[InfoBarSettings] 🌐 使用CORS兼容请求:', modelsUrl);
 
         let response;
@@ -15016,15 +15357,15 @@ export class InfoBarSettings {
             }
         } catch (fetchError) {
             console.error('[InfoBarSettings] ❌ Gemini请求失败:', fetchError);
-            
+
             // 检查是否是CORS错误
-            if (fetchError.message.includes('CORS_BLOCKED') || 
+            if (fetchError.message.includes('CORS_BLOCKED') ||
                 fetchError.message.includes('CORS') ||
                 (fetchError.name === 'TypeError' && fetchError.message.includes('fetch'))) {
-                    
+
                 throw new Error('CORS跨域错误：无法访问Gemini模型列表，请检查API配置或使用服务器端代理');
             }
-            
+
             throw fetchError;
         }
 
@@ -15172,7 +15513,7 @@ export class InfoBarSettings {
         }
 
         console.log('[InfoBarSettings] 🌐 使用CORS兼容请求:', modelsUrl);
-        
+
         let response;
         try {
             // 🔧 修复：使用APIIntegration的CORS兼容fetch方法
@@ -15191,15 +15532,15 @@ export class InfoBarSettings {
             }
         } catch (fetchError) {
             console.error('[InfoBarSettings] ❌ 请求失败:', fetchError);
-            
+
             // 检查是否是CORS错误
-            if (fetchError.message.includes('CORS_BLOCKED') || 
+            if (fetchError.message.includes('CORS_BLOCKED') ||
                 fetchError.message.includes('CORS') ||
                 (fetchError.name === 'TypeError' && fetchError.message.includes('fetch'))) {
-                    
+
                 throw new Error('CORS跨域错误：无法访问模型列表，请检查反代服务器的CORS配置或使用服务器端代理');
             }
-            
+
             throw fetchError;
         }
 
@@ -15210,14 +15551,14 @@ export class InfoBarSettings {
             } catch (e) {
                 errorText = '无法读取错误响应';
             }
-            
+
             console.error('[InfoBarSettings] 🔥 API响应错误:', {
                 status: response.status,
                 statusText: response.statusText,
                 url: modelsUrl,
                 errorText: errorText.substring(0, 200)
             });
-            
+
             throw new Error(`API错误 (${response.status}): ${errorText}`);
         }
 
@@ -15232,7 +15573,7 @@ export class InfoBarSettings {
 
         // 🔧 增强的响应格式兼容性处理
         let models = [];
-        
+
         if (data.data && Array.isArray(data.data)) {
             // 标准OpenAI格式: { "data": [...] }
             console.log('[InfoBarSettings] 📋 检测到标准OpenAI格式');
@@ -15266,7 +15607,7 @@ export class InfoBarSettings {
         } else {
             console.warn('[InfoBarSettings] ⚠️ 未识别的响应格式，提供降级模型列表');
             console.log('[InfoBarSettings] 🔍 原始响应:', JSON.stringify(data, null, 2));
-            
+
             // 提供降级模型列表
             if (provider === 'gemini') {
                 models = [
@@ -15281,12 +15622,12 @@ export class InfoBarSettings {
                 ];
             }
         }
-        
+
         // 过滤和验证模型列表
-        models = models.filter(model => 
-            model && 
-            typeof model === 'object' && 
-            model.id && 
+        models = models.filter(model =>
+            model &&
+            typeof model === 'object' &&
+            model.id &&
             typeof model.id === 'string' &&
             model.id.trim() !== ''
         );
@@ -15295,7 +15636,7 @@ export class InfoBarSettings {
         models.forEach((model, index) => {
             console.log(`[InfoBarSettings] 📋 模型 ${index + 1}: ${model.id} (${model.name})`);
         });
-        
+
         return models;
     }
 
@@ -15577,7 +15918,7 @@ export class InfoBarSettings {
             }
 
             console.log('[InfoBarSettings] 🌐 使用CORS兼容连接测试:', testUrl);
-            
+
             let response;
             try {
                 // 🔧 修复：使用APIIntegration的CORS兼容fetch方法
@@ -15598,15 +15939,15 @@ export class InfoBarSettings {
                 }
             } catch (fetchError) {
                 console.error('[InfoBarSettings] ❌ 连接测试请求失败:', fetchError);
-                
+
                 // 检查是否是CORS错误
-                if (fetchError.message.includes('CORS_BLOCKED') || 
+                if (fetchError.message.includes('CORS_BLOCKED') ||
                     fetchError.message.includes('CORS') ||
                     (fetchError.name === 'TypeError' && fetchError.message.includes('fetch'))) {
-                        
+
                     throw new Error('CORS跨域错误：无法访问API服务器，请检查反代配置或使用服务器端代理');
                 }
-                
+
                 throw fetchError;
             }
 
@@ -16323,7 +16664,7 @@ export class InfoBarSettings {
 
             // 🔧 修复：智能提示词现在在消息增强阶段处理，这里不再需要
             let fullSystemPrompt = '';
-            
+
             // 🔧 修复：手动处理变量替换，然后添加变量系统读取提示词
             if (variablePrompt) {
                 try {
@@ -16339,7 +16680,7 @@ export class InfoBarSettings {
                 }
                 fullSystemPrompt = variablePrompt + '\n\n' + fullSystemPrompt;
             }
-            
+
             // 添加世界书内容
             if (worldBookContent) {
                 fullSystemPrompt = fullSystemPrompt + '\n\n## 📚 世界书信息\n\n' + worldBookContent;
@@ -17361,17 +17702,17 @@ export class InfoBarSettings {
             // 方法1：尝试从 context.worldInfoData 获取
             if (context.worldInfoData && Array.isArray(context.worldInfoData) && context.worldInfoData.length > 0) {
                 console.log('[InfoBarSettings] 📖 从worldInfoData获取世界书内容');
-                const activeEntries = context.worldInfoData.filter(entry => 
+                const activeEntries = context.worldInfoData.filter(entry =>
                     entry && !entry.disable && entry.content && entry.content.trim()
                 );
-                
+
                 if (activeEntries.length > 0) {
                     const worldBookText = activeEntries.map(entry => {
                         const title = entry.key || entry.keys || 'Unknown';
                         const content = entry.content || '';
                         return `**${title}**: ${content}`;
                     }).join('\n\n');
-                    
+
                     console.log('[InfoBarSettings] ✅ 获取到世界书条目数量:', activeEntries.length);
                     return worldBookText;
                 }
@@ -17380,17 +17721,17 @@ export class InfoBarSettings {
             // 方法2：尝试从 context.world_info 获取
             if (context.world_info && Array.isArray(context.world_info) && context.world_info.length > 0) {
                 console.log('[InfoBarSettings] 📖 从world_info获取世界书内容');
-                const activeEntries = context.world_info.filter(entry => 
+                const activeEntries = context.world_info.filter(entry =>
                     entry && !entry.disable && entry.content && entry.content.trim()
                 );
-                
+
                 if (activeEntries.length > 0) {
                     const worldBookText = activeEntries.map(entry => {
                         const title = entry.key || entry.keys || 'Unknown';
                         const content = entry.content || '';
                         return `**${title}**: ${content}`;
                     }).join('\n\n');
-                    
+
                     console.log('[InfoBarSettings] ✅ 获取到世界书条目数量:', activeEntries.length);
                     return worldBookText;
                 }
@@ -17401,17 +17742,17 @@ export class InfoBarSettings {
                 console.log('[InfoBarSettings] 📖 通过API获取世界书设置');
                 const worldInfo = context.getWorldInfoSettings();
                 if (worldInfo && worldInfo.length > 0) {
-                    const activeEntries = worldInfo.filter(entry => 
+                    const activeEntries = worldInfo.filter(entry =>
                         entry && !entry.disable && entry.content && entry.content.trim()
                     );
-                    
+
                     if (activeEntries.length > 0) {
                         const worldBookText = activeEntries.map(entry => {
                             const title = entry.key || entry.keys || 'Unknown';
                             const content = entry.content || '';
                             return `**${title}**: ${content}`;
                         }).join('\n\n');
-                        
+
                         console.log('[InfoBarSettings] ✅ 获取到世界书条目数量:', activeEntries.length);
                         return worldBookText;
                     }
@@ -17421,17 +17762,17 @@ export class InfoBarSettings {
             // 方法4：尝试直接从全局变量获取
             if (window.world_info && Array.isArray(window.world_info) && window.world_info.length > 0) {
                 console.log('[InfoBarSettings] 📖 从全局变量获取世界书内容');
-                const activeEntries = window.world_info.filter(entry => 
+                const activeEntries = window.world_info.filter(entry =>
                     entry && !entry.disable && entry.content && entry.content.trim()
                 );
-                
+
                 if (activeEntries.length > 0) {
                     const worldBookText = activeEntries.map(entry => {
                         const title = entry.key || entry.keys || 'Unknown';
                         const content = entry.content || '';
                         return `**${title}**: ${content}`;
                     }).join('\n\n');
-                    
+
                     console.log('[InfoBarSettings] ✅ 获取到世界书条目数量:', activeEntries.length);
                     return worldBookText;
                 }
@@ -17580,10 +17921,10 @@ add interaction(1 {"1","小雨","2","同事","3","友好","4","讨论项目","5"
                 const formatReminder = `
 
 🚨🚨🚨 **CRITICAL REMINDER: 必须输出以下两个标签** 🚨🚨🚨
-1. <aiThinkProcess><!--五步分析思考--></aiThinkProcess>  
+1. <aiThinkProcess><!--五步分析思考--></aiThinkProcess>
 2. <infobar_data><!--面板数据--></infobar_data>
 ⚠️ **严禁颠倒顺序！严禁内容不被注释符号包裹！**`;
-                
+
                 messages[lastUserMessageIndex].content += formatReminder;
                 console.log('[InfoBarSettings] 🔥 已在用户消息末尾添加格式提醒');
             }
@@ -17608,14 +17949,14 @@ add interaction(1 {"1","小雨","2","同事","3","友好","4","讨论项目","5"
 
             // 获取当前启用的面板信息
             const enabledPanelsInfo = await this.getEnabledPanelsInfo();
-            
+
             // 获取当前数据状态（用于增量更新判断）
             const currentDataInfo = await this.getCurrentDataInfo();
 
             // 🔧 重要修复：确保智能提示词被强化置于系统消息最前面
             console.log('[InfoBarSettings] 🔥 已将强化格式约束置于系统消息最前面');
             console.log('[InfoBarSettings] 🧠 智能提示词即将注入，长度:', enabledPanelsInfo.length);
-            
+
             // 构建完整的系统提示词，智能提示词放在最前面
             const systemPrompt = `${enabledPanelsInfo}
 
@@ -17747,11 +18088,11 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             }
 
             console.log(`[InfoBarSettings] ✅ 成功获取完整智能提示词，长度: ${fullSmartPrompt.length} 字符`);
-            
+
             // 🔧 新增：强化智能提示词日志，确保可以看到智能提示词是否正确获取
             console.log('[InfoBarSettings] 🧠 获取到智能提示词，长度:', fullSmartPrompt.length);
             console.log('[InfoBarSettings] 🧠 智能提示词前200字符预览:', fullSmartPrompt.substring(0, 200));
-            
+
             return fullSmartPrompt;
 
         } catch (error) {
@@ -17918,7 +18259,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             });
 
             console.log('[InfoBarSettings] 📊 本地反代响应状态:', response.status);
-            
+
             // 🔧 新增：检查响应头信息，帮助诊断长度问题
             const contentLength = response.headers.get('content-length');
             const contentType = response.headers.get('content-type');
@@ -17940,7 +18281,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             console.log('[InfoBarSettings] 📊 原始响应文本长度:', rawResponseText.length);
             console.log('[InfoBarSettings] 📊 原始响应前500字符:', rawResponseText.substring(0, 500));
             console.log('[InfoBarSettings] 📊 原始响应后500字符:', rawResponseText.substring(Math.max(0, rawResponseText.length - 500)));
-            
+
             let data;
             try {
                 data = JSON.parse(rawResponseText);
@@ -17967,13 +18308,13 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 hasMessage: !!(data.choices?.[0]?.message),
                 messageKeys: data.choices?.[0]?.message ? Object.keys(data.choices[0].message) : 'none'
             });
-            
+
             // 解析响应 - 多种格式兼容
             let generatedText = '';
-            
+
             if (data.choices && Array.isArray(data.choices) && data.choices.length > 0) {
                 const choice = data.choices[0];
-                
+
                 if (choice.message && choice.message.content) {
                     generatedText = choice.message.content;
                     console.log('[InfoBarSettings] ✅ 使用message.content格式提取内容');
@@ -18022,7 +18363,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
      */
     async sendGeminiNativeRequest(messages, apiConfig) {
         console.log('[InfoBarSettings] 🔄 发送Gemini原生请求...');
-        
+
         const systemMessage = messages.find(m => m.role === 'system');
         const userMessage = messages.find(m => m.role === 'user');
 
@@ -18037,7 +18378,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 maxOutputTokens: apiConfig.maxTokens || 2000
             }
         };
-        
+
         const requestUrl = `${apiConfig.baseUrl}/v1beta/models/${apiConfig.model}:generateContent?key=${apiConfig.apiKey}`;
         console.log('[InfoBarSettings] 🌐 使用CORS兼容请求:', requestUrl);
 
@@ -18048,7 +18389,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 console.log('[InfoBarSettings] ✅ 使用CORS兼容的fetch方法');
                 response = await this.apiIntegration.proxyCompatibleFetch(requestUrl, {
                     method: 'POST',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'User-Agent': 'SillyTavern-InfoBar/1.0'
                     },
@@ -18058,7 +18399,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 console.warn('[InfoBarSettings] ⚠️ APIIntegration不可用，使用原生fetch');
                 response = await fetch(requestUrl, {
                     method: 'POST',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'User-Agent': 'SillyTavern-InfoBar/1.0'
                     },
@@ -18067,15 +18408,15 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             }
         } catch (fetchError) {
             console.error('[InfoBarSettings] ❌ Gemini原生请求失败:', fetchError);
-            
+
             // 检查是否是CORS错误
-            if (fetchError.message.includes('CORS_BLOCKED') || 
+            if (fetchError.message.includes('CORS_BLOCKED') ||
                 fetchError.message.includes('CORS') ||
                 (fetchError.name === 'TypeError' && fetchError.message.includes('fetch'))) {
-                    
+
                 throw new Error('CORS跨域错误：无法访问Gemini API，请检查反代配置或使用服务器端代理');
             }
-            
+
             throw fetchError;
         }
 
@@ -18085,11 +18426,11 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 // 获取重试建议时间
                 const retryAfter = response.headers.get('Retry-After') || 60;
                 console.warn(`[InfoBarSettings] ⚠️ 429频率限制，建议${retryAfter}秒后重试`);
-                
+
                 throw new Error(`API请求频率过高(429)，请等待${retryAfter}秒后重试。建议调整请求间隔或稍后再试。`);
             } else if (response.status === 500) {
                 console.error('[InfoBarSettings] ❌ 500服务器内部错误');
-                
+
                 // 尝试获取错误详情
                 let errorDetail = '';
                 try {
@@ -18099,7 +18440,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 } catch (e) {
                     console.warn('[InfoBarSettings] ⚠️ 无法读取500错误详情');
                 }
-                
+
                 throw new Error(`Gemini服务器内部错误(500)，这可能是临时问题。建议稍后重试。${errorDetail ? '错误详情: ' + errorDetail : ''}`);
             } else {
                 throw new Error(`Gemini API错误: ${response.status} ${response.statusText}`);
@@ -18107,12 +18448,12 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
         }
 
         const data = await response.json();
-        
+
         console.log('[InfoBarSettings] 🔍 Gemini API响应数据结构:', JSON.stringify(data, null, 2));
-        
+
         // 🔧 改进的响应解析逻辑，支持多种可能的格式
         let extractedText = '';
-        
+
         // 尝试标准的Gemini响应格式
         if (data.candidates && data.candidates[0]) {
             const candidate = data.candidates[0];
@@ -18123,7 +18464,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 hasText: !!candidate.text,
                 hasOutput: !!candidate.output
             });
-            
+
             if (candidate.content && candidate.content.parts && candidate.content.parts[0]) {
                 extractedText = candidate.content.parts[0].text || '';
                 console.log('[InfoBarSettings] ✅ 从标准路径提取文本，长度:', extractedText.length);
@@ -18135,17 +18476,17 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 console.log('[InfoBarSettings] ✅ 从candidate.output提取文本，长度:', extractedText.length);
             }
         }
-        
+
         // 如果标准路径失败，尝试其他可能的格式
         if (!extractedText && data.text) {
             extractedText = data.text;
             console.log('[InfoBarSettings] ✅ 从data.text提取文本，长度:', extractedText.length);
         }
-        
+
         // 最后尝试从整个响应中查找文本内容
         if (!extractedText) {
             console.warn('[InfoBarSettings] ⚠️ 无法从标准路径提取文本，尝试深度搜索...');
-            
+
             // 递归搜索所有可能包含文本内容的字段
             const searchForText = (obj, path = '') => {
                 if (typeof obj === 'string' && obj.trim() && obj.length > 20) {
@@ -18162,19 +18503,19 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 }
                 return null;
             };
-            
+
             extractedText = searchForText(data, 'data') || '';
         }
-        
+
         if (!extractedText) {
             console.error('[InfoBarSettings] ❌ 无法从Gemini响应中提取任何文本内容');
             console.error('[InfoBarSettings] 📊 完整响应结构keys:', Object.keys(data));
             console.error('[InfoBarSettings] 📊 候选者详情:', data.candidates);
-            
+
             // 如果完全没有文本内容，返回错误而不是空文本
             throw new Error('Gemini API返回了空的文本内容，请检查API配置或模型响应');
         }
-        
+
         return {
             success: true,
             text: extractedText.trim(),
@@ -18187,14 +18528,14 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
      */
     async sendOpenAICompatibleRequest(messages, apiConfig) {
         console.log('[InfoBarSettings] 🔄 发送OpenAI兼容请求...');
-        
+
         // 🔧 修复：确保baseUrl存在，否则使用fallback
         let baseUrl = apiConfig.baseUrl || apiConfig.endpoint;
         if (!baseUrl) {
             console.error('[InfoBarSettings] ❌ baseUrl和endpoint都未配置');
             throw new Error('API基础URL未配置，请检查API设置');
         }
-        
+
         // 🔧 移除末尾可能的路径部分，确保只有基础URL
         if (baseUrl.endsWith('/chat/completions')) {
             baseUrl = baseUrl.replace('/chat/completions', '');
@@ -18202,7 +18543,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
         if (baseUrl.endsWith('/v1')) {
             baseUrl = baseUrl.replace('/v1', '');
         }
-        
+
         const requestBody = {
             model: apiConfig.model,
             messages: messages,
@@ -18217,7 +18558,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             messagesCount: messages.length,
             userConfiguredMaxTokens: apiConfig.maxTokens // 🔧 显示用户配置的令牌数
         });
-        
+
         const requestUrl = `${baseUrl}/v1/chat/completions`;
         console.log('[InfoBarSettings] 🌐 使用CORS兼容请求:', requestUrl);
 
@@ -18249,15 +18590,15 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             }
         } catch (fetchError) {
             console.error('[InfoBarSettings] ❌ OpenAI兼容请求失败:', fetchError);
-            
+
             // 检查是否是CORS错误
-            if (fetchError.message.includes('CORS_BLOCKED') || 
+            if (fetchError.message.includes('CORS_BLOCKED') ||
                 fetchError.message.includes('CORS') ||
                 (fetchError.name === 'TypeError' && fetchError.message.includes('fetch'))) {
-                    
+
                 throw new Error('CORS跨域错误：无法访问反代API，请检查反代服务器的CORS配置或使用服务器端代理');
             }
-            
+
             throw fetchError;
         }
 
@@ -18272,10 +18613,10 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 } catch (e) {
                     console.warn('[InfoBarSettings] ⚠️ 无法读取500错误详情');
                 }
-                
+
                 throw new Error(`反代服务器内部错误 (500): 可能是以下问题之一：
 1. 反代配置问题：/v1/chat/completions端点配置错误
-2. 后端API问题：上游API服务异常或配额不足  
+2. 后端API问题：上游API服务异常或配额不足
 3. 请求格式问题：反代服务器不支持当前请求格式
 4. 认证问题：后端API Key无效或过期
 
@@ -18283,7 +18624,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
 建议检查反代服务器日志以获取更多信息。`);
             }
-            
+
             throw new Error(`API错误: ${response.status} ${response.statusText}`);
         }
 
@@ -19127,7 +19468,10 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             // 🚀 新增：世界书上传配置事件
             this.bindWorldBookUploadEvents();
 
-            // 🚀 新增：AI记忆总结复选框事件
+            // 🧠 记忆增强面板事件处理器
+            this.bindMemoryEnhancementEvents();
+
+            // 🚀 新增：AI记忆总结复选框事件（总结面板中的旧版本，保留兼容性）
             const aiMemoryEnabledCheckbox = this.modal.querySelector('#content-ai-memory-enabled');
             if (aiMemoryEnabledCheckbox) {
                 aiMemoryEnabledCheckbox.addEventListener('change', (e) => {
@@ -19330,18 +19674,18 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
     handleAutoHideEnabledChange(enabled) {
         try {
             console.log('[InfoBarSettings] 🔄 自动隐藏楼层启用状态变化:', enabled);
-            
+
             // 显示/隐藏阈值设置
             const thresholdRow = this.modal.querySelector('#content-auto-hide-threshold-row');
             if (thresholdRow) {
                 thresholdRow.style.display = enabled ? 'block' : 'none';
             }
-            
+
             // 如果启用了自动隐藏，立即检查是否需要隐藏楼层
             if (enabled) {
                 this.checkAndExecuteAutoHide();
             }
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理自动隐藏状态变化失败:', error);
         }
@@ -19355,32 +19699,32 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             // 获取设置
             const autoHideEnabled = this.modal?.querySelector('#content-auto-hide-enabled')?.checked || false;
             const autoHideThreshold = parseInt(this.modal?.querySelector('#content-auto-hide-threshold')?.value) || 30;
-            
+
             if (!autoHideEnabled) {
                 console.log('[InfoBarSettings] ⏸️ 自动隐藏未启用，跳过检查');
                 return;
             }
-            
+
             // 获取当前聊天消息数量
             const chatLength = this.getChatLength();
             if (chatLength <= autoHideThreshold) {
                 console.log('[InfoBarSettings] ℹ️ 聊天长度不足，无需隐藏楼层');
                 return;
             }
-            
+
             // 计算需要隐藏的范围：0到(总长度-阈值-1)
             const hideUntilIndex = chatLength - autoHideThreshold - 1;
-            
+
             if (hideUntilIndex > 0) {
                 console.log(`[InfoBarSettings] 🔄 执行自动隐藏：隐藏楼层 0-${hideUntilIndex}`);
                 await this.executeHideCommand(`/hide 0-${hideUntilIndex}`);
             }
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 自动隐藏楼层失败:', error);
         }
     }
-    
+
     /**
      * 获取当前聊天的消息数量
      */
@@ -19391,72 +19735,72 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 const context = getContext();
                 return context?.chat?.length || 0;
             }
-            
+
             // 备用方法：通过DOM查询消息数量
             const messages = document.querySelectorAll('#chat .mes');
             return messages.length;
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 获取聊天长度失败:', error);
             return 0;
         }
     }
-    
+
     /**
      * 执行隐藏命令
      */
     async executeHideCommand(command) {
         try {
             console.log('[InfoBarSettings] 📋 执行隐藏命令:', command);
-            
+
             // 方法1: 尝试使用SillyTavern的斜杠命令解析器
             if (typeof window.SlashCommandParser !== 'undefined') {
                 const parser = new window.SlashCommandParser();
                 const result = parser.parse(command, false);
-                
+
                 if (result && typeof result.execute === 'function') {
                     await result.execute();
                     console.log('[InfoBarSettings] ✅ 隐藏命令执行成功 (方法1)');
                     return;
                 }
             }
-            
+
             // 方法2: 尝试直接在聊天输入框执行命令
             const chatTextarea = document.getElementById('send_textarea');
             if (chatTextarea) {
                 console.log('[InfoBarSettings] 🔄 尝试通过聊天输入框执行命令');
                 const originalValue = chatTextarea.value;
                 chatTextarea.value = command;
-                
+
                 // 触发输入事件
                 chatTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-                
+
                 // 等待短暂时间后按回车
                 setTimeout(() => {
                     chatTextarea.dispatchEvent(new KeyboardEvent('keydown', {
                         key: 'Enter',
                         bubbles: true
                     }));
-                    
+
                     // 恢复原始值
                     setTimeout(() => {
                         chatTextarea.value = originalValue;
                     }, 100);
                 }, 100);
-                
+
                 console.log('[InfoBarSettings] ✅ 隐藏命令已通过聊天输入框发送');
                 return;
             }
-            
+
             // 方法3: 尝试使用SillyTavern的全局命令执行器
             if (typeof window.executeSlashCommand === 'function') {
                 await window.executeSlashCommand(command);
                 console.log('[InfoBarSettings] ✅ 隐藏命令执行成功 (方法3)');
                 return;
             }
-            
+
             console.warn('[InfoBarSettings] ⚠️ 所有隐藏命令执行方法都失败');
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 执行隐藏命令失败:', error);
         }
@@ -19475,7 +19819,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
         try {
             console.log('[InfoBarSettings] 🖊️ 触发手动总结...');
-            
+
             // 设置进行中标志
             this._summaryInProgress = true;
 
@@ -19518,10 +19862,10 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 触发手动总结失败:', error);
-            
+
             // 🔧 改进的错误消息处理
             let errorMessage = '❌ 总结生成失败';
-            
+
             if (error.message?.includes('429')) {
                 errorMessage = '❌ API请求过于频繁，请稍后再试 (429错误)';
             } else if (error.message?.includes('500')) {
@@ -19533,12 +19877,12 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             } else if (error.message) {
                 errorMessage += ': ' + error.message;
             }
-            
+
             this.showMessage(errorMessage, 'error');
         } finally {
             // 🔧 清除进行中标志
             this._summaryInProgress = false;
-            
+
             // 恢复按钮状态
             const manualSummaryBtn = this.modal.querySelector('#header-manual-summary-btn');
             if (manualSummaryBtn) {
@@ -19633,7 +19977,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             if (autoHideEnabled) {
                 settings.autoHideEnabled = autoHideEnabled.checked;
             }
-            
+
             const autoHideThreshold = this.modal.querySelector('#content-auto-hide-threshold');
             if (autoHideThreshold) {
                 settings.autoHideThreshold = parseInt(autoHideThreshold.value) || 30;
@@ -20367,7 +20711,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'hobbies': '爱好', 'sports': '运动', 'music': '音乐', 'art': '艺术',
                 'reading': '阅读', 'gaming': '游戏', 'travel': '旅行', 'cooking': '烹饪',
                 'skills': '技能特长', 'languages': '语言能力', 'habits': '生活习惯', 'healthStatus': '健康状态',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '姓名': '姓名', '年龄': '年龄', '性别': '性别', '职业': '职业',
                 '身高': '身高', '体重': '体重', '血型': '血型', '星座': '星座',
@@ -20400,7 +20744,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'factions': '势力组织', 'conflicts': '冲突矛盾', 'alliances': '联盟关系', 'wars': '战争历史',
                 'resources': '资源分布', 'materials': '材料设定', 'artifacts': '神器文物', 'currency': '货币系统',
                 'trade': '贸易体系', 'markets': '市场设定', 'guilds': '公会组织', 'transportation': '交通运输',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '世界名称': '世界名称', '世界类型': '世界类型', '世界风格': '世界风格', '世界主题': '世界主题',
                 '世界描述': '世界描述', '世界历史': '世界历史', '神话传说': '神话传说', '世界设定': '世界设定',
@@ -20431,7 +20775,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'communicationStyle': '沟通风格', 'preferredTopics': '偏好话题', 'avoidedTopics': '回避话题', 'boundaries': '边界设定',
                 'comfortLevel': '舒适度', 'energyLevel': '活跃度', 'responseTime': '响应时间', 'engagement': '参与度',
                 'specialEvents': '特殊事件', 'achievements': '成就记录', 'challenges': '挑战任务', 'growth': '成长轨迹',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '对象名称': '对象名称', '对象类型': '对象类型', '当前状态': '当前状态', '所在位置': '所在位置',
                 '情绪状态': '情绪状态', '当前活动': '当前活动', '可用性': '可用性', '优先级': '优先级',
@@ -20463,7 +20807,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'sorting': '排序功能', 'filtering': '筛选功能', 'search': '搜索功能', 'grouping': '分组功能',
                 'backup': '备份功能', 'export': '导出功能', 'import': '导入功能', 'sync': '同步功能',
                 'archive': '归档管理', 'history': '历史记录', 'versioning': '版本控制', 'recovery': '恢复功能',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '任务创建': '任务创建', '任务编辑': '任务编辑', '任务删除': '任务删除', '任务完成': '任务完成',
                 '优先级': '优先级', '截止日期': '截止日期', '进度跟踪': '进度跟踪', '状态管理': '状态管理',
@@ -20492,7 +20836,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'reputation': '组织声誉', 'influence': '影响力', 'diplomacy': '外交关系', 'treaties': '条约协议',
                 'finances': '财务状况', 'assets': '资产管理', 'facilities': '设施设备', 'equipment': '装备器材',
                 'technology': '技术资源', 'knowledge': '知识库', 'archives': '档案管理', 'secrets': '机密信息',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '组织名称': '组织名称', '组织类型': '组织类型', '组织描述': '组织描述', '组织目标': '组织目标',
                 '组织历史': '组织历史', '成立背景': '成立背景', '组织格言': '组织格言', '核心价值': '核心价值',
@@ -20521,7 +20865,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'ratings': '评分系统', 'polls': '投票调查', 'discussions': '讨论区', 'feedback': '反馈系统',
                 'analytics': '数据分析', 'metrics': '指标统计', 'trends': '趋势分析', 'reports': '报告生成',
                 'monitoring': '监控系统', 'alertsSystem': '警报系统', 'automation': '自动化', 'aiAnalysis': 'AI分析',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '突发新闻': '突发新闻', '政治新闻': '政治新闻', '经济新闻': '经济新闻', '社会新闻': '社会新闻',
                 '军事新闻': '军事新闻', '科技新闻': '科技新闻', '文化新闻': '文化新闻', '体育新闻': '体育新闻',
@@ -20551,7 +20895,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'upgrading': '升级功能', 'combining': '合成功能', 'dismantling': '拆解功能', 'recycling': '回收功能',
                 'automation': '自动化', 'aiSorting': 'AI整理', 'recommendations': '推荐系统', 'analytics': '数据分析',
                 'backup': '备份功能', 'sync': '同步功能', 'security': '安全保护', 'history': '历史记录',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '物品存储': '物品存储', '物品取出': '物品取出', '物品整理': '物品整理', '物品搜索': '物品搜索',
                 '排序功能': '排序功能', '筛选功能': '筛选功能', '分类管理': '分类管理', '标签系统': '标签系统',
@@ -20581,7 +20925,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'leadership': '领导能力', 'empathy': '共情能力', 'insight': '洞察能力', 'networking': '社交能力',
                 'telepathy': '心灵感应', 'telekinesis': '念动力', 'precognition': '预知能力', 'shapeshifting': '变形能力',
                 'invisibility': '隐身能力', 'flight': '飞行能力', 'regeneration': '再生能力', 'immortality': '不朽能力',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '力量属性': '力量属性', '敏捷属性': '敏捷属性', '智力属性': '智力属性', '体质属性': '体质属性',
                 '智慧属性': '智慧属性', '魅力属性': '魅力属性', '幸运属性': '幸运属性', '感知属性': '感知属性',
@@ -20610,7 +20954,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'playerAgency': '玩家主导', 'emergentNarrative': '涌现叙事', 'proceduralGeneration': '程序生成', 'adaptiveStorytelling': '自适应叙事',
                 'timeline': '时间线', 'notes': '剧情笔记', 'bookmarks': '书签标记', 'saveStates': '存档状态',
                 'autoSave': '自动保存', 'export': '导出功能', 'import': '导入功能', 'analytics': '数据分析',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '主线剧情': '主线剧情', '支线任务': '支线任务', '子剧情': '子剧情', '背景故事': '背景故事',
                 '序章': '序章', '尾声': '尾声', '回忆片段': '回忆片段', '伏笔铺垫': '伏笔铺垫',
@@ -20640,7 +20984,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'caveMansion': '洞府', 'secretRealm': '秘境', 'inheritance': '传承', 'opportunity': '机缘',
                 'meditation': '打坐', 'tribulationCrossing': '渡劫', 'enlightenment': '顿悟', 'breakthrough': '突破',
                 'sect': '宗门', 'masterDisciple': '师徒', 'daoCompanion': '道侣', 'immortalAscension': '飞升',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '炼气期': '炼气期', '筑基期': '筑基期', '金丹期': '金丹期', '元婴期': '元婴期',
                 '化神期': '化神期', '炼虚期': '炼虚期', '合体期': '合体期', '大乘期': '大乘期',
@@ -20671,7 +21015,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'kraken': '海怪', 'chimera': '奇美拉', 'basilisk': '蛇怪', 'hydra': '九头蛇',
                 'legendaryWeapon': '传说武器', 'magicArmor': '魔法护甲', 'artifact': '神器', 'relic': '圣物',
                 'magicCrystal': '魔法水晶', 'enchantedItem': '附魔物品', 'potion': '魔法药水', 'scroll': '魔法卷轴',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '人类种族': '人类种族', '精灵种族': '精灵种族', '矮人种族': '矮人种族', '兽人种族': '兽人种族',
                 '龙族': '龙族', '恶魔': '恶魔', '天使': '天使', '不死族': '不死族',
@@ -20702,7 +21046,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'saving': '储蓄计划', 'credit': '信用记录', 'insurance': '保险保障', 'movies': '电影娱乐',
                 'music': '音乐欣赏', 'books': '阅读习惯', 'travel': '旅游出行', 'sports': '体育运动',
                 'hobbies': '兴趣爱好', 'clubs': '俱乐部', 'events': '活动参与',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '城市环境': '城市环境', '区域设定': '区域设定', '住房情况': '住房情况', '交通工具': '交通工具',
                 '社区环境': '社区环境', '设施配套': '设施配套', '生活成本': '生活成本', '安全状况': '安全状况',
@@ -20733,7 +21077,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'festivals': '节庆活动', 'religion': '宗教信仰', 'medicine': '医学知识', 'profession': '职业身份',
                 'crafts': '手工技艺', 'trade': '商贸活动', 'farming': '农业生产', 'administration': '行政管理',
                 'teaching': '教学传授', 'healing': '医疗救治', 'construction': '建筑营造',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '朝代背景': '朝代背景', '历史时期': '历史时期', '皇帝君主': '皇帝君主', '都城首府': '都城首府',
                 '地域分布': '地域分布', '历史事件': '历史事件', '战争冲突': '战争冲突', '政治制度': '政治制度',
@@ -20764,7 +21108,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'lightning': '雷电', 'ice': '冰霜', 'light': '光明', 'dark': '黑暗',
                 'staff': '法杖', 'wand': '魔杖', 'orb': '法球', 'robe': '法袍',
                 'amulet': '护符', 'ring': '魔法戒指', 'crystal': '魔法水晶', 'tome': '魔法典籍',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '塑能系': '塑能系', '幻术系': '幻术系', '惑控系': '惑控系', '死灵系': '死灵系',
                 '预言系': '预言系', '变化系': '变化系', '咒法系': '咒法系', '防护系': '防护系',
@@ -20795,7 +21139,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 'schedule': '训练计划', 'evaluation': '评估系统', 'auto': '自动训练', 'adaptive': '自适应训练',
                 'ai': 'AI辅助', 'analytics': '数据分析', 'reports': '训练报告', 'export': '导出功能',
                 'backup': '备份功能', 'sync': '同步功能',
-                
+
                 // 🔧 完整的中文字段名映射 (保持不变)
                 '服从训练': '服从训练', '纪律训练': '纪律训练', '礼仪训练': '礼仪训练', '姿态训练': '姿态训练',
                 '言语训练': '言语训练', '行为训练': '行为训练', '注意力训练': '注意力训练', '耐心训练': '耐心训练',
@@ -20856,7 +21200,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
         // 🔧 新增：缓存映射结果
         this._cachedCompleteMapping = baseMapping;
-        
+
         console.log('[InfoBarSettings] ✅ 完整显示名称映射生成完成:', Object.keys(baseMapping));
         return baseMapping;
     }
@@ -24912,7 +25256,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                                     </button>
                                 </div>
                             </div>
-                            
+
                             <div class="editor-content" style="flex: 1; position: relative; overflow: hidden;">
                                 <!-- 代码编辑器 -->
                                 <div class="code-editor-container" style="
@@ -24955,7 +25299,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 </div>
 
 💡 提示：使用右侧面板查看可用数据字段和语法帮助"></textarea>
-                                    
+
                                     <!-- 语法高亮层 -->
                                     <div class="syntax-highlight-layer" style="
                                         position: absolute;
@@ -24976,7 +25320,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                                         color: transparent;
                                     "></div>
                                 </div>
-                                
+
                                 <!-- 预览容器 -->
                                 <div class="preview-container" style="
                                     width: 100%;
@@ -25005,8 +25349,8 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                             position: relative;
                             transition: background 0.2s ease;
                             flex-shrink: 0;
-                        " 
-                        onmouseover="this.style.background='${themeColors.accent}'" 
+                        "
+                        onmouseover="this.style.background='${themeColors.accent}'"
                         onmouseout="this.style.background='${themeColors.border}'">
                             <div style="
                                 position: absolute;
@@ -25103,7 +25447,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                                 display: flex;
                                 align-items: center;
                                 gap: 6px;
-                                color: ${themeColors.textSecondary}; 
+                                color: ${themeColors.textSecondary};
                                 font-size: 11px;
                             ">
                                 <i class="fas fa-circle" style="color: #4CAF50; font-size: 8px;"></i>
@@ -25118,7 +25462,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                         </div>
                         <div class="editor-actions" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
                             <button class="btn btn-sm btn-outline-secondary" data-action="load-template" style="
-                                padding: 6px 12px; 
+                                padding: 6px 12px;
                                 font-size: 11px;
                                 border: 1px solid ${themeColors.border};
                                 background: transparent;
@@ -25130,7 +25474,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                                 <i class="fas fa-folder-open"></i> 加载
                             </button>
                             <button class="btn btn-sm btn-outline-secondary" data-action="save-template" style="
-                                padding: 6px 12px; 
+                                padding: 6px 12px;
                                 font-size: 11px;
                                 border: 1px solid ${themeColors.border};
                                 background: transparent;
@@ -25142,7 +25486,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                                 <i class="fas fa-save"></i> 保存
                             </button>
                             <button class="btn btn-sm btn-primary" data-action="apply-template" style="
-                                padding: 6px 16px; 
+                                padding: 6px 16px;
                                 font-size: 11px;
                                 background: ${themeColors.accent};
                                 color: ${themeColors.background};
@@ -25545,7 +25889,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             const resizer = modal.querySelector('.editor-resizer');
             const leftPanel = modal.querySelector('.editor-left');
             const rightPanel = modal.querySelector('.editor-right');
-            
+
             if (!resizer || !leftPanel || !rightPanel) return;
 
             let isResizing = false;
@@ -25558,7 +25902,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 startX = e.clientX;
                 startLeftWidth = leftPanel.offsetWidth;
                 startRightWidth = rightPanel.offsetWidth;
-                
+
                 document.body.style.cursor = 'col-resize';
                 e.preventDefault();
             });
@@ -25789,7 +26133,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
      */
     checkHTMLSyntax(html) {
         const errors = [];
-        
+
         try {
             // 简单的标签匹配检查
             const openTags = [];
@@ -26850,21 +27194,21 @@ ${userTemplate}
      */
     buildCoreFieldsInfo(enabledPanels, availableFields) {
         let info = '';
-        
+
         if (enabledPanels && typeof enabledPanels === 'object') {
             const panelCount = Object.keys(enabledPanels).length;
             info += `启用面板(${panelCount}个): `;
-            
+
             const panelNames = Object.entries(enabledPanels)
                 .slice(0, 8) // 只显示前8个面板，避免过长
                 .map(([panelId, config]) => `${panelId}`)
                 .join(', ');
-                
+
             info += panelNames;
             if (panelCount > 8) info += `, ...等${panelCount}个`;
             info += '\n\n';
         }
-        
+
         // 简化的字段示例
         info += `数据访问示例:\n`;
         info += `- 角色信息: {{data.personal.name}}, {{data.personal.age}}\n`;
@@ -26872,7 +27216,7 @@ ${userTemplate}
         info += `- 物品道具: {{data.inventory.items}}\n`;
         info += `- 任务信息: {{data.tasks.current}}\n`;
         info += `- 位置信息: {{data.world.location}}\n`;
-        
+
         return info;
     }
 
@@ -26881,26 +27225,26 @@ ${userTemplate}
      */
     buildDetailedFieldsInfo(enabledPanels, availableFields) {
         let info = '';
-        
+
         if (enabledPanels && typeof enabledPanels === 'object') {
             const panelCount = Object.keys(enabledPanels).length;
             info += `### 启用的数据面板 (${panelCount}个)：\n\n`;
-            
+
             Object.entries(enabledPanels).forEach(([panelId, panelConfig]) => {
                 const panelName = this.getPanelDisplayName(panelId);
                 const fieldsCount = this.countEnabledFields(panelConfig);
-                
+
                 info += `#### 📊 ${panelName} (${panelId})\n`;
                 info += `- 状态: ${panelConfig.enabled !== false ? '✅ 已启用' : '❌ 已禁用'}\n`;
                 info += `- 字段数量: ${fieldsCount}个\n`;
                 info += `- 访问语法: \`{{data.${panelId}.fieldName}}\`\n\n`;
             });
         }
-        
+
         if (availableFields && typeof availableFields === 'object') {
             const totalFields = Object.keys(availableFields).length;
             info += `### 可用数据字段 (${totalFields}个)：\n\n`;
-            
+
             Object.entries(availableFields).forEach(([panelId, fields]) => {
                 if (fields && typeof fields === 'object') {
                     const fieldList = Object.keys(fields);
@@ -26916,7 +27260,7 @@ ${userTemplate}
                 }
             });
         }
-        
+
         return info || '暂无可用的数据字段信息';
     }
 
@@ -27122,7 +27466,7 @@ ${userTemplate}
             }
 
             const data = await response.json();
-            
+
             // 🔧 增加调试日志，帮助诊断API返回格式
             console.log('[InfoBarSettings] 📋 API返回数据结构:', JSON.stringify(data, null, 2));
 
@@ -27144,7 +27488,7 @@ ${userTemplate}
                     // 🚀 检查是否因为MAX_TOKENS导致响应被截断
                     if (candidate.finishReason === 'MAX_TOKENS') {
                         console.warn('[InfoBarSettings] ⚠️ Gemini响应被截断 - MAX_TOKENS，尝试提取部分内容:', candidate);
-                        
+
                         // 🔧 尝试获取截断前的部分内容
                         let partialContent = '';
                         if (candidate.content.parts && Array.isArray(candidate.content.parts) && candidate.content.parts.length > 0) {
@@ -27153,10 +27497,10 @@ ${userTemplate}
                                 partialContent = part.text.trim();
                             }
                         }
-                        
+
                         if (partialContent) {
                             console.log('[InfoBarSettings] 🔄 获取到部分内容，长度:', partialContent.length);
-                            
+
                             // 🎯 检查是否包含有效的HTML内容
                             if (partialContent.includes('<html') || partialContent.includes('<!DOCTYPE') || partialContent.includes('<div')) {
                                 console.log('[InfoBarSettings] ✅ 检测到有效HTML内容，使用部分结果');
@@ -27179,7 +27523,7 @@ ${userTemplate}
 
                         // 🔧 处理不同的content格式
                         let textContent = '';
-                        
+
                         if (candidate.content.parts && Array.isArray(candidate.content.parts) && candidate.content.parts.length > 0) {
                             // 标准格式：有parts数组
                             const part = candidate.content.parts[0];
@@ -27206,7 +27550,7 @@ ${userTemplate}
                 } catch (parseError) {
                     console.error('[InfoBarSettings] ❌ 解析Gemini返回内容失败:', parseError);
                     console.error('[InfoBarSettings] 📋 原始返回数据:', data);
-                    
+
                     // 🔧 尝试其他可能的格式
                     if (data.text) {
                         console.log('[InfoBarSettings] 🔄 尝试直接使用data.text');
@@ -27424,7 +27768,7 @@ ${userTemplate}
 
         // 🔧 基本HTML验证
         const result = cleaned.trim();
-        
+
         if (!result) {
             console.error('[InfoBarSettings] ❌ 清理后AI响应为空');
             throw new Error('AI返回的内容清理后为空');
@@ -27510,7 +27854,7 @@ ${userTemplate}
         try {
             // 加载当前启用的面板
             this.loadEnabledPanelsList();
-            
+
             // 加载可用字段
             this.loadAvailableFieldsList();
 
@@ -27534,7 +27878,7 @@ ${userTemplate}
 
             // 获取当前启用的面板
             const enabledPanels = this.getEnabledPanels(); // 移除await，因为这是同步方法
-            
+
             if (enabledPanels && Object.keys(enabledPanels).length > 0) {
                 const themeColors = {
                     text: this.getInfoBarThemeColor('text'),
@@ -27558,13 +27902,13 @@ ${userTemplate}
                         font-size: 11px;
                     ">
                         <i class="${this.getPanelIcon(panelId)}" style="
-                            color: ${themeColors.accent}; 
-                            margin-right: 6px; 
+                            color: ${themeColors.accent};
+                            margin-right: 6px;
                             font-size: 10px;
                         "></i>
                         <span style="flex-grow: 1;">${this.getPanelDisplayName(panelId)}</span>
                         <span style="
-                            color: ${themeColors.textSecondary}; 
+                            color: ${themeColors.textSecondary};
                             font-size: 9px;
                         ">${this.countEnabledFields(panelConfig)}个字段</span>
                     </div>
@@ -27604,7 +27948,7 @@ ${userTemplate}
      */
     countEnabledFields(panelConfig) {
         if (!panelConfig || typeof panelConfig !== 'object') return 0;
-        
+
         let count = 0;
         // 计算基本字段
         Object.entries(panelConfig).forEach(([key, value]) => {
@@ -27612,12 +27956,12 @@ ${userTemplate}
                 count++;
             }
         });
-        
+
         // 计算子项
         if (panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
             count += panelConfig.subItems.filter(item => item.enabled).length;
         }
-        
+
         return count;
     }
 
@@ -27637,7 +27981,7 @@ ${userTemplate}
             'custom2': 'fas fa-puzzle-piece',
             'custom3': 'fas fa-star'
         };
-        
+
         // 检查panelId是否匹配自定义面板格式
         if (panelId && panelId.toLowerCase().startsWith('custom')) {
             if (panelId === 'custom') return iconMap['custom'];
@@ -27652,7 +27996,7 @@ ${userTemplate}
                 return iconMap[`custom${Math.min(num, 3)}`] || iconMap['custom'];
             }
         }
-        
+
         return iconMap[panelId] || 'fas fa-layer-group';
     }
 
@@ -27668,7 +28012,7 @@ ${userTemplate}
 
             // 获取当前数据字段
             const dataFields = await this.getCurrentDataFields();
-            
+
             if (dataFields && Object.keys(dataFields).length > 0) {
                 const themeColors = {
                     text: this.getInfoBarThemeColor('text'),
@@ -27679,7 +28023,7 @@ ${userTemplate}
                 };
 
                 let fieldsHTML = '';
-                
+
                 Object.entries(dataFields).forEach(([panelId, fields]) => {
                     if (fields && fields.length > 0) {
                         fieldsHTML += `
@@ -27696,10 +28040,10 @@ ${userTemplate}
                                 </div>
                                 <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                         `;
-                        
+
                         fields.forEach(field => {
                             fieldsHTML += `
-                                <button class="field-insert-btn" 
+                                <button class="field-insert-btn"
                                         data-insert="{{data.${field}}}"
                                         style="
                                     padding: 2px 6px;
@@ -27710,13 +28054,13 @@ ${userTemplate}
                                     cursor: pointer;
                                     font-size: 9px;
                                     transition: all 0.2s ease;
-                                " onmouseover="this.style.background='${themeColors.accent}'; this.style.color='${themeColors.background}'" 
+                                " onmouseover="this.style.background='${themeColors.accent}'; this.style.color='${themeColors.background}'"
                                    onmouseout="this.style.background='transparent'; this.style.color='${themeColors.text}'">
                                     ${field}
                                 </button>
                             `;
                         });
-                        
+
                         fieldsHTML += `
                                 </div>
                             </div>
@@ -27767,7 +28111,7 @@ ${userTemplate}
     getPanelDisplayName(panelId) {
         const panelNames = {
             character: '🧙‍♂️ 角色信息',
-            status: '💖 状态显示', 
+            status: '💖 状态显示',
             inventory: '🎒 物品背包',
             skills: '⚡ 技能能力',
             world: '🌍 世界信息',
@@ -27777,7 +28121,7 @@ ${userTemplate}
             combat: '⚔️ 战斗状态',
             progress: '📈 进度追踪'
         };
-        
+
         return panelNames[panelId] || `📊 ${panelId}`;
     }
 
@@ -27857,7 +28201,7 @@ ${userTemplate}
                 const textarea = e.target;
                 const start = textarea.selectionStart;
                 const end = textarea.selectionEnd;
-                
+
                 textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
                 textarea.selectionStart = textarea.selectionEnd = start + 2;
             }
@@ -29738,6 +30082,582 @@ ${dataExamples}
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理自适应学习变化失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 绑定记忆增强面板事件
+     */
+    bindMemoryEnhancementEvents() {
+        try {
+            // AI记忆总结事件
+            const memoryAiMemoryEnabled = this.modal.querySelector('#memory-ai-memory-enabled');
+            if (memoryAiMemoryEnabled) {
+                memoryAiMemoryEnabled.addEventListener('change', (e) => {
+                    this.handleAIMemoryEnabledChange(e.target.checked);
+                });
+            }
+
+            const memoryAiMessageLevel = this.modal.querySelector('#memory-ai-message-level-summary');
+            if (memoryAiMessageLevel) {
+                memoryAiMessageLevel.addEventListener('change', (e) => {
+                    this.handleAIMessageLevelChange(e.target.checked);
+                });
+            }
+
+            // 语义搜索事件
+            const memoryVectorizedEnabled = this.modal.querySelector('#memory-vectorized-memory-enabled');
+            if (memoryVectorizedEnabled) {
+                memoryVectorizedEnabled.addEventListener('change', (e) => {
+                    this.handleVectorizedMemoryEnabledChange(e.target.checked);
+                });
+            }
+
+            const memoryVectorEngine = this.modal.querySelector('#memory-vector-engine');
+            if (memoryVectorEngine) {
+                memoryVectorEngine.addEventListener('change', (e) => {
+                    this.handleVectorEngineChange(e.target.value);
+                });
+            }
+
+            // 深度记忆管理事件
+            const memoryDeepMemoryEnabled = this.modal.querySelector('#memory-deep-memory-enabled');
+            if (memoryDeepMemoryEnabled) {
+                memoryDeepMemoryEnabled.addEventListener('change', (e) => {
+                    this.handleDeepMemoryEnabledChange(e.target.checked);
+                });
+            }
+
+            const memoryAutoMemoryMigration = this.modal.querySelector('#memory-auto-memory-migration');
+            if (memoryAutoMemoryMigration) {
+                memoryAutoMemoryMigration.addEventListener('change', (e) => {
+                    this.handleAutoMemoryMigrationChange(e.target.checked);
+                });
+            }
+
+            const memoryMemoryConflictResolution = this.modal.querySelector('#memory-memory-conflict-resolution');
+            if (memoryMemoryConflictResolution) {
+                memoryMemoryConflictResolution.addEventListener('change', (e) => {
+                    this.handleMemoryConflictResolutionChange(e.target.checked);
+                });
+            }
+
+            // 智能记忆分类器事件
+            const memoryIntelligentClassifierEnabled = this.modal.querySelector('#memory-intelligent-classifier-enabled');
+            if (memoryIntelligentClassifierEnabled) {
+                memoryIntelligentClassifierEnabled.addEventListener('change', (e) => {
+                    this.handleIntelligentClassifierEnabledChange(e.target.checked);
+                });
+            }
+
+            const memorySemanticClustering = this.modal.querySelector('#memory-semantic-clustering');
+            if (memorySemanticClustering) {
+                memorySemanticClustering.addEventListener('change', (e) => {
+                    this.handleSemanticClusteringChange(e.target.checked);
+                });
+            }
+
+            const memoryTemporalPatternRecognition = this.modal.querySelector('#memory-temporal-pattern-recognition');
+            if (memoryTemporalPatternRecognition) {
+                memoryTemporalPatternRecognition.addEventListener('change', (e) => {
+                    this.handleTemporalPatternRecognitionChange(e.target.checked);
+                });
+            }
+
+            const memoryImportancePrediction = this.modal.querySelector('#memory-importance-prediction');
+            if (memoryImportancePrediction) {
+                memoryImportancePrediction.addEventListener('change', (e) => {
+                    this.handleImportancePredictionChange(e.target.checked);
+                });
+            }
+
+            const memoryAdaptiveLearning = this.modal.querySelector('#memory-adaptive-learning');
+            if (memoryAdaptiveLearning) {
+                memoryAdaptiveLearning.addEventListener('change', (e) => {
+                    this.handleAdaptiveLearningChange(e.target.checked);
+                });
+            }
+
+            console.log('[InfoBarSettings] ✅ 记忆增强面板事件绑定完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 绑定记忆增强面板事件失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 加载记忆增强面板设置（支持模块设置与扩展设置双来源）
+     */
+    async loadMemoryEnhancementSettings() {
+        try {
+            console.log('[InfoBarSettings] 📥 加载记忆增强设置...');
+
+            const infoBarTool = window.SillyTavernInfobar;
+            const summaryManager = infoBarTool?.modules?.summaryManager;
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const savedMem = extCfg.memoryEnhancement || {};
+
+            // 🚀 AI记忆总结设置
+            const aiSettings = summaryManager?.aiMemorySummarizer?.settings || savedMem.ai || {};
+            const aiEnabledEl = this.modal.querySelector('#memory-ai-memory-enabled');
+            const aiMsgLevelEl = this.modal.querySelector('#memory-ai-message-level-summary');
+            const aiThresholdEl = this.modal.querySelector('#memory-ai-importance-threshold');
+            const aiThresholdVal = this.modal.querySelector('#memory-ai-importance-value');
+            if (aiEnabledEl) aiEnabledEl.checked = !!aiSettings.enabled;
+            if (aiMsgLevelEl) aiMsgLevelEl.checked = !!aiSettings.messageLevelSummary;
+            if (aiThresholdEl) {
+                const v = typeof aiSettings.importanceThreshold === 'number' ? aiSettings.importanceThreshold : parseFloat(aiThresholdEl.value) || 0.6;
+                aiThresholdEl.value = v;
+                if (aiThresholdVal) aiThresholdVal.textContent = `${Math.round(v * 100)}%`;
+            }
+            // 显示/隐藏AI记忆选项
+            this.modal.querySelectorAll('.ai-memory-options').forEach(opt => {
+                opt.style.display = aiSettings.enabled ? 'block' : 'none';
+            });
+
+            // 🔍 语义搜索设置
+            const vectorSettings = summaryManager?.vectorizedMemoryRetriever?.settings || savedMem.vector || {};
+            const vecEnabledEl = this.modal.querySelector('#memory-vectorized-memory-enabled');
+            const vecEngineEl = this.modal.querySelector('#memory-vector-engine');
+            const vecSimEl = this.modal.querySelector('#memory-similarity-threshold');
+            const vecSimVal = this.modal.querySelector('#memory-similarity-value');
+            const vecMaxEl = this.modal.querySelector('#memory-max-search-results');
+            if (vecEnabledEl) vecEnabledEl.checked = !!vectorSettings.enabled;
+            if (vecEngineEl && vectorSettings.vectorEngine) vecEngineEl.value = vectorSettings.vectorEngine;
+            if (vecSimEl) {
+                const v = typeof vectorSettings.similarityThreshold === 'number' ? vectorSettings.similarityThreshold : parseFloat(vecSimEl.value) || 0.7;
+                vecSimEl.value = v;
+                if (vecSimVal) vecSimVal.textContent = `${Math.round(v * 100)}%`;
+            }
+            if (vecMaxEl && typeof vectorSettings.maxResults === 'number') vecMaxEl.value = vectorSettings.maxResults;
+            this.modal.querySelectorAll('.vectorized-memory-options').forEach(opt => {
+                opt.style.display = vectorSettings.enabled ? 'block' : 'none';
+            });
+
+            // 🧠 深度记忆管理设置
+            const deepManager = infoBarTool?.modules?.deepMemoryManager;
+            const deepSettings = deepManager?.settings || savedMem.deep || {};
+            const deepEnabledEl = this.modal.querySelector('#memory-deep-memory-enabled');
+            if (deepEnabledEl) deepEnabledEl.checked = !!deepSettings.enabled;
+            this.modal.querySelectorAll('.deep-memory-options').forEach(opt => {
+                opt.style.display = deepSettings.enabled ? 'block' : 'none';
+            });
+            const autoMigEl = this.modal.querySelector('#memory-auto-memory-migration');
+            const memImpEl = this.modal.querySelector('#memory-memory-importance-threshold');
+            const memImpVal = this.modal.querySelector('#memory-memory-importance-value');
+            const confResEl = this.modal.querySelector('#memory-memory-conflict-resolution');
+            const capSens = this.modal.querySelector('#memory-sensory-capacity');
+            const capShort = this.modal.querySelector('#memory-short-term-capacity');
+            const capLong = this.modal.querySelector('#memory-long-term-capacity');
+            const capArchive = this.modal.querySelector('#memory-deep-archive-capacity');
+            if (autoMigEl) autoMigEl.checked = !!deepSettings.autoMemoryMigration;
+            if (memImpEl) {
+                const v = typeof deepSettings.memoryImportanceThreshold === 'number' ? deepSettings.memoryImportanceThreshold : parseFloat(memImpEl.value) || 0.6;
+                memImpEl.value = v;
+                if (memImpVal) memImpVal.textContent = `${Math.round(v * 100)}%`;
+            }
+            if (confResEl) confResEl.checked = !!deepSettings.conflictResolution;
+            if (capSens && deepSettings.capacities?.sensory) capSens.value = deepSettings.capacities.sensory;
+            if (capShort && deepSettings.capacities?.shortTerm) capShort.value = deepSettings.capacities.shortTerm;
+            if (capLong && deepSettings.capacities?.longTerm) capLong.value = deepSettings.capacities.longTerm;
+            if (capArchive && deepSettings.capacities?.deepArchive) capArchive.value = deepSettings.capacities.deepArchive;
+
+            // 🤖 智能记忆分类器设置
+            const clf = infoBarTool?.modules?.intelligentMemoryClassifier;
+            const clfSettings = clf?.settings || savedMem.classifier || {};
+            const clfEnabledEl = this.modal.querySelector('#memory-intelligent-classifier-enabled');
+            if (clfEnabledEl) clfEnabledEl.checked = !!clfSettings.enabled;
+            this.modal.querySelectorAll('.intelligent-classifier-options').forEach(opt => {
+                opt.style.display = clfSettings.enabled ? 'block' : 'none';
+            });
+            const semClus = this.modal.querySelector('#memory-semantic-clustering');
+            const tmpRec = this.modal.querySelector('#memory-temporal-pattern-recognition');
+            const impPred = this.modal.querySelector('#memory-importance-prediction');
+            const clfConf = this.modal.querySelector('#memory-classification-confidence-threshold');
+            const clfConfVal = this.modal.querySelector('#memory-classification-confidence-value');
+            const adapLearn = this.modal.querySelector('#memory-adaptive-learning');
+            if (semClus) semClus.checked = !!clfSettings.semanticClustering;
+            if (tmpRec) tmpRec.checked = !!clfSettings.temporalPatternRecognition;
+            if (impPred) impPred.checked = !!clfSettings.importancePrediction;
+            if (clfConf) {
+                const v = typeof clfSettings.classificationConfidenceThreshold === 'number' ? clfSettings.classificationConfidenceThreshold : parseFloat(clfConf.value) || 0.7;
+                clfConf.value = v;
+                if (clfConfVal) clfConfVal.textContent = `${Math.round(v * 100)}%`;
+            }
+            if (adapLearn) adapLearn.checked = !!clfSettings.adaptiveLearning;
+
+            console.log('[InfoBarSettings] ✅ 记忆增强设置加载完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载记忆增强设置失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 初始化记忆增强面板内容
+     */
+    initMemoryEnhancementPanelContent() {
+        try {
+            console.log('[InfoBarSettings] 🧠 初始化记忆增强面板内容...');
+
+            const infoBarTool = window.SillyTavernInfobar;
+            if (!infoBarTool) {
+                console.warn('[InfoBarSettings] ⚠️ InfoBar工具未找到');
+                return;
+            }
+
+            // 加载当前设置
+            this.loadMemoryEnhancementSettings();
+
+            // 绑定记忆增强面板事件
+            this.bindMemoryEnhancementEvents();
+
+            console.log('[InfoBarSettings] ✅ 记忆增强面板内容初始化完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化记忆增强面板内容失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 处理提示词模式变化
+     */
+    handlePromptModeChange(mode) {
+        try {
+            console.log('[InfoBarSettings] 🧠 提示词模式变化:', mode);
+
+            const smartConfig = this.modal.querySelector('#smart-prompt-config');
+            const customConfig = this.modal.querySelector('#custom-prompt-config');
+
+            if (mode === 'smart') {
+                // 显示智能提示词配置，隐藏自定义提示词配置
+                if (smartConfig) smartConfig.style.display = 'block';
+                if (customConfig) customConfig.style.display = 'none';
+
+                // 启用智能提示词系统
+                this.enableSmartPromptSystem();
+
+                console.log('[InfoBarSettings] ✅ 已切换到智能提示词模式');
+            } else if (mode === 'custom') {
+                // 隐藏智能提示词配置，显示自定义提示词配置
+                if (smartConfig) smartConfig.style.display = 'none';
+                if (customConfig) customConfig.style.display = 'block';
+
+                // 禁用智能提示词系统
+                this.disableSmartPromptSystem();
+
+                console.log('[InfoBarSettings] ✅ 已切换到自定义提示词模式');
+            }
+
+            // 保存设置
+            this.savePromptSettings();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理提示词模式变化失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 启用智能提示词系统
+     */
+    enableSmartPromptSystem() {
+        try {
+            const infoBarTool = window.SillyTavernInfobar;
+            const smartPromptSystem = infoBarTool?.modules?.smartPromptSystem;
+
+            if (smartPromptSystem) {
+                // 重新启用智能提示词系统
+                smartPromptSystem.enabled = true;
+                console.log('[InfoBarSettings] ✅ 智能提示词系统已启用');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 启用智能提示词系统失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 禁用智能提示词系统
+     */
+    disableSmartPromptSystem() {
+        try {
+            const infoBarTool = window.SillyTavernInfobar;
+            const smartPromptSystem = infoBarTool?.modules?.smartPromptSystem;
+
+            if (smartPromptSystem) {
+                // 禁用智能提示词系统
+                smartPromptSystem.enabled = false;
+                console.log('[InfoBarSettings] ⚠️ 智能提示词系统已禁用');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 禁用智能提示词系统失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 更新自定义提示词统计信息
+     */
+    updateCustomPromptStats() {
+        try {
+            const textarea = this.modal.querySelector('#custom-prompt-content');
+            if (!textarea) return;
+
+            const content = textarea.value;
+            const charCount = content.length;
+            const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+            const lineCount = content.split('\n').length;
+
+            // 更新统计显示
+            const charCountSpan = this.modal.querySelector('#custom-prompt-char-count');
+            const wordCountSpan = this.modal.querySelector('#custom-prompt-word-count');
+            const lineCountSpan = this.modal.querySelector('#custom-prompt-line-count');
+
+            if (charCountSpan) charCountSpan.textContent = charCount;
+            if (wordCountSpan) wordCountSpan.textContent = wordCount;
+            if (lineCountSpan) lineCountSpan.textContent = lineCount;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新自定义提示词统计失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 刷新提示词预览
+     */
+    async refreshPromptPreview() {
+        try {
+            console.log('[InfoBarSettings] 🔄 刷新提示词预览...');
+
+            const previewContainer = this.modal.querySelector('#prompt-preview');
+            const statusSpan = this.modal.querySelector('#preview-status');
+
+            if (!previewContainer) return;
+
+            // 更新状态
+            if (statusSpan) statusSpan.textContent = '生成中...';
+
+            // 获取当前提示词模式
+            const modeRadio = this.modal.querySelector('input[name="promptSettings.mode"]:checked');
+            const mode = modeRadio ? modeRadio.value : 'smart';
+
+            let previewContent = '';
+
+            if (mode === 'smart') {
+                // 生成智能提示词预览
+                previewContent = await this.generateSmartPromptPreview();
+            } else {
+                // 获取自定义提示词内容
+                const customContent = this.modal.querySelector('#custom-prompt-content')?.value || '';
+                previewContent = customContent || '暂无自定义提示词内容';
+            }
+
+            // 显示预览内容
+            previewContainer.innerHTML = `
+                <div class="prompt-preview-content">
+                    <pre>${this.escapeXML(previewContent)}</pre>
+                </div>
+            `;
+
+            // 更新状态
+            if (statusSpan) statusSpan.textContent = '预览已更新';
+
+            console.log('[InfoBarSettings] ✅ 提示词预览刷新完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 刷新提示词预览失败:', error);
+
+            const statusSpan = this.modal.querySelector('#preview-status');
+            if (statusSpan) statusSpan.textContent = '预览失败';
+        }
+    }
+
+    /**
+     * 🧠 生成智能提示词预览（不包含数据状态部分）
+     */
+    async generateSmartPromptPreview() {
+        try {
+            const infoBarTool = window.SillyTavernInfobar;
+            const smartPromptSystem = infoBarTool?.modules?.smartPromptSystem;
+
+            if (!smartPromptSystem) {
+                return '智能提示词系统未初始化';
+            }
+
+            // 生成完整的智能提示词
+            const fullSmartPrompt = await smartPromptSystem.generateSmartPrompt();
+
+            if (fullSmartPrompt) {
+                // 移除数据状态部分，只显示提示词模板
+                const previewPrompt = this.removeDataStatusFromPrompt(fullSmartPrompt);
+                return previewPrompt || '智能提示词模板（不包含数据状态部分）';
+            } else {
+                return '暂无智能提示词内容（可能没有启用的面板或数据）';
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 生成智能提示词预览失败:', error);
+            return '生成智能提示词预览时出错: ' + error.message;
+        }
+    }
+
+    /**
+     * 🧠 从提示词中移除在预览中不显示的隐藏部分
+     * - 【📊 当前数据状态（统一行视图）】...【🤖 AI生成指导】（AI记忆增强数据整体块）
+     * - 🔍 缺失字段详细列表（必须补充） 块
+     */
+    removeDataStatusFromPrompt(fullPrompt) {
+        try {
+            let result = fullPrompt;
+
+            // 1) 移除 AI记忆增强数据整体块（包含数据状态、历史/持久化/上下文记忆等）
+            const dataStatusStart = result.indexOf('【📊 当前数据状态（统一行视图）】');
+            if (dataStatusStart !== -1) {
+                // 寻找AI记忆增强块的结束位置（包括【🤖 AI生成指导】之后的内容）
+                const possibleEnds = [
+                    '🔍 **缺失字段详细列表',
+                    '【🔄 增量数据补充 - 重要】',
+                    '【📋 输出完整性检查清单】',
+                    '💥💥💥 **最终执行检查清单**',
+                    '【当前行索引提示】',
+                    '\n\n【', // 下一个大标题
+                ];
+
+                let endIndex = -1;
+                for (const endMarker of possibleEnds) {
+                    const idx = result.indexOf(endMarker, dataStatusStart);
+                    if (idx !== -1) {
+                        if (endIndex === -1 || idx < endIndex) {
+                            endIndex = idx;
+                        }
+                    }
+                }
+
+                if (endIndex !== -1) {
+                    const beforeData = result.substring(0, dataStatusStart);
+                    const afterData = result.substring(endIndex);
+                    result = (beforeData + afterData).trim();
+                } else {
+                    result = result.substring(0, dataStatusStart).trim();
+                }
+            }
+
+            // 2) 额外移除 “缺失字段详细列表（必须补充）” 块
+            const missingTitle = '缺失字段详细列表';
+            let missingStart = result.indexOf(missingTitle);
+            if (missingStart !== -1) {
+                // 寻找下一个可能的分段起始标记（下一个大标题/区块）
+                const markers = [
+                    '\n【', // 下一段以【 开头的大标题
+                    '【',   // 兜底：任意【 开头
+                    '💥💥💥', // 最终检查清单标题
+                    '【📋 输出完整性检查清单】',
+                    '\n\n【',
+                ];
+                let nextIndex = -1;
+                for (const m of markers) {
+                    const idx = result.indexOf(m, missingStart + 1);
+                    if (idx !== -1) {
+                        if (nextIndex === -1 || idx < nextIndex) nextIndex = idx;
+                    }
+                }
+
+                if (nextIndex !== -1) {
+                    result = (result.substring(0, missingStart) + result.substring(nextIndex)).trim();
+                } else {
+                    // 没有找到下一个分段标记，则截断到末尾
+                    result = result.substring(0, missingStart).trim();
+                }
+            }
+
+            return result;
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 过滤预览隐藏部分失败:', error);
+            return fullPrompt;
+        }
+    }
+
+    /**
+     * 🧠 保存提示词设置
+     */
+    async savePromptSettings() {
+        try {
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings['Information bar integration tool'] || {};
+
+            // 获取当前设置
+            const modeRadio = this.modal.querySelector('input[name="promptSettings.mode"]:checked');
+            const mode = modeRadio ? modeRadio.value : 'smart';
+            const customContent = this.modal.querySelector('#custom-prompt-content')?.value || '';
+
+            // 保存设置
+            configs.promptSettings = {
+                mode: mode,
+                customContent: customContent
+            };
+
+            // 保存到SillyTavern
+            extensionSettings['Information bar integration tool'] = configs;
+
+            // 使用configManager保存配置
+            if (this.configManager && typeof this.configManager.setConfig === 'function') {
+                await this.configManager.setConfig('promptSettings', configs.promptSettings);
+            }
+
+            // 使用SillyTavern的保存机制
+            if (typeof saveSettingsDebounced === 'function') {
+                saveSettingsDebounced();
+            }
+
+            console.log('[InfoBarSettings] ✅ 提示词设置已保存:', { mode, customContentLength: customContent.length });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 保存提示词设置失败:', error);
+        }
+    }
+
+    /**
+     * 🧠 加载提示词设置
+     */
+    async loadPromptSettings() {
+        try {
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings['Information bar integration tool'] || {};
+            const promptSettings = configs.promptSettings || {};
+
+            // 设置默认值
+            const mode = promptSettings.mode || 'smart';
+            const customContent = promptSettings.customContent || '';
+
+            // 更新UI
+            const smartRadio = this.modal.querySelector('#smart-prompt-mode');
+            const customRadio = this.modal.querySelector('#custom-prompt-mode');
+            const customTextarea = this.modal.querySelector('#custom-prompt-content');
+
+            if (smartRadio && customRadio) {
+                if (mode === 'smart') {
+                    smartRadio.checked = true;
+                } else {
+                    customRadio.checked = true;
+                }
+            }
+
+            if (customTextarea) {
+                customTextarea.value = customContent;
+            }
+
+            // 触发模式变化处理
+            this.handlePromptModeChange(mode);
+
+            // 更新统计信息
+            this.updateCustomPromptStats();
+
+            console.log('[InfoBarSettings] ✅ 提示词设置已加载:', { mode, customContentLength: customContent.length });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载提示词设置失败:', error);
         }
     }
 }
