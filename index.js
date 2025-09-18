@@ -328,6 +328,9 @@ class InformationBarIntegrationTool {
             this.eventSystem
         );
 
+        // 🔧 修复：调用InfoBarSettings的init方法，确保CustomAPITaskQueue被正确初始化
+        await this.infoBarSettings.init();
+
         // InfoBarSettings初始化完成后，检查并自动设置自定义API Hook
         await this.checkAndSetupCustomAPIHookAfterInit();
 
@@ -777,7 +780,9 @@ class InformationBarIntegrationTool {
                 npcDatabaseManager: this.npcDatabaseManager,
                 npcManagementPanel: this.npcManagementPanel,
                 worldBookManager: this.worldBookManager,
-                worldBookConfigPanel: this.worldBookConfigPanel
+                worldBookConfigPanel: this.worldBookConfigPanel,
+                // 🔧 修复：添加自定义API任务队列模块
+                customAPITaskQueue: this.infoBarSettings?.customAPITaskQueue
             };
 
             // 确保eventSource也被设置
