@@ -637,8 +637,10 @@ export class VectorizedMemoryRetrieval {
      */
     async vectorizeText(text) {
         try {
-            if (!text || typeof text !== 'string') {
-                throw new Error('无效的文本内容');
+            // 🔧 修复：更严格的输入验证和错误处理
+            if (!text || typeof text !== 'string' || text.trim().length === 0) {
+                console.warn('[VectorizedMemoryRetrieval] ⚠️ 无效的文本内容，返回null');
+                return null;
             }
             
             console.log('[VectorizedMemoryRetrieval] 🔢 向量化文本，长度:', text.length);

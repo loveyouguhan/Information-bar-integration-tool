@@ -26,14 +26,20 @@ export class SummaryManager {
         
         // 总结设置
         this.settings = {
-            autoSummaryEnabled: true,  // 🔧 修复：启用自动总结功能以增加记忆数据积累
+            autoSummaryEnabled: false,  // 🔧 修复：默认关闭自动总结功能
             summaryFloorCount: 20,
             summaryType: 'small',
             summaryWordCount: 300,
             injectSummaryEnabled: false,  // 🔧 新增：总结注入功能开关
             // 🔧 新增：自动隐藏楼层设置
             autoHideEnabled: false,
-            autoHideThreshold: 30
+            autoHideThreshold: 30,
+            // 📚 世界书上传相关（用于持久化UI选择）
+            autoUploadNewSummary: false,
+            worldBookEntryFormat: 'auto',
+            worldBookCustomEntryName: '',
+            worldBookAddTimestamp: true,
+            worldBookUseContentTags: true
         };
         
         // 状态管理
@@ -132,7 +138,19 @@ export class SummaryManager {
     updateSettings(newSettings) {
         try {
             console.log('[SummaryManager] 🔄 更新总结设置:', newSettings);
+            const oldSettings = { ...this.settings };
             this.settings = { ...this.settings, ...newSettings };
+
+            // 🔧 新增：触发设置变化事件，通知其他模块
+            if (this.eventSystem) {
+                this.eventSystem.emit('summary-settings:changed', {
+                    oldSettings,
+                    newSettings: this.settings,
+                    changedKeys: Object.keys(newSettings),
+                    timestamp: Date.now()
+                });
+            }
+
         } catch (error) {
             console.error('[SummaryManager] ❌ 更新设置失败:', error);
         }
@@ -299,7 +317,7 @@ export class SummaryManager {
             // 重新初始化消息计数
             await this.initMessageCount();
             
-            // 触发总结数据更新事件（供SummaryPanel和InfoBarSettings监听）
+            // 触发总结数据更新事件（供InfoBarSettings监听）
             if (this.eventSystem) {
                 this.eventSystem.emit('summary:chat:changed', {
                     chatId: data?.chatId || this.unifiedDataCore?.getCurrentChatId?.(),

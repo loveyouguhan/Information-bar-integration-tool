@@ -403,6 +403,12 @@ export class IntelligentMemoryClassifier {
      */
     basicSemanticClassification(memory) {
         try {
+            // 🔧 修复：添加严格的输入验证
+            if (!memory || !memory.content || typeof memory.content !== 'string') {
+                console.warn('[IntelligentMemoryClassifier] ⚠️ 无效的记忆内容，使用默认分类');
+                return { category: 'contextual', confidence: 0.3, method: 'invalid_input_fallback' };
+            }
+
             const content = memory.content.toLowerCase();
 
             // 基于关键词的基础分类
@@ -658,6 +664,12 @@ export class IntelligentMemoryClassifier {
      */
     extractContentFeatures(content) {
         try {
+            // 🔧 修复：添加严格的输入验证
+            if (!content || typeof content !== 'string') {
+                console.warn('[IntelligentMemoryClassifier] ⚠️ 无效的内容，返回默认特征');
+                return { length: 0, wordCount: 0, uniqueWords: 0, importance: 0.3 };
+            }
+
             const features = {
                 length: content.length,
                 wordCount: content.split(/\s+/).length,
@@ -1116,6 +1128,16 @@ export class IntelligentMemoryClassifier {
                 this.handleQualityAssessment(data);
             });
 
+            // 🔧 新增：监听消息删除事件
+            this.eventSystem.on('MESSAGE_DELETED', (data) => {
+                this.handleMessageDeleted(data);
+            });
+
+            // 🔧 新增：监听消息重新生成事件
+            this.eventSystem.on('MESSAGE_REGENERATED', (data) => {
+                this.handleMessageRegenerated(data);
+            });
+
             console.log('[IntelligentMemoryClassifier] ✅ 事件监听器绑定完成');
 
         } catch (error) {
@@ -1142,6 +1164,84 @@ export class IntelligentMemoryClassifier {
 
         } catch (error) {
             console.error('[IntelligentMemoryClassifier] ❌ 处理记忆添加事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理消息删除事件
+     */
+    async handleMessageDeleted(data) {
+        try {
+            console.log('[IntelligentMemoryClassifier] 🗑️ 处理消息删除事件');
+
+            if (!this.settings.enabled) return;
+
+            // 检查是否需要跳过回溯（用户消息删除）
+            if (data && data.skipRollback === true) {
+                console.log('[IntelligentMemoryClassifier] ℹ️ 跳过分类数据回溯（删除的是用户消息）');
+                return;
+            }
+
+            console.log('[IntelligentMemoryClassifier] 🔄 开始分类数据回溯...');
+
+            // 清理最近的分类历史
+            await this.clearRecentClassificationHistory();
+
+            console.log('[IntelligentMemoryClassifier] ✅ 消息删除分类回溯完成');
+
+        } catch (error) {
+            console.error('[IntelligentMemoryClassifier] ❌ 处理消息删除事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理消息重新生成事件
+     */
+    async handleMessageRegenerated(data) {
+        try {
+            console.log('[IntelligentMemoryClassifier] 🔄 处理消息重新生成事件');
+
+            if (!this.settings.enabled) return;
+
+            console.log('[IntelligentMemoryClassifier] 🔄 开始分类数据回溯（重新生成）...');
+
+            // 清理最近的分类历史
+            await this.clearRecentClassificationHistory();
+
+            console.log('[IntelligentMemoryClassifier] ✅ 消息重新生成分类回溯完成');
+
+        } catch (error) {
+            console.error('[IntelligentMemoryClassifier] ❌ 处理消息重新生成事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：清理最近的分类历史
+     */
+    async clearRecentClassificationHistory() {
+        try {
+            console.log('[IntelligentMemoryClassifier] 🧹 清理最近的分类历史...');
+
+            // 清理最近的分类历史（保留重要的历史数据）
+            const now = Date.now();
+            const recentThreshold = 30 * 60 * 1000; // 30分钟内的分类
+
+            const originalLength = this.classificationHistory.length;
+            this.classificationHistory = this.classificationHistory.filter(history => {
+                return now - history.timestamp > recentThreshold;
+            });
+
+            const removedCount = originalLength - this.classificationHistory.length;
+
+            // 重置分类统计
+            this.classificationStats.totalClassifications = this.classificationHistory.length;
+            this.classificationStats.lastClassificationTime = this.classificationHistory.length > 0 ?
+                this.classificationHistory[this.classificationHistory.length - 1].timestamp : 0;
+
+            console.log(`[IntelligentMemoryClassifier] ✅ 已清理 ${removedCount} 个最近的分类记录`);
+
+        } catch (error) {
+            console.error('[IntelligentMemoryClassifier] ❌ 清理分类历史失败:', error);
         }
     }
 

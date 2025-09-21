@@ -1151,6 +1151,11 @@ export class EventSystem {
      */
     extractMessageContent(messageData) {
         try {
+            // 🔧 修复：添加严格的输入验证
+            if (!messageData || typeof messageData !== 'object') {
+                return null;
+            }
+
             // 尝试不同的消息内容字段
             const possibleFields = ['mes', 'message', 'content', 'text'];
 
@@ -1488,20 +1493,21 @@ export class EventSystem {
             const deepMemoryManager = infoBarTool.modules.deepMemoryManager;
             const intelligentMemoryClassifier = infoBarTool.modules.intelligentMemoryClassifier;
 
+            // 🔧 修复：更严格的消息内容验证
+            const messageContent = this.extractMessageContent(messageData);
+            if (!messageContent || typeof messageContent !== 'string' || messageContent.trim().length < 10) {
+                console.log('[EventSystem] ⚠️ 消息内容无效或太短，跳过记忆处理');
+                return;
+            }
+
             // 准备记忆数据
             const memoryData = {
-                message: this.extractMessageContent(messageData) || '',
+                message: messageContent.trim(),
                 isUser: messageType === 'user_message',
                 timestamp: Date.now(),
                 messageType: messageType,
                 originalData: messageData
             };
-
-            // 只处理有内容的消息
-            if (!memoryData.message || memoryData.message.length < 10) {
-                console.log('[EventSystem] ⚠️ 消息内容太短，跳过记忆处理');
-                return;
-            }
 
             console.log('[EventSystem] 📝 处理记忆数据:', {
                 messageType: messageType,
@@ -1509,21 +1515,40 @@ export class EventSystem {
                 isUser: memoryData.isUser
             });
 
-            // 立即处理模式
+            // 🔧 修复：立即处理模式，添加错误处理和状态检查
             if (this.immediateMemoryProcessing) {
                 // 触发AI记忆总结
-                if (aiMemorySummarizer && aiMemorySummarizer.handleMessageReceived) {
-                    await aiMemorySummarizer.handleMessageReceived(memoryData);
+                if (aiMemorySummarizer && aiMemorySummarizer.handleMessageReceived && aiMemorySummarizer.settings?.enabled) {
+                    try {
+                        await aiMemorySummarizer.handleMessageReceived(memoryData);
+                    } catch (error) {
+                        console.error('[EventSystem] ❌ AI记忆总结处理失败:', error);
+                    }
                 }
 
                 // 触发深度记忆管理
-                if (deepMemoryManager && deepMemoryManager.handleMessageReceived) {
-                    await deepMemoryManager.handleMessageReceived(memoryData);
+                if (deepMemoryManager && deepMemoryManager.handleMessageReceived && deepMemoryManager.settings?.enabled) {
+                    try {
+                        await deepMemoryManager.handleMessageReceived(memoryData);
+                    } catch (error) {
+                        console.error('[EventSystem] ❌ 深度记忆管理处理失败:', error);
+                    }
                 }
 
                 // 触发智能记忆分类
-                if (intelligentMemoryClassifier && intelligentMemoryClassifier.handleMemoryAdded) {
-                    await intelligentMemoryClassifier.handleMemoryAdded({ memory: memoryData });
+                if (intelligentMemoryClassifier && intelligentMemoryClassifier.handleMemoryAdded && intelligentMemoryClassifier.settings?.enabled) {
+                    try {
+                        // 🔧 修复：确保传入正确格式的记忆对象
+                        const memoryForClassification = {
+                            content: memoryData.message,
+                            timestamp: memoryData.timestamp,
+                            isUser: memoryData.isUser,
+                            messageType: memoryData.messageType
+                        };
+                        await intelligentMemoryClassifier.handleMemoryAdded(memoryForClassification);
+                    } catch (error) {
+                        console.error('[EventSystem] ❌ 智能记忆分类处理失败:', error);
+                    }
                 }
             } else {
                 // 队列处理模式

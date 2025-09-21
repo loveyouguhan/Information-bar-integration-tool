@@ -320,6 +320,12 @@ export class AIMemoryDatabaseInjector {
             // 监听配置变更事件
             this.eventSystem.on('config:changed', this.handleConfigChanged.bind(this));
 
+            // 🔧 新增：监听消息删除事件
+            this.eventSystem.on('MESSAGE_DELETED', this.handleMessageDeleted.bind(this));
+
+            // 🔧 新增：监听消息重新生成事件
+            this.eventSystem.on('MESSAGE_REGENERATED', this.handleMessageRegenerated.bind(this));
+
             console.log('[AIMemoryDatabaseInjector] ✅ 内部事件监听器绑定完成');
 
         } catch (error) {
@@ -1409,6 +1415,82 @@ export class AIMemoryDatabaseInjector {
             }
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 处理配置变更事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理消息删除事件
+     */
+    async handleMessageDeleted(data) {
+        try {
+            console.log('[AIMemoryDatabaseInjector] 🗑️ 处理消息删除事件');
+
+            if (!this.initialized) return;
+
+            // 检查是否需要跳过回溯（用户消息删除）
+            if (data && data.skipRollback === true) {
+                console.log('[AIMemoryDatabaseInjector] ℹ️ 跳过记忆回溯（删除的是用户消息）');
+                return;
+            }
+
+            console.log('[AIMemoryDatabaseInjector] 🔄 开始记忆数据回溯...');
+
+            // 清理最近的记忆数据
+            await this.clearRecentMemoryData();
+
+            console.log('[AIMemoryDatabaseInjector] ✅ 消息删除记忆回溯完成');
+
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 处理消息删除事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理消息重新生成事件
+     */
+    async handleMessageRegenerated(data) {
+        try {
+            console.log('[AIMemoryDatabaseInjector] 🔄 处理消息重新生成事件');
+
+            if (!this.initialized) return;
+
+            console.log('[AIMemoryDatabaseInjector] 🔄 开始记忆数据回溯（重新生成）...');
+
+            // 清理最近的记忆数据
+            await this.clearRecentMemoryData();
+
+            console.log('[AIMemoryDatabaseInjector] ✅ 消息重新生成记忆回溯完成');
+
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 处理消息重新生成事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：清理最近的记忆数据
+     */
+    async clearRecentMemoryData() {
+        try {
+            console.log('[AIMemoryDatabaseInjector] 🧹 清理最近的记忆数据...');
+
+            // 清理感知记忆（最新的记忆）
+            const sensoryCount = this.memoryDatabase.sensoryMemory.size;
+            this.memoryDatabase.sensoryMemory.clear();
+
+            // 清理短期记忆中的最近记忆（保留重要的记忆）
+            const now = Date.now();
+            const recentThreshold = 30 * 60 * 1000; // 30分钟内的记忆
+
+            for (const [id, memory] of this.memoryDatabase.shortTermMemory) {
+                if (now - memory.timestamp < recentThreshold) {
+                    this.memoryDatabase.shortTermMemory.delete(id);
+                }
+            }
+
+            console.log(`[AIMemoryDatabaseInjector] ✅ 已清理 ${sensoryCount} 个感知记忆和最近的短期记忆`);
+
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 清理最近记忆失败:', error);
         }
     }
 

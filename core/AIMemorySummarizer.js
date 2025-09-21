@@ -22,7 +22,7 @@ export class AIMemorySummarizer {
         
         // AI总结设置
         this.settings = {
-            enabled: true,                     // 🔧 修复：启用AI总结以增加记忆数据积累
+            enabled: false,                    // 🔧 修复：默认关闭AI总结，避免自动开启
             // 🔧 修改：启用消息级别处理，不再跟随楼层触发
             followSummaryFloor: false,         // ❌ 不跟随楼层，改为消息级别触发
             messageLevelSummary: true,         // ✅ 启用消息级别总结，每条重要消息都会触发
@@ -68,26 +68,29 @@ export class AIMemorySummarizer {
     async init() {
         try {
             console.log('[AIMemorySummarizer] 📊 开始初始化AI记忆总结器...');
-            
+
             // 加载设置
             await this.loadSettings();
-            
+
+            // 🔧 新增：与SummaryManager设置同步
+            await this.syncWithSummaryManager();
+
             // 绑定事件监听器
             this.bindEventListeners();
-            
+
             // 初始化缓存
             await this.initializeCache();
-            
+
             this.initialized = true;
             console.log('[AIMemorySummarizer] ✅ AI记忆总结器初始化完成');
-            
+
             // 触发初始化完成事件
             if (this.eventSystem) {
                 this.eventSystem.emit('ai-memory-summarizer:initialized', {
                     timestamp: Date.now()
                 });
             }
-            
+
         } catch (error) {
             console.error('[AIMemorySummarizer] ❌ 初始化失败:', error);
             this.handleError(error);
@@ -100,15 +103,36 @@ export class AIMemorySummarizer {
     async loadSettings() {
         try {
             console.log('[AIMemorySummarizer] 📥 加载AI总结设置...');
-            
+
             if (!this.unifiedDataCore) return;
-            
-            const savedSettings = await this.unifiedDataCore.getData('ai_memory_summarizer_settings');
-            if (savedSettings) {
-                this.settings = { ...this.settings, ...savedSettings };
-                console.log('[AIMemorySummarizer] ✅ AI总结设置加载完成:', this.settings);
+
+            // 🔧 修复：优先从扩展设置中加载，然后从UnifiedDataCore加载
+            let settingsLoaded = false;
+
+            // 1. 尝试从SillyTavern扩展设置中加载
+            try {
+                const context = SillyTavern?.getContext?.();
+                const extensionSettings = context?.extensionSettings?.['Information bar integration tool'];
+                const memoryEnhancementSettings = extensionSettings?.memoryEnhancement?.ai;
+
+                if (memoryEnhancementSettings && typeof memoryEnhancementSettings === 'object') {
+                    this.settings = { ...this.settings, ...memoryEnhancementSettings };
+                    console.log('[AIMemorySummarizer] ✅ 从扩展设置加载AI总结设置:', this.settings);
+                    settingsLoaded = true;
+                }
+            } catch (extensionError) {
+                console.warn('[AIMemorySummarizer] ⚠️ 从扩展设置加载失败:', extensionError);
             }
-            
+
+            // 2. 如果扩展设置没有加载成功，从UnifiedDataCore加载
+            if (!settingsLoaded) {
+                const savedSettings = await this.unifiedDataCore.getData('ai_memory_summarizer_settings');
+                if (savedSettings) {
+                    this.settings = { ...this.settings, ...savedSettings };
+                    console.log('[AIMemorySummarizer] ✅ 从UnifiedDataCore加载AI总结设置:', this.settings);
+                }
+            }
+
         } catch (error) {
             console.error('[AIMemorySummarizer] ❌ 加载设置失败:', error);
         }
@@ -121,12 +145,36 @@ export class AIMemorySummarizer {
         try {
             console.log('[AIMemorySummarizer] 🔄 更新AI总结设置:', newSettings);
             this.settings = { ...this.settings, ...newSettings };
-            
-            // 保存设置
+
+            // 🔧 修复：同时保存到UnifiedDataCore和扩展设置
+            // 1. 保存到UnifiedDataCore
             if (this.unifiedDataCore) {
                 await this.unifiedDataCore.setData('ai_memory_summarizer_settings', this.settings);
             }
-            
+
+            // 2. 保存到SillyTavern扩展设置
+            try {
+                const context = SillyTavern?.getContext?.();
+                if (context?.extensionSettings) {
+                    if (!context.extensionSettings['Information bar integration tool']) {
+                        context.extensionSettings['Information bar integration tool'] = {};
+                    }
+                    if (!context.extensionSettings['Information bar integration tool'].memoryEnhancement) {
+                        context.extensionSettings['Information bar integration tool'].memoryEnhancement = {};
+                    }
+
+                    context.extensionSettings['Information bar integration tool'].memoryEnhancement.ai = {
+                        enabled: this.settings.enabled,
+                        messageLevelSummary: this.settings.messageLevelSummary,
+                        importanceThreshold: this.settings.importanceThreshold
+                    };
+
+                    console.log('[AIMemorySummarizer] ✅ 设置已同步到扩展设置');
+                }
+            } catch (extensionError) {
+                console.warn('[AIMemorySummarizer] ⚠️ 同步到扩展设置失败:', extensionError);
+            }
+
         } catch (error) {
             console.error('[AIMemorySummarizer] ❌ 更新设置失败:', error);
         }
@@ -138,26 +186,31 @@ export class AIMemorySummarizer {
     bindEventListeners() {
         try {
             console.log('[AIMemorySummarizer] 🔗 绑定事件监听器...');
-            
+
             if (!this.eventSystem) return;
-            
+
             // 监听消息接收事件
             this.eventSystem.on('message:received', (data) => {
                 this.handleMessageReceived(data);
             });
-            
+
             // 监听总结完成事件
             this.eventSystem.on('summary:created', (data) => {
                 this.handleSummaryCreated(data);
             });
-            
+
             // 监听聊天切换事件
             this.eventSystem.on('chat:changed', (data) => {
                 this.handleChatChanged(data);
             });
-            
+
+            // 🔧 新增：监听SummaryManager设置变化事件
+            this.eventSystem.on('summary-settings:changed', (data) => {
+                this.handleSummarySettingsChanged(data);
+            });
+
             console.log('[AIMemorySummarizer] ✅ 事件监听器绑定完成');
-            
+
         } catch (error) {
             console.error('[AIMemorySummarizer] ❌ 绑定事件监听器失败:', error);
         }
@@ -648,6 +701,53 @@ ${messageContent}
 
         } catch (error) {
             console.error('[AIMemorySummarizer] ❌ 处理聊天切换事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 修复：处理SummaryManager设置变化事件（移除强制同步）
+     */
+    async handleSummarySettingsChanged(data) {
+        try {
+            console.log('[AIMemorySummarizer] 🔄 SummaryManager设置变化事件接收');
+
+            // 🔧 修复：不再强制同步enabled状态
+            // AI记忆总结应该保持独立的启用状态，不被SummaryManager的autoSummaryEnabled影响
+
+            if (data && data.newSettings) {
+                console.log('[AIMemorySummarizer] 📊 SummaryManager新设置:', data.newSettings);
+                console.log('[AIMemorySummarizer] ✅ AI记忆总结保持独立设置，当前状态:', this.settings.enabled);
+
+                // 可以在这里处理其他需要同步的设置，但不包括enabled状态
+                // 例如：总结字数限制、重要性阈值等
+            }
+
+        } catch (error) {
+            console.error('[AIMemorySummarizer] ❌ 处理SummaryManager设置变化失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 修复：与SummaryManager设置同步（移除强制同步enabled状态）
+     */
+    async syncWithSummaryManager() {
+        try {
+            console.log('[AIMemorySummarizer] 🔄 与SummaryManager设置同步...');
+
+            if (this.summaryManager && this.summaryManager.settings) {
+                const summarySettings = this.summaryManager.settings;
+
+                // 🔧 修复：不再强制同步enabled状态，AI记忆总结应该保持独立设置
+                // AI记忆总结的启用状态应该由用户在记忆增强面板中独立控制
+                // 而不是被SummaryManager的autoSummaryEnabled覆盖
+
+                console.log('[AIMemorySummarizer] ✅ 保持AI记忆总结独立设置，不被SummaryManager覆盖');
+                console.log('[AIMemorySummarizer] 📊 当前AI记忆总结状态:', this.settings.enabled);
+                console.log('[AIMemorySummarizer] 📊 SummaryManager自动总结状态:', summarySettings.autoSummaryEnabled);
+            }
+
+        } catch (error) {
+            console.error('[AIMemorySummarizer] ❌ 与SummaryManager设置同步失败:', error);
         }
     }
 

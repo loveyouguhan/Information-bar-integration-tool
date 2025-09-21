@@ -622,6 +622,12 @@ export class DeepMemoryManager {
      */
     async classifyMemoryCategory(memory) {
         try {
+            // 🔧 修复：添加严格的输入验证
+            if (!memory || !memory.content || typeof memory.content !== 'string') {
+                console.warn('[DeepMemoryManager] ⚠️ 无效的记忆内容，使用默认分类');
+                return 'contextual';
+            }
+
             const content = memory.content.toLowerCase();
 
             // 情节记忆 - 具体事件和经历
@@ -975,6 +981,16 @@ export class DeepMemoryManager {
                 this.handleVectorizedMemoryIndexed(data);
             });
 
+            // 🔧 新增：监听消息删除事件
+            this.eventSystem.on('MESSAGE_DELETED', (data) => {
+                this.handleMessageDeleted(data);
+            });
+
+            // 🔧 新增：监听消息重新生成事件
+            this.eventSystem.on('MESSAGE_REGENERATED', (data) => {
+                this.handleMessageRegenerated(data);
+            });
+
             console.log('[DeepMemoryManager] ✅ 事件监听器绑定完成');
 
         } catch (error) {
@@ -1204,11 +1220,16 @@ export class DeepMemoryManager {
 
             if (!this.unifiedDataCore) return;
 
-            // 加载各层记忆数据
+            // 🔧 修复：获取当前聊天ID，按聊天分别存储记忆数据
+            const currentChatId = this.unifiedDataCore.getCurrentChatId?.() || 'default';
+            console.log('[DeepMemoryManager] 📍 当前聊天ID:', currentChatId);
+
+            // 加载各层记忆数据，使用聊天ID作为前缀
             const layerNames = ['sensory', 'shortTerm', 'longTerm', 'deepArchive'];
 
             for (const layerName of layerNames) {
-                const layerData = await this.unifiedDataCore.getData(`deep_memory_${layerName}`);
+                const layerKey = `deep_memory_${layerName}_${currentChatId}`;
+                const layerData = await this.unifiedDataCore.getData(layerKey);
                 if (layerData) {
                     for (const [id, memory] of Object.entries(layerData)) {
                         this.memoryLayers[layerName].set(id, memory);
@@ -1218,7 +1239,7 @@ export class DeepMemoryManager {
                 }
             }
 
-            console.log(`[DeepMemoryManager] ✅ 已加载 ${this.stats.totalMemories} 个记忆`);
+            console.log(`[DeepMemoryManager] ✅ 已加载 ${this.stats.totalMemories} 个记忆 (聊天: ${currentChatId})`);
 
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 加载现有记忆数据失败:', error);
@@ -1234,13 +1255,18 @@ export class DeepMemoryManager {
 
             if (!this.unifiedDataCore) return;
 
-            // 保存各层记忆数据
+            // 🔧 修复：获取当前聊天ID，按聊天分别保存记忆数据
+            const currentChatId = this.unifiedDataCore.getCurrentChatId?.() || 'default';
+            console.log('[DeepMemoryManager] 📍 保存到聊天:', currentChatId);
+
+            // 保存各层记忆数据，使用聊天ID作为前缀
             for (const [layerName, layer] of Object.entries(this.memoryLayers)) {
                 const layerData = Object.fromEntries(layer);
-                await this.unifiedDataCore.setData(`deep_memory_${layerName}`, layerData);
+                const layerKey = `deep_memory_${layerName}_${currentChatId}`;
+                await this.unifiedDataCore.setData(layerKey, layerData);
             }
 
-            console.log('[DeepMemoryManager] ✅ 记忆数据保存完成');
+            console.log(`[DeepMemoryManager] ✅ 记忆数据保存完成 (聊天: ${currentChatId})`);
 
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 保存记忆数据失败:', error);
@@ -1256,16 +1282,30 @@ export class DeepMemoryManager {
 
             if (!this.settings.enabled) return;
 
-            // 保存当前记忆数据
+            // 保存当前聊天的记忆数据
             await this.saveMemoryData();
 
-            // 清理临时记忆
+            // 🔧 修复：清理所有层级的记忆数据，而不仅仅是sensory层
+            console.log('[DeepMemoryManager] 🧹 清理所有记忆层级...');
             this.memoryLayers.sensory.clear();
+            this.memoryLayers.shortTerm.clear();
+            this.memoryLayers.longTerm.clear();
+            this.memoryLayers.deepArchive.clear();
 
-            // 重置统计信息
+            // 🔧 修复：清理记忆索引
+            this.memoryIndex.clear();
+
+            // 🔧 修复：重置统计信息
+            this.stats.totalMemories = 0;
+            this.stats.memoryMigrations = 0;
             this.stats.lastMaintenanceTime = Date.now();
 
+            // 🔧 修复：重新加载新聊天的记忆数据
+            console.log('[DeepMemoryManager] 📥 重新加载新聊天的记忆数据...');
+            await this.loadExistingMemories();
+
             console.log('[DeepMemoryManager] ✅ 聊天切换处理完成');
+            console.log(`[DeepMemoryManager] 📊 新聊天记忆统计: 总计 ${this.stats.totalMemories} 个记忆`);
 
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 处理聊天切换事件失败:', error);
@@ -1294,6 +1334,108 @@ export class DeepMemoryManager {
 
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 处理向量化记忆索引事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理消息删除事件
+     */
+    async handleMessageDeleted(data) {
+        try {
+            console.log('[DeepMemoryManager] 🗑️ 处理消息删除事件');
+
+            if (!this.settings.enabled) return;
+
+            // 检查是否需要跳过回溯（用户消息删除）
+            if (data && data.skipRollback === true) {
+                console.log('[DeepMemoryManager] ℹ️ 跳过记忆回溯（删除的是用户消息）');
+                return;
+            }
+
+            console.log('[DeepMemoryManager] 🔄 开始记忆数据回溯...');
+
+            // 获取当前聊天ID
+            const chatId = data?.chatId || this.unifiedDataCore?.getCurrentChatId();
+            if (!chatId) {
+                console.warn('[DeepMemoryManager] ⚠️ 无法获取聊天ID，跳过记忆回溯');
+                return;
+            }
+
+            // 清理最近的记忆数据（感知记忆层）
+            await this.clearRecentMemories();
+
+            // 重新加载记忆数据
+            await this.loadExistingMemories();
+
+            console.log('[DeepMemoryManager] ✅ 消息删除记忆回溯完成');
+
+        } catch (error) {
+            console.error('[DeepMemoryManager] ❌ 处理消息删除事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理消息重新生成事件
+     */
+    async handleMessageRegenerated(data) {
+        try {
+            console.log('[DeepMemoryManager] 🔄 处理消息重新生成事件');
+
+            if (!this.settings.enabled) return;
+
+            // 获取当前聊天ID
+            const chatId = data?.chatId || this.unifiedDataCore?.getCurrentChatId();
+            if (!chatId) {
+                console.warn('[DeepMemoryManager] ⚠️ 无法获取聊天ID，跳过记忆回溯');
+                return;
+            }
+
+            console.log('[DeepMemoryManager] 🔄 开始记忆数据回溯（重新生成）...');
+
+            // 清理最近的记忆数据
+            await this.clearRecentMemories();
+
+            // 重新加载记忆数据
+            await this.loadExistingMemories();
+
+            console.log('[DeepMemoryManager] ✅ 消息重新生成记忆回溯完成');
+
+        } catch (error) {
+            console.error('[DeepMemoryManager] ❌ 处理消息重新生成事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：清理最近的记忆数据
+     */
+    async clearRecentMemories() {
+        try {
+            console.log('[DeepMemoryManager] 🧹 清理最近的记忆数据...');
+
+            // 清理感知记忆层（最新的记忆）
+            const sensoryMemoryCount = this.memoryLayers.sensory.size;
+            this.memoryLayers.sensory.clear();
+
+            // 清理短期记忆中的最近记忆（保留重要的长期记忆）
+            const now = Date.now();
+            const recentThreshold = 30 * 60 * 1000; // 30分钟内的记忆
+
+            for (const [id, memory] of this.memoryLayers.shortTerm) {
+                if (now - memory.timestamp < recentThreshold) {
+                    this.memoryLayers.shortTerm.delete(id);
+                    this.memoryIndex.delete(id);
+                }
+            }
+
+            // 更新统计信息
+            this.stats.totalMemories = this.memoryLayers.shortTerm.size +
+                                      this.memoryLayers.longTerm.size +
+                                      this.memoryLayers.deepArchive.size;
+
+            console.log(`[DeepMemoryManager] ✅ 已清理 ${sensoryMemoryCount} 个感知记忆和最近的短期记忆`);
+
+        } catch (error) {
+            console.error('[DeepMemoryManager] ❌ 清理最近记忆失败:', error);
         }
     }
 
