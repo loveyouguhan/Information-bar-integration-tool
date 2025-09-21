@@ -4587,6 +4587,9 @@ export class InfoBarSettings {
             });
             this.modal.querySelector(`[data-nav="${contentType}"]`).classList.add('active');
 
+            // 🔧 修复：重新应用导航项主题样式
+            this.applyNavItemTheme();
+
             // 更新内容面板
             this.modal.querySelectorAll('.content-panel').forEach(panel => {
                 panel.classList.remove('active');
@@ -7051,11 +7054,19 @@ export class InfoBarSettings {
             };
             const getVal = (id) => this.modal.querySelector(`#${id}`)?.value;
 
+            // 🔧 修复：确保AI记忆总结设置与后端模块同步
+            const infoBarTool = window.SillyTavernInfobar;
+            const summaryManager = infoBarTool?.modules?.summaryManager;
+            const aiMemorySummarizer = summaryManager?.aiMemorySummarizer;
+
+            // 优先使用后端模块的当前设置，确保与实际状态同步
+            const aiSettings = aiMemorySummarizer?.settings || {};
+
             const data = {
                 ai: {
-                    enabled: getBool('memory-ai-memory-enabled'),
-                    messageLevelSummary: getBool('memory-ai-message-level-summary'),
-                    importanceThreshold: getNum('memory-ai-importance-threshold')
+                    enabled: aiSettings.enabled !== undefined ? aiSettings.enabled : getBool('memory-ai-memory-enabled'),
+                    messageLevelSummary: aiSettings.messageLevelSummary !== undefined ? aiSettings.messageLevelSummary : getBool('memory-ai-message-level-summary'),
+                    importanceThreshold: aiSettings.importanceThreshold !== undefined ? aiSettings.importanceThreshold : getNum('memory-ai-importance-threshold')
                 },
                 vector: {
                     enabled: getBool('memory-vectorized-memory-enabled'),
@@ -14962,12 +14973,28 @@ export class InfoBarSettings {
             this.modal.style.color = theme.colors.text;
             this.modal.style.borderColor = theme.colors.border;
 
-            // 应用到所有相关元素
-            const elements = this.modal.querySelectorAll('.modal-header, .modal-body, .modal-footer, .nav-item, .content-panel');
+            // 应用到所有相关元素，但排除导航项
+            const elements = this.modal.querySelectorAll('.modal-header, .modal-body, .modal-footer, .content-panel');
             elements.forEach(element => {
                 element.style.backgroundColor = theme.colors.bg;
                 element.style.color = theme.colors.text;
                 element.style.borderColor = theme.colors.border;
+            });
+
+            // 🔧 修复：单独处理导航项，保持激活状态的正确样式
+            const navItems = this.modal.querySelectorAll('.nav-item');
+            navItems.forEach(navItem => {
+                if (navItem.classList.contains('active')) {
+                    // 激活状态的导航项使用主题色
+                    navItem.style.backgroundColor = theme.colors.primary;
+                    navItem.style.color = theme.colors.text;
+                    navItem.style.borderLeftColor = theme.colors.primary;
+                } else {
+                    // 非激活状态的导航项使用背景色
+                    navItem.style.backgroundColor = theme.colors.bg;
+                    navItem.style.color = theme.colors.text;
+                    navItem.style.borderColor = theme.colors.border;
+                }
             });
 
             // 🔧 修复：应用主题到总结面板特定元素
@@ -14978,6 +15005,49 @@ export class InfoBarSettings {
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 应用主题到信息栏设置失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：单独应用导航项主题样式
+     */
+    applyNavItemTheme() {
+        try {
+            if (!this.modal) return;
+
+            // 获取当前激活的主题
+            const activeThemeCard = this.modal.querySelector('.theme-preview-card.active');
+            if (!activeThemeCard) {
+                console.log('[InfoBarSettings] ⚠️ 未找到激活的主题卡片');
+                return;
+            }
+
+            const themeId = activeThemeCard.getAttribute('data-theme');
+            const currentTheme = this.getThemeById(themeId);
+            if (!currentTheme || !currentTheme.colors) {
+                console.log('[InfoBarSettings] ⚠️ 未找到主题配置:', themeId);
+                return;
+            }
+
+            // 应用导航项主题样式
+            const navItems = this.modal.querySelectorAll('.nav-item');
+            navItems.forEach(navItem => {
+                if (navItem.classList.contains('active')) {
+                    // 激活状态的导航项使用主题色
+                    navItem.style.backgroundColor = currentTheme.colors.primary;
+                    navItem.style.color = currentTheme.colors.text;
+                    navItem.style.borderLeftColor = currentTheme.colors.primary;
+                } else {
+                    // 非激活状态的导航项使用背景色
+                    navItem.style.backgroundColor = currentTheme.colors.bg;
+                    navItem.style.color = currentTheme.colors.text;
+                    navItem.style.borderColor = currentTheme.colors.border;
+                }
+            });
+
+            console.log('[InfoBarSettings] ✅ 导航项主题应用完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 导航项主题应用失败:', error);
         }
     }
 
@@ -19107,6 +19177,34 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 autoHideThreshold.value = settings.autoHideThreshold || 30;
             }
 
+            // 📚 新增：世界书上传持久化设置回填
+            const wbAutoEl = this.modal.querySelector('#worldbook-auto-upload');
+            if (wbAutoEl) {
+                wbAutoEl.checked = settings.autoUploadNewSummary || false;
+            }
+
+            const entryFormatEl = this.modal.querySelector('#worldbook-entry-format');
+            const customRow = this.modal.querySelector('#worldbook-custom-name-row');
+            if (entryFormatEl) {
+                entryFormatEl.value = settings.worldBookEntryFormat || 'auto';
+                if (customRow) customRow.style.display = (entryFormatEl.value === 'custom') ? 'block' : 'none';
+            }
+
+            const customNameEl = this.modal.querySelector('#worldbook-custom-name');
+            if (customNameEl) {
+                customNameEl.value = settings.worldBookCustomEntryName || '';
+            }
+
+            const addTsEl = this.modal.querySelector('#worldbook-add-timestamp');
+            if (addTsEl) {
+                addTsEl.checked = settings.worldBookAddTimestamp !== false;
+            }
+
+            const useTagsEl = this.modal.querySelector('#worldbook-use-tags');
+            if (useTagsEl) {
+                useTagsEl.checked = settings.worldBookUseContentTags !== false;
+            }
+
             console.log('[InfoBarSettings] ✅ 总结设置加载完成');
 
         } catch (error) {
@@ -19942,7 +20040,13 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             injectSummaryEnabled: false,  // 🔧 新增：注入总结设置
             // 🔧 新增：自动隐藏楼层设置
             autoHideEnabled: false,
-            autoHideThreshold: 30
+            autoHideThreshold: 30,
+            // 📚 世界书上传相关（用于持久化保存）
+            autoUploadNewSummary: false,
+            worldBookEntryFormat: 'auto',
+            worldBookCustomEntryName: '',
+            worldBookAddTimestamp: true,
+            worldBookUseContentTags: true
         };
 
         try {
@@ -19981,6 +20085,32 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             const autoHideThreshold = this.modal.querySelector('#content-auto-hide-threshold');
             if (autoHideThreshold) {
                 settings.autoHideThreshold = parseInt(autoHideThreshold.value) || 30;
+            }
+
+            // 📚 新增：获取“自动上传新总结”与“条目命名格式”等世界书上传设置
+            const wbAuto = this.modal.querySelector('#worldbook-auto-upload');
+            if (wbAuto) {
+                settings.autoUploadNewSummary = wbAuto.checked;
+            }
+
+            const entryFormatEl = this.modal.querySelector('#worldbook-entry-format');
+            if (entryFormatEl) {
+                settings.worldBookEntryFormat = entryFormatEl.value || 'auto';
+            }
+
+            const customNameEl = this.modal.querySelector('#worldbook-custom-name');
+            if (customNameEl) {
+                settings.worldBookCustomEntryName = customNameEl.value || '';
+            }
+
+            const addTsEl = this.modal.querySelector('#worldbook-add-timestamp');
+            if (addTsEl) {
+                settings.worldBookAddTimestamp = addTsEl.checked !== false;
+            }
+
+            const useTagsEl = this.modal.querySelector('#worldbook-use-tags');
+            if (useTagsEl) {
+                settings.worldBookUseContentTags = useTagsEl.checked !== false;
             }
 
         } catch (error) {
@@ -30257,7 +30387,7 @@ ${dataExamples}
                 memImpEl.value = v;
                 if (memImpVal) memImpVal.textContent = `${Math.round(v * 100)}%`;
             }
-            if (confResEl) confResEl.checked = !!deepSettings.conflictResolution;
+            if (confResEl) confResEl.checked = !!deepSettings.memoryConflictResolution;
             if (capSens && deepSettings.capacities?.sensory) capSens.value = deepSettings.capacities.sensory;
             if (capShort && deepSettings.capacities?.shortTerm) capShort.value = deepSettings.capacities.shortTerm;
             if (capLong && deepSettings.capacities?.longTerm) capLong.value = deepSettings.capacities.longTerm;
@@ -30285,7 +30415,7 @@ ${dataExamples}
                 clfConf.value = v;
                 if (clfConfVal) clfConfVal.textContent = `${Math.round(v * 100)}%`;
             }
-            if (adapLearn) adapLearn.checked = !!clfSettings.adaptiveLearning;
+            if (adapLearn) adapLearn.checked = !!clfSettings.adaptationEnabled;
 
             console.log('[InfoBarSettings] ✅ 记忆增强设置加载完成');
         } catch (error) {
