@@ -38,7 +38,6 @@ import { AIMemoryDatabaseInjector } from './core/AIMemoryDatabaseInjector.js';
 import { InfoBarSettings } from './ui/InfoBarSettings.js';
 import { DataTable } from './ui/DataTable.js';
 import { MessageInfoBarRenderer } from './ui/MessageInfoBarRenderer.js';
-import { SummaryPanel } from './ui/SummaryPanel.js';
 import { SummaryManager } from './core/SummaryManager.js';
 import { AIMemorySummarizer } from './core/AIMemorySummarizer.js';
 import { VectorizedMemoryRetrieval } from './core/VectorizedMemoryRetrieval.js';
@@ -116,7 +115,6 @@ class InformationBarIntegrationTool {
         // UI组件
         this.infoBarSettings = null;
         this.dataTable = null;
-        this.summaryPanel = null;
 
         // 总结功能
         this.summaryManager = null;
@@ -418,14 +416,6 @@ class InformationBarIntegrationTool {
             this.stscriptDataSync.setSummaryManager(this.summaryManager);
         }
 
-        // 初始化总结面板
-        this.summaryPanel = new SummaryPanel(
-            this.dataCore,
-            this.eventSystem,
-            this.summaryManager
-        );
-        await this.summaryPanel.init();
-
         // 初始化前端显示管理器
         this.frontendDisplayManager = new FrontendDisplayManager(
             this.configManager,
@@ -466,7 +456,6 @@ class InformationBarIntegrationTool {
             deepMemoryManager: this.deepMemoryManager,
             intelligentMemoryClassifier: this.intelligentMemoryClassifier,
             aiMemoryDatabaseInjector: this.aiMemoryDatabaseInjector,
-            summaryPanel: this.summaryPanel,
             frontendDisplayManager: this.frontendDisplayManager,
             fieldRuleManager: this.fieldRuleManager,
             panelRuleManager: this.panelRuleManager,
@@ -769,7 +758,6 @@ class InformationBarIntegrationTool {
                 deepMemoryManager: this.deepMemoryManager,
                 intelligentMemoryClassifier: this.intelligentMemoryClassifier,
                 aiMemoryDatabaseInjector: this.aiMemoryDatabaseInjector, // 🧠 添加：AI记忆数据库注入器
-                summaryPanel: this.summaryPanel,
                 frontendDisplayManager: this.frontendDisplayManager,
                 fieldRuleManager: this.fieldRuleManager,
                 panelRuleManager: this.panelRuleManager,

@@ -3415,6 +3415,71 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     cursor: pointer;
 }
 
+/* 🔧 统一复选框样式修复 - 解决不同面板复选框样式不一致问题 */
+.infobar-modal-new input[type="checkbox"] {
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    max-width: 16px !important;
+    accent-color: var(--theme-primary-color, #4299e1) !important;
+    cursor: pointer !important;
+    margin: 0 !important;
+    appearance: none !important;
+    border: 2px solid var(--theme-border-color, #dee2e6) !important;
+    border-radius: 3px !important;
+    background: var(--theme-background-secondary, #ffffff) !important;
+    position: relative !important;
+    transition: all 0.2s ease !important;
+    flex-shrink: 0 !important;
+}
+
+/* 特别针对 checkbox-label 类的复选框 */
+.infobar-modal-new .checkbox-label input[type="checkbox"] {
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    max-width: 16px !important;
+}
+
+/* 复选框选中状态 */
+.infobar-modal-new input[type="checkbox"]:checked {
+    background: var(--theme-primary-color, #4299e1) !important;
+    border-color: var(--theme-primary-color, #4299e1) !important;
+}
+
+/* 复选框选中标记 */
+.infobar-modal-new input[type="checkbox"]:checked::after {
+    content: '✓' !important;
+    position: absolute !important;
+    top: -1px !important;
+    left: 2px !important;
+    color: white !important;
+    font-size: 12px !important;
+    font-weight: bold !important;
+    line-height: 1 !important;
+}
+
+/* 复选框悬停效果 */
+.infobar-modal-new input[type="checkbox"]:hover {
+    border-color: var(--theme-primary-color, #4299e1) !important;
+    box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.2) !important;
+}
+
+/* 确保开关样式复选框不受影响 */
+.infobar-modal-new .toggle-switch input[type="checkbox"] {
+    width: 0px !important;
+    height: 0px !important;
+    opacity: 0 !important;
+    position: absolute !important;
+    appearance: none !important;
+    border: none !important;
+    background: none !important;
+}
+
+.infobar-modal-new .toggle-switch input[type="checkbox"]::after {
+    display: none !important;
+}
+
 /* 底部状态栏 */
 .datatable-modal-new .modal-footer {
     background: var(--theme-bg-secondary, #1a1a1a);
