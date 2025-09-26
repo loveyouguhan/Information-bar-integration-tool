@@ -134,9 +134,9 @@ export class EventSystem {
      */
     bindSillyTavernEvents() {
         try {
-            // 获取SillyTavern上下文
-            const context = SillyTavern?.getContext?.();
-            
+            // 🔧 修复：直接从window获取SillyTavern上下文
+            const context = window.SillyTavern?.getContext?.();
+
             if (context) {
                 this.sillyTavernEventSource = context.eventSource;
                 // 🔧 修复：使用正确的事件类型属性名
@@ -148,9 +148,12 @@ export class EventSystem {
                 // 立即设置事件代理
                 this.setupEventProxies();
                 this.bindMessageEvents();
+
+                // 🔧 新增：立即启动记忆处理监听器
+                this.startMemoryProcessingListener();
             } else {
                 console.warn('[EventSystem] ⚠️ 无法获取SillyTavern事件系统，将在稍后重试');
-                
+
                 // 延迟重试
                 setTimeout(() => {
                     this.bindSillyTavernEvents();
@@ -1454,14 +1457,26 @@ export class EventSystem {
             console.log('[EventSystem] 🧠 启动记忆处理监听器...');
 
             // 监听SillyTavern的消息事件，直接触发记忆处理
-            if (this.sillyTavernEventSource) {
-                // 监听消息发送事件
-                this.sillyTavernEventSource.on('message_sent', (data) => {
+            if (this.sillyTavernEventSource && this.sillyTavernEventTypes) {
+                // 🔧 修复：使用正确的事件类型常量
+                this.sillyTavernEventSource.on(this.sillyTavernEventTypes.MESSAGE_SENT, (data) => {
+                    console.log('[EventSystem] 📤 收到MESSAGE_SENT事件，触发记忆处理');
                     this.triggerMemoryProcessing('user_message', data);
                 });
 
-                // 监听消息接收事件
-                this.sillyTavernEventSource.on('message_received', (data) => {
+                this.sillyTavernEventSource.on(this.sillyTavernEventTypes.MESSAGE_RECEIVED, (data) => {
+                    console.log('[EventSystem] 📨 收到MESSAGE_RECEIVED事件，触发记忆处理');
+                    this.triggerMemoryProcessing('ai_message', data);
+                });
+
+                // 🔧 新增：监听用户和角色消息渲染事件（更可靠）
+                this.sillyTavernEventSource.on(this.sillyTavernEventTypes.USER_MESSAGE_RENDERED, (data) => {
+                    console.log('[EventSystem] 👤 收到USER_MESSAGE_RENDERED事件，触发记忆处理');
+                    this.triggerMemoryProcessing('user_message', data);
+                });
+
+                this.sillyTavernEventSource.on(this.sillyTavernEventTypes.CHARACTER_MESSAGE_RENDERED, (data) => {
+                    console.log('[EventSystem] 🤖 收到CHARACTER_MESSAGE_RENDERED事件，触发记忆处理');
                     this.triggerMemoryProcessing('ai_message', data);
                 });
             }
@@ -1483,30 +1498,68 @@ export class EventSystem {
         try {
             if (!this.memoryProcessingEnabled) return;
 
-            console.log('[EventSystem] 🧠 触发记忆处理:', messageType);
+            console.log('[EventSystem] 🧠 触发记忆处理:', messageType, messageData);
 
             // 获取记忆处理模块
             const infoBarTool = window.SillyTavernInfobar;
             if (!infoBarTool?.modules) return;
 
-            const aiMemorySummarizer = infoBarTool.modules.summaryManager?.aiMemorySummarizer;
             const deepMemoryManager = infoBarTool.modules.deepMemoryManager;
-            const intelligentMemoryClassifier = infoBarTool.modules.intelligentMemoryClassifier;
+            if (!deepMemoryManager || !deepMemoryManager.settings?.enabled) {
+                console.log('[EventSystem] ⚠️ 深度记忆管理器未启用，跳过记忆处理');
+                return;
+            }
 
-            // 🔧 修复：更严格的消息内容验证
-            const messageContent = this.extractMessageContent(messageData);
-            if (!messageContent || typeof messageContent !== 'string' || messageContent.trim().length < 10) {
+            // 🔧 修复：处理SillyTavern传递的消息ID
+            let messageContent = '';
+            let actualMessageData = messageData;
+
+            // 如果messageData是数字，说明是消息ID，需要获取实际消息
+            if (typeof messageData === 'number') {
+                console.log('[EventSystem] 🔍 检测到消息ID:', messageData, '，获取实际消息内容');
+                try {
+                    const context = SillyTavern?.getContext?.();
+                    if (context?.chat && context.chat[messageData]) {
+                        actualMessageData = context.chat[messageData];
+                        console.log('[EventSystem] ✅ 成功获取消息对象:', actualMessageData.mes?.substring(0, 50) + '...');
+                    } else {
+                        console.log('[EventSystem] ❌ 无法根据消息ID获取消息对象');
+                        return;
+                    }
+                } catch (error) {
+                    console.error('[EventSystem] ❌ 获取消息对象失败:', error);
+                    return;
+                }
+            }
+
+            // 提取消息内容
+            if (actualMessageData?.mes) {
+                messageContent = actualMessageData.mes;
+            } else if (actualMessageData?.message) {
+                messageContent = actualMessageData.message;
+            } else if (typeof actualMessageData === 'string') {
+                messageContent = actualMessageData;
+            }
+
+            // 清理HTML标签和特殊标记
+            messageContent = messageContent.replace(/<[^>]*>/g, '').trim();
+
+            if (!messageContent || messageContent.length < 10) {
                 console.log('[EventSystem] ⚠️ 消息内容无效或太短，跳过记忆处理');
                 return;
             }
 
+            console.log('[EventSystem] 📝 处理消息内容:', messageContent.substring(0, 100) + '...');
+
             // 准备记忆数据
             const memoryData = {
                 message: messageContent.trim(),
+                mes: messageContent.trim(), // 兼容DeepMemoryManager的期望格式
                 isUser: messageType === 'user_message',
-                timestamp: Date.now(),
+                is_user: messageType === 'user_message', // 兼容格式
+                timestamp: actualMessageData.send_date || Date.now(),
                 messageType: messageType,
-                originalData: messageData
+                originalData: actualMessageData
             };
 
             console.log('[EventSystem] 📝 处理记忆数据:', {
@@ -1517,27 +1570,36 @@ export class EventSystem {
 
             // 🔧 修复：立即处理模式，添加错误处理和状态检查
             if (this.immediateMemoryProcessing) {
-                // 触发AI记忆总结
-                if (aiMemorySummarizer && aiMemorySummarizer.handleMessageReceived && aiMemorySummarizer.settings?.enabled) {
-                    try {
-                        await aiMemorySummarizer.handleMessageReceived(memoryData);
-                    } catch (error) {
-                        console.error('[EventSystem] ❌ AI记忆总结处理失败:', error);
-                    }
-                }
+                console.log('[EventSystem] 🚀 开始立即记忆处理...');
 
-                // 触发深度记忆管理
-                if (deepMemoryManager && deepMemoryManager.handleMessageReceived && deepMemoryManager.settings?.enabled) {
+                // 触发深度记忆管理（最重要的）
+                if (deepMemoryManager && deepMemoryManager.handleMessageReceived) {
                     try {
+                        console.log('[EventSystem] 🧠 调用深度记忆管理器处理消息');
                         await deepMemoryManager.handleMessageReceived(memoryData);
+                        console.log('[EventSystem] ✅ 深度记忆管理处理完成');
                     } catch (error) {
                         console.error('[EventSystem] ❌ 深度记忆管理处理失败:', error);
                     }
                 }
 
+                // 触发AI记忆总结
+                const aiMemorySummarizer = infoBarTool.modules.summaryManager?.aiMemorySummarizer;
+                if (aiMemorySummarizer && aiMemorySummarizer.handleMessageReceived && aiMemorySummarizer.settings?.enabled) {
+                    try {
+                        console.log('[EventSystem] 📝 调用AI记忆总结器处理消息');
+                        await aiMemorySummarizer.handleMessageReceived(memoryData);
+                        console.log('[EventSystem] ✅ AI记忆总结处理完成');
+                    } catch (error) {
+                        console.error('[EventSystem] ❌ AI记忆总结处理失败:', error);
+                    }
+                }
+
                 // 触发智能记忆分类
+                const intelligentMemoryClassifier = infoBarTool.modules.intelligentMemoryClassifier;
                 if (intelligentMemoryClassifier && intelligentMemoryClassifier.handleMemoryAdded && intelligentMemoryClassifier.settings?.enabled) {
                     try {
+                        console.log('[EventSystem] 🎯 调用智能记忆分类器处理消息');
                         // 🔧 修复：确保传入正确格式的记忆对象
                         const memoryForClassification = {
                             content: memoryData.message,
@@ -1546,6 +1608,7 @@ export class EventSystem {
                             messageType: memoryData.messageType
                         };
                         await intelligentMemoryClassifier.handleMemoryAdded(memoryForClassification);
+                        console.log('[EventSystem] ✅ 智能记忆分类处理完成');
                     } catch (error) {
                         console.error('[EventSystem] ❌ 智能记忆分类处理失败:', error);
                     }

@@ -118,15 +118,49 @@ export class SummaryManager {
     async loadSettings() {
         try {
             console.log('[SummaryManager] 📥 加载总结设置...');
-            
-            if (!this.unifiedDataCore) return;
-            
-            const savedSettings = await this.unifiedDataCore.getData('summary_settings');
-            if (savedSettings) {
-                this.settings = { ...this.settings, ...savedSettings };
-                console.log('[SummaryManager] ✅ 总结设置加载完成:', this.settings);
+
+            // 1. 从UnifiedDataCore加载设置
+            if (this.unifiedDataCore) {
+                const savedSettings = await this.unifiedDataCore.getData('summary_settings');
+                if (savedSettings) {
+                    this.settings = { ...this.settings, ...savedSettings };
+                    console.log('[SummaryManager] ✅ 从数据核心加载设置:', savedSettings);
+                }
             }
-            
+
+            // 2. 🔧 新增：从SillyTavern扩展设置加载设置（优先级更高）
+            try {
+                const context = SillyTavern?.getContext?.();
+                if (context && context.extensionSettings) {
+                    const extensionSettings = context.extensionSettings['Information bar integration tool'];
+                    if (extensionSettings) {
+                        // 提取总结相关设置
+                        const summarySettings = {};
+                        const summaryKeys = [
+                            'autoSummaryEnabled', 'summaryFloorCount', 'summaryType', 'summaryWordCount',
+                            'injectSummaryEnabled', 'autoHideEnabled', 'autoHideThreshold',
+                            'autoUploadNewSummary', 'worldBookEntryFormat', 'worldBookCustomEntryName',
+                            'worldBookAddTimestamp', 'worldBookUseContentTags'
+                        ];
+
+                        summaryKeys.forEach(key => {
+                            if (extensionSettings[key] !== undefined) {
+                                summarySettings[key] = extensionSettings[key];
+                            }
+                        });
+
+                        if (Object.keys(summarySettings).length > 0) {
+                            this.settings = { ...this.settings, ...summarySettings };
+                            console.log('[SummaryManager] ✅ 从扩展设置加载设置:', summarySettings);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('[SummaryManager] ⚠️ 从扩展设置加载失败:', error);
+            }
+
+            console.log('[SummaryManager] ✅ 总结设置加载完成:', this.settings);
+
         } catch (error) {
             console.error('[SummaryManager] ❌ 加载设置失败:', error);
         }
@@ -384,7 +418,7 @@ export class SummaryManager {
             }
             
             // 确定总结范围
-            const summaryRange = this.determineSummaryRange(messages, options);
+            const summaryRange = await this.determineSummaryRange(messages, options);
             
             // 生成总结提示词
             const summaryPrompt = this.createSummaryPrompt(messages, summaryRange, options);
@@ -401,28 +435,49 @@ export class SummaryManager {
                 timestamp: Date.now()
             });
             
-            // 更新最后总结的消息ID：按窗口推进，避免下次重复
-            if (options.type === 'auto') {
-                this.lastSummaryMessageId = summaryRange.end + 1;
-            }
+            // 🔧 修复：无论手动还是自动总结，都要更新lastSummaryMessageId，避免重复总结
+            this.lastSummaryMessageId = summaryRange.end + 1;
+            console.log('[SummaryManager] 🎯 更新lastSummaryMessageId:', this.lastSummaryMessageId, '类型:', options.type);
 
             // 🔧 新增：如果启用了总结注入，则注入到主API上下文
             if (this.settings.injectSummaryEnabled) {
                 await this.injectSummaryToMainAPI(summaryContent, summaryRecord);
             }
 
-            // 🚀 新增：如果有AI记忆总结器，也生成AI记忆总结
-            if (this.aiMemorySummarizer && this.aiMemorySummarizer.settings.enabled) {
+            // 🔧 修复：AI记忆总结现已集成到智能提示词系统，不再在传统总结中重复生成
+            // 避免与智能提示词系统中的AI记忆总结功能冲突
+            console.log('[SummaryManager] ℹ️ AI记忆总结已集成到智能提示词系统，跳过重复生成');
+
+            // 🔧 新增：检查自动上传新总结设置
+            if (this.settings.autoUploadNewSummary) {
                 try {
-                    console.log('[SummaryManager] 🧠 生成AI记忆总结...');
-                    const aiSummaryData = await this.generateAIMemorySummary(messages, summaryRange, summaryRecord);
-                    if (aiSummaryData) {
-                        summaryRecord.aiMemorySummary = aiSummaryData;
-                        console.log('[SummaryManager] ✅ AI记忆总结已添加到总结记录');
-                    }
-                } catch (aiError) {
-                    console.error('[SummaryManager] ❌ 生成AI记忆总结失败:', aiError);
-                    // 不影响主总结流程
+                    console.log('[SummaryManager] 📤 自动上传新总结已启用，开始上传...');
+
+                    // 使用当前设置构建上传选项
+                    const uploadOptions = {
+                        autoCreateWorldBook: true,
+                        bindToChatLore: true,
+                        entryNameFormat: this.settings.worldBookEntryFormat || 'auto',
+                        customEntryName: this.settings.worldBookCustomEntryName || null,
+                        addTimestamp: this.settings.worldBookAddTimestamp !== false,
+                        useContentTags: this.settings.worldBookUseContentTags !== false
+                    };
+
+                    // 异步上传，不阻塞总结完成
+                    this.uploadSummaryToWorldBook(summaryRecord.id, uploadOptions)
+                        .then(uploadResult => {
+                            if (uploadResult.success) {
+                                console.log('[SummaryManager] ✅ 新总结自动上传成功:', uploadResult);
+                            } else {
+                                console.warn('[SummaryManager] ⚠️ 新总结自动上传失败:', uploadResult.error);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('[SummaryManager] ❌ 新总结自动上传异常:', error);
+                        });
+
+                } catch (error) {
+                    console.error('[SummaryManager] ❌ 自动上传新总结失败:', error);
                 }
             }
 
@@ -467,24 +522,144 @@ export class SummaryManager {
     /**
      * 确定总结范围
      */
-    determineSummaryRange(messages, options) {
+    async determineSummaryRange(messages, options) {
         try {
             const totalMessages = messages.length;
-            
+
             if (options.type === 'manual') {
-                // 手动总结：总结最近的楼层数消息
-                const start = Math.max(0, totalMessages - this.settings.summaryFloorCount);
-                return { start, end: totalMessages - 1 };
+                // 🔧 修复：手动总结使用智能范围计算，避免与已有总结重复
+                return await this.calculateSmartSummaryRange(totalMessages, 'manual');
             } else {
-                // 自动总结：每次只总结最近 summaryFloorCount 条消息，避免一次性覆盖过多楼层
-                const end = totalMessages - 1;
-                const start = Math.max(0, end - this.settings.summaryFloorCount + 1);
-                return { start, end };
+                // 🔧 修复：自动总结基于lastSummaryMessageId计算，确保连续性
+                return await this.calculateSmartSummaryRange(totalMessages, 'auto');
             }
-            
+
         } catch (error) {
             console.error('[SummaryManager] ❌ 确定总结范围失败:', error);
             return { start: 0, end: messages.length - 1 };
+        }
+    }
+
+    /**
+     * 🔧 新增：智能计算总结范围，避免重复
+     */
+    async calculateSmartSummaryRange(totalMessages, type) {
+        try {
+            console.log('[SummaryManager] 🧠 智能计算总结范围...', { totalMessages, type, lastSummaryMessageId: this.lastSummaryMessageId });
+
+            // 获取已有的总结历史
+            const summaryHistory = await this.getSummaryHistory();
+
+            if (type === 'manual') {
+                // 手动总结：从最后总结位置开始，总结到当前消息
+                const start = Math.max(0, this.lastSummaryMessageId);
+                const end = totalMessages - 1;
+
+                // 🔧 新增：检查是否与已有总结重复
+                const proposedRange = { start, end };
+                if (await this.isRangeAlreadySummarized(proposedRange, summaryHistory)) {
+                    console.log('[SummaryManager] ⚠️ 检测到楼层范围重复，调整范围');
+                    // 如果重复，只总结最新的未总结部分
+                    const adjustedStart = Math.max(start, this.findLastSummarizedMessage(summaryHistory) + 1);
+                    if (adjustedStart <= end) {
+                        return { start: adjustedStart, end };
+                    } else {
+                        console.log('[SummaryManager] ℹ️ 所有消息都已总结，无需重复总结');
+                        throw new Error('所有消息都已总结，无需重复总结');
+                    }
+                }
+
+                // 检查是否有足够的新消息需要总结
+                if (end - start + 1 < 5) {
+                    console.log('[SummaryManager] ⚠️ 新消息太少，扩展总结范围');
+                    const expandedStart = Math.max(0, end - this.settings.summaryFloorCount + 1);
+                    return { start: expandedStart, end };
+                }
+
+                return { start, end };
+
+            } else {
+                // 自动总结：基于lastSummaryMessageId计算连续范围
+                const start = Math.max(0, this.lastSummaryMessageId);
+                const end = totalMessages - 1;
+
+                // 确保总结范围不超过设定的楼层数
+                const maxRange = this.settings.summaryFloorCount;
+                if (end - start + 1 > maxRange) {
+                    const adjustedStart = Math.max(start, end - maxRange + 1);
+                    return { start: adjustedStart, end };
+                }
+
+                return { start, end };
+            }
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 智能计算总结范围失败:', error);
+            // 降级到简单计算
+            const end = totalMessages - 1;
+            const start = Math.max(0, end - this.settings.summaryFloorCount + 1);
+            return { start, end };
+        }
+    }
+
+    /**
+     * 🔧 新增：检查楼层范围是否已经被总结过
+     */
+    async isRangeAlreadySummarized(proposedRange, summaryHistory) {
+        try {
+            if (!summaryHistory || summaryHistory.length === 0) {
+                return false;
+            }
+
+            // 检查是否有重叠的总结范围
+            for (const summary of summaryHistory) {
+                if (summary.messageRange) {
+                    const existingRange = summary.messageRange;
+
+                    // 检查是否有重叠
+                    const hasOverlap = !(proposedRange.end < existingRange.start || proposedRange.start > existingRange.end);
+
+                    if (hasOverlap) {
+                        console.log('[SummaryManager] 🔍 发现重叠范围:', {
+                            proposed: `${proposedRange.start}-${proposedRange.end}`,
+                            existing: `${existingRange.start}-${existingRange.end}`,
+                            summaryId: summary.id
+                        });
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 检查范围重复失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 🔧 新增：找到最后一个被总结的消息位置
+     */
+    findLastSummarizedMessage(summaryHistory) {
+        try {
+            if (!summaryHistory || summaryHistory.length === 0) {
+                return -1;
+            }
+
+            let lastMessage = -1;
+
+            for (const summary of summaryHistory) {
+                if (summary.messageRange && typeof summary.messageRange.end === 'number') {
+                    lastMessage = Math.max(lastMessage, summary.messageRange.end);
+                }
+            }
+
+            return lastMessage;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 查找最后总结消息失败:', error);
+            return -1;
         }
     }
 
@@ -624,13 +799,26 @@ ${messageContent}
                 }
             });
 
-            // 🔧 修复：处理API返回结果的格式
+            // 🔧 修复：处理API返回结果的格式，正确处理错误情况
             let resultText = '';
+
+            // 首先检查是否是错误对象
+            if (apiResult && typeof apiResult === 'object' && apiResult.success === false) {
+                // 这是一个错误响应，抛出错误而不是当作成功结果
+                const errorMessage = apiResult.error || apiResult.message || 'API请求失败';
+                throw new Error(errorMessage);
+            }
+
             if (typeof apiResult === 'string') {
                 resultText = apiResult;
             } else if (apiResult && typeof apiResult === 'object') {
                 // 如果返回的是对象，尝试提取文本内容
-                resultText = apiResult.content || apiResult.text || apiResult.message || JSON.stringify(apiResult);
+                resultText = apiResult.content || apiResult.text || apiResult.message || '';
+
+                // 如果没有找到文本内容，但不是错误对象，则转换为JSON
+                if (!resultText && apiResult.success !== false) {
+                    resultText = JSON.stringify(apiResult);
+                }
             } else {
                 resultText = String(apiResult || '');
             }

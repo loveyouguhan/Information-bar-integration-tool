@@ -609,6 +609,17 @@ export class XMLDataParser {
 
             const [, operation, panelName, rowNumber, dataParams] = match;
 
+            // 🚨 新增：严格验证面板名称是否在支持列表中
+            if (!this.isValidPanelName(panelName)) {
+                const errorMsg = `🚨🚨🚨 CRITICAL ERROR: AI尝试操作不存在的面板 "${panelName}"！
+❌ 禁止操作：AI不能创建新面板或操作未启用的面板
+✅ 允许的面板：${Array.from(this.supportedPanels).join(', ')}
+🚨 系统拒绝此操作以防止数据污染！`;
+
+                console.error('[XMLDataParser] 🚨 面板验证失败:', errorMsg);
+                throw new Error(errorMsg);
+            }
+
             const operationData = {
                 type: operation.toLowerCase(), // 统一转换为小写
                 panel: panelName,
@@ -621,13 +632,23 @@ export class XMLDataParser {
             // 解析数据参数（如果存在）
             if (dataParams && dataParams.trim()) {
                 operationData.data = this.parseOperationDataParameters(dataParams);
+
+                // 🚨 新增：验证字段是否在允许的字段列表中
+                if (!this.validatePanelFields(panelName, operationData.data)) {
+                    const errorMsg = `🚨🚨🚨 CRITICAL ERROR: AI尝试在面板 "${panelName}" 中使用不存在的字段！
+❌ 禁止操作：AI不能创建新字段或使用未启用的字段
+🚨 系统拒绝此操作以防止数据污染！`;
+
+                    console.error('[XMLDataParser] 🚨 字段验证失败:', errorMsg);
+                    throw new Error(errorMsg);
+                }
             }
 
             return operationData;
 
         } catch (error) {
             console.error(`[XMLDataParser] ❌ 解析操作指令失败: ${commandLine}`, error);
-            return null;
+            throw error; // 重新抛出错误，确保上层能够捕获
         }
     }
 
@@ -657,7 +678,8 @@ export class XMLDataParser {
                     const columnNumber = parseInt(columnStr);
 
                     if (!isNaN(columnNumber) && valueStr !== undefined) {
-                        data[`col_${columnNumber}`] = valueStr;
+                        // 🚨 修复：直接使用列号作为key，不添加前缀
+                        data[columnNumber.toString()] = valueStr;
                         console.log(`[XMLDataParser] 📊 解析操作参数: 列${columnNumber} = "${valueStr}"`);
                     } else {
                         console.warn(`[XMLDataParser] ⚠️ 无效操作参数: "${parts[i]}" -> "${parts[i + 1]}"`);
@@ -1166,23 +1188,124 @@ export class XMLDataParser {
                 return false;
             }
 
-            // 🔧 修复：动态验证面板是否受支持（包括自定义面板和自定义子项）
-            const englishPanelId = this.panelNameMapping?.[panelName] || panelName;
-            const isSupported = this.supportedPanels.has(englishPanelId) || this.supportedPanels.has(panelName);
-
-            if (!isSupported) {
-                console.warn(`[XMLDataParser] ⚠️ 不支持的面板类型: ${panelName} (英文ID: ${englishPanelId})`);
-                // 不再直接返回false，而是记录警告但仍然处理数据
-                console.log(`[XMLDataParser] ℹ️ 继续处理未知面板: ${panelName}，可能是新增的自定义面板`);
-            } else {
-                console.log(`[XMLDataParser] ✅ 面板类型验证通过: ${panelName} -> ${englishPanelId}`);
+            // 🚨 修复：严格验证面板是否在支持列表中，拒绝未知面板
+            if (!this.isValidPanelName(panelName)) {
+                console.error(`[XMLDataParser] 🚨 拒绝不支持的面板类型: ${panelName}`);
+                console.error(`[XMLDataParser] 📋 支持的面板列表: ${Array.from(this.supportedPanels).join(', ')}`);
+                return false;
             }
 
+            console.log(`[XMLDataParser] ✅ 面板类型验证通过: ${panelName}`);
             return true;
 
         } catch (error) {
             console.error('[XMLDataParser] ❌ 验证面板数据失败:', error);
             return false;
+        }
+    }
+
+    /**
+     * 🚨 验证面板名称是否有效（严格模式）
+     * @param {string} panelName - 面板名称
+     * @returns {boolean} 是否为有效的面板名称
+     */
+    isValidPanelName(panelName) {
+        if (!panelName || typeof panelName !== 'string') {
+            return false;
+        }
+
+        // 检查是否在支持的面板列表中
+        const englishPanelId = this.panelNameMapping?.[panelName] || panelName;
+        const isSupported = this.supportedPanels.has(englishPanelId) || this.supportedPanels.has(panelName);
+
+        if (!isSupported) {
+            console.error(`[XMLDataParser] 🚨 面板名称验证失败: "${panelName}"`);
+            console.error(`[XMLDataParser] 📋 当前支持的面板: ${Array.from(this.supportedPanels).join(', ')}`);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 🚨 验证面板字段是否有效（严格模式）
+     * @param {string} panelName - 面板名称
+     * @param {Object} fieldData - 字段数据
+     * @returns {boolean} 是否所有字段都有效
+     */
+    validatePanelFields(panelName, fieldData) {
+        try {
+            if (!fieldData || typeof fieldData !== 'object') {
+                return true; // 空数据认为是有效的
+            }
+
+            // 获取面板的启用字段配置
+            const enabledFields = this.getEnabledFieldsForPanel(panelName);
+            if (!enabledFields || enabledFields.length === 0) {
+                console.warn(`[XMLDataParser] ⚠️ 无法获取面板 "${panelName}" 的字段配置，跳过字段验证`);
+                return true; // 如果无法获取配置，暂时允许通过
+            }
+
+            // 检查每个字段是否在允许列表中
+            const fieldKeys = Object.keys(fieldData);
+            const invalidFields = [];
+
+            for (const fieldKey of fieldKeys) {
+                // 字段key应该是数字（列号）
+                const columnIndex = parseInt(fieldKey);
+                if (isNaN(columnIndex) || columnIndex < 1 || columnIndex > enabledFields.length) {
+                    invalidFields.push(`列号${fieldKey}(超出范围1-${enabledFields.length})`);
+                }
+            }
+
+            if (invalidFields.length > 0) {
+                console.error(`[XMLDataParser] 🚨 面板 "${panelName}" 包含无效字段: ${invalidFields.join(', ')}`);
+                console.error(`[XMLDataParser] 📋 允许的列号范围: 1-${enabledFields.length}`);
+                console.error(`[XMLDataParser] 📋 启用的字段: ${enabledFields.map((f, i) => `${i+1}.${f.key}`).join(', ')}`);
+                return false;
+            }
+
+            return true;
+
+        } catch (error) {
+            console.error(`[XMLDataParser] ❌ 验证面板字段失败: ${panelName}`, error);
+            return false; // 验证失败时拒绝
+        }
+    }
+
+    /**
+     * 🚨 获取面板的启用字段列表
+     * @param {string} panelName - 面板名称
+     * @returns {Array} 启用的字段列表
+     */
+    getEnabledFieldsForPanel(panelName) {
+        try {
+            // 获取SillyTavern上下文和扩展设置
+            const context = window.SillyTavern?.getContext?.();
+            if (!context) {
+                console.warn(`[XMLDataParser] ⚠️ 无法获取SillyTavern上下文`);
+                return null;
+            }
+
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings?.['Information bar integration tool'] || {};
+
+            // 转换为英文面板ID
+            const englishPanelId = this.panelNameMapping?.[panelName] || panelName;
+
+            // 获取面板配置
+            const panelConfig = configs[englishPanelId];
+            if (!panelConfig || !panelConfig.subItems) {
+                console.warn(`[XMLDataParser] ⚠️ 无法获取面板 "${englishPanelId}" 的配置`);
+                return null;
+            }
+
+            // 返回启用的字段
+            return panelConfig.subItems.filter(item => item.enabled !== false);
+
+        } catch (error) {
+            console.error(`[XMLDataParser] ❌ 获取面板字段配置失败: ${panelName}`, error);
+            return null;
         }
     }
 

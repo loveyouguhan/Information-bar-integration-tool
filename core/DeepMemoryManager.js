@@ -29,6 +29,7 @@ export class DeepMemoryManager {
         // 深度记忆管理设置
         this.settings = {
             enabled: false,                        // 是否启用深度记忆管理
+            autoSave: true,                        // 🔧 新增：自动保存记忆数据
             sensoryMemoryCapacity: 100,            // 感知记忆容量
             shortTermMemoryCapacity: 500,          // 短期记忆容量
             longTermMemoryCapacity: 5000,          // 长期记忆容量
@@ -111,6 +112,12 @@ export class DeepMemoryManager {
             
             // 加载现有记忆数据
             await this.loadExistingMemories();
+
+            // 🔧 修复：如果初始化时没有加载到数据，延迟重试（增强版）
+            if (this.stats.totalMemories === 0 && this.unifiedDataCore) {
+                console.log('[DeepMemoryManager] 🔄 初始化时未加载到数据，启动延迟重试机制...');
+                this.startDelayedLoadRetry();
+            }
             
             // 绑定事件监听器
             this.bindEventListeners();
@@ -147,7 +154,15 @@ export class DeepMemoryManager {
             
             const savedSettings = await this.unifiedDataCore.getData('deep_memory_settings');
             if (savedSettings) {
+                // 🔧 修复：确保新的默认设置不会被旧的存储设置覆盖
                 this.settings = { ...this.settings, ...savedSettings };
+
+                // 确保autoSave设置存在（向后兼容）
+                if (this.settings.autoSave === undefined) {
+                    this.settings.autoSave = true;
+                    console.log('[DeepMemoryManager] 🔧 添加缺失的autoSave设置');
+                }
+
                 console.log('[DeepMemoryManager] ✅ 深度记忆管理设置加载完成:', this.settings);
             }
             
@@ -278,7 +293,13 @@ export class DeepMemoryManager {
             if (memory.importance >= this.settings.sensoryToShortTermThreshold) {
                 await this.migrateMemory(memory.id, 'sensory', 'shortTerm');
             }
-            
+
+            // 🔧 修复：自动保存记忆数据到持久化存储
+            if (this.settings.autoSave !== false) { // 默认启用自动保存
+                await this.saveMemoryData();
+                console.log('[DeepMemoryManager] 💾 记忆数据已自动保存');
+            }
+
             return memory;
             
         } catch (error) {
@@ -416,7 +437,13 @@ export class DeepMemoryManager {
                     timestamp: Date.now()
                 });
             }
-            
+
+            // 🔧 修复：记忆迁移后自动保存数据
+            if (this.settings.autoSave !== false) { // 默认启用自动保存
+                await this.saveMemoryData();
+                console.log('[DeepMemoryManager] 💾 记忆迁移后数据已自动保存');
+            }
+
             return true;
             
         } catch (error) {
@@ -1031,23 +1058,61 @@ export class DeepMemoryManager {
      */
     async handleMessageReceived(data) {
         try {
-            console.log('[DeepMemoryManager] 📝 处理消息接收事件');
+            console.log('[DeepMemoryManager] 📝 处理消息接收事件', data);
 
-            if (!this.settings.enabled) return;
+            if (!this.settings.enabled) {
+                console.log('[DeepMemoryManager] ⚠️ 深度记忆管理器未启用，跳过处理');
+                return;
+            }
 
-            // 只处理重要消息
-            if (data.message && data.message.length > 50) {
+            // 🔧 修复：更强大的消息内容提取逻辑
+            let messageContent = '';
+            let isUser = false;
+
+            // 尝试多种方式提取消息内容
+            if (data.message) {
+                messageContent = data.message;
+                isUser = data.isUser || false;
+            } else if (data.mes) {
+                messageContent = data.mes;
+                isUser = data.is_user || false;
+            } else if (typeof data === 'string') {
+                messageContent = data;
+                isUser = false;
+            } else if (data.content) {
+                messageContent = data.content;
+                isUser = data.isUser || false;
+            }
+
+            // 清理HTML标签和特殊标记
+            if (messageContent) {
+                messageContent = messageContent.replace(/<[^>]*>/g, '').replace(/<!--[\s\S]*?-->/g, '').trim();
+            }
+
+            console.log('[DeepMemoryManager] 🔍 提取的消息内容长度:', messageContent.length);
+            console.log('[DeepMemoryManager] 🔍 消息内容预览:', messageContent.substring(0, 100) + '...');
+
+            // 🔧 修复：降低消息长度要求，处理更多消息
+            if (messageContent && messageContent.length > 10) {
+                console.log('[DeepMemoryManager] 📝 处理消息:', messageContent.substring(0, 50) + '...');
+
                 const memoryData = {
-                    content: data.message,
-                    type: data.isUser ? 'user_message' : 'assistant_message',
+                    content: messageContent,
+                    type: isUser ? 'user_message' : 'assistant_message',
                     source: 'chat_message',
                     metadata: {
-                        isUser: data.isUser,
-                        timestamp: data.timestamp
+                        isUser: isUser,
+                        timestamp: data.timestamp || Date.now(),
+                        originalData: data
                     }
                 };
 
+                console.log('[DeepMemoryManager] 🧠 添加记忆到感知层...');
                 await this.addMemoryToSensoryLayer(memoryData);
+                console.log('[DeepMemoryManager] ✅ 记忆处理完成');
+            } else {
+                console.log('[DeepMemoryManager] ⚠️ 消息太短或无效，跳过处理:', messageContent?.length || 0, '字符');
+                console.log('[DeepMemoryManager] 🔍 原始数据结构:', Object.keys(data || {}));
             }
 
         } catch (error) {
@@ -1212,6 +1277,55 @@ export class DeepMemoryManager {
     }
 
     /**
+     * 🔧 新增：启动延迟加载重试机制
+     */
+    startDelayedLoadRetry() {
+        let retryCount = 0;
+        const maxRetries = 5;
+        const retryIntervals = [2000, 5000, 10000, 15000, 30000]; // 递增的重试间隔
+
+        const attemptLoad = async () => {
+            try {
+                console.log(`[DeepMemoryManager] 🔄 延迟加载尝试 ${retryCount + 1}/${maxRetries}...`);
+
+                // 检查UnifiedDataCore是否已完全初始化
+                if (!this.unifiedDataCore || !this.unifiedDataCore.initialized) {
+                    console.log('[DeepMemoryManager] ⚠️ UnifiedDataCore尚未完全初始化，继续等待...');
+                    scheduleNextRetry();
+                    return;
+                }
+
+                await this.loadExistingMemories();
+
+                if (this.stats.totalMemories > 0) {
+                    console.log(`[DeepMemoryManager] ✅ 延迟加载成功，恢复了 ${this.stats.totalMemories} 个记忆`);
+                    return; // 成功加载，停止重试
+                } else {
+                    console.log('[DeepMemoryManager] ⚠️ 延迟加载仍未找到数据，继续重试...');
+                    scheduleNextRetry();
+                }
+            } catch (error) {
+                console.error('[DeepMemoryManager] ❌ 延迟加载失败:', error);
+                scheduleNextRetry();
+            }
+        };
+
+        const scheduleNextRetry = () => {
+            retryCount++;
+            if (retryCount < maxRetries) {
+                const delay = retryIntervals[retryCount - 1] || 30000;
+                console.log(`[DeepMemoryManager] ⏰ 将在 ${delay}ms 后进行第 ${retryCount + 1} 次重试`);
+                setTimeout(attemptLoad, delay);
+            } else {
+                console.warn('[DeepMemoryManager] ⚠️ 已达到最大重试次数，停止延迟加载重试');
+            }
+        };
+
+        // 开始第一次重试
+        setTimeout(attemptLoad, retryIntervals[0]);
+    }
+
+    /**
      * 加载现有记忆数据
      */
     async loadExistingMemories() {
@@ -1224,18 +1338,35 @@ export class DeepMemoryManager {
             const currentChatId = this.unifiedDataCore.getCurrentChatId?.() || 'default';
             console.log('[DeepMemoryManager] 📍 当前聊天ID:', currentChatId);
 
-            // 加载各层记忆数据，使用聊天ID作为前缀
+            // 🔧 修复：兼容两种键名格式的记忆数据加载
             const layerNames = ['sensory', 'shortTerm', 'longTerm', 'deepArchive'];
 
             for (const layerName of layerNames) {
-                const layerKey = `deep_memory_${layerName}_${currentChatId}`;
-                const layerData = await this.unifiedDataCore.getData(layerKey);
-                if (layerData) {
+                // 优先尝试加载带聊天ID的数据
+                const layerKeyWithChat = `deep_memory_${layerName}_${currentChatId}`;
+                let layerData = await this.unifiedDataCore.getData(layerKeyWithChat);
+
+                // 如果没有找到，尝试加载不带聊天ID的历史数据
+                if (!layerData || Object.keys(layerData).length === 0) {
+                    const layerKeyLegacy = `deep_memory_${layerName}`;
+                    const legacyData = await this.unifiedDataCore.getData(layerKeyLegacy);
+                    if (legacyData && Object.keys(legacyData).length > 0) {
+                        console.log(`[DeepMemoryManager] 📥 从历史格式加载 ${layerName} 层数据: ${Object.keys(legacyData).length} 个记忆`);
+                        layerData = legacyData;
+
+                        // 🔧 迁移：将历史数据迁移到新格式
+                        await this.unifiedDataCore.setData(layerKeyWithChat, layerData);
+                        console.log(`[DeepMemoryManager] 🔄 已将 ${layerName} 层数据迁移到新格式`);
+                    }
+                }
+
+                if (layerData && Object.keys(layerData).length > 0) {
                     for (const [id, memory] of Object.entries(layerData)) {
                         this.memoryLayers[layerName].set(id, memory);
                         this.memoryIndex.set(id, memory);
                         this.stats.totalMemories++;
                     }
+                    console.log(`[DeepMemoryManager] ✅ 已加载 ${layerName} 层: ${Object.keys(layerData).length} 个记忆`);
                 }
             }
 

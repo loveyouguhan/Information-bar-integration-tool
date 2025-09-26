@@ -22,18 +22,18 @@ export class AIMemorySummarizer {
         
         // AI总结设置
         this.settings = {
-            enabled: false,                    // 🔧 修复：默认关闭AI总结，避免自动开启
+            enabled: true,                     // 🔧 修复：默认启用AI总结，确保记忆系统正常工作
             // 🔧 修改：启用消息级别处理，不再跟随楼层触发
             followSummaryFloor: false,         // ❌ 不跟随楼层，改为消息级别触发
             messageLevelSummary: true,         // ✅ 启用消息级别总结，每条重要消息都会触发
             batchSize: 3,                      // 🔧 减小批量处理大小，提高响应速度
-            importanceThreshold: 0.5,          // 🔧 降低重要性阈值，处理更多消息
+            importanceThreshold: 0.3,          // 🔧 进一步降低重要性阈值，处理更多消息
             summaryCache: true,                // 启用总结缓存
             preventDuplication: true,          // 防重复机制
             memoryClassification: true,        // 记忆分类
             autoTagging: true,                 // 自动标记
             maxSummaryLength: 200,             // 最大总结长度
-            minSummaryLength: 30,              // 🔧 降低最小总结长度
+            minSummaryLength: 20,              // 🔧 进一步降低最小总结长度
             immediateProcessing: true          // 🔧 新增：立即处理模式
         };
         
@@ -817,6 +817,58 @@ ${messageContent}
                 timestamp: Date.now()
             });
         }
+    }
+
+    /**
+     * 文本总结方法 - 供AIMemoryDatabaseInjector调用
+     */
+    async summarizeText(text, options = {}) {
+        try {
+            console.log('[AIMemorySummarizer] 📝 开始文本总结，长度:', text.length);
+
+            if (!this.summaryManager) {
+                throw new Error('SummaryManager未初始化');
+            }
+
+            const {
+                maxLength = Math.floor(text.length * 0.7),
+                preserveKeyInfo = true
+            } = options;
+
+            // 构建总结提示词
+            const summaryPrompt = this.createTextSummaryPrompt(text, maxLength, preserveKeyInfo);
+
+            // 调用SummaryManager的API
+            const summaryContent = await this.summaryManager.callSummaryAPI(summaryPrompt);
+
+            console.log('[AIMemorySummarizer] ✅ 文本总结完成，原长度:', text.length, '总结长度:', summaryContent.length);
+
+            return summaryContent;
+
+        } catch (error) {
+            console.error('[AIMemorySummarizer] ❌ 文本总结失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 创建文本总结提示词
+     */
+    createTextSummaryPrompt(text, maxLength, preserveKeyInfo) {
+        const prompt = `请对以下文本进行智能总结：
+
+原文内容：
+${text}
+
+总结要求：
+- 最大长度：${maxLength}字符
+- ${preserveKeyInfo ? '保留关键信息和重要细节' : '简洁概括主要内容'}
+- 保持原文的核心含义
+- 使用简洁明了的语言
+
+请直接返回总结内容，不要添加额外的说明：`;
+
+        return prompt;
     }
 
     /**

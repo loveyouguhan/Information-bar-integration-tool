@@ -81,6 +81,15 @@ export class SmartPromptSystem {
             // 🚀 绑定规则变化监听器
             this.bindRuleChangeListeners();
 
+            // 🔧 新增：绑定总结输出处理器
+            this.bindSummaryOutputHandler();
+
+            // 🔧 新增：绑定消息内容过滤器
+            this.bindMessageContentFilter();
+
+            // 🚀 新增：初始化AI记忆总结隐藏机制
+            this.initializeAIMemorySummaryHiding();
+
             this.initialized = true;
             console.log('[SmartPromptSystem] ✅ 智能提示词系统初始化完成');
 
@@ -613,9 +622,14 @@ add organization(1 {"1","科技公司","2","私企","3","工程师","4","技术�
 ❌ 绝对禁止：{"1":"值1","2":"值2"} (缺少面板名和行号)
 ❌ 绝对禁止：personal: {"name":"张三"}
 ❌ 绝对禁止：任何JSON对象格式
+❌ 🚨 绝对禁止：add newpanel(1 {...}) (创建新面板)
+❌ 🚨 绝对禁止：add custom_panel(1 {...}) (创建自定义面板)
+❌ 🚨 绝对禁止：操作未在启用列表中的面板
+❌ 🚨 绝对禁止：使用超出范围的列号
 
 ✅ 唯一正确格式：add personal(1 {"1","张三","2","25","3","程序员"})
 ✅ 唯一正确格式：update world(1 {"1","现代都市","2","繁华"})
+✅ 🔥 只能操作启用的面板和字段，列号必须在有效范围内
 
 ${panelRulesSection}
 
@@ -1096,6 +1110,10 @@ ${panelRulesSection}
                 return '';
             }
 
+            // 🔧 新增：检查总结功能需求
+            const summaryInstructions = await this.generateSummaryInstructions();
+            console.log('[SmartPromptSystem] 📝 总结指令生成:', summaryInstructions ? '已添加' : '无需添加');
+
             // 🚀 增强：获取AI记忆增强数据（包含历史记忆）
             const memoryEnhancedData = await this.getAIMemoryEnhancedData(enabledPanels);
             const currentPanelData = memoryEnhancedData.current;
@@ -1139,6 +1157,12 @@ ${panelRulesSection}
             console.log('更新策略:', updateStrategy.type, `(数据覆盖率: ${updateStrategy.dataPercentage}%)`);
             console.log('最终提示词长度:', prompt.length);
 
+            // 🔧 新增：将总结指令添加到提示词末尾
+            if (summaryInstructions) {
+                prompt += '\n\n' + summaryInstructions;
+                console.log('[SmartPromptSystem] 📝 已将总结指令添加到智能提示词');
+            }
+
             console.log(`[SmartPromptSystem] ✅ 智能提示词生成完成，包含 ${enabledPanels.length} 个面板`);
 
             return prompt;
@@ -1147,6 +1171,41 @@ ${panelRulesSection}
             console.error('[SmartPromptSystem] ❌ 生成智能提示词失败:', error);
             this.handleError(error);
             return '';
+        }
+    }
+
+    /**
+     * 🔧 新增：生成AI记忆总结指令（传统总结使用自定义API方案）
+     */
+    async generateSummaryInstructions() {
+        try {
+            console.log('[SmartPromptSystem] 📝 检查AI记忆总结功能需求...');
+
+            // 只检查AI记忆总结是否启用
+            const aiMemoryEnabled = await this.checkAIMemorySummaryEnabled();
+            if (!aiMemoryEnabled) {
+                console.log('[SmartPromptSystem] ℹ️ AI记忆总结未启用，无需添加总结指令');
+                return null;
+            }
+
+            console.log('[SmartPromptSystem] ✅ AI记忆总结指令已添加');
+            console.log('[SmartPromptSystem] ℹ️ 传统剧情总结继续使用自定义API方案');
+
+            // 只生成AI记忆总结指令
+            const aiMemoryInstruction = this.createAIMemorySummaryInstruction();
+
+            const fullInstructions = `
+## 📝 AI记忆总结输出要求
+
+${aiMemoryInstruction}
+
+**重要提醒**: 请在正常回复后，按照上述格式输出AI记忆总结内容。总结内容应该独立于正常回复，使用指定的标签格式。`;
+
+            return fullInstructions;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 生成AI记忆总结指令失败:', error);
+            return null;
         }
     }
 
@@ -1168,6 +1227,125 @@ ${panelRulesSection}
             console.warn('[SmartPromptSystem] ⚠️ 检测输出模式失败，默认为主API:', error);
             return '主API';
         }
+    }
+
+    /**
+     * 🔧 新增：检查AI记忆总结是否启用
+     */
+    async checkAIMemorySummaryEnabled() {
+        try {
+            // 获取InfoBar工具实例
+            const infoBarTool = window.SillyTavernInfobar;
+            if (!infoBarTool || !infoBarTool.modules) {
+                return false;
+            }
+
+            // 检查AI记忆总结器
+            const aiMemorySummarizer = infoBarTool.modules.summaryManager?.aiMemorySummarizer;
+            if (!aiMemorySummarizer) {
+                return false;
+            }
+
+            // 检查设置
+            const settings = aiMemorySummarizer.settings;
+            return settings && settings.enabled && settings.messageLevelSummary;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 检查AI记忆总结状态失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 🔧 修改：传统总结不再集成到智能提示词，保持原有自定义API方案
+     */
+    async checkTraditionalSummaryTrigger() {
+        // 传统总结功能保持原有的自定义API调用方案，不集成到智能提示词
+        return false;
+    }
+
+    /**
+     * 🔧 新增：创建AI记忆总结指令
+     */
+    createAIMemorySummaryInstruction() {
+        // 获取当前消息ID
+        const currentMessageId = this.getCurrentMessageId();
+
+        return `### AI记忆总结输出
+
+请在回复后输出AI记忆总结，**严禁使用代码块格式**，直接输出如下格式：
+
+[AI_MEMORY_SUMMARY]
+{
+  "type": "ai_memory",
+  "content": "简洁的记忆总结内容（20-200字）",
+  "importance": 0.8,
+  "tags": ["关键词1", "关键词2"],
+  "category": "剧情发展|角色互动|情感变化|场景描述|决定转折",
+  "timestamp": ${Date.now()},
+  "messageId": "${currentMessageId}"
+}
+[/AI_MEMORY_SUMMARY]
+
+**严格要求**：
+- 绝对不要使用三个反引号包裹AI记忆总结
+- 绝对不要使用代码块格式
+- 直接输出[AI_MEMORY_SUMMARY]标签和JSON内容
+- 提取当前对话的核心要点
+- 重点关注角色行为、情感变化、剧情发展
+- 保持客观中性的叙述风格
+- 总结长度控制在20-200字之间`;
+    }
+
+    /**
+     * 🔧 新增：获取当前消息ID
+     */
+    getCurrentMessageId() {
+        try {
+            const context = SillyTavern.getContext();
+            if (context && context.chat && context.chat.length > 0) {
+                // 获取最后一条消息的ID，这将是即将生成的AI回复的ID
+                const nextMessageId = context.chat.length;
+                return `msg_${nextMessageId}`;
+            }
+            return `msg_${Date.now()}`;
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 获取当前消息ID失败:', error);
+            return `msg_${Date.now()}`;
+        }
+    }
+
+    /**
+     * 🔧 新增：创建传统剧情总结指令
+     */
+    createTraditionalSummaryInstruction() {
+        return `### 传统剧情总结输出
+
+请在回复后输出传统剧情总结，格式如下：
+
+\`\`\`
+[TRADITIONAL_SUMMARY]
+{
+  "type": "traditional",
+  "content": "详细的剧情总结内容（200-500字）",
+  "messageRange": {
+    "start": "起始消息ID",
+    "end": "结束消息ID",
+    "count": "消息数量"
+  },
+  "keyEvents": ["关键事件1", "关键事件2"],
+  "characters": ["涉及角色1", "涉及角色2"],
+  "setting": "场景描述",
+  "timestamp": ${Date.now()}
+}
+[/TRADITIONAL_SUMMARY]
+\`\`\`
+
+**要求**：
+- 总结最近一段时间的完整剧情发展
+- 包含关键事件、角色互动、场景变化
+- 保持故事的连贯性和逻辑性
+- 总结长度控制在200-500字之间`;
     }
 
     /**
@@ -2572,11 +2750,16 @@ ${panelRulesSection}
 ❌ **严禁使用英文字段名或自创字段**
 ❌ **严禁使用custom_field_开头的字段**（如：custom_field_1234567890等）
 ❌ **严禁使用占位符**（如："未知"、"N/A"、"待补全"）
+❌ **🚨 严禁创建新面板**（如：add newpanel(1 {...})、add custom_panel(1 {...})等）
+❌ **🚨 严禁操作未启用的面板**（只能操作上述列表中的面板）
+❌ **🚨 严禁添加新字段或超出列号范围**（列号必须在1到字段数量范围内）
 
 **✅ 正确做法：**
 - 每个面板严格按照上述列表输出字段
 - 字段数量必须与用户启用的字段数量一致
-- 使用确切的中文字段名和值`;
+- 使用确切的中文字段名和值
+- **🔥 只能使用UPDATE/ADD/DELETE操作已启用的面板和字段**
+- **🔥 列号必须在有效范围内，不能超出启用字段的数量**`;
 
         // 如果有交互对象面板，添加动态NPC格式说明
         if (interactionFields.length > 0) {
@@ -3264,6 +3447,17 @@ ${panelRulesSection}
 
             const [, operation, panelName, rowNumber, dataParams] = match;
 
+            // 🚨 新增：严格验证面板名称是否在支持列表中
+            if (!this.isValidPanelName(panelName)) {
+                const errorMsg = `🚨🚨🚨 CRITICAL ERROR: AI尝试操作不存在的面板 "${panelName}"！
+❌ 禁止操作：AI不能创建新面板或操作未启用的面板
+✅ 允许的面板：请查看启用的面板列表
+🚨 系统拒绝此操作以防止数据污染！`;
+
+                console.error('[SmartPromptSystem] 🚨 面板验证失败:', errorMsg);
+                throw new Error(errorMsg);
+            }
+
             const operationData = {
                 type: operation.toLowerCase(), // 统一转换为小写
                 panel: panelName,
@@ -3276,13 +3470,23 @@ ${panelRulesSection}
             // 解析数据参数（如果存在）
             if (dataParams && dataParams.trim()) {
                 operationData.data = this.parseDataParameters(dataParams);
+
+                // 🚨 新增：验证字段是否在允许的字段列表中
+                if (!this.validatePanelFields(panelName, operationData.data)) {
+                    const errorMsg = `🚨🚨🚨 CRITICAL ERROR: AI尝试在面板 "${panelName}" 中使用不存在的字段！
+❌ 禁止操作：AI不能创建新字段或使用未启用的字段
+🚨 系统拒绝此操作以防止数据污染！`;
+
+                    console.error('[SmartPromptSystem] 🚨 字段验证失败:', errorMsg);
+                    throw new Error(errorMsg);
+                }
             }
 
             return operationData;
 
         } catch (error) {
             console.error(`[SmartPromptSystem] ❌ 解析操作指令失败: ${commandLine}`, error);
-            return null;
+            throw error; // 重新抛出错误，确保上层能够捕获
         }
     }
 
@@ -3329,7 +3533,8 @@ ${panelRulesSection}
                     }
 
                     if (!isNaN(columnNumber) && valueStr !== undefined) {
-                        data[`col_${columnNumber}`] = valueStr;
+                        // 🚨 修复：直接使用列号作为key，不添加前缀
+                        data[columnNumber.toString()] = valueStr;
                         console.log(`[SmartPromptSystem] 📊 解析参数: 列${columnNumber} = "${valueStr}"`);
                     } else {
                         console.warn(`[SmartPromptSystem] ⚠️ 无效参数: "${parts[i]}" -> "${parts[i + 1]}"`);
@@ -3469,6 +3674,123 @@ ${panelRulesSection}
         const validKeyPattern = /^[\u4e00-\u9fa5\w]+(\.[\u4e00-\u9fa5\w]+)*$/;
 
         return validKeyPattern.test(key);
+    }
+
+    /**
+     * 🚨 验证面板名称是否有效（严格模式）
+     * @param {string} panelName - 面板名称
+     * @returns {boolean} 是否为有效的面板名称
+     */
+    isValidPanelName(panelName) {
+        if (!panelName || typeof panelName !== 'string') {
+            return false;
+        }
+
+        // 获取当前启用的面板列表
+        const enabledPanels = this.getEnabledPanelIds();
+        const isValid = enabledPanels.includes(panelName);
+
+        if (!isValid) {
+            console.error(`[SmartPromptSystem] 🚨 面板名称验证失败: "${panelName}"`);
+            console.error(`[SmartPromptSystem] 📋 当前启用的面板: ${enabledPanels.join(', ')}`);
+        }
+
+        return isValid;
+    }
+
+    /**
+     * 🚨 验证面板字段是否有效（严格模式）
+     * @param {string} panelName - 面板名称
+     * @param {Object} fieldData - 字段数据
+     * @returns {boolean} 是否所有字段都有效
+     */
+    validatePanelFields(panelName, fieldData) {
+        try {
+            if (!fieldData || typeof fieldData !== 'object') {
+                return true; // 空数据认为是有效的
+            }
+
+            // 获取面板的启用字段配置
+            const enabledFields = this.getEnabledFieldsForPanel(panelName);
+            if (!enabledFields || enabledFields.length === 0) {
+                console.warn(`[SmartPromptSystem] ⚠️ 无法获取面板 "${panelName}" 的字段配置，跳过字段验证`);
+                return true; // 如果无法获取配置，暂时允许通过
+            }
+
+            // 检查每个字段是否在允许列表中
+            const fieldKeys = Object.keys(fieldData);
+            const invalidFields = [];
+
+            for (const fieldKey of fieldKeys) {
+                // 字段key应该是数字（列号）
+                const columnIndex = parseInt(fieldKey);
+                if (isNaN(columnIndex) || columnIndex < 1 || columnIndex > enabledFields.length) {
+                    invalidFields.push(`列号${fieldKey}(超出范围1-${enabledFields.length})`);
+                }
+            }
+
+            if (invalidFields.length > 0) {
+                console.error(`[SmartPromptSystem] 🚨 面板 "${panelName}" 包含无效字段: ${invalidFields.join(', ')}`);
+                console.error(`[SmartPromptSystem] 📋 允许的列号范围: 1-${enabledFields.length}`);
+                console.error(`[SmartPromptSystem] 📋 启用的字段: ${enabledFields.map((f, i) => `${i+1}.${f.key}`).join(', ')}`);
+                return false;
+            }
+
+            return true;
+
+        } catch (error) {
+            console.error(`[SmartPromptSystem] ❌ 验证面板字段失败: ${panelName}`, error);
+            return false; // 验证失败时拒绝
+        }
+    }
+
+    /**
+     * 🚨 获取当前启用的面板ID列表
+     * @returns {Array} 启用的面板ID列表
+     */
+    getEnabledPanelIds() {
+        try {
+            // 获取当前启用的面板配置
+            const enabledPanels = this.getEnabledPanels();
+            return enabledPanels.map(panel => {
+                // 自定义面板使用key，基础面板使用id
+                return (panel.type === 'custom' && panel.key) ? panel.key : panel.id;
+            });
+
+        } catch (error) {
+            console.error(`[SmartPromptSystem] ❌ 获取启用面板ID失败:`, error);
+            return [];
+        }
+    }
+
+    /**
+     * 🚨 获取面板的启用字段列表
+     * @param {string} panelName - 面板名称
+     * @returns {Array} 启用的字段列表
+     */
+    getEnabledFieldsForPanel(panelName) {
+        try {
+            // 获取当前启用的面板配置
+            const enabledPanels = this.getEnabledPanels();
+
+            // 查找对应的面板配置
+            const panelConfig = enabledPanels.find(panel => {
+                const panelKey = (panel.type === 'custom' && panel.key) ? panel.key : panel.id;
+                return panelKey === panelName;
+            });
+
+            if (!panelConfig || !panelConfig.subItems) {
+                console.warn(`[SmartPromptSystem] ⚠️ 无法获取面板 "${panelName}" 的配置`);
+                return null;
+            }
+
+            // 返回启用的字段
+            return panelConfig.subItems.filter(item => item.enabled !== false);
+
+        } catch (error) {
+            console.error(`[SmartPromptSystem] ❌ 获取面板字段配置失败: ${panelName}`, error);
+            return null;
+        }
     }
 
     /**
@@ -4955,6 +5277,409 @@ infobar_data标签（独立输出，必须后输出）
             throw error;
         }
     }
+
+    /**
+     * 🔧 新增：绑定总结输出处理器
+     */
+    bindSummaryOutputHandler() {
+        try {
+            console.log('[SmartPromptSystem] 🔗 绑定总结输出处理器...');
+
+            // 监听消息生成完成事件
+            if (this.eventSystem) {
+                this.eventSystem.on('message:generated', (data) => {
+                    this.handleGeneratedMessage(data);
+                });
+            }
+
+            // 监听SillyTavern的消息事件
+            $(document).on('message_sent', (event, data) => {
+                this.handleSillyTavernMessage(data);
+            });
+
+            // 监听AI消息接收事件
+            $(document).on('CHARACTER_MESSAGE_RENDERED', (event, data) => {
+                this.handleSillyTavernMessage(data);
+            });
+
+            // 监听消息添加事件
+            $(document).on('messageAdded', (event, data) => {
+                this.handleSillyTavernMessage(data);
+            });
+
+            console.log('[SmartPromptSystem] ✅ 总结输出处理器绑定完成');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 绑定总结输出处理器失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：绑定消息内容过滤器
+     */
+    bindMessageContentFilter() {
+        try {
+            console.log('[SmartPromptSystem] 🔗 绑定消息内容过滤器...');
+
+            // 监听消息渲染完成事件，在消息显示后隐藏AI记忆总结内容
+            $(document).on('CHARACTER_MESSAGE_RENDERED', (event, data) => {
+                setTimeout(() => {
+                    this.filterAIMemorySummaryFromDisplay();
+                }, 100);
+            });
+
+            // 监听消息添加事件
+            $(document).on('messageAdded', (event, data) => {
+                setTimeout(() => {
+                    this.filterAIMemorySummaryFromDisplay();
+                }, 100);
+            });
+
+            // 定期检查和过滤（防止遗漏）
+            setInterval(() => {
+                this.filterAIMemorySummaryFromDisplay();
+            }, 5000);
+
+            console.log('[SmartPromptSystem] ✅ 消息内容过滤器绑定完成');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 绑定消息内容过滤器失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 优化：高效的AI记忆总结隐藏方案
+     * 使用CSS样式和预处理相结合的方式，避免性能问题
+     */
+    initializeAIMemorySummaryHiding() {
+        try {
+            console.log('[SmartPromptSystem] 🚀 初始化AI记忆总结隐藏机制...');
+
+            // 方案1：注入CSS样式隐藏AI记忆总结
+            this.injectAIMemorySummaryHidingCSS();
+
+            // 方案2：监听消息渲染事件，在渲染时预处理
+            this.bindMessageRenderingEvents();
+
+            console.log('[SmartPromptSystem] ✅ AI记忆总结隐藏机制初始化完成');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 初始化AI记忆总结隐藏机制失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：注入CSS样式隐藏AI记忆总结
+     */
+    injectAIMemorySummaryHidingCSS() {
+        try {
+            // 检查是否已经注入过样式
+            if (document.getElementById('ai-memory-summary-hiding-styles')) {
+                console.log('[SmartPromptSystem] ℹ️ AI记忆总结隐藏样式已存在，跳过注入');
+                return;
+            }
+
+            const cssRules = `
+                /* 🔒 AI记忆总结隐藏样式 */
+                .ai-memory-summary-hidden {
+                    display: none !important;
+                    visibility: hidden !important;
+                    height: 0 !important;
+                    overflow: hidden !important;
+                    opacity: 0 !important;
+                }
+
+                /* 🔒 通过属性选择器隐藏包含AI记忆总结的内容 */
+                .mes_text [data-ai-memory-summary="true"] {
+                    display: none !important;
+                }
+
+                /* 🔒 隐藏代码块中的AI记忆总结 */
+                .mes_text pre:has([data-ai-memory-summary]) {
+                    display: none !important;
+                }
+            `;
+
+            const styleElement = document.createElement('style');
+            styleElement.id = 'ai-memory-summary-hiding-styles';
+            styleElement.textContent = cssRules;
+            document.head.appendChild(styleElement);
+
+            console.log('[SmartPromptSystem] ✅ AI记忆总结隐藏CSS样式注入完成');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 注入AI记忆总结隐藏CSS失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：绑定消息渲染事件
+     */
+    bindMessageRenderingEvents() {
+        try {
+            // 监听SillyTavern的消息渲染事件
+            if (window.eventSource) {
+                window.eventSource.on('message_rendered', this.handleMessageRendered.bind(this));
+                console.log('[SmartPromptSystem] ✅ 消息渲染事件监听器绑定完成');
+            }
+
+            // 监听DOM变化，处理动态添加的消息
+            this.observeMessageChanges();
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 绑定消息渲染事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理消息渲染事件
+     */
+    handleMessageRendered(data) {
+        try {
+            if (!data || !data.messageId) return;
+
+            // 查找对应的消息元素
+            const messageElement = document.querySelector(`[mesid="${data.messageId}"]`);
+            if (!messageElement) return;
+
+            // 预处理消息内容
+            this.preprocessMessageForAIMemorySummary(messageElement);
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 处理消息渲染事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：观察消息变化
+     */
+    observeMessageChanges() {
+        try {
+            // 创建MutationObserver监听消息容器的变化
+            const chatContainer = document.querySelector('#chat');
+            if (!chatContainer) {
+                console.warn('[SmartPromptSystem] ⚠️ 未找到聊天容器，无法监听消息变化');
+                return;
+            }
+
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'childList') {
+                        mutation.addedNodes.forEach((node) => {
+                            if (node.nodeType === Node.ELEMENT_NODE && node.classList?.contains('mes')) {
+                                // 新消息添加，预处理AI记忆总结
+                                setTimeout(() => {
+                                    this.preprocessMessageForAIMemorySummary(node);
+                                }, 100);
+                            }
+                        });
+                    }
+                });
+            });
+
+            observer.observe(chatContainer, {
+                childList: true,
+                subtree: true
+            });
+
+            console.log('[SmartPromptSystem] ✅ 消息变化观察器启动完成');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 启动消息变化观察器失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：预处理消息中的AI记忆总结
+     */
+    preprocessMessageForAIMemorySummary(messageElement) {
+        try {
+            const messageTextElement = messageElement.querySelector('.mes_text');
+            if (!messageTextElement) return;
+
+            let messageContent = messageTextElement.innerHTML;
+
+            // 检查是否包含AI记忆总结
+            if (!messageContent.includes('[AI_MEMORY_SUMMARY]')) return;
+
+            // 🚀 高效的正则表达式预处理
+            const aiMemorySummaryRegex = /\[AI_MEMORY_SUMMARY\][\s\S]*?\[\/AI_MEMORY_SUMMARY\]/g;
+
+            // 将AI记忆总结内容包装在隐藏容器中，而不是直接删除
+            messageContent = messageContent.replace(aiMemorySummaryRegex, (match) => {
+                return `<div class="ai-memory-summary-hidden" data-ai-memory-summary="true">${match}</div>`;
+            });
+
+            // 处理代码块中的AI记忆总结
+            const codeBlockRegex = /```[\s\S]*?\[AI_MEMORY_SUMMARY\][\s\S]*?\[\/AI_MEMORY_SUMMARY\][\s\S]*?```/g;
+            messageContent = messageContent.replace(codeBlockRegex, (match) => {
+                return `<div class="ai-memory-summary-hidden" data-ai-memory-summary="true">${match}</div>`;
+            });
+
+            // 更新消息内容（只在有变化时更新）
+            if (messageTextElement.innerHTML !== messageContent) {
+                messageTextElement.innerHTML = messageContent;
+                console.log('[SmartPromptSystem] 🔒 已预处理消息中的AI记忆总结内容');
+            }
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 预处理消息AI记忆总结失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 兼容性方法：从显示中过滤AI记忆总结内容（保留作为备用方案）
+     */
+    filterAIMemorySummaryFromDisplay() {
+        try {
+            console.log('[SmartPromptSystem] ⚠️ 使用备用的AI记忆总结隐藏方案...');
+
+            // 查找所有未处理的消息元素
+            const messageElements = document.querySelectorAll('.mes:not([data-ai-memory-processed])');
+            let processedCount = 0;
+
+            messageElements.forEach(messageElement => {
+                this.preprocessMessageForAIMemorySummary(messageElement);
+                messageElement.setAttribute('data-ai-memory-processed', 'true');
+                processedCount++;
+            });
+
+            if (processedCount > 0) {
+                console.log(`[SmartPromptSystem] ✅ 备用方案处理了 ${processedCount} 个消息`);
+            }
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 备用AI记忆总结隐藏方案失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理生成的消息，提取总结内容
+     */
+    async handleGeneratedMessage(data) {
+        try {
+            if (!data || !data.message) {
+                return;
+            }
+
+            const messageContent = data.message;
+            console.log('[SmartPromptSystem] 📝 检查生成消息中的总结内容...');
+
+            // 提取AI记忆总结
+            const aiMemorySummary = this.extractAIMemorySummary(messageContent);
+            if (aiMemorySummary) {
+                await this.processAIMemorySummary(aiMemorySummary);
+            }
+
+            // 🔧 修改：传统剧情总结不再通过智能提示词处理，保持原有自定义API方案
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 处理生成消息失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理SillyTavern消息事件
+     */
+    async handleSillyTavernMessage(data) {
+        try {
+            // 检查是否是AI回复
+            if (!data || data.is_user) {
+                return;
+            }
+
+            const messageContent = data.mes || data.message || '';
+            if (!messageContent) {
+                return;
+            }
+
+            // 检查消息是否包含AI记忆总结标签
+            if (!messageContent.includes('[AI_MEMORY_SUMMARY]')) {
+                return;
+            }
+
+            console.log('[SmartPromptSystem] 📝 检测到AI记忆总结内容，开始处理...');
+            console.log('[SmartPromptSystem] 📄 消息内容长度:', messageContent.length);
+
+            // 提取并处理总结内容
+            await this.handleGeneratedMessage({ message: messageContent });
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 处理SillyTavern消息失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：提取AI记忆总结
+     */
+    extractAIMemorySummary(messageContent) {
+        try {
+            const regex = /\[AI_MEMORY_SUMMARY\]([\s\S]*?)\[\/AI_MEMORY_SUMMARY\]/;
+            const match = messageContent.match(regex);
+
+            if (match && match[1]) {
+                const jsonContent = match[1].trim();
+                return JSON.parse(jsonContent);
+            }
+
+            return null;
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 提取AI记忆总结失败:', error);
+            return null;
+        }
+    }
+
+
+
+    /**
+     * 🔧 新增：处理AI记忆总结
+     */
+    async processAIMemorySummary(summary) {
+        try {
+            console.log('[SmartPromptSystem] 🧠 处理AI记忆总结:', summary);
+
+            // 获取深度记忆管理器
+            const infoBarTool = window.SillyTavernInfobar;
+            const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+            const aiMemorySummarizer = infoBarTool?.modules?.summaryManager?.aiMemorySummarizer;
+
+            if (deepMemoryManager && deepMemoryManager.initialized) {
+                // 将总结内容添加到深度记忆管理器
+                const memoryData = {
+                    content: summary.content,
+                    importance: summary.importance || 0.8,
+                    tags: summary.tags || [],
+                    category: summary.category || '角色互动',
+                    timestamp: summary.timestamp || Date.now(),
+                    messageId: summary.messageId,
+                    source: 'ai_memory_summary'
+                };
+
+                await deepMemoryManager.addMemoryToSensoryLayer(memoryData);
+                console.log('[SmartPromptSystem] ✅ AI记忆总结已添加到深度记忆管理器');
+            }
+
+            if (aiMemorySummarizer) {
+                // 触发AI记忆总结创建事件
+                if (this.eventSystem) {
+                    this.eventSystem.emit('ai-summary:created', {
+                        summary: summary,
+                        messageCount: 1,
+                        importantCount: 1,
+                        timestamp: Date.now(),
+                        source: 'smart_prompt_integration'
+                    });
+                }
+
+                console.log('[SmartPromptSystem] ✅ AI记忆总结事件已触发');
+            }
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 处理AI记忆总结失败:', error);
+        }
+    }
+
+
 
     /**
      * 获取系统状态
