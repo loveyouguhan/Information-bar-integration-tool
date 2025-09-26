@@ -279,26 +279,18 @@ class InformationBarIntegrationTool {
         this.variableSystemPrompt = new VariableSystemPrompt(this.eventSystem);
         await this.variableSystemPrompt.init();
 
-        // 初始化STScript数据同步系统
-        try {
-            // SummaryManager将在UI组件初始化阶段通过setSummaryManager()方法设置
-            this.stscriptDataSync = new STScriptDataSync(this.dataCore, this.eventSystem);
-            await this.stscriptDataSync.initialize();
-            console.log('[InfoBarTool] ✅ STScript数据同步系统初始化完成');
-        } catch (error) {
-            console.warn('[InfoBarTool] ⚠️ STScript数据同步系统初始化失败:', error.message);
-            console.warn('[InfoBarTool] 📝 将继续运行，但STScript功能不可用');
-            this.stscriptDataSync = null;
-        }
+        // 🔧 修改：禁用STScript数据同步系统
+        console.log('[InfoBarTool] ⏸️ STScript数据同步系统已被禁用');
+        this.stscriptDataSync = null;
 
-        // 初始化AI数据暴露模块（需要在STScript数据同步系统之后）
+        // 初始化AI数据暴露模块（STScript同步系统已禁用）
         try {
             this.aiDataExposure = new AIDataExposure({
                 unifiedDataCore: this.dataCore,
                 eventSystem: this.eventSystem,
                 fieldRuleManager: this.fieldRuleManager,
                 panelRuleManager: this.panelRuleManager,
-                stScriptDataSync: this.stscriptDataSync
+                stScriptDataSync: null // 🔧 修改：STScript同步系统已禁用
             });
             await this.aiDataExposure.init();
             console.log('[InfoBarTool] ✅ AI数据暴露模块初始化完成');
@@ -411,10 +403,7 @@ class InformationBarIntegrationTool {
         });
         await this.aiMemoryDatabaseInjector.init();
 
-        // 🆕 将SummaryManager设置到STScript同步系统（延迟初始化）
-        if (this.stscriptDataSync) {
-            this.stscriptDataSync.setSummaryManager(this.summaryManager);
-        }
+        // 🔧 修改：STScript同步系统已禁用，跳过SummaryManager设置
 
         // 初始化前端显示管理器
         this.frontendDisplayManager = new FrontendDisplayManager(
@@ -449,7 +438,7 @@ class InformationBarIntegrationTool {
             xmlDataParser: this.xmlDataParser,
             dataSnapshotManager: this.dataSnapshotManager,
             aiDataExposure: this.aiDataExposure,
-            stScriptDataSync: this.stscriptDataSync,
+            stScriptDataSync: null, // 🔧 修改：STScript同步系统已禁用
             summaryManager: this.summaryManager,
             aiMemorySummarizer: this.aiMemorySummarizer,
             vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
@@ -751,7 +740,7 @@ class InformationBarIntegrationTool {
             xmlDataParser: this.xmlDataParser,
             aiDataExposure: this.aiDataExposure, // 🔧 添加：AI数据暴露模块
                 dataSnapshotManager: this.dataSnapshotManager,
-                stScriptDataSync: this.stscriptDataSync,
+                stScriptDataSync: null, // 🔧 修改：STScript同步系统已禁用
                 summaryManager: this.summaryManager,
                 aiMemorySummarizer: this.aiMemorySummarizer,
                 vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,

@@ -10116,6 +10116,176 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     }
 }
 
+/* ========== 记忆状态可视化样式 ========== */
+
+/* 记忆状态可视化容器 */
+.memory-status-visualization {
+    background: var(--theme-bg-secondary, #f8f9fa);
+    border: 1px solid var(--theme-border-color, #dee2e6);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.status-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--theme-border-color, #dee2e6);
+}
+
+.status-header h4 {
+    margin: 0;
+    color: var(--theme-text-primary, #212529);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.refresh-status-btn {
+    background: var(--theme-bg-primary, #ffffff);
+    border: 1px solid var(--theme-border-color, #dee2e6);
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.refresh-status-btn:hover {
+    background: var(--theme-bg-hover, #e9ecef);
+    transform: rotate(90deg);
+}
+
+/* 四层记忆状态卡片 */
+.memory-layers-status {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.memory-layer-card {
+    background: var(--theme-bg-primary, #ffffff);
+    border: 1px solid var(--theme-border-color, #dee2e6);
+    border-radius: 6px;
+    padding: 12px;
+    transition: all 0.2s ease;
+}
+
+.memory-layer-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+.layer-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.layer-icon {
+    font-size: 16px;
+    margin-right: 8px;
+}
+
+.layer-name {
+    flex: 1;
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--theme-text-primary, #212529);
+}
+
+.layer-status {
+    font-size: 12px;
+    margin-left: 8px;
+}
+
+.layer-status.active { color: #28a745; }
+.layer-status.inactive { color: #6c757d; }
+.layer-status.error { color: #dc3545; }
+.layer-status.processing { color: #ffc107; }
+
+.layer-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+}
+
+.stat-label {
+    color: var(--theme-text-secondary, #6c757d);
+}
+
+.stat-value {
+    font-weight: 500;
+    color: var(--theme-text-primary, #212529);
+}
+
+/* 模块状态概览 */
+.modules-status {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.module-status-card {
+    background: var(--theme-bg-primary, #ffffff);
+    border: 1px solid var(--theme-border-color, #dee2e6);
+    border-radius: 6px;
+    padding: 12px;
+    transition: all 0.2s ease;
+}
+
+.module-status-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+.module-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.module-icon {
+    font-size: 14px;
+    margin-right: 6px;
+}
+
+.module-name {
+    flex: 1;
+    font-weight: 500;
+    font-size: 12px;
+    color: var(--theme-text-primary, #212529);
+}
+
+.module-status {
+    font-size: 10px;
+    margin-left: 6px;
+}
+
+.module-status.active { color: #28a745; }
+.module-status.inactive { color: #6c757d; }
+.module-status.error { color: #dc3545; }
+.module-status.processing { color: #ffc107; }
+
+.module-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.module-stats .stat-item {
+    font-size: 11px;
+}
+
 /* ========== 自定义对话框样式 ========== */
 
 /* 自定义面板添加对话框、子项对话框、删除确认对话框、保存确认对话框 */
