@@ -4845,7 +4845,7 @@ export class InfoBarSettings {
                         <select id="api-provider" name="apiConfig.provider">
                             <option value="">请选择提供商</option>
                             <option value="gemini">Google Gemini</option>
-                            <option value="localproxy">本地反代 (SillyTavern后端)</option>
+                            <option value="localproxy">cil/本地反代 (SillyTavern后端)</option>
                             <option value="custom">自定义API</option>
                         </select>
                         <small>选择您要使用的AI模型提供商</small>
@@ -5023,6 +5023,164 @@ export class InfoBarSettings {
             </div>
 
             <div class="content-body">
+                <!-- 🎯 记忆系统状态可视化 -->
+                <div class="memory-status-visualization" id="memory-status-visualization">
+                    <div class="status-header">
+                        <h4>📊 记忆状态显示</h4>
+                        <button class="refresh-status-btn" id="refresh-memory-status" title="刷新状态">🔄</button>
+                    </div>
+
+                    <!-- 四层记忆状态卡片 -->
+                    <div class="memory-layers-status">
+                        <div class="memory-layer-card" data-layer="sensory">
+                            <div class="layer-header">
+                                <span class="layer-icon">👁️</span>
+                                <span class="layer-name">感知记忆层</span>
+                                <span class="layer-status" id="sensory-status">●</span>
+                            </div>
+                            <div class="layer-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">数量:</span>
+                                    <span class="stat-value" id="sensory-count">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">容量:</span>
+                                    <span class="stat-value" id="sensory-capacity">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="memory-layer-card" data-layer="shortTerm">
+                            <div class="layer-header">
+                                <span class="layer-icon">⚡</span>
+                                <span class="layer-name">短期记忆层</span>
+                                <span class="layer-status" id="shortterm-status">●</span>
+                            </div>
+                            <div class="layer-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">数量:</span>
+                                    <span class="stat-value" id="shortterm-count">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">重要性:</span>
+                                    <span class="stat-value" id="shortterm-importance">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="memory-layer-card" data-layer="longTerm">
+                            <div class="layer-header">
+                                <span class="layer-icon">🧠</span>
+                                <span class="layer-name">长期记忆层</span>
+                                <span class="layer-status" id="longterm-status">●</span>
+                            </div>
+                            <div class="layer-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">数量:</span>
+                                    <span class="stat-value" id="longterm-count">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">迁移:</span>
+                                    <span class="stat-value" id="longterm-migrations">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="memory-layer-card" data-layer="deepArchive">
+                            <div class="layer-header">
+                                <span class="layer-icon">📚</span>
+                                <span class="layer-name">深度归档层</span>
+                                <span class="layer-status" id="archive-status">●</span>
+                            </div>
+                            <div class="layer-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">数量:</span>
+                                    <span class="stat-value" id="archive-count">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">压缩:</span>
+                                    <span class="stat-value" id="archive-compression">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 模块状态概览 -->
+                    <div class="modules-status">
+                        <div class="module-status-card" data-module="aiSummarizer">
+                            <div class="module-header">
+                                <span class="module-icon">🤖</span>
+                                <span class="module-name">AI记忆总结</span>
+                                <span class="module-status" id="ai-summarizer-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">队列:</span>
+                                    <span class="stat-value" id="ai-summarizer-queue">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">缓存:</span>
+                                    <span class="stat-value" id="ai-summarizer-cache">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="module-status-card" data-module="vectorSearch">
+                            <div class="module-header">
+                                <span class="module-icon">🔍</span>
+                                <span class="module-name">语义搜索</span>
+                                <span class="module-status" id="vector-search-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">索引:</span>
+                                    <span class="stat-value" id="vector-search-index">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">命中率:</span>
+                                    <span class="stat-value" id="vector-search-hitrate">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="module-status-card" data-module="classifier">
+                            <div class="module-header">
+                                <span class="module-icon">🎯</span>
+                                <span class="module-name">智能分类</span>
+                                <span class="module-status" id="classifier-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">分类:</span>
+                                    <span class="stat-value" id="classifier-count">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">置信度:</span>
+                                    <span class="stat-value" id="classifier-confidence">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="module-status-card" data-module="injector">
+                            <div class="module-header">
+                                <span class="module-icon">💉</span>
+                                <span class="module-name">记忆注入</span>
+                                <span class="module-status" id="injector-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">注入:</span>
+                                    <span class="stat-value" id="injector-count">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">错误:</span>
+                                    <span class="stat-value" id="injector-errors">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 🚀 AI记忆总结设置 -->
                 <div class="setting-row ai-memory-section">
                     <h5 style="color: #4CAF50; margin: 0 0 10px 0; font-size: 14px; font-weight: 600;">🧠 AI记忆总结</h5>
@@ -17943,7 +18101,7 @@ add interaction(1 {"1","小雨","2","同事","3","友好","4","讨论项目","5"
 
             // 根据提供商和接口类型发送请求
             if (apiConfig.provider === 'gemini' && apiConfig.format === 'native') {
-                return await this.sendGeminiNativeRequest(enhancedMessages, apiConfig);
+                return await this.sendGeminiNativeRequest(enhancedMessages, apiConfig, options);
             } else if (apiConfig.provider === 'localproxy') {
                 return await this.sendLocalProxyRequest(enhancedMessages, apiConfig);
             } else {
@@ -18431,7 +18589,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
     /**
      * 发送Gemini原生API请求
      */
-    async sendGeminiNativeRequest(messages, apiConfig) {
+    async sendGeminiNativeRequest(messages, apiConfig, options = {}) {
         console.log('[InfoBarSettings] 🔄 发送Gemini原生请求...');
 
         const systemMessage = messages.find(m => m.role === 'system');
@@ -18439,15 +18597,27 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
         const prompt = systemMessage ? `${systemMessage.content}\n\n${userMessage.content}` : userMessage.content;
 
+        // 🔧 修复：根据使用场景动态设置maxOutputTokens
+        // 总结功能需要更大的输出令牌数，普通信息栏请求使用较小值
+        const isSummaryRequest = options?.skipSystemPrompt === true;
+        const defaultMaxTokens = isSummaryRequest ? 8000 : 2000;  // 总结请求使用8000，普通请求使用2000
+
         const requestBody = {
             contents: [{
                 parts: [{ text: prompt }]
             }],
             generationConfig: {
                 temperature: apiConfig.temperature || 0.7,
-                maxOutputTokens: apiConfig.maxTokens || 2000
+                maxOutputTokens: apiConfig.maxTokens || defaultMaxTokens
             }
         };
+
+        console.log('[InfoBarSettings] 🔧 API请求配置:', {
+            isSummaryRequest,
+            maxOutputTokens: requestBody.generationConfig.maxOutputTokens,
+            temperature: requestBody.generationConfig.temperature,
+            promptLength: prompt.length
+        });
 
         const requestUrl = `${apiConfig.baseUrl}/v1beta/models/${apiConfig.model}:generateContent?key=${apiConfig.apiKey}`;
         console.log('[InfoBarSettings] 🌐 使用CORS兼容请求:', requestUrl);
@@ -19483,6 +19653,12 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
         try {
             console.log('[InfoBarSettings] 🔗 绑定总结面板事件...');
 
+            // 🔧 修复：防止重复绑定事件监听器
+            if (this._summaryEventsbound) {
+                console.log('[InfoBarSettings] ⚠️ 总结面板事件已绑定，跳过重复绑定');
+                return;
+            }
+
             // 总结类型变化事件
             const summaryTypeSelect = this.modal.querySelector('#content-summary-type');
             if (summaryTypeSelect) {
@@ -19737,6 +19913,9 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                     this.handleAutoHideEnabledChange(e.target.checked);
                 });
             }
+
+            // 🔧 修复：设置事件绑定标志，防止重复绑定
+            this._summaryEventsbound = true;
 
             console.log('[InfoBarSettings] ✅ 总结面板事件绑定完成');
 
@@ -20017,6 +20196,25 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             const unifiedDataCore = infoBarTool?.modules?.dataCore;
             if (unifiedDataCore) {
                 await unifiedDataCore.setData('summary_settings', settings);
+            }
+
+            // 🔧 新增：保存到SillyTavern扩展设置
+            const context = SillyTavern.getContext();
+            if (context && context.extensionSettings) {
+                const extensionSettings = context.extensionSettings;
+                if (!extensionSettings['Information bar integration tool']) {
+                    extensionSettings['Information bar integration tool'] = {};
+                }
+
+                // 保存总结设置到扩展设置
+                Object.assign(extensionSettings['Information bar integration tool'], settings);
+
+                // 触发SillyTavern保存
+                if (context.saveSettingsDebounced) {
+                    context.saveSettingsDebounced();
+                }
+
+                console.log('[InfoBarSettings] 💾 总结设置已保存到扩展设置');
             }
 
             console.log('[InfoBarSettings] ✅ 总结设置已保存');
@@ -30220,6 +30418,14 @@ ${dataExamples}
      */
     bindMemoryEnhancementEvents() {
         try {
+            // 🎯 状态刷新按钮事件
+            const refreshStatusBtn = this.modal.querySelector('#refresh-memory-status');
+            if (refreshStatusBtn) {
+                refreshStatusBtn.addEventListener('click', () => {
+                    this.refreshMemoryStatus();
+                });
+            }
+
             // AI记忆总结事件
             const memoryAiMemoryEnabled = this.modal.querySelector('#memory-ai-memory-enabled');
             if (memoryAiMemoryEnabled) {
@@ -30442,10 +30648,171 @@ ${dataExamples}
             // 绑定记忆增强面板事件
             this.bindMemoryEnhancementEvents();
 
+            // 初始化状态显示
+            this.refreshMemoryStatus();
+
             console.log('[InfoBarSettings] ✅ 记忆增强面板内容初始化完成');
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 初始化记忆增强面板内容失败:', error);
+        }
+    }
+
+    /**
+     * 🎯 刷新记忆系统状态显示
+     */
+    async refreshMemoryStatus() {
+        try {
+            console.log('[InfoBarSettings] 🔄 刷新记忆系统状态...');
+
+            const infoBarTool = window.SillyTavernInfobar;
+            if (!infoBarTool) {
+                console.warn('[InfoBarSettings] ⚠️ InfoBar工具未找到');
+                return;
+            }
+
+            // 获取各模块状态
+            const deepMemoryManager = infoBarTool.modules?.deepMemoryManager;
+            const aiMemorySummarizer = infoBarTool.modules?.summaryManager?.aiMemorySummarizer;
+            const vectorizedMemoryRetrieval = infoBarTool.modules?.vectorizedMemoryRetrieval;
+            const intelligentMemoryClassifier = infoBarTool.modules?.intelligentMemoryClassifier;
+            const aiMemoryDatabaseInjector = infoBarTool.modules?.aiMemoryDatabaseInjector;
+
+            // 更新四层记忆架构状态
+            if (deepMemoryManager) {
+                const status = deepMemoryManager.getStatus();
+                this.updateMemoryLayerStatus('sensory', status);
+                this.updateMemoryLayerStatus('shortTerm', status);
+                this.updateMemoryLayerStatus('longTerm', status);
+                this.updateMemoryLayerStatus('deepArchive', status);
+            }
+
+            // 更新模块状态
+            if (aiMemorySummarizer) {
+                const status = aiMemorySummarizer.getStatus();
+                this.updateModuleStatus('aiSummarizer', status);
+            }
+
+            if (vectorizedMemoryRetrieval) {
+                const status = vectorizedMemoryRetrieval.getStatus();
+                this.updateModuleStatus('vectorSearch', status);
+            }
+
+            if (intelligentMemoryClassifier) {
+                const status = intelligentMemoryClassifier.getStatus();
+                this.updateModuleStatus('classifier', status);
+            }
+
+            if (aiMemoryDatabaseInjector) {
+                const status = aiMemoryDatabaseInjector.getStatus();
+                this.updateModuleStatus('injector', status);
+            }
+
+            console.log('[InfoBarSettings] ✅ 记忆系统状态刷新完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 刷新记忆系统状态失败:', error);
+        }
+    }
+
+    /**
+     * 🎯 更新记忆层状态显示
+     */
+    updateMemoryLayerStatus(layerName, status) {
+        try {
+            const layerData = status.memoryLayers?.[layerName];
+            const stats = status.stats || {};
+            const settings = status.settings || {};
+
+            // 更新状态指示器
+            const statusElement = this.modal.querySelector(`#${layerName === 'shortTerm' ? 'shortterm' : layerName === 'longTerm' ? 'longterm' : layerName === 'deepArchive' ? 'archive' : layerName}-status`);
+            if (statusElement) {
+                const isActive = status.initialized && !status.isProcessing;
+                statusElement.className = `layer-status ${isActive ? 'active' : status.errorCount > 0 ? 'error' : 'inactive'}`;
+            }
+
+            // 更新具体数据
+            switch (layerName) {
+                case 'sensory':
+                    this.updateElement('#sensory-count', layerData || 0);
+                    this.updateElement('#sensory-capacity', `${layerData || 0}/${settings.sensoryMemoryCapacity || 100}`);
+                    break;
+                case 'shortTerm':
+                    this.updateElement('#shortterm-count', layerData || 0);
+                    this.updateElement('#shortterm-importance', `${Math.round((stats.averageImportance || 0) * 100)}%`);
+                    break;
+                case 'longTerm':
+                    this.updateElement('#longterm-count', layerData || 0);
+                    this.updateElement('#longterm-migrations', stats.memoryMigrations || 0);
+                    break;
+                case 'deepArchive':
+                    this.updateElement('#archive-count', layerData || 0);
+                    this.updateElement('#archive-compression', `${Math.round((stats.compressionRatio || 0) * 100)}%`);
+                    break;
+            }
+
+        } catch (error) {
+            console.error(`[InfoBarSettings] ❌ 更新记忆层状态失败 (${layerName}):`, error);
+        }
+    }
+
+    /**
+     * 🎯 更新模块状态显示
+     */
+    updateModuleStatus(moduleName, status) {
+        try {
+            // 更新状态指示器
+            const statusElement = this.modal.querySelector(`#${moduleName === 'aiSummarizer' ? 'ai-summarizer' : moduleName === 'vectorSearch' ? 'vector-search' : moduleName}-status`);
+            if (statusElement) {
+                const isActive = status.initialized && !status.isProcessing;
+                statusElement.className = `module-status ${isActive ? 'active' : status.errorCount > 0 ? 'error' : 'inactive'}`;
+            }
+
+            // 更新具体数据
+            switch (moduleName) {
+                case 'aiSummarizer':
+                    this.updateElement('#ai-summarizer-queue', status.queueLength || 0);
+                    this.updateElement('#ai-summarizer-cache', status.cacheSize || 0);
+                    break;
+                case 'vectorSearch':
+                    this.updateElement('#vector-search-index', status.indexSize || 0);
+                    // 🔧 修复：正确计算命中率
+                    let hitRate = 0;
+                    if (status.stats) {
+                        const cacheHits = status.stats.cacheHits || 0;
+                        const cacheMisses = status.stats.cacheMisses || 0;
+                        const totalRequests = cacheHits + cacheMisses;
+                        hitRate = totalRequests > 0 ? Math.round((cacheHits / totalRequests) * 100) : 0;
+                    }
+                    this.updateElement('#vector-search-hitrate', `${hitRate}%`);
+                    break;
+                case 'classifier':
+                    // 🔧 修复：使用正确的字段名
+                    this.updateElement('#classifier-count', status.stats?.totalClassifications || 0);
+                    this.updateElement('#classifier-confidence', `${Math.round((status.stats?.averageConfidence || 0) * 100)}%`);
+                    break;
+                case 'injector':
+                    this.updateElement('#injector-count', status.stats?.totalInjections || 0);
+                    this.updateElement('#injector-errors', status.errorCount || 0);
+                    break;
+            }
+
+        } catch (error) {
+            console.error(`[InfoBarSettings] ❌ 更新模块状态失败 (${moduleName}):`, error);
+        }
+    }
+
+    /**
+     * 🎯 更新DOM元素内容
+     */
+    updateElement(selector, value) {
+        try {
+            const element = this.modal.querySelector(selector);
+            if (element) {
+                element.textContent = value;
+            }
+        } catch (error) {
+            console.error(`[InfoBarSettings] ❌ 更新元素失败 (${selector}):`, error);
         }
     }
 

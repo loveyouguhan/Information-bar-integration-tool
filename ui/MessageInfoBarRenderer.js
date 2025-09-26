@@ -286,10 +286,23 @@ export class MessageInfoBarRenderer {
                     this.renderedMessages.clear();
                     console.log('[MessageInfoBarRenderer] 🧹 已清除所有渲染记录，共', clearedCount, '条');
                 }
+
+                // 🚨 自定义API数据更新时，立即渲染信息栏
+                console.log('[MessageInfoBarRenderer] 🚀 自定义API数据更新完成，立即开始渲染');
+                this.renderInfoBarForLatestMessage();
+                return;
             }
 
-            // 🔧 修复：移除固定延迟，EventSystem已确保数据准备就绪才触发此事件
-            console.log('[MessageInfoBarRenderer] 🚀 数据已准备就绪，立即开始渲染');
+            // 🚨 新增：检查是否为自定义API模式
+            const isCustomAPIMode = await this.isCustomAPIMode();
+            if (isCustomAPIMode) {
+                console.log('[MessageInfoBarRenderer] 🔄 检测到自定义API模式，主API返回后等待自定义API响应');
+                console.log('[MessageInfoBarRenderer] ⏳ 跳过基于旧数据的信息栏渲染，等待自定义API更新数据');
+                return;
+            }
+
+            // 🔧 修复：只有在非自定义API模式下，才基于数据核心立即渲染
+            console.log('[MessageInfoBarRenderer] 🚀 主API模式，数据已准备就绪，立即开始渲染');
             this.renderInfoBarForLatestMessage();
 
         } catch (error) {
@@ -3994,6 +4007,39 @@ export class MessageInfoBarRenderer {
     }
 
     /**
+     * 检查是否为自定义API模式
+     */
+    async isCustomAPIMode() {
+        try {
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings['Information bar integration tool'] || {};
+            const apiConfig = configs.apiConfig || {};
+
+            // 检查自定义API是否启用且配置完整
+            const isEnabled = apiConfig.enabled === true;
+            const hasApiKey = apiConfig.apiKey && apiConfig.apiKey.trim() !== '';
+            const hasModel = apiConfig.model && apiConfig.model.trim() !== '';
+
+            const isCustomAPIMode = isEnabled && hasApiKey && hasModel;
+
+            console.log('[MessageInfoBarRenderer] 🔍 自定义API模式检测:', {
+                enabled: isEnabled,
+                hasApiKey: hasApiKey,
+                hasModel: hasModel,
+                provider: apiConfig.provider,
+                isCustomAPIMode: isCustomAPIMode
+            });
+
+            return isCustomAPIMode;
+
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 检查自定义API模式失败:', error);
+            return false; // 出错时默认为主API模式
+        }
+    }
+
+    /**
      * 检查前端显示功能是否启用
      */
     async isFrontendDisplayEnabled() {
@@ -4009,13 +4055,13 @@ export class MessageInfoBarRenderer {
                 const frontendDisplayConfig = await this.configManager.getFrontendDisplayConfig();
                 const isEnabled = frontendDisplayConfig?.enabled === true;
                 console.log('[MessageInfoBarRenderer] 🔍 配置管理器前端显示状态:', isEnabled);
-                
+
                 // 同步内部标志
                 if (isEnabled !== this.frontendDisplayMode) {
                     this.frontendDisplayMode = isEnabled;
                     console.log('[MessageInfoBarRenderer] 🔄 已同步内部前端显示标志为' + isEnabled);
                 }
-                
+
                 return isEnabled;
             }
 
@@ -4023,16 +4069,16 @@ export class MessageInfoBarRenderer {
             const context = SillyTavern.getContext();
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings['Information bar integration tool'] || {};
-            
+
             const isEnabled = configs.frontendDisplay?.enabled === true;
             console.log('[MessageInfoBarRenderer] 🔍 扩展设置前端显示状态:', isEnabled);
-            
+
             // 同步内部标志
             if (isEnabled !== this.frontendDisplayMode) {
                 this.frontendDisplayMode = isEnabled;
                 console.log('[MessageInfoBarRenderer] 🔄 已同步内部前端显示标志为' + isEnabled);
             }
-            
+
             return isEnabled;
 
         } catch (error) {
