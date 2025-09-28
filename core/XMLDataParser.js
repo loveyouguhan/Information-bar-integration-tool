@@ -1274,7 +1274,7 @@ export class XMLDataParser {
     }
 
     /**
-     * 🚨 获取面板的启用字段列表
+     * 🚨 获取面板的启用字段列表 - 修复：与SmartPromptSystem保持一致
      * @param {string} panelName - 面板名称
      * @returns {Array} 启用的字段列表
      */
@@ -1295,13 +1295,70 @@ export class XMLDataParser {
 
             // 获取面板配置
             const panelConfig = configs[englishPanelId];
-            if (!panelConfig || !panelConfig.subItems) {
+            if (!panelConfig) {
                 console.warn(`[XMLDataParser] ⚠️ 无法获取面板 "${englishPanelId}" 的配置`);
                 return null;
             }
 
-            // 返回启用的字段
-            return panelConfig.subItems.filter(item => item.enabled !== false);
+            // 🔧 修复：同时处理基础设置复选框和面板管理自定义子项（与SmartPromptSystem.getEnabledPanels保持一致）
+            const allSubItems = [];
+
+            // 1. 处理基础设置中的复选框配置（panel[key].enabled格式）
+            const subItemKeys = Object.keys(panelConfig).filter(key =>
+                key !== 'enabled' &&
+                key !== 'subItems' &&     // 排除自定义子项数组
+                key !== 'description' &&  // 排除面板属性
+                key !== 'icon' &&
+                key !== 'required' &&
+                key !== 'memoryInject' &&
+                key !== 'prompts' &&
+                !key.startsWith('custom_field_') && // 🔧 修复：排除custom_field字段，这些字段应该只通过subItems管理
+                typeof panelConfig[key] === 'object' &&
+                panelConfig[key].enabled !== undefined
+            );
+            const enabledSubItems = subItemKeys.filter(key => panelConfig[key].enabled === true);
+
+            // 添加基础设置的子项
+            enabledSubItems.forEach(key => {
+                allSubItems.push({
+                    key: key,
+                    name: panelConfig[key].name || key,
+                    enabled: true,
+                    value: panelConfig[key].value || '',
+                    source: 'basicSettings' // 标记来源
+                });
+            });
+
+            // 2. 处理面板管理中的自定义子项（panel.subItems数组格式）
+            let enabledCustomSubItems = [];
+            if (panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
+                enabledCustomSubItems = panelConfig.subItems.filter(subItem => subItem.enabled === true);
+
+                // 🔧 修复：创建键名集合，避免重复添加
+                const existingKeys = new Set(allSubItems.map(item => item.key));
+
+                enabledCustomSubItems.forEach(subItem => {
+                    const key = subItem.key || subItem.name.toLowerCase().replace(/\s+/g, '_');
+
+                    // 🔧 修复：检查是否已存在，避免重复
+                    if (!existingKeys.has(key)) {
+                        allSubItems.push({
+                            key: key,
+                            name: subItem.displayName || subItem.name,
+                            enabled: true,
+                            value: subItem.value || '',
+                            source: 'panelManagement' // 标记来源
+                        });
+                        existingKeys.add(key);
+                    } else {
+                        console.log(`[XMLDataParser] ⚠️ 跳过重复的自定义子项: ${key} (基础面板 ${englishPanelId} 已存在该键)`);
+                    }
+                });
+            }
+
+            console.log(`[XMLDataParser] 📊 面板 "${englishPanelId}" 启用字段统计: 基础设置=${enabledSubItems.length}, 自定义子项=${enabledCustomSubItems.length}, 总计=${allSubItems.length}`);
+
+            return allSubItems;
 
         } catch (error) {
             console.error(`[XMLDataParser] ❌ 获取面板字段配置失败: ${panelName}`, error);

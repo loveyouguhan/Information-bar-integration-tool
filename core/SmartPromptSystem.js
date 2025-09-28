@@ -87,9 +87,6 @@ export class SmartPromptSystem {
             // 🔧 新增：绑定消息内容过滤器
             this.bindMessageContentFilter();
 
-            // 🚀 新增：初始化AI记忆总结隐藏机制
-            this.initializeAIMemorySummaryHiding();
-
             this.initialized = true;
             console.log('[SmartPromptSystem] ✅ 智能提示词系统初始化完成');
 
@@ -5348,208 +5345,57 @@ infobar_data标签（独立输出，必须后输出）
     }
 
     /**
-     * 🚀 优化：高效的AI记忆总结隐藏方案
-     * 使用CSS样式和预处理相结合的方式，避免性能问题
-     */
-    initializeAIMemorySummaryHiding() {
-        try {
-            console.log('[SmartPromptSystem] 🚀 初始化AI记忆总结隐藏机制...');
-
-            // 方案1：注入CSS样式隐藏AI记忆总结
-            this.injectAIMemorySummaryHidingCSS();
-
-            // 方案2：监听消息渲染事件，在渲染时预处理
-            this.bindMessageRenderingEvents();
-
-            console.log('[SmartPromptSystem] ✅ AI记忆总结隐藏机制初始化完成');
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 初始化AI记忆总结隐藏机制失败:', error);
-        }
-    }
-
-    /**
-     * 🔧 新增：注入CSS样式隐藏AI记忆总结
-     */
-    injectAIMemorySummaryHidingCSS() {
-        try {
-            // 检查是否已经注入过样式
-            if (document.getElementById('ai-memory-summary-hiding-styles')) {
-                console.log('[SmartPromptSystem] ℹ️ AI记忆总结隐藏样式已存在，跳过注入');
-                return;
-            }
-
-            const cssRules = `
-                /* 🔒 AI记忆总结隐藏样式 */
-                .ai-memory-summary-hidden {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    overflow: hidden !important;
-                    opacity: 0 !important;
-                }
-
-                /* 🔒 通过属性选择器隐藏包含AI记忆总结的内容 */
-                .mes_text [data-ai-memory-summary="true"] {
-                    display: none !important;
-                }
-
-                /* 🔒 隐藏代码块中的AI记忆总结 */
-                .mes_text pre:has([data-ai-memory-summary]) {
-                    display: none !important;
-                }
-            `;
-
-            const styleElement = document.createElement('style');
-            styleElement.id = 'ai-memory-summary-hiding-styles';
-            styleElement.textContent = cssRules;
-            document.head.appendChild(styleElement);
-
-            console.log('[SmartPromptSystem] ✅ AI记忆总结隐藏CSS样式注入完成');
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 注入AI记忆总结隐藏CSS失败:', error);
-        }
-    }
-
-    /**
-     * 🔧 新增：绑定消息渲染事件
-     */
-    bindMessageRenderingEvents() {
-        try {
-            // 监听SillyTavern的消息渲染事件
-            if (window.eventSource) {
-                window.eventSource.on('message_rendered', this.handleMessageRendered.bind(this));
-                console.log('[SmartPromptSystem] ✅ 消息渲染事件监听器绑定完成');
-            }
-
-            // 监听DOM变化，处理动态添加的消息
-            this.observeMessageChanges();
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 绑定消息渲染事件失败:', error);
-        }
-    }
-
-    /**
-     * 🔧 新增：处理消息渲染事件
-     */
-    handleMessageRendered(data) {
-        try {
-            if (!data || !data.messageId) return;
-
-            // 查找对应的消息元素
-            const messageElement = document.querySelector(`[mesid="${data.messageId}"]`);
-            if (!messageElement) return;
-
-            // 预处理消息内容
-            this.preprocessMessageForAIMemorySummary(messageElement);
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 处理消息渲染事件失败:', error);
-        }
-    }
-
-    /**
-     * 🔧 新增：观察消息变化
-     */
-    observeMessageChanges() {
-        try {
-            // 创建MutationObserver监听消息容器的变化
-            const chatContainer = document.querySelector('#chat');
-            if (!chatContainer) {
-                console.warn('[SmartPromptSystem] ⚠️ 未找到聊天容器，无法监听消息变化');
-                return;
-            }
-
-            const observer = new MutationObserver((mutations) => {
-                mutations.forEach((mutation) => {
-                    if (mutation.type === 'childList') {
-                        mutation.addedNodes.forEach((node) => {
-                            if (node.nodeType === Node.ELEMENT_NODE && node.classList?.contains('mes')) {
-                                // 新消息添加，预处理AI记忆总结
-                                setTimeout(() => {
-                                    this.preprocessMessageForAIMemorySummary(node);
-                                }, 100);
-                            }
-                        });
-                    }
-                });
-            });
-
-            observer.observe(chatContainer, {
-                childList: true,
-                subtree: true
-            });
-
-            console.log('[SmartPromptSystem] ✅ 消息变化观察器启动完成');
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 启动消息变化观察器失败:', error);
-        }
-    }
-
-    /**
-     * 🔧 新增：预处理消息中的AI记忆总结
-     */
-    preprocessMessageForAIMemorySummary(messageElement) {
-        try {
-            const messageTextElement = messageElement.querySelector('.mes_text');
-            if (!messageTextElement) return;
-
-            let messageContent = messageTextElement.innerHTML;
-
-            // 检查是否包含AI记忆总结
-            if (!messageContent.includes('[AI_MEMORY_SUMMARY]')) return;
-
-            // 🚀 高效的正则表达式预处理
-            const aiMemorySummaryRegex = /\[AI_MEMORY_SUMMARY\][\s\S]*?\[\/AI_MEMORY_SUMMARY\]/g;
-
-            // 将AI记忆总结内容包装在隐藏容器中，而不是直接删除
-            messageContent = messageContent.replace(aiMemorySummaryRegex, (match) => {
-                return `<div class="ai-memory-summary-hidden" data-ai-memory-summary="true">${match}</div>`;
-            });
-
-            // 处理代码块中的AI记忆总结
-            const codeBlockRegex = /```[\s\S]*?\[AI_MEMORY_SUMMARY\][\s\S]*?\[\/AI_MEMORY_SUMMARY\][\s\S]*?```/g;
-            messageContent = messageContent.replace(codeBlockRegex, (match) => {
-                return `<div class="ai-memory-summary-hidden" data-ai-memory-summary="true">${match}</div>`;
-            });
-
-            // 更新消息内容（只在有变化时更新）
-            if (messageTextElement.innerHTML !== messageContent) {
-                messageTextElement.innerHTML = messageContent;
-                console.log('[SmartPromptSystem] 🔒 已预处理消息中的AI记忆总结内容');
-            }
-
-        } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 预处理消息AI记忆总结失败:', error);
-        }
-    }
-
-    /**
-     * 🔧 兼容性方法：从显示中过滤AI记忆总结内容（保留作为备用方案）
+     * 🔧 新增：从显示中过滤AI记忆总结内容
      */
     filterAIMemorySummaryFromDisplay() {
         try {
-            console.log('[SmartPromptSystem] ⚠️ 使用备用的AI记忆总结隐藏方案...');
-
-            // 查找所有未处理的消息元素
-            const messageElements = document.querySelectorAll('.mes:not([data-ai-memory-processed])');
-            let processedCount = 0;
+            // 查找所有消息元素
+            const messageElements = document.querySelectorAll('.mes');
+            let filteredCount = 0;
 
             messageElements.forEach(messageElement => {
-                this.preprocessMessageForAIMemorySummary(messageElement);
-                messageElement.setAttribute('data-ai-memory-processed', 'true');
-                processedCount++;
+                const messageTextElement = messageElement.querySelector('.mes_text');
+                if (!messageTextElement) return;
+
+                const messageContent = messageTextElement.innerHTML;
+
+                // 检查是否包含AI记忆总结标签
+                if (messageContent.includes('[AI_MEMORY_SUMMARY]')) {
+                    // 🔧 修复：处理多种格式的AI记忆总结内容
+                    let filteredContent = messageContent;
+
+                    // 1. 移除带代码块的AI记忆总结内容
+                    filteredContent = filteredContent.replace(
+                        /```[\s\S]*?\[AI_MEMORY_SUMMARY\][\s\S]*?\[\/AI_MEMORY_SUMMARY\][\s\S]*?```/g,
+                        ''
+                    );
+
+                    // 2. 移除不带代码块的AI记忆总结内容
+                    filteredContent = filteredContent.replace(
+                        /\[AI_MEMORY_SUMMARY\][\s\S]*?\[\/AI_MEMORY_SUMMARY\]/g,
+                        ''
+                    );
+
+                    // 3. 清理多余的空行和空白
+                    filteredContent = filteredContent
+                        .replace(/\n\s*\n\s*\n/g, '\n\n')  // 多个空行合并为两个
+                        .replace(/^\s+|\s+$/g, '')         // 去除首尾空白
+                        .trim();
+
+                    // 更新消息内容
+                    messageTextElement.innerHTML = filteredContent;
+                    filteredCount++;
+
+                    console.log('[SmartPromptSystem] 🔒 已隐藏消息中的AI记忆总结内容（包括代码块格式）');
+                }
             });
 
-            if (processedCount > 0) {
-                console.log(`[SmartPromptSystem] ✅ 备用方案处理了 ${processedCount} 个消息`);
+            if (filteredCount > 0) {
+                console.log(`[SmartPromptSystem] ✅ 共过滤了 ${filteredCount} 条消息中的AI记忆总结内容`);
             }
 
         } catch (error) {
-            console.error('[SmartPromptSystem] ❌ 备用AI记忆总结隐藏方案失败:', error);
+            console.error('[SmartPromptSystem] ❌ 过滤AI记忆总结内容失败:', error);
         }
     }
 
