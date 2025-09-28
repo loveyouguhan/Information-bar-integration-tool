@@ -4845,7 +4845,7 @@ export class InfoBarSettings {
                         <select id="api-provider" name="apiConfig.provider">
                             <option value="">请选择提供商</option>
                             <option value="gemini">Google Gemini</option>
-                            <option value="localproxy">cil/本地反代 (SillyTavern后端)</option>
+                            <option value="localproxy">通用全兼容（Silly Tavern后端）</option>
                             <option value="custom">自定义API</option>
                         </select>
                         <small>选择您要使用的AI模型提供商</small>

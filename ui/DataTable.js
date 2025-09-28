@@ -1376,7 +1376,15 @@ export class DataTable {
                                 console.warn(`[DataTable] ⚠️ 交互对象字段 ${item.name} 未找到映射，使用列索引: ${colKey}`);
                             }
 
-                            const value = firstNpcData.rowData[colKey];
+                            // 🔧 修复：支持纯数字字段名，如果col_X格式找不到，尝试纯数字格式
+                            let value = firstNpcData.rowData[colKey];
+
+                            // 如果col_X格式找不到数据，尝试纯数字格式
+                            if ((value === undefined || value === null) && colKey.startsWith('col_')) {
+                                const numericKey = colKey.replace('col_', '');
+                                value = firstNpcData.rowData[numericKey];
+                                console.log(`[DataTable] 🔧 交互对象col_X格式未找到，尝试数字格式: ${colKey} -> ${numericKey} = "${value}"`);
+                            }
 
                             if (value !== undefined && value !== null) {
                                 console.log(`[DataTable] 🔍 交互对象字段值: ${item.name} -> ${colKey} = "${value}"`);
@@ -1412,7 +1420,15 @@ export class DataTable {
                                 console.warn(`[DataTable] ⚠️ ${panel.id}字段 ${item.name} 未找到映射，使用列索引: ${colKey}`);
                             }
 
-                            const value = panelData.rowData[colKey];
+                            // 🔧 修复：支持纯数字字段名，如果col_X格式找不到，尝试纯数字格式
+                            let value = panelData.rowData[colKey];
+
+                            // 如果col_X格式找不到数据，尝试纯数字格式
+                            if ((value === undefined || value === null) && colKey.startsWith('col_')) {
+                                const numericKey = colKey.replace('col_', '');
+                                value = panelData.rowData[numericKey];
+                                console.log(`[DataTable] 🔧 col_X格式未找到，尝试数字格式: ${colKey} -> ${numericKey} = "${value}"`);
+                            }
 
                             if (value !== undefined && value !== null) {
                                 console.log(`[DataTable] 🔍 ${panel.id}字段值: ${item.name} -> ${colKey} = "${value}"`);

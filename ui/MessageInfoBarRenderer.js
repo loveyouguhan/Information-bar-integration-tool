@@ -1875,11 +1875,24 @@ export class MessageInfoBarRenderer {
      */
     convertColFieldToStandardName(fieldName, panelKey) {
         try {
-            const colMatch = fieldName.match(/^col_(\d+)$/);
-            if (!colMatch) return fieldName; // 非 col_X，直接返回
+            // 🔧 修复：支持纯数字字段名（如 "1", "2", "3"）和 col_X 格式
+            let colNumber = null;
 
-            const colNumber = parseInt(colMatch[1], 10);
-            console.log(`[MessageInfoBarRenderer] 🔧 解析列字段: col_${colNumber} (面板: ${panelKey})`);
+            // 检查是否为 col_X 格式
+            const colMatch = fieldName.match(/^col_(\d+)$/);
+            if (colMatch) {
+                colNumber = parseInt(colMatch[1], 10);
+                console.log(`[MessageInfoBarRenderer] 🔧 解析列字段: col_${colNumber} (面板: ${panelKey})`);
+            }
+            // 🔧 新增：检查是否为纯数字字段名
+            else if (/^\d+$/.test(fieldName)) {
+                colNumber = parseInt(fieldName, 10);
+                console.log(`[MessageInfoBarRenderer] 🔧 解析数字字段: ${fieldName} (面板: ${panelKey})`);
+            }
+            // 非数字字段，直接返回
+            else {
+                return fieldName;
+            }
 
             // 1) 优先从 DataTable 的启用面板配置中解析 subItems
             const dataTable = window.SillyTavernInfobar?.modules?.dataTable;
@@ -1896,19 +1909,19 @@ export class MessageInfoBarRenderer {
             }
 
             if (panelConfig && Array.isArray(panelConfig.subItems)) {
-                const subItem = panelConfig.subItems[colNumber - 1]; // col_1 对应索引0
+                const subItem = panelConfig.subItems[colNumber - 1]; // 数字1 对应索引0
                 if (subItem && (subItem.key || subItem.name)) {
                     const resolved = subItem.key || subItem.name;
-                    console.log(`[MessageInfoBarRenderer] ✅ col_${colNumber} -> ${resolved} (来自面板配置)`);
+                    console.log(`[MessageInfoBarRenderer] ✅ 字段${colNumber} -> ${resolved} (来自面板配置)`);
                     return resolved;
                 }
             }
 
-            // 2) 找不到配置映射时，保持 col_X 原样，后续用 mapColFieldToDisplayName 获取显示名
-            console.log(`[MessageInfoBarRenderer] ⚠️ 未从配置解析到字段，保留原始: col_${colNumber}`);
+            // 2) 找不到配置映射时，保持原样，后续用 mapColFieldToDisplayName 获取显示名
+            console.log(`[MessageInfoBarRenderer] ⚠️ 未从配置解析到字段，保留原始: ${fieldName}`);
             return fieldName;
         } catch (error) {
-            console.error('[MessageInfoBarRenderer] ❌ col_X字段转换失败:', error);
+            console.error('[MessageInfoBarRenderer] ❌ 字段转换失败:', error);
             return fieldName;
         }
     }
@@ -1941,12 +1954,20 @@ export class MessageInfoBarRenderer {
                 if (targetPanel && targetPanel.subItems) {
                     console.log(`[MessageInfoBarRenderer] 🔧 找到目标面板: ${targetPanel.name}, 子项数量: ${targetPanel.subItems.length}`);
 
-                    // 检查是否是col_X格式
+                    // 🔧 修复：检查是否是col_X格式或纯数字格式
+                    let colNumber = null;
                     const colMatch = fieldName.match(/^col_(\d+)$/);
                     if (colMatch) {
-                        const colNumber = parseInt(colMatch[1]);
+                        colNumber = parseInt(colMatch[1]);
+                        console.log(`[MessageInfoBarRenderer] 🔧 检测到col_X格式: col_${colNumber}`);
+                    } else if (/^\d+$/.test(fieldName)) {
+                        colNumber = parseInt(fieldName);
+                        console.log(`[MessageInfoBarRenderer] 🔧 检测到纯数字格式: ${fieldName}`);
+                    }
+
+                    if (colNumber !== null) {
                         const enabledSubItems = targetPanel.subItems.filter(item => item.enabled);
-                        console.log(`[MessageInfoBarRenderer] 🔧 启用子项数量: ${enabledSubItems.length}, 查找col_${colNumber}`);
+                        console.log(`[MessageInfoBarRenderer] 🔧 启用子项数量: ${enabledSubItems.length}, 查找字段${colNumber}`);
 
                         if (enabledSubItems[colNumber - 1]) {
                             const realColumnName = enabledSubItems[colNumber - 1].name;
