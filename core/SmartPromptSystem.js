@@ -1439,25 +1439,36 @@ ${aiMemoryInstruction}
 
 
     /**
-
-     * 统一按 subItems 顺序读取一行中的字段值（优先 key，其次 col_N）
+     * 统一按 subItems 顺序读取一行中的字段值（优先 key，其次 col_N，最后数字键）
      */
     getRowValueBySubItem(rowRaw, subItem, panelConfig) {
         try {
             const row = rowRaw && rowRaw.rowData ? rowRaw.rowData : (rowRaw || {});
             const key = subItem?.key;
             let value = key ? row[key] : undefined;
+
             if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
-                // 尝试 col_N
+                // 尝试 col_N 格式
                 let colIndex = -1;
                 if (Array.isArray(panelConfig?.subItems) && key) {
                     colIndex = panelConfig.subItems.findIndex(si => si && si.key === key);
                 }
                 if (colIndex >= 0) {
                     const colKey = `col_${colIndex + 1}`;
-                    if (row[colKey] !== undefined) value = row[colKey];
+                    if (row[colKey] !== undefined) {
+                        value = row[colKey];
+                    }
+                }
+
+                // 🔧 修复：尝试数字键格式（"1", "2", "3", ...）
+                if ((value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) && colIndex >= 0) {
+                    const numKey = String(colIndex + 1);
+                    if (row[numKey] !== undefined) {
+                        value = row[numKey];
+                    }
                 }
             }
+
             if (value === undefined || value === null) return '';
             return typeof value === 'string' ? value : String(value);
         } catch (e) {
@@ -3852,11 +3863,51 @@ ${aiMemoryInstruction}
         try {
             console.log(`[SmartPromptSystem] 🚀 开始执行 ${operations.length} 个操作指令...`);
 
+            // 🔧 记录涉及的面板
+            const affectedPanels = new Set();
+
             for (const operation of operations) {
                 await this.executeOperation(operation, characterId);
+                if (operation.panel) {
+                    affectedPanels.add(operation.panel);
+                }
             }
 
             console.log('[SmartPromptSystem] ✅ 所有操作指令执行完成');
+
+            // 🚀 新增：触发data:updated事件，通知其他模块数据已更新
+            if (this.eventSystem && affectedPanels.size > 0) {
+                try {
+                    // 获取当前聊天ID和更新后的数据
+                    const chatId = this.dataCore.getCurrentChatId();
+                    const chatData = await this.dataCore.getChatData(chatId);
+                    
+                    // 构造事件payload
+                    const panelData = {};
+                    for (const panelId of affectedPanels) {
+                        if (chatData?.infobar_data?.panels?.[panelId]) {
+                            panelData[panelId] = chatData.infobar_data.panels[panelId];
+                        }
+                    }
+
+                    console.log(`[SmartPromptSystem] 📡 触发data:updated事件，涉及 ${affectedPanels.size} 个面板:`, Array.from(affectedPanels));
+                    
+                    this.eventSystem.emit('data:updated', {
+                        dataEntry: {
+                            data: panelData,
+                            timestamp: Date.now(),
+                            messageId: `operation_${Date.now()}`,
+                            source: 'operation_command'
+                        },
+                        affectedPanels: Array.from(affectedPanels),
+                        timestamp: Date.now()
+                    });
+                    
+                    console.log('[SmartPromptSystem] ✅ data:updated事件已触发');
+                } catch (eventError) {
+                    console.error('[SmartPromptSystem] ❌ 触发data:updated事件失败:', eventError);
+                }
+            }
 
         } catch (error) {
             console.error('[SmartPromptSystem] ❌ 执行操作指令失败:', error);

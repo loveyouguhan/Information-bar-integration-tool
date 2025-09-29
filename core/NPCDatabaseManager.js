@@ -38,7 +38,7 @@ export class NPCDatabaseManager {
         this.import = this.import.bind(this);
         this.getCurrentChatId = this.getCurrentChatId.bind(this);
         this.getCurrentDbKey = this.getCurrentDbKey.bind(this);
-        this.deleteNpc = this.deleteNpc.bind(this);
+        this.deleteNPC = this.deleteNPC.bind(this);
     }
 
     /**
@@ -398,7 +398,24 @@ export class NPCDatabaseManager {
     ensureNpc(name) {
         const normalized = this.normalizeName(name) || '未命名NPC';
         let id = this.db.nameToId[normalized];
-        if (!id) {
+        
+        // 🔧 修复：如果找到ID但NPC对象不存在，重新创建NPC对象
+        if (id && !this.db.npcs[id]) {
+            console.warn(`[NPCDB] ⚠️ ID映射存在但NPC对象丢失: ${normalized} (${id})，重新创建...`);
+            const now = Date.now();
+            this.db.npcs[id] = {
+                id,
+                name: normalized,
+                fields: {},
+                appearCount: 0,
+                lastSeen: 0,
+                lastMessageId: null,
+                lastChatId: null,
+                createdAt: now,
+                updatedAt: now
+            };
+        } else if (!id) {
+            // 完全新的NPC，创建ID和对象
             id = this.generateId();
             const now = Date.now();
             this.db.nameToId[normalized] = id;
@@ -415,6 +432,7 @@ export class NPCDatabaseManager {
             };
             this.eventSystem?.emit('npc:created', { id, name: normalized, timestamp: now });
         }
+        
         return this.db.npcs[id];
     }
 
@@ -627,41 +645,59 @@ export class NPCDatabaseManager {
     }
 
     /**
-     * 🚀 新增：将数组格式字段映射为标准字段
+     * 🚀 新增：将数组格式字段映射为标准字段（支持数字键和col_x格式）
      */
     mapArrayFieldsToStandard(npcData, index) {
+        // 🔧 修复：自动检测字段键的格式（数字键 vs col_x格式）
+        const hasNumericKeys = Object.keys(npcData).some(key => /^\d+$/.test(key));
+        const hasColKeys = Object.keys(npcData).some(key => /^col_\d+$/.test(key));
+
+        console.log(`[NPCDB] 🔍 字段格式检测: 数字键=${hasNumericKeys}, col_x键=${hasColKeys}`);
+
+        // 🔧 修复：根据实际数据格式选择正确的键名
+        const getFieldValue = (fieldIndex) => {
+            // 优先使用数字键
+            if (npcData[fieldIndex] !== undefined) {
+                return npcData[fieldIndex];
+            }
+            // 回退到col_x格式
+            if (npcData[`col_${fieldIndex}`] !== undefined) {
+                return npcData[`col_${fieldIndex}`];
+            }
+            return '';
+        };
+
         const mappedFields = {
             // 基础信息
             index: index,
             source: 'array_format',
 
-            // 🎯 标准字段映射
-            'NPC名称': npcData.col_1 || '',
-            '对象类型': npcData.col_2 || '',
-            '当前状态': npcData.col_3 || '',
-            '关系类型': npcData.col_4 || '',
-            '亲密度': npcData.col_5 || '',
+            // 🎯 标准字段映射（使用动态键访问）
+            '1': getFieldValue(1),  // 通常是NPC名称
+            '2': getFieldValue(2),  // 对象类型
+            '3': getFieldValue(3),  // 当前状态
+            '4': getFieldValue(4),  // 关系类型
+            '5': getFieldValue(5),  // 亲密度
+            '6': getFieldValue(6),  // 背景/描述
+            '7': getFieldValue(7),  // 外貌特征
+            '8': getFieldValue(8),  // 服装/装备
+            '9': getFieldValue(9),  // 备注
 
-            // 额外字段（如果存在）
-            ...(npcData.col_6 && { '额外信息1': npcData.col_6 }),
-            ...(npcData.col_7 && { '额外信息2': npcData.col_7 }),
-            ...(npcData.col_8 && { '额外信息3': npcData.col_8 }),
-
-            // 保留原始数据用于调试（但不显示在UI中）
+            // 保留原始数据用于调试
             _原始数据: npcData,
             _解析时间: new Date().toISOString()
         };
 
-        // 🔧 清理空值字段
+        // 🔧 清理空值字段（除了元数据字段）
         Object.keys(mappedFields).forEach(key => {
-            if (mappedFields[key] === '' || mappedFields[key] === null || mappedFields[key] === undefined) {
-                if (!key.startsWith('_')) { // 保留调试字段
-                    delete mappedFields[key];
-                }
+            const value = mappedFields[key];
+            if ((value === '' || value === null || value === undefined) && !key.startsWith('_') && key !== 'index' && key !== 'source') {
+                delete mappedFields[key];
             }
         });
 
-        console.log(`[NPCDB] 🗂️ 字段映射完成 ${npcData.col_1}:`, Object.keys(mappedFields).filter(k => !k.startsWith('_')));
+        const npcName = getFieldValue(1) || 'Unknown';
+        console.log(`[NPCDB] 🗂️ 字段映射完成 ${npcName}:`, Object.keys(mappedFields).filter(k => !k.startsWith('_') && k !== 'index' && k !== 'source'));
         return mappedFields;
     }
 
@@ -857,48 +893,13 @@ export class NPCDatabaseManager {
     search({ q = '', sortBy = 'lastSeen', order = 'desc', filterCurrentChat = true } = {}) {
         const term = (q || '').trim();
         const arr = Object.values(this.db.npcs);
-        
-        // 🚀 关键修复：验证数据库隔离和NPC聊天归属
+
+        // 🔧 采用聊天隔离：数据库本身就是按聊天隔离的，直接使用所有NPC
         let filtered = arr;
         const currentChatId = this.getCurrentChatId();
-        const currentDbKey = this.getCurrentDbKey();
-        
-        console.log(`[NPCDB] 🔍 搜索调试信息:`, {
-            currentChatId,
-            currentDbKey,
-            totalNpcs: arr.length,
-            filterCurrentChat
-        });
-        
-        if (filterCurrentChat && currentChatId) {
-            // 🔧 双重检查：既要检查数据库键匹配，也要检查NPC的lastChatId
-            filtered = arr.filter(npc => {
-                const npcChatId = npc.lastChatId;
-                const belongsToCurrentChat = npcChatId === currentChatId;
-                
-                if (!belongsToCurrentChat) {
-                    console.log(`[NPCDB] 🔍 过滤NPC "${npc.name}" (${npc.id}): 所属聊天 "${npcChatId}" != 当前聊天 "${currentChatId}"`);
-                }
-                
-                return belongsToCurrentChat;
-            });
-            
-            console.log(`[NPCDB] 🔍 聊天过滤结果: ${filtered.length}/${arr.length} 个NPC属于当前聊天 "${currentChatId}"`);
-            
-            // 🔧 额外检查：如果过滤后没有NPC，但数据库中有NPC，说明可能存在数据污染
-            if (filtered.length === 0 && arr.length > 0) {
-                console.warn(`[NPCDB] ⚠️ 数据库隔离检查: 当前聊天 "${currentChatId}" 的数据库中有 ${arr.length} 个NPC，但没有一个属于当前聊天`);
-                console.warn('[NPCDB] ⚠️ 这可能表明存在跨聊天数据污染问题');
-                
-                // 列出所有NPC的归属聊天
-                arr.forEach(npc => {
-                    console.warn(`[NPCDB] 🔍 NPC "${npc.name}" (${npc.id}) 归属聊天: "${npc.lastChatId}"`);
-                });
-            }
-        } else if (!currentChatId) {
-            console.warn('[NPCDB] ⚠️ 无法获取当前聊天ID，显示所有NPC');
-        }
-        
+
+        console.log(`[NPCDB] 🔍 搜索当前聊天(${currentChatId})的NPC: ${arr.length} 个`);
+
         // 搜索文本过滤
         if (term) {
             const beforeSearch = filtered.length;
@@ -944,11 +945,28 @@ export class NPCDatabaseManager {
     }
 
     /**
+     * 🔍 根据ID获取NPC
+     * @param {string} npcId - NPC ID
+     * @returns {Object|null} NPC对象或null
+     */
+    getNPCById(npcId) {
+        try {
+            if (!npcId || !this.db.npcs[npcId]) {
+                return null;
+            }
+            return this.db.npcs[npcId];
+        } catch (error) {
+            console.error('[NPCDB] ❌ 获取NPC失败:', error);
+            return null;
+        }
+    }
+
+    /**
      * 🆕 删除NPC
      * @param {string} npcId - NPC ID
      * @returns {boolean} 是否删除成功
      */
-    async deleteNpc(npcId) {
+    async deleteNPC(npcId) {
         try {
             if (!npcId || !this.db.npcs[npcId]) {
                 console.warn('[NPCDB] ⚠️ NPC不存在:', npcId);
@@ -996,12 +1014,12 @@ export class NPCDatabaseManager {
     }
 
     /**
-     * 🔒 获取当前聊天的NPC数据（严格聊天隔离）
-     * ⚠️ 只返回当前聊天的NPC，绝不包含其他聊天的数据
+     * 🔒 获取当前聊天的NPC数据（聊天隔离）
+     * 采用聊天隔离存储，直接返回当前聊天数据库中的所有NPC
      */
     async getCurrentChatNpcs() {
         try {
-            // 🔒 严格验证：确保当前数据库已加载且是当前聊天的数据
+            // 确保当前数据库已加载且是当前聊天的数据
             const currentChatId = this.getCurrentChatId();
             if (!currentChatId) {
                 console.warn('[NPCDB] ⚠️ 当前没有有效的聊天ID');
@@ -1009,29 +1027,17 @@ export class NPCDatabaseManager {
             }
 
             if (this.currentChatId !== currentChatId) {
-                console.warn('[NPCDB] ⚠️ 聊天ID不匹配，重新加载数据库');
+                console.log('[NPCDB] 🔄 聊天ID变化，重新加载数据库');
                 await this.load();
             }
 
             const npcs = Object.values(this.db.npcs || {});
-            
-            console.log(`[NPCDB] 🔒 获取当前聊天(${currentChatId})的NPC数据: ${npcs.length} 个NPC`);
-            
-            // 🔒 额外验证：确保返回的NPC都属于当前聊天
-            const verifiedNpcs = npcs.filter(npc => {
-                // 严格隔离：必须明确属于当前聊天
-                const belongsToCurrentChat = npc.lastChatId === currentChatId;
-                if (!belongsToCurrentChat) {
-                    console.warn(`[NPCDB] ⚠️ 过滤跨聊天或未绑定聊天的NPC: ${npc.name} (${npc.lastChatId} != ${currentChatId})`);
-                }
-                return belongsToCurrentChat;
-            });
 
-            if (verifiedNpcs.length !== npcs.length) {
-                console.error(`[NPCDB] ❌ 数据隔离异常: 期望${npcs.length}个NPC，验证后${verifiedNpcs.length}个`);
-            }
+            console.log(`[NPCDB] 📋 获取当前聊天(${currentChatId})的NPC数据: ${npcs.length} 个NPC`);
 
-            return verifiedNpcs;
+            // 🔧 采用聊天隔离：直接返回当前聊天数据库中的所有NPC
+            // 由于数据库本身就是按聊天隔离的，所以不需要额外过滤
+            return npcs;
         } catch (error) {
             console.error('[NPCDB] ❌ 获取当前聊天NPC数据失败:', error);
             this.errorCount++;

@@ -1,14 +1,17 @@
 /**
  * 统一数据核心模块
- * 
+ *
  * 负责管理所有数据存储和同步，包括：
  * - localStorage（全局持久化数据）
  * - chatMetadata（角色/聊天相关数据）
  * - 数据同步和备份机制
  * - 数据验证和完整性检查
- * 
+ * - 文件存储管理（大型数据）
+ *
  * @class UnifiedDataCore
  */
+
+import { FileStorageManager } from './FileStorageManager.js';
 
 export class UnifiedDataCore {
     constructor(eventSystem = null) {
@@ -23,6 +26,7 @@ export class UnifiedDataCore {
         // 数据管理器
         this.localStorage = null;
         this.chatMetadata = null;
+        this.fileStorage = new FileStorageManager(eventSystem);
 
         // 数据缓存
         this.cache = new Map();
@@ -147,6 +151,18 @@ export class UnifiedDataCore {
             
             // 启动自动同步
             this.startAutoSync();
+
+            // 初始化文件存储
+            await this.fileStorage.init();
+
+            // 🧹 自动清理settings.json中的残留数据
+            setTimeout(async () => {
+                try {
+                    await this.cleanupSettingsData();
+                } catch (error) {
+                    console.error('[UnifiedDataCore] ❌ 自动清理失败:', error);
+                }
+            }, 5000); // 延迟5秒执行，避免影响初始化性能
 
             // 初始化聊天上下文管理
             await this.initChatContextManager();
@@ -308,24 +324,31 @@ export class UnifiedDataCore {
             if (this.cache.has(cacheKey)) {
                 return this.cache.get(cacheKey);
             }
-            
+
             let value;
-            
+
             if (scope === 'global') {
-                value = this.localStorage.get(key);
+                // 🔧 修复：检查是否有文件存储引用
+                const fileRef = this.localStorage.get(`__file_ref_${key}`);
+                if (fileRef && fileRef.type && fileRef.key) {
+                    console.log(`[UnifiedDataCore] 📁 从文件读取数据: ${key} -> ${fileRef.type}`);
+                    value = await this.fileStorage.loadFromFile(fileRef.type, fileRef.key);
+                } else {
+                    value = this.localStorage.get(key);
+                }
             } else if (scope === 'chat') {
                 value = this.chatMetadata.get(key);
             } else {
                 throw new Error(`无效的数据范围: ${scope}`);
             }
-            
+
             // 更新缓存
             if (value !== undefined) {
                 this.cache.set(cacheKey, value);
             }
-            
+
             return value;
-            
+
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 获取数据失败:', error);
             this.handleError(error);
@@ -697,6 +720,63 @@ export class UnifiedDataCore {
     }
 
     /**
+     * 判断数据是否应该存储到文件中（避免存储到settings.json）
+     * @param {string} key - 数据键
+     * @param {any} value - 数据值
+     * @returns {Object|null} 如果应该存储到文件，返回{type, key}，否则返回null
+     */
+    shouldStoreInFile(key, value) {
+        // 🔧 修复：AI记忆相关数据存储到文件
+        const largeDataPatterns = [
+            // AI记忆相关
+            /^ai_memory_/,
+            /^ai_summary_/,
+            /^deep_memory_/,
+            /^vector_/,
+            /^memory_/,
+            /^persistent_memory$/,
+
+            // 缓存相关
+            /^.*_cache$/,
+            /^cache_/,
+
+            // 大型数据
+            /^backup_/,
+            /^history_/,
+            /^logs_/
+        ];
+
+        // 检查键名模式
+        for (const pattern of largeDataPatterns) {
+            if (pattern.test(key)) {
+                // 根据键名确定存储类型
+                if (key.includes('memory') || key.includes('ai_')) {
+                    return { type: 'memory', key: key };
+                } else if (key.includes('cache')) {
+                    return { type: 'cache', key: key };
+                } else if (key.includes('vector')) {
+                    return { type: 'vectors', key: key };
+                } else {
+                    return { type: 'memory', key: key }; // 默认存储到memory
+                }
+            }
+        }
+
+        // 检查数据大小（超过100KB的数据存储到文件）
+        try {
+            const dataStr = JSON.stringify(value);
+            if (dataStr.length > 100 * 1024) { // 100KB
+                console.log(`[UnifiedDataCore] 📁 大数据检测: ${key} (${(dataStr.length / 1024).toFixed(2)}KB)`);
+                return { type: 'memory', key: key };
+            }
+        } catch (error) {
+            console.warn('[UnifiedDataCore] ⚠️ 数据大小检测失败:', error);
+        }
+
+        return null;
+    }
+
+    /**
      * 设置数据
      * @param {string} key - 数据键
      * @param {any} value - 数据值
@@ -704,6 +784,38 @@ export class UnifiedDataCore {
      */
     async setData(key, value, scope = 'global') {
         try {
+            // 🔧 修复：检查是否应该存储到文件
+            const fileStorage = this.shouldStoreInFile(key, value);
+            if (fileStorage && scope === 'global') {
+                console.log(`[UnifiedDataCore] 📁 将数据存储到文件: ${key} -> ${fileStorage.type}`);
+                await this.fileStorage.saveToFile(fileStorage.type, fileStorage.key, value);
+
+                // 在localStorage中保存一个引用，表示数据存储在文件中
+                this.localStorage.set(`__file_ref_${key}`, {
+                    type: fileStorage.type,
+                    key: fileStorage.key,
+                    timestamp: Date.now(),
+                    size: JSON.stringify(value).length
+                });
+
+                // 更新缓存
+                const cacheKey = `${scope}:${key}`;
+                this.cache.set(cacheKey, value);
+
+                // 触发数据变更事件
+                if (this.eventSystem) {
+                    this.eventSystem.emit('data:changed', {
+                        key,
+                        value,
+                        scope,
+                        storage: 'file',
+                        timestamp: Date.now()
+                    });
+                }
+
+                return;
+            }
+
             if (scope === 'global') {
                 this.localStorage.set(key, value);
             } else if (scope === 'chat') {
@@ -808,17 +920,26 @@ export class UnifiedDataCore {
     async deleteData(key, scope = 'global') {
         try {
             if (scope === 'global') {
-                this.localStorage.delete(key);
+                // 🔧 修复：检查是否有文件存储引用
+                const fileRef = this.localStorage.get(`__file_ref_${key}`);
+                if (fileRef && fileRef.type && fileRef.key) {
+                    console.log(`[UnifiedDataCore] 📁 从文件删除数据: ${key} -> ${fileRef.type}`);
+                    await this.fileStorage.deleteFromFile(fileRef.type, fileRef.key);
+                    // 删除文件引用
+                    this.localStorage.delete(`__file_ref_${key}`);
+                } else {
+                    this.localStorage.delete(key);
+                }
             } else if (scope === 'chat') {
                 await this.chatMetadata.delete(key);
             } else {
                 throw new Error(`无效的数据范围: ${scope}`);
             }
-            
+
             // 清除缓存
             const cacheKey = `${scope}:${key}`;
             this.cache.delete(cacheKey);
-            
+
             // 触发数据删除事件
             if (this.eventSystem) {
                 this.eventSystem.emit('data:deleted', {
@@ -827,7 +948,7 @@ export class UnifiedDataCore {
                     timestamp: Date.now()
                 });
             }
-            
+
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 删除数据失败:', error);
             this.handleError(error);
@@ -1809,6 +1930,227 @@ export class UnifiedDataCore {
 
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 更新持久化记忆失败:', error);
+        }
+    }
+
+    /**
+     * 🧹 清理settings.json中的残留数据
+     * 将大型数据迁移到文件存储，清理settings.json
+     */
+    async cleanupSettingsData() {
+        try {
+            console.log('[UnifiedDataCore] 🧹 开始清理settings.json中的残留数据...');
+
+            const allData = this.localStorage.getAll();
+            let cleanedCount = 0;
+            let migratedSize = 0;
+
+            // 需要清理的数据模式
+            const cleanupPatterns = [
+                /^ai_memory_/,
+                /^ai_summary_/,
+                /^deep_memory_/,
+                /^vector_/,
+                /^memory_/,
+                /^persistent_memory$/,
+                /^.*_cache$/,
+                /^cache_/,
+                /^backup_/,
+                /^history_/,
+                /^logs_/
+            ];
+
+            for (const [key, value] of Object.entries(allData)) {
+                // 跳过文件引用
+                if (key.startsWith('__file_ref_')) {
+                    continue;
+                }
+
+                // 检查是否需要清理
+                let shouldClean = false;
+                for (const pattern of cleanupPatterns) {
+                    if (pattern.test(key)) {
+                        shouldClean = true;
+                        break;
+                    }
+                }
+
+                // 检查数据大小
+                if (!shouldClean) {
+                    try {
+                        const dataStr = JSON.stringify(value);
+                        if (dataStr.length > 50 * 1024) { // 50KB以上的数据
+                            shouldClean = true;
+                            console.log(`[UnifiedDataCore] 📊 发现大数据: ${key} (${(dataStr.length / 1024).toFixed(2)}KB)`);
+                        }
+                    } catch (error) {
+                        console.warn('[UnifiedDataCore] ⚠️ 数据大小检测失败:', key, error);
+                    }
+                }
+
+                if (shouldClean) {
+                    try {
+                        // 迁移到文件存储
+                        const fileStorage = this.shouldStoreInFile(key, value);
+                        if (fileStorage) {
+                            console.log(`[UnifiedDataCore] 📁 迁移数据到文件: ${key} -> ${fileStorage.type}`);
+                            await this.fileStorage.saveToFile(fileStorage.type, fileStorage.key, value);
+
+                            // 创建文件引用
+                            this.localStorage.set(`__file_ref_${key}`, {
+                                type: fileStorage.type,
+                                key: fileStorage.key,
+                                timestamp: Date.now(),
+                                size: JSON.stringify(value).length,
+                                migrated: true
+                            });
+
+                            // 删除原始数据
+                            this.localStorage.delete(key);
+
+                            cleanedCount++;
+                            migratedSize += JSON.stringify(value).length;
+                        }
+                    } catch (error) {
+                        console.error(`[UnifiedDataCore] ❌ 迁移数据失败: ${key}`, error);
+                    }
+                }
+            }
+
+            const migratedSizeMB = (migratedSize / (1024 * 1024)).toFixed(2);
+            console.log(`[UnifiedDataCore] ✅ 清理完成: 迁移了 ${cleanedCount} 个数据项，释放了 ${migratedSizeMB}MB 空间`);
+
+            // 触发清理完成事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('data:cleanup:completed', {
+                    cleanedCount,
+                    migratedSize,
+                    timestamp: Date.now()
+                });
+            }
+
+            return { cleanedCount, migratedSize };
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理settings.json数据失败:', error);
+            return { cleanedCount: 0, migratedSize: 0 };
+        }
+    }
+
+    /**
+     * 🔍 获取存储统计信息
+     */
+    async getStorageStats() {
+        try {
+            const stats = {
+                settings: { count: 0, size: 0 },
+                files: { count: 0, size: 0 },
+                total: { count: 0, size: 0 }
+            };
+
+            // 统计settings.json中的数据
+            const allData = this.localStorage.getAll();
+            const settingsStr = JSON.stringify(allData);
+            stats.settings.count = Object.keys(allData).length;
+            stats.settings.size = settingsStr.length;
+
+            // 统计文件存储中的数据
+            const fileStats = await this.fileStorage.getStorageStats();
+            stats.files = fileStats.total;
+
+            // 计算总计
+            stats.total.count = stats.settings.count + stats.files.count;
+            stats.total.size = stats.settings.size + stats.files.size;
+
+            // 格式化大小
+            stats.settings.sizeFormatted = this.formatBytes(stats.settings.size);
+            stats.files.sizeFormatted = this.formatBytes(stats.files.size);
+            stats.total.sizeFormatted = this.formatBytes(stats.total.size);
+
+            return stats;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取存储统计失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 格式化字节数
+     */
+    formatBytes(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    /**
+     * 🧹 清理多聊天记忆数据
+     * 清理不活跃聊天的记忆数据，减少存储空间占用
+     */
+    async cleanupChatMemoryData(maxChatsToKeep = 5) {
+        try {
+            console.log('[UnifiedDataCore] 🧹 开始清理多聊天记忆数据...');
+
+            // 调用FileStorageManager的清理功能
+            const result = await this.fileStorage.cleanupChatMemoryData(maxChatsToKeep);
+
+            if (result.error) {
+                console.error('[UnifiedDataCore] ❌ 清理多聊天记忆数据失败:', result.error);
+                return result;
+            }
+
+            // 同时清理settings.json中对应的文件引用
+            let cleanedRefs = 0;
+            const allData = this.localStorage.getAll();
+            const refsToDelete = [];
+
+            for (const key of Object.keys(allData)) {
+                if (key.startsWith('__file_ref_deep_memory_')) {
+                    const dataKey = key.replace('__file_ref_', '');
+
+                    // 检查对应的数据是否还存在
+                    try {
+                        const data = await this.fileStorage.loadFromFile('memory', dataKey);
+                        if (!data) {
+                            refsToDelete.push(key);
+                        }
+                    } catch (error) {
+                        // 如果读取失败，说明数据已被删除，删除引用
+                        refsToDelete.push(key);
+                    }
+                }
+            }
+
+            // 删除无效的文件引用
+            refsToDelete.forEach(refKey => {
+                this.localStorage.delete(refKey);
+                cleanedRefs++;
+            });
+
+            console.log(`[UnifiedDataCore] ✅ 多聊天记忆数据清理完成`);
+            console.log(`[UnifiedDataCore] 📊 删除了 ${result.deletedItems || 0} 个记忆数据项`);
+            console.log(`[UnifiedDataCore] 📊 清理了 ${cleanedRefs} 个无效文件引用`);
+
+            // 触发清理完成事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('data:chat-memory:cleaned', {
+                    ...result,
+                    cleanedRefs: cleanedRefs,
+                    timestamp: Date.now()
+                });
+            }
+
+            return {
+                ...result,
+                cleanedRefs: cleanedRefs
+            };
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理多聊天记忆数据失败:', error);
+            return { error: error.message };
         }
     }
 
