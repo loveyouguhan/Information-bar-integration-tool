@@ -785,7 +785,7 @@ export class DataTable {
             'interaction': {
                 // 🔧 基于getDefaultPanelConfig的真实基础字段（只有6个基础字段）
                 'NPC姓名': 'col_1',
-                'NPC类型': 'col_2', 
+                'NPC类型': 'col_2',
                 'NPC状态': 'col_3',
                 'NPC关系': 'col_4',
                 'NPC心情': 'col_5',
@@ -796,7 +796,17 @@ export class DataTable {
                 '当前状态': 'col_3',  // 对应 NPC状态
                 '关系类型': 'col_4',  // 对应 NPC关系
                 '亲密度': 'col_5',    // 对应 NPC心情
-                '历史记录': 'col_6'   // 对应 NPC位置
+                '历史记录': 'col_6',  // 对应 NPC位置
+                // 🔧 修复：添加数字键到col_X的映射，支持NPC数据库的数字键格式
+                '姓名': '1',          // 数字键1对应姓名
+                '职业/身份': '2',     // 数字键2对应职业/身份
+                '性格/态度': '3',     // 数字键3对应性格/态度
+                '关系': '4',          // 数字键4对应关系
+                '好感度': '5',        // 数字键5对应好感度
+                '背景/描述': '6',     // 数字键6对应背景/描述
+                '状态': '7',          // 数字键7对应状态
+                '外貌特征': '8',      // 数字键8对应外貌特征（自定义字段）
+                '服装/装备': '9',     // 数字键9对应服装/装备（自定义字段）
                 // 🔧 '自动记录'字段应该通过动态映射分配到col_7，而不是硬编码
                 // 🔧 移除了所有非基础字段：新建子项、衣服、附近银行等
             },
@@ -1081,32 +1091,23 @@ export class DataTable {
                     // 从数据项中获取对应字段的值
                     let value = '';
                     if (dataItem.rowData) {
-                        // 🔧 修复：增强字段名匹配，支持旧架构字段名
+                        // 🔧 修复：增强字段名匹配，支持数字键格式（关键修复）
                         const possibleFieldNames = [
                             item.name,
                             item.key,
+                            `${colIndex + 1}`,  // 🔧 关键修复：添加纯数字键支持（字符串格式）
                             `col_${colIndex + 1}`,
                             `_${item.name.match(/_(\d+)$/)?.[1] || ''}`,
                             // 🆕 添加旧架构字段名映射
                             this.mapDisplayNameToLegacyField(item.name, panel.key),
                             this.mapDisplayNameToLegacyField(item.key, panel.key)
-                        ].filter(name => name && name !== item.name && name !== item.key); // 去重
+                        ].filter(name => name && name !== ''); // 🔧 修复：只过滤空值，保留所有有效字段名
 
-                        // 先尝试原始字段名
-                        for (const fieldName of [item.name, item.key]) {
+                        // 🔧 修复：统一使用possibleFieldNames进行匹配，避免重复逻辑
+                        for (const fieldName of possibleFieldNames) {
                             if (fieldName && dataItem.rowData[fieldName] !== undefined) {
                                 value = dataItem.rowData[fieldName];
                                 break;
-                            }
-                        }
-
-                        // 如果没找到，尝试其他可能的字段名
-                        if (value === '' || value === undefined) {
-                            for (const fieldName of possibleFieldNames) {
-                                if (fieldName && dataItem.rowData[fieldName] !== undefined) {
-                                    value = dataItem.rowData[fieldName];
-                                    break;
-                                }
                             }
                         }
                     }
@@ -1225,19 +1226,20 @@ export class DataTable {
 
             // 🔧 修复：为每个交互对象数据项生成数据行
             const npcDataRows = interactionDataItems.map((dataItem, index) => {
-                // 获取NPC名称（从第一列数据）
-                const npcName = dataItem.rowData?.col_1 || `NPC ${index + 1}`;
+                // 🔧 修复：获取NPC名称，支持数字键格式
+                const npcName = dataItem.rowData?.['1'] || dataItem.rowData?.col_1 || `NPC ${index + 1}`;
 
                 // 🔧 使用统一的字段映射管理器
                 const fieldMapping = this.getFieldMapping('interaction');
 
                 // 生成数据行
                 const dataRow = panel.subItems.map((item, itemIndex) => {
-                    // 🔧 修复：增强字段匹配，支持旧架构字段名
+                    // 🔧 修复：增强字段匹配，支持数字键和旧架构字段名
                     let value = '-';
                     let colKey = `col_${itemIndex + 1}`;
 
                     const possibleFieldNames = [
+                        `${itemIndex + 1}`,                    // 数字键格式 (1, 2, 3, ...)
                         item.name,
                         item.key,
                         fieldMapping[item.name],
@@ -4026,17 +4028,24 @@ export class DataTable {
                     return;
                 }
                 const r = item.rowData || {};
-                const key = JSON.stringify([
-                    r.col_1 || r['NPC名称'] || '',
-                    r.col_2 || r['对象类型'] || '',
-                    r.col_4 || r['关系类型'] || '',
-                    r.col_3 || r['当前状态'] || ''
-                ]);
+
+                // 🔧 修复：支持数字键格式的数据
+                const npcName = r['1'] || r.col_1 || r['NPC名称'] || '';
+                const npcType = r['2'] || r.col_2 || r['对象类型'] || '';
+                const npcStatus = r['3'] || r.col_3 || r['当前状态'] || '';
+                const npcRelation = r['4'] || r.col_4 || r['关系类型'] || '';
+
+                const key = JSON.stringify([npcName, npcType, npcRelation, npcStatus]);
+
+                console.log(`[DataTable] 🔍 NPC去重检查: ${npcName} -> key: ${key}`);
+
                 if (seen.has(key)) {
+                    console.log(`[DataTable] ⚠️ 跳过重复NPC: ${npcName}`);
                     return; // 跳过重复
                 }
                 seen.add(key);
                 deduped.push(item);
+                console.log(`[DataTable] ✅ 添加NPC: ${npcName}`);
             });
 
             return deduped;

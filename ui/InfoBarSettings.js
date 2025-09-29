@@ -425,11 +425,59 @@ export class InfoBarSettings {
             // 🔧 新增：预生成字段映射缓存，避免运行时重复生成
             this.preloadCompleteDisplayNameMapping();
 
+            // 🧹 初始化数据清理工具
+            await this.initDataCleanupTool();
+
             console.log('[InfoBarSettings] ✅ 设置界面初始化完成');
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 初始化失败:', error);
             this.handleError(error);
+        }
+    }
+
+    /**
+     * 🧹 初始化数据清理工具
+     */
+    async initDataCleanupTool() {
+        try {
+            console.log('[InfoBarSettings] 🧹 初始化数据清理工具...');
+
+            // 动态导入数据清理工具
+            const { DataCleanupTool } = await import('./DataCleanupTool.js');
+
+            // 创建数据清理工具实例
+            this.dataCleanupTool = new DataCleanupTool(
+                this.unifiedDataCore,
+                this.eventSystem
+            );
+
+            console.log('[InfoBarSettings] ✅ 数据清理工具初始化完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化数据清理工具失败:', error);
+            this.dataCleanupTool = null;
+        }
+    }
+
+    /**
+     * 🧹 打开数据清理工具
+     */
+    openDataCleanupTool() {
+        try {
+            console.log('[InfoBarSettings] 🧹 打开数据清理工具...');
+
+            if (!this.dataCleanupTool) {
+                this.showMessage('数据清理工具未初始化', 'error');
+                return;
+            }
+
+            // 显示数据清理工具界面
+            this.dataCleanupTool.show();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 打开数据清理工具失败:', error);
+            this.showMessage('打开数据清理工具失败: ' + error.message, 'error');
         }
     }
 
@@ -506,6 +554,9 @@ export class InfoBarSettings {
                             </div>
                             <div class="nav-item" data-nav="summary">
                                 总结面板
+                            </div>
+                            <div class="nav-item" data-nav="npc-management">
+                                NPC管理
                             </div>
                             <div class="nav-item" data-nav="personal">
                                 个人信息
@@ -593,6 +644,9 @@ export class InfoBarSettings {
                             </div>
                             <div class="content-panel" data-content="interaction">
                                 ${this.createInteractionPanel()}
+                            </div>
+                            <div class="content-panel" data-content="npc-management">
+                                ${this.createNPCManagementPanel()}
                             </div>
                             <div class="content-panel" data-content="tasks">
                                 ${this.createTasksPanel()}
@@ -1015,6 +1069,278 @@ export class InfoBarSettings {
                     pointer-events: none !important;
                     user-select: none;
                 }
+
+                /* NPC管理面板样式 */
+                .npc-list-container {
+                    margin-top: 15px;
+                }
+
+                .npc-search-bar {
+                    display: flex;
+                    gap: 10px;
+                    margin-bottom: 15px;
+                    align-items: center;
+                }
+
+                .npc-search-bar input {
+                    flex: 1;
+                    padding: 8px 12px;
+                    border: 1px solid var(--theme-border-color, #ddd);
+                    border-radius: 4px;
+                    background: var(--theme-bg-secondary, #fff);
+                    color: var(--theme-text-primary, #333);
+                }
+
+                .npc-cards-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                    gap: 15px;
+                    max-height: 400px;
+                    overflow-y: auto;
+                    padding: 10px;
+                    border: 1px solid var(--theme-border-color, #ddd);
+                    border-radius: 6px;
+                    background: var(--theme-bg-secondary, #f9f9f9);
+                }
+
+                .npc-card {
+                    background: var(--theme-bg-primary, #fff);
+                    border: 1px solid var(--theme-border-color, #ddd);
+                    border-radius: 8px;
+                    padding: 12px;
+                    transition: all 0.2s ease;
+                    cursor: pointer;
+                }
+
+                .npc-card:hover {
+                    border-color: var(--theme-primary-color, #007bff);
+                    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.15);
+                    transform: translateY(-1px);
+                }
+
+                .npc-card-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 8px;
+                }
+
+                .npc-name {
+                    margin: 0;
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: var(--theme-text-primary, #333);
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                .npc-appear-count {
+                    font-size: 12px;
+                    color: var(--theme-text-secondary, #666);
+                    background: var(--theme-bg-secondary, #f0f0f0);
+                    padding: 2px 6px;
+                    border-radius: 10px;
+                }
+
+                .npc-card-body {
+                    margin-bottom: 10px;
+                }
+
+                .npc-info {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                }
+
+                .npc-field-count,
+                .npc-last-seen {
+                    font-size: 12px;
+                    color: var(--theme-text-secondary, #666);
+                }
+
+                .npc-card-footer {
+                    text-align: right;
+                }
+
+                .npc-card-actions {
+                    display: flex;
+                    gap: 8px;
+                    justify-content: flex-end;
+                    align-items: center;
+                }
+
+                .npc-view-btn,
+                .npc-delete-btn {
+                    font-size: 12px;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    transition: all 0.2s ease;
+                }
+
+                .npc-delete-btn {
+                    background: transparent;
+                    border: 1px solid var(--theme-danger-color, #dc3545);
+                    color: var(--theme-danger-color, #dc3545);
+                }
+
+                .npc-delete-btn:hover {
+                    background: var(--theme-danger-color, #dc3545);
+                    color: white;
+                    transform: translateY(-1px);
+                    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
+                }
+
+                .npc-loading,
+                .npc-error,
+                .npc-empty {
+                    text-align: center;
+                    padding: 40px 20px;
+                    color: var(--theme-text-secondary, #666);
+                    font-style: italic;
+                }
+
+                .npc-error {
+                    color: var(--theme-error-color, #dc3545);
+                }
+
+                /* NPC详情模态框样式 */
+                .npc-detail-modal {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.5);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 10000;
+                }
+
+                .npc-detail-content {
+                    background: var(--theme-bg-primary, #fff);
+                    border-radius: 8px;
+                    width: 90%;
+                    max-width: 600px;
+                    max-height: 80%;
+                    overflow: hidden;
+                    display: flex;
+                    flex-direction: column;
+                }
+
+                .npc-detail-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 15px 20px;
+                    border-bottom: 1px solid var(--theme-border-color, #ddd);
+                    background: var(--theme-bg-secondary, #f8f9fa);
+                }
+
+                .npc-detail-header h3 {
+                    margin: 0;
+                    color: var(--theme-text-primary, #333);
+                }
+
+                .npc-detail-close {
+                    background: none;
+                    border: none;
+                    font-size: 24px;
+                    cursor: pointer;
+                    color: var(--theme-text-secondary, #666);
+                    padding: 0;
+                    width: 30px;
+                    height: 30px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+
+                .npc-detail-close:hover {
+                    color: var(--theme-text-primary, #333);
+                }
+
+                .npc-detail-body {
+                    padding: 20px;
+                    overflow-y: auto;
+                }
+
+                .npc-detail-section {
+                    margin-bottom: 20px;
+                }
+
+                .npc-detail-section h4 {
+                    margin: 0 0 10px 0;
+                    color: var(--theme-text-primary, #333);
+                    border-bottom: 1px solid var(--theme-border-color, #ddd);
+                    padding-bottom: 5px;
+                }
+
+                .npc-basic-info,
+                .npc-fields-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+
+                .npc-info-item,
+                .npc-field-item {
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 8px 12px;
+                    background: var(--theme-bg-secondary, #f8f9fa);
+                    border-radius: 4px;
+                    border-left: 3px solid var(--theme-primary-color, #007bff);
+                }
+
+                .npc-info-item strong,
+                .npc-field-item strong {
+                    color: var(--theme-text-primary, #333);
+                    min-width: 80px;
+                }
+
+                .npc-info-item span,
+                .npc-field-item span {
+                    color: var(--theme-text-secondary, #666);
+                    word-break: break-word;
+                    text-align: right;
+                }
+
+                .npc-no-fields,
+                .npc-no-data {
+                    text-align: center;
+                    padding: 20px;
+                    color: var(--theme-text-secondary, #666);
+                    font-style: italic;
+                }
+
+                .npc-data-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+
+                /* NPC管理按钮组样式 */
+                .button-group {
+                    display: flex;
+                    gap: 10px;
+                    flex-wrap: wrap;
+                    margin-bottom: 8px;
+                }
+
+                .button-group .btn {
+                    flex: 0 0 auto;
+                    font-size: 12px;
+                    padding: 6px 12px;
+                    border-radius: 4px;
+                    transition: all 0.2s ease;
+                }
+
+                .button-group .btn:hover {
+                    transform: translateY(-1px);
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                }
             `;
 
             document.head.appendChild(style);
@@ -1149,6 +1475,17 @@ export class InfoBarSettings {
                     this.testConnection();
                 }
 
+                // NPC管理相关按钮
+                if (e.target.id === 'npc-sync-now-btn') {
+                    this.handleNPCSyncNow();
+                }
+                if (e.target.id === 'npc-worldbook-sync-now-btn') {
+                    this.handleNPCWorldBookSyncNow();
+                }
+                if (e.target.id === 'npc-refresh-btn') {
+                    this.refreshNPCList();
+                }
+
             // 🆕 破甲提示词文本框字符统计
             if (e.target.id === 'armor-breaking-prompt') {
                 this.updateArmorBreakingStats();
@@ -1188,6 +1525,14 @@ export class InfoBarSettings {
                 // 前端显示设置变更
                 if (e.target.name && e.target.name.startsWith('frontendDisplay.')) {
                     this.handleFrontendDisplayChange(e);
+                }
+
+                // NPC管理设置变更
+                if (e.target.id === 'npc-auto-sync-enabled') {
+                    this.handleNPCAutoSyncChange(e.target.checked);
+                }
+                if (e.target.id === 'npc-worldbook-sync-enabled') {
+                    this.handleNPCWorldBookSyncChange(e.target.checked);
                 }
 
                 // API启用开关变更
@@ -4606,6 +4951,11 @@ export class InfoBarSettings {
                 this.initMemoryEnhancementPanelContent();
             }
 
+            // 🎭 新增：NPC管理面板特殊处理
+            if (contentType === 'npc-management') {
+                this.initNPCManagementPanelContent();
+            }
+
             console.log(`[InfoBarSettings] 📑 切换到内容: ${contentType}`);
 
         } catch (error) {
@@ -4676,6 +5026,9 @@ export class InfoBarSettings {
                     break;
                 case 'import':
                     this.importSettings();
+                    break;
+                case 'open-data-cleanup':
+                    this.openDataCleanupTool();
                     break;
                 case 'open-error-log':
                     this.openErrorLogModal();
@@ -4898,10 +5251,10 @@ export class InfoBarSettings {
 
                 <!-- 加载模型列表按钮 -->
                 <div class="settings-group">
-                    <h4>6. 加载模型列表</h4>
+                    <h4>6. 模型列表管理</h4>
                     <div class="form-group">
-                        <button type="button" id="load-models-btn" class="btn btn-primary">📋 加载模型列表</button>
-                        <small>点击加载可用的模型列表</small>
+                        <button type="button" id="load-models-btn" class="btn btn-primary">🔄 重新加载模型列表</button>
+                        <small>重新从API获取最新的模型列表（会消耗API额度）</small>
                     </div>
                 </div>
 
@@ -6466,6 +6819,7 @@ export class InfoBarSettings {
                     <button class="btn btn-primary" data-action="export-custom">📤 导出选定配置</button>
                     <button class="btn" data-action="export">导出全部配置</button>
                     <button class="btn" data-action="import">导入配置</button>
+                    <button class="btn btn-warning" data-action="open-data-cleanup" title="清理settings.json中的大型数据">🧹 数据清理</button>
                 </div>
 
                 <!-- 已保存的配置 -->
@@ -6861,24 +7215,36 @@ export class InfoBarSettings {
                 this.updateAPIStatus();
             }
 
-            // 特别处理API模型配置 - 如果有保存的模型配置，自动加载模型列表
+            // 🔧 修复：智能处理API模型配置 - 优先使用缓存，避免不必要的API调用
             if (configs.apiConfig && configs.apiConfig.model && configs.apiConfig.provider && configs.apiConfig.apiKey) {
-                console.log('[InfoBarSettings] 🔄 检测到保存的模型配置，自动加载模型列表...');
+                console.log('[InfoBarSettings] 🔄 检测到保存的模型配置，智能加载模型列表...');
                 console.log('[InfoBarSettings] 📋 保存的模型:', configs.apiConfig.model);
                 console.log('[InfoBarSettings] 🏢 提供商:', configs.apiConfig.provider);
 
                 // 延迟执行，确保UI已完全渲染
                 setTimeout(async () => {
                     try {
-                        await this.loadModelList();
-                        // 加载完成后，恢复保存的模型选择
-                        const modelSelect = this.modal.querySelector('#api-model');
-                        if (modelSelect && configs.apiConfig.model) {
-                            modelSelect.value = configs.apiConfig.model;
-                            console.log('[InfoBarSettings] ✅ 已恢复保存的模型选择:', configs.apiConfig.model);
+                        // 🔧 新增：优先尝试从缓存加载模型列表
+                        const cachedModels = await this.loadCachedModelList(configs.apiConfig);
+
+                        if (cachedModels && cachedModels.length > 0) {
+                            console.log('[InfoBarSettings] ✅ 使用缓存的模型列表，避免API调用');
+                            this.populateModelSelect(cachedModels);
+
+                            // 恢复保存的模型选择
+                            const modelSelect = this.modal.querySelector('#api-model');
+                            if (modelSelect && configs.apiConfig.model) {
+                                modelSelect.value = configs.apiConfig.model;
+                                console.log('[InfoBarSettings] ✅ 已恢复保存的模型选择:', configs.apiConfig.model);
+                            }
+                        } else {
+                            console.log('[InfoBarSettings] ⚠️ 缓存中无有效模型列表，需要手动加载');
+                            // 显示提示信息，不自动调用API
+                            this.showModelLoadingHint();
                         }
                     } catch (error) {
-                        console.error('[InfoBarSettings] ❌ 自动加载模型列表失败:', error);
+                        console.error('[InfoBarSettings] ❌ 智能加载模型列表失败:', error);
+                        this.showModelLoadingHint();
                     }
                 }, 500);
             }
@@ -9414,6 +9780,111 @@ export class InfoBarSettings {
             </div>
         `;
     }
+
+    /**
+     * 创建NPC管理面板
+     */
+    createNPCManagementPanel() {
+        return `
+            <div class="content-header">
+                <h3>NPC数据库管理</h3>
+                <p class="content-description">管理当前聊天中的NPC数据，支持数据同步和世界书集成</p>
+            </div>
+
+            <div class="settings-group">
+                <h4>1. 启用NPC数据库管理</h4>
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="npc-auto-sync-enabled" ${this.getNPCAutoSyncEnabled() ? 'checked' : ''}>
+                        <label for="npc-auto-sync-enabled" class="checkbox-label">自动同步NPC数据</label>
+                    </div>
+                    <small>当检测到交互对象面板数据更新时，自动同步到NPC数据库</small>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h4>2. 世界书同步</h4>
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="npc-worldbook-sync-enabled" ${this.getNPCWorldBookSyncEnabled() ? 'checked' : ''}>
+                        <label for="npc-worldbook-sync-enabled" class="checkbox-label">启用世界书同步</label>
+                    </div>
+                    <small>自动将NPC数据同步到世界书中，便于AI记忆和引用</small>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h4>3. 手动操作</h4>
+                <div class="form-group">
+                    <div class="button-group">
+                        <button type="button" id="npc-sync-now-btn" class="btn btn-sm btn-outline-primary">
+                            🔄 立即同步NPC数据
+                        </button>
+                        <button type="button" id="npc-worldbook-sync-now-btn" class="btn btn-sm btn-outline-secondary">
+                            🌍 同步到世界书
+                        </button>
+                    </div>
+                    <small>手动执行数据同步操作</small>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h4>4. NPC列表</h4>
+                <div class="npc-list-container">
+                    <div class="npc-search-bar">
+                        <input type="text" id="npc-search-input" placeholder="搜索NPC..." class="form-control">
+                        <button type="button" id="npc-refresh-btn" class="btn btn-outline-primary">🔄 刷新</button>
+                    </div>
+                    <div id="npc-cards-container" class="npc-cards-grid">
+                        <!-- NPC卡片将在这里动态生成 -->
+                        <div class="npc-loading">正在加载NPC数据...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NPC详情模态框 -->
+            <div id="npc-detail-modal" class="npc-detail-modal" style="display: none;">
+                <div class="npc-detail-content">
+                    <div class="npc-detail-header">
+                        <h3 id="npc-detail-name">NPC详情</h3>
+                        <button class="npc-detail-close">&times;</button>
+                    </div>
+                    <div class="npc-detail-body">
+                        <div id="npc-detail-info">
+                            <!-- NPC详细信息将在这里显示 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 获取NPC自动同步启用状态
+     */
+    getNPCAutoSyncEnabled() {
+        try {
+            const saved = localStorage.getItem('npcPanel_autoSync');
+            return saved === 'true';
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取NPC自动同步状态失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 获取NPC世界书同步启用状态
+     */
+    getNPCWorldBookSyncEnabled() {
+        try {
+            const saved = localStorage.getItem('npcPanel_worldBookSync');
+            return saved === 'true';
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取NPC世界书同步状态失败:', error);
+            return false;
+        }
+    }
+
     /**
      * 创建任务系统面板
      */
@@ -15477,6 +15948,150 @@ export class InfoBarSettings {
     }
 
     /**
+     * 🔧 新增：从缓存加载模型列表
+     */
+    async loadCachedModelList(apiConfig) {
+        try {
+            console.log('[InfoBarSettings] 📋 尝试从缓存加载模型列表...');
+
+            // 生成缓存键，基于提供商和API配置
+            const cacheKey = this.generateModelCacheKey(apiConfig);
+            console.log('[InfoBarSettings] 🔑 缓存键:', cacheKey);
+
+            // 从ConfigManager获取缓存的模型数据
+            const configManager = window.SillyTavernInfobar?.modules?.configManager;
+            if (!configManager) {
+                console.warn('[InfoBarSettings] ⚠️ ConfigManager未找到，无法读取缓存');
+                return null;
+            }
+
+            const cachedData = await configManager.getConfig(`apiConfig.modelCache.${cacheKey}`);
+            if (!cachedData) {
+                console.log('[InfoBarSettings] ℹ️ 缓存中没有找到模型数据');
+                return null;
+            }
+
+            // 检查缓存是否过期（默认24小时）
+            const cacheMaxAge = 24 * 60 * 60 * 1000; // 24小时
+            const now = Date.now();
+            if (now - cachedData.timestamp > cacheMaxAge) {
+                console.log('[InfoBarSettings] ⏰ 缓存已过期，需要重新加载');
+                return null;
+            }
+
+            console.log(`[InfoBarSettings] ✅ 从缓存加载了 ${cachedData.models.length} 个模型`);
+            return cachedData.models;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 从缓存加载模型列表失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🔧 新增：生成模型缓存键
+     */
+    generateModelCacheKey(apiConfig) {
+        // 基于提供商、接口类型和基础URL生成唯一键
+        const provider = apiConfig.provider || 'unknown';
+        const interfaceType = apiConfig.format || 'unknown';
+        const baseUrl = apiConfig.baseUrl || apiConfig.endpoint || 'default';
+
+        // 创建简短但唯一的哈希
+        const keyString = `${provider}_${interfaceType}_${baseUrl}`;
+        return keyString.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 50);
+    }
+
+    /**
+     * 🔧 新增：保存模型列表到缓存
+     */
+    async saveCachedModelList(apiConfig, models) {
+        try {
+            console.log('[InfoBarSettings] 💾 保存模型列表到缓存...');
+
+            const cacheKey = this.generateModelCacheKey(apiConfig);
+            const cachedData = {
+                models: models,
+                timestamp: Date.now(),
+                provider: apiConfig.provider,
+                config: {
+                    provider: apiConfig.provider,
+                    format: apiConfig.format,
+                    baseUrl: apiConfig.baseUrl || apiConfig.endpoint
+                }
+            };
+
+            // 保存到ConfigManager
+            const configManager = window.SillyTavernInfobar?.modules?.configManager;
+            if (configManager) {
+                await configManager.setConfig(`apiConfig.modelCache.${cacheKey}`, cachedData);
+                console.log(`[InfoBarSettings] ✅ 已缓存 ${models.length} 个模型`);
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ ConfigManager未找到，无法保存缓存');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 保存模型列表缓存失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：填充模型选择框
+     */
+    populateModelSelect(models) {
+        try {
+            const modelSelect = this.modal.querySelector('#api-model');
+            if (!modelSelect) {
+                console.warn('[InfoBarSettings] ⚠️ 模型选择框未找到');
+                return;
+            }
+
+            // 清空现有选项
+            modelSelect.innerHTML = '<option value="">请选择模型</option>';
+
+            // 添加模型选项
+            models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.id;
+                option.textContent = model.name;
+                option.title = model.description || model.name;
+                modelSelect.appendChild(option);
+            });
+
+            console.log(`[InfoBarSettings] ✅ 已填充 ${models.length} 个模型到选择框`);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 填充模型选择框失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：显示模型加载提示
+     */
+    showModelLoadingHint() {
+        try {
+            const connectionStatus = this.modal.querySelector('#connection-status');
+            if (connectionStatus) {
+                connectionStatus.innerHTML = `
+                    <div style="color: #f59e0b;">
+                        ⚠️ 模型列表需要手动加载<br>
+                        <small>点击"📋 加载模型列表"按钮获取最新模型</small>
+                    </div>
+                `;
+            }
+
+            // 同时更新模型选择框的提示
+            const modelSelect = this.modal.querySelector('#api-model');
+            if (modelSelect) {
+                modelSelect.innerHTML = '<option value="">请先加载模型列表</option>';
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示模型加载提示失败:', error);
+        }
+    }
+
+    /**
      * 加载模型列表
      */
     async loadModelList() {
@@ -15513,24 +16128,28 @@ export class InfoBarSettings {
                 models = await this.loadOpenAICompatibleModels(baseUrl, apiKey, provider);
             }
 
+            // 🔧 新增：保存模型列表到缓存
+            const apiConfig = {
+                provider: provider,
+                format: interfaceType,
+                baseUrl: baseUrl,
+                endpoint: baseUrl
+            };
+            await this.saveCachedModelList(apiConfig, models);
+
             // 更新模型选择框
-            if (modelSelect) {
-                modelSelect.innerHTML = '<option value="">请选择模型</option>';
-                models.forEach(model => {
-                    const option = document.createElement('option');
-                    option.value = model.id;
-                    option.textContent = model.name;
-                    option.title = model.description || model.name;
-                    modelSelect.appendChild(option);
-                });
-            }
+            this.populateModelSelect(models);
 
             if (connectionStatus) {
-                connectionStatus.textContent = `✅ 成功加载 ${models.length} 个模型`;
-                connectionStatus.style.color = '#10b981';
+                connectionStatus.innerHTML = `
+                    <div style="color: #10b981;">
+                        ✅ 成功加载 ${models.length} 个模型<br>
+                        <small>模型列表已缓存，下次打开时将自动使用缓存</small>
+                    </div>
+                `;
             }
 
-            console.log(`[InfoBarSettings] ✅ 成功加载 ${models.length} 个模型:`, models);
+            console.log(`[InfoBarSettings] ✅ 成功加载 ${models.length} 个模型并已缓存:`, models);
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 加载模型列表失败:', error);
@@ -15544,7 +16163,7 @@ export class InfoBarSettings {
             this.showNotification('加载模型失败: ' + error.message, 'error');
         } finally {
             if (loadModelsBtn) {
-                loadModelsBtn.textContent = '📋 加载模型列表';
+                loadModelsBtn.textContent = '🔄 重新加载模型列表';
                 loadModelsBtn.disabled = false;
             }
         }
@@ -31156,5 +31775,480 @@ ${dataExamples}
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 加载提示词设置失败:', error);
         }
+    }
+
+    /**
+     * 初始化NPC管理面板内容
+     */
+    initNPCManagementPanelContent() {
+        try {
+            console.log('[InfoBarSettings] 🎭 初始化NPC管理面板内容...');
+
+            // 刷新NPC列表
+            this.refreshNPCList();
+
+            // 绑定搜索事件
+            const searchInput = this.modal.querySelector('#npc-search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    this.filterNPCList(e.target.value);
+                });
+            }
+
+            console.log('[InfoBarSettings] ✅ NPC管理面板内容初始化完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化NPC管理面板内容失败:', error);
+        }
+    }
+
+    /**
+     * 过滤NPC列表
+     */
+    filterNPCList(searchText) {
+        try {
+            const cards = this.modal.querySelectorAll('.npc-card');
+            const searchLower = searchText.toLowerCase();
+
+            cards.forEach(card => {
+                const npcName = card.querySelector('.npc-name')?.textContent?.toLowerCase() || '';
+                const shouldShow = !searchText || npcName.includes(searchLower);
+                card.style.display = shouldShow ? 'block' : 'none';
+            });
+
+            console.log('[InfoBarSettings] 🔍 NPC列表已过滤，搜索词:', searchText);
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 过滤NPC列表失败:', error);
+        }
+    }
+
+    // ==================== NPC管理相关方法 ====================
+
+    /**
+     * 处理NPC自动同步开关变更
+     */
+    handleNPCAutoSyncChange(enabled) {
+        try {
+            localStorage.setItem('npcPanel_autoSync', enabled.toString());
+            console.log('[InfoBarSettings] 🔄 NPC自动同步设置已更新:', enabled ? '开启' : '关闭');
+
+            // 通知NPC管理面板更新状态
+            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
+            if (npcPanel) {
+                npcPanel.autoSyncEnabled = enabled;
+                npcPanel.updateSyncUI?.();
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新NPC自动同步设置失败:', error);
+        }
+    }
+
+    /**
+     * 处理NPC世界书同步开关变更
+     */
+    handleNPCWorldBookSyncChange(enabled) {
+        try {
+            localStorage.setItem('npcPanel_worldBookSync', enabled.toString());
+            console.log('[InfoBarSettings] 🌍 NPC世界书同步设置已更新:', enabled ? '开启' : '关闭');
+
+            // 通知NPC管理面板更新状态
+            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
+            if (npcPanel) {
+                npcPanel.worldBookSyncEnabled = enabled;
+                npcPanel.updateWorldBookSyncUI?.();
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新NPC世界书同步设置失败:', error);
+        }
+    }
+
+    /**
+     * 处理立即同步NPC数据
+     */
+    async handleNPCSyncNow() {
+        try {
+            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
+            if (!npcPanel) {
+                this.showNotification('NPC管理模块未找到', 'error');
+                return;
+            }
+
+            console.log('[InfoBarSettings] 🔄 开始手动同步NPC数据...');
+            await npcPanel.syncNow();
+            this.refreshNPCList();
+            this.showNotification('NPC数据同步完成', 'success');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 手动同步NPC数据失败:', error);
+            this.showNotification('NPC数据同步失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 处理同步NPC到世界书
+     */
+    async handleNPCWorldBookSyncNow() {
+        try {
+            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
+            if (!npcPanel) {
+                this.showNotification('NPC管理模块未找到', 'error');
+                return;
+            }
+
+            console.log('[InfoBarSettings] 🌍 开始手动同步NPC到世界书...');
+            await npcPanel.syncToWorldBook();
+            this.showNotification('NPC数据已同步到世界书', 'success');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 手动同步NPC到世界书失败:', error);
+            this.showNotification('同步到世界书失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 刷新NPC列表
+     */
+    async refreshNPCList() {
+        try {
+            const container = this.modal.querySelector('#npc-cards-container');
+            if (!container) return;
+
+            // 显示加载状态
+            container.innerHTML = '<div class="npc-loading">正在加载NPC数据...</div>';
+
+            const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+            if (!npcDB) {
+                container.innerHTML = '<div class="npc-error">NPC数据库模块未找到</div>';
+                return;
+            }
+
+            // 获取当前聊天的NPC数据
+            const npcs = await npcDB.getAllNpcsForCurrentChat();
+
+            if (!npcs || npcs.length === 0) {
+                container.innerHTML = '<div class="npc-empty">当前聊天中暂无NPC数据</div>';
+                return;
+            }
+
+            // 生成NPC卡片
+            const cardsHtml = npcs.map(npc => this.createNPCCard(npc)).join('');
+            container.innerHTML = cardsHtml;
+
+            // 绑定卡片点击事件
+            this.bindNPCCardEvents();
+
+            console.log('[InfoBarSettings] ✅ NPC列表已刷新，显示', npcs.length, '个NPC');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 刷新NPC列表失败:', error);
+            const container = this.modal.querySelector('#npc-cards-container');
+            if (container) {
+                container.innerHTML = '<div class="npc-error">加载NPC数据失败</div>';
+            }
+        }
+    }
+
+    /**
+     * 创建NPC卡片HTML
+     */
+    createNPCCard(npc) {
+        const lastSeenTime = npc.lastSeen ? new Date(npc.lastSeen).toLocaleString() : '未知';
+        const fieldCount = Object.keys(npc.fields || {}).length;
+
+        return `
+            <div class="npc-card" data-npc-id="${npc.id}">
+                <div class="npc-card-header">
+                    <h4 class="npc-name">${this.escapeHtml(npc.name)}</h4>
+                    <span class="npc-appear-count">${npc.appearCount || 0}次</span>
+                </div>
+                <div class="npc-card-body">
+                    <div class="npc-info">
+                        <span class="npc-field-count">📋 ${fieldCount} 个字段</span>
+                        <span class="npc-last-seen">🕒 ${lastSeenTime}</span>
+                    </div>
+                </div>
+                <div class="npc-card-footer">
+                    <div class="npc-card-actions">
+                        <button class="btn btn-sm btn-outline-primary npc-view-btn" data-npc-id="${npc.id}">
+                            查看详情
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger npc-delete-btn" data-npc-id="${npc.id}" title="删除此NPC">
+                            🗑️ 删除
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 绑定NPC卡片事件
+     */
+    bindNPCCardEvents() {
+        const cards = this.modal.querySelectorAll('.npc-card');
+        cards.forEach(card => {
+            card.addEventListener('click', (e) => {
+                if (e.target.classList.contains('npc-view-btn')) {
+                    const npcId = e.target.dataset.npcId;
+                    this.showNPCDetails(npcId);
+                } else if (e.target.classList.contains('npc-delete-btn')) {
+                    e.stopPropagation(); // 阻止事件冒泡
+                    const npcId = e.target.dataset.npcId;
+                    this.deleteNPC(npcId);
+                }
+            });
+        });
+    }
+
+    /**
+     * 删除NPC
+     */
+    async deleteNPC(npcId) {
+        try {
+            const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+            if (!npcDB) {
+                console.error('[InfoBarSettings] ❌ NPC数据库模块未找到');
+                return;
+            }
+
+            // 获取NPC信息用于确认对话框
+            const npc = npcDB.getNPCById(npcId);
+            if (!npc) {
+                console.error('[InfoBarSettings] ❌ 未找到NPC:', npcId);
+                return;
+            }
+
+            // 显示确认对话框
+            const confirmed = confirm(`确定要删除NPC "${npc.name}" 吗？\n\n此操作不可撤销，将永久删除该NPC的所有数据。`);
+            if (!confirmed) {
+                console.log('[InfoBarSettings] 🚫 用户取消删除操作');
+                return;
+            }
+
+            console.log('[InfoBarSettings] 🗑️ 开始删除NPC:', npcId, npc.name);
+
+            // 执行删除操作
+            const success = await npcDB.deleteNPC(npcId);
+            if (success) {
+                console.log('[InfoBarSettings] ✅ NPC删除成功:', npcId);
+
+                // 刷新NPC列表
+                await this.refreshNPCList();
+
+                // 显示成功提示
+                this.showToast(`NPC "${npc.name}" 已成功删除`, 'success');
+            } else {
+                console.error('[InfoBarSettings] ❌ NPC删除失败:', npcId);
+                this.showToast(`删除NPC "${npc.name}" 失败`, 'error');
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除NPC时发生错误:', error);
+            this.showToast('删除NPC时发生错误', 'error');
+        }
+    }
+
+    /**
+     * 显示Toast提示
+     */
+    showToast(message, type = 'info') {
+        try {
+            // 尝试使用SillyTavern的toast系统
+            if (window.toastr) {
+                switch (type) {
+                    case 'success':
+                        window.toastr.success(message);
+                        break;
+                    case 'error':
+                        window.toastr.error(message);
+                        break;
+                    case 'warning':
+                        window.toastr.warning(message);
+                        break;
+                    default:
+                        window.toastr.info(message);
+                }
+            } else {
+                // 降级到console输出
+                console.log(`[InfoBarSettings] 📢 ${type.toUpperCase()}: ${message}`);
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示Toast失败:', error);
+            console.log(`[InfoBarSettings] 📢 ${type.toUpperCase()}: ${message}`);
+        }
+    }
+
+    /**
+     * 显示NPC详情
+     */
+    async showNPCDetails(npcId) {
+        try {
+            const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+            if (!npcDB) {
+                this.showNotification('NPC数据库模块未找到', 'error');
+                return;
+            }
+
+            const npc = npcDB.db?.npcs?.[npcId];
+            if (!npc) {
+                this.showNotification('NPC数据未找到', 'error');
+                return;
+            }
+
+            const modal = this.modal.querySelector('#npc-detail-modal');
+            const nameEl = modal.querySelector('#npc-detail-name');
+            const infoEl = modal.querySelector('#npc-detail-info');
+
+            nameEl.textContent = npc.name;
+            infoEl.innerHTML = this.createNPCDetailHTML(npc);
+
+            modal.style.display = 'flex';
+
+            // 绑定关闭事件
+            const closeBtn = modal.querySelector('.npc-detail-close');
+            closeBtn.onclick = () => {
+                modal.style.display = 'none';
+            };
+
+            // 点击背景关闭
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            };
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示NPC详情失败:', error);
+            this.showNotification('显示NPC详情失败', 'error');
+        }
+    }
+
+    /**
+     * 创建NPC详情HTML
+     */
+    createNPCDetailHTML(npc) {
+        // 获取剧情世界时间（如果可用）
+        const lastSeenTime = this.getStoryWorldTime(npc.lastSeen) || '未知';
+
+        // 提取NPC的实际数据字段
+        const npcData = {};
+
+        if (npc.fields && Object.keys(npc.fields).length > 0) {
+            // 首先检查是否有_原始数据字段（这是主要的数据来源）
+            if (npc.fields._原始数据 && typeof npc.fields._原始数据 === 'object') {
+                const rawData = npc.fields._原始数据;
+
+                // 定义数字键对应的字段名映射（基于交互对象面板的结构）
+                const fieldMapping = {
+                    '1': '姓名',
+                    '2': '职业/身份',
+                    '3': '性格/态度',
+                    '4': '关系',
+                    '5': '好感度',
+                    '6': '背景/描述',
+                    '7': '状态',
+                    '8': '外貌特征',
+                    '9': '服装/装备'
+                };
+
+                // 提取原始数据中的字段
+                Object.entries(rawData).forEach(([key, value]) => {
+                    const fieldName = fieldMapping[key] || `字段${key}`;
+                    // 🔧 修复：显示所有字段，包括"无"值的自定义字段
+                    if (value && String(value).trim() !== '') {
+                        npcData[fieldName] = String(value);
+                    }
+                });
+            }
+
+            // 然后添加其他非技术性字段
+            Object.entries(npc.fields).forEach(([key, value]) => {
+                if (!this.isTechnicalField(key) && !key.startsWith('_')) {
+                    npcData[key] = String(value);
+                }
+            });
+        }
+
+        let dataHtml = '';
+        if (Object.keys(npcData).length > 0) {
+            dataHtml = Object.entries(npcData).map(([key, value]) => `
+                <div class="npc-info-item">
+                    <strong>${this.escapeHtml(key)}:</strong>
+                    <span>${this.escapeHtml(String(value))}</span>
+                </div>
+            `).join('');
+        } else {
+            dataHtml = '<div class="npc-no-data">暂无详细数据</div>';
+        }
+
+        return `
+            <div class="npc-detail-section">
+                <h4>NPC信息</h4>
+                <div class="npc-basic-info">
+                    <div class="npc-info-item">
+                        <strong>出现次数:</strong> ${npc.appearCount || 0}次
+                    </div>
+                    <div class="npc-info-item">
+                        <strong>最后出现:</strong> ${lastSeenTime}
+                    </div>
+                </div>
+            </div>
+
+            <div class="npc-detail-section">
+                <h4>详细资料</h4>
+                <div class="npc-data-list">
+                    ${dataHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 判断是否为技术性字段
+     */
+    isTechnicalField(fieldName) {
+        const technicalFields = ['id', 'createdAt', 'updatedAt', 'lastSeen', 'appearCount', 'chatId', 'timestamp'];
+        return technicalFields.includes(fieldName) || fieldName.startsWith('_') || fieldName.includes('Id');
+    }
+
+    /**
+     * 获取剧情世界时间
+     */
+    getStoryWorldTime(timestamp) {
+        if (!timestamp) return null;
+
+        try {
+            // 尝试获取SillyTavern的世界时间设置
+            const context = SillyTavern?.getContext?.();
+            if (context?.worldInfoSettings?.calendar) {
+                // 如果有世界时间设置，使用世界时间格式
+                // 这里可以根据实际的世界时间系统进行转换
+                return '剧情时间：' + new Date(timestamp).toLocaleDateString();
+            }
+
+            // 否则使用相对时间描述
+            const now = Date.now();
+            const diff = now - timestamp;
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor(diff / (1000 * 60));
+
+            if (days > 0) {
+                return `${days}天前`;
+            } else if (hours > 0) {
+                return `${hours}小时前`;
+            } else if (minutes > 0) {
+                return `${minutes}分钟前`;
+            } else {
+                return '刚刚';
+            }
+        } catch (error) {
+            console.warn('[InfoBarSettings] 获取剧情世界时间失败:', error);
+            return new Date(timestamp).toLocaleString();
+        }
+    }
+
+    /**
+     * HTML转义
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 }

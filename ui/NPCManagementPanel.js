@@ -50,10 +50,6 @@ export class NPCManagementPanel {
         this.toggleWorldBookSync = this.toggleWorldBookSync.bind(this);
         this.updateWorldBookSyncUI = this.updateWorldBookSyncUI.bind(this);
         
-        // 🚀 新增：自动同步相关方法绑定
-        this.setupAutoSyncListeners = this.setupAutoSyncListeners.bind(this);
-        this.handleDataUpdated = this.handleDataUpdated.bind(this);
-
         try { this.init(); } catch (e) { console.error('[NPCPanel] 初始化失败', e); }
         
         // 🌍 CSS动画样式注入
@@ -197,10 +193,10 @@ export class NPCManagementPanel {
                         gap: 8px;
                         transition: all 0.3s ease;
                     ">
-                        <!-- 数据同步行 -->
+                        <!-- 启用NPC数据库管理行 -->
                         <div style="display: flex; align-items: center; gap: 8px;">
                         <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 12px; color: var(--theme-text-secondary, #999);">数据同步</span>
+                            <span style="font-size: 12px; color: var(--theme-text-secondary, #999);">启用NPC数据库管理</span>
                             <div class="sync-toggle" style="
                                 position: relative;
                                 width: 40px;
@@ -243,7 +239,7 @@ export class NPCManagementPanel {
                         <!-- 🌍 新增：世界书同步行 -->
                         <div style="display: flex; align-items: center; gap: 8px; padding-top: 6px; border-top: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));">
                             <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 12px; color: var(--theme-text-secondary, #999);">同步世界书</span>
+                                <span style="font-size: 12px; color: var(--theme-text-secondary, #999);">世界书同步</span>
                                 <div class="worldbook-sync-toggle" style="
                                     position: relative;
                                     width: 40px;
@@ -475,52 +471,87 @@ export class NPCManagementPanel {
      * 🚀 新增：设置自动同步监听器
      */
     setupAutoSyncListeners() {
-        if (!this.eventSystem) {
-            console.warn('[NPCPanel] ⚠️ 事件系统不可用，无法设置自动同步监听器');
-            return;
-        }
-
-        // 监听data:updated事件，当AI返回更新interaction面板数据时触发
-        this.eventSystem.on('data:updated', this.handleDataUpdated);
-        
-        console.log('[NPCPanel] 🎧 自动同步监听器已设置');
-    }
-
-    /**
-     * 🚀 新增：处理数据更新事件
-     */
-    async handleDataUpdated(payload) {
-        try {
-            // 检查是否开启了数据同步
-            if (!this.autoSyncEnabled) {
-                console.log('[NPCPanel] ⏸️ 数据同步已关闭，跳过自动同步');
+        // 🔧 修复：延迟设置监听器，确保eventSystem完全准备好
+        const trySetupListener = (attempt = 1, maxAttempts = 5) => {
+            if (!this.eventSystem || typeof this.eventSystem.on !== 'function') {
+                if (attempt < maxAttempts) {
+                    console.log(`[NPCPanel] ⏳ 事件系统尚未准备好，${attempt}秒后重试 (${attempt}/${maxAttempts})`);
+                    setTimeout(() => {
+                        // 重新获取eventSystem引用
+                        this.eventSystem = this.eventSystem || window.SillyTavernInfobar?.eventSource;
+                        trySetupListener(attempt + 1, maxAttempts);
+                    }, 1000 * attempt);
+                } else {
+                    console.error('[NPCPanel] ❌ 事件系统未能在规定时间内准备好，自动同步功能可能无法工作');
+                }
                 return;
             }
 
-            // 检查是否有interaction面板数据更新
-            const panelsData = payload?.dataEntry?.data || payload?.panelFields || payload?.data || {};
-            const interactionData = panelsData.interaction;
-            
-            if (!interactionData || Object.keys(interactionData).length === 0) {
-                console.log('[NPCPanel] ℹ️ 没有interaction数据更新，跳过自动同步');
-                return;
-            }
+            // 🔧 修复：使用箭头函数确保this上下文正确
+            const autoSyncHandler = async (payload) => {
+                try {
+                    // 🔧 修复：添加详细的调试日志
+                    console.log('[NPCPanel] 📡 收到data:updated事件');
 
-            console.log('[NPCPanel] 🔄 检测到interaction数据更新，触发自动同步');
+                    // 检查是否开启了数据同步
+                    if (!this.autoSyncEnabled) {
+                        console.log('[NPCPanel] ⏸️ 数据同步已关闭，跳过自动同步');
+                        return;
+                    }
 
-            // 执行数据同步
-            await this.syncNow();
+                    // 🔧 修复：更全面的数据检查
+                    const panelsData = payload?.dataEntry?.data || payload?.panelFields || payload?.data || {};
+                    const interactionData = panelsData.interaction;
 
-            // 如果开启了世界书同步，同步完成后执行世界书同步
-            if (this.worldBookSyncEnabled) {
-                console.log('[NPCPanel] 🌍 数据同步完成，触发自动世界书同步');
-                await this.syncToWorldBook();
-            }
+                    console.log('[NPCPanel] 🔍 检查interaction数据:', {
+                        hasDataEntry: !!payload?.dataEntry,
+                        hasData: !!panelsData,
+                        hasInteraction: !!interactionData,
+                        interactionKeys: interactionData ? Object.keys(interactionData).length : 0
+                    });
 
-        } catch (error) {
-            console.error('[NPCPanel] ❌ 自动同步处理失败:', error);
-        }
+                    if (!interactionData || Object.keys(interactionData).length === 0) {
+                        console.log('[NPCPanel] ℹ️ 没有interaction数据更新，跳过自动同步');
+                        return;
+                    }
+
+                    console.log('[NPCPanel] 🔄 检测到interaction数据更新，触发自动同步');
+
+                    // 🔧 修复：延迟执行同步，避免与NPCDatabaseManager冲突
+                    setTimeout(async () => {
+                        try {
+                            // 执行数据同步
+                            await this.syncNow();
+
+                            // 如果开启了世界书同步，同步完成后执行世界书同步
+                            if (this.worldBookSyncEnabled) {
+                                console.log('[NPCPanel] 🌍 数据同步完成，触发自动世界书同步');
+                                await this.syncToWorldBook();
+                            }
+                        } catch (syncError) {
+                            console.error('[NPCPanel] ❌ 延迟同步执行失败:', syncError);
+                        }
+                    }, 500); // 延迟500ms，让NPCDatabaseManager先处理
+
+                } catch (error) {
+                    console.error('[NPCPanel] ❌ 自动同步处理失败:', error);
+                }
+            };
+
+            // 监听data:updated事件，当AI返回更新interaction面板数据时触发
+            this.eventSystem.on('data:updated', autoSyncHandler);
+
+            // 🆕 保存监听器引用，以便后续管理
+            this.autoSyncHandler = autoSyncHandler;
+
+            console.log('[NPCPanel] ✅ 自动同步监听器已成功设置');
+        };
+
+        // 立即尝试设置，如果失败则延迟重试
+        trySetupListener();
     }
+
+
 
     /**
      * 🚀 新增：切换自动同步功能
@@ -535,8 +566,15 @@ export class NPCManagementPanel {
         // 保存设置到本地存储
         localStorage.setItem('npcPanel_autoSync', this.autoSyncEnabled.toString());
 
-        // 如果开启自动同步，立即执行一次同步
+        // 🔧 修复：如果开启自动同步，确保监听器正常工作
         if (this.autoSyncEnabled) {
+            // 检查监听器是否已设置
+            if (!this.autoSyncHandler || !this.eventSystem) {
+                console.log('[NPCPanel] 🔄 重新设置自动同步监听器...');
+                this.setupAutoSyncListeners();
+            }
+            
+            // 立即执行一次同步
             this.syncNow();
         }
 
@@ -643,7 +681,7 @@ export class NPCManagementPanel {
     }
 
     /**
-     * 🚀 新增：清理和映射字段数据
+     * 🚀 新增：清理和映射字段数据（使用动态字段配置）
      */
     cleanAndMapFields(rawFields) {
         if (!rawFields || typeof rawFields !== 'object') {
@@ -652,52 +690,191 @@ export class NPCManagementPanel {
 
         const cleanedFields = {};
 
-        // 🎯 字段映射表：将col_x格式映射为用户友好的中文字段名
-        const fieldMapping = {
-            'col_1': 'NPC名称',
-            'col_2': '对象类型',
-            'col_3': '当前状态',
-            'col_4': '关系类型',
-            'col_5': '亲密度',
-            'col_6': '额外信息1',
-            'col_7': '额外信息2',
-            'col_8': '额外信息3'
-        };
+        // 🔧 修复：动态获取interaction面板的字段配置
+        const fieldDisplayNames = this.getInteractionFieldDisplayNames();
 
         // 处理所有字段
         Object.keys(rawFields).forEach(key => {
             const value = rawFields[key];
 
-            // 跳过空值和无意义的字段
+            // 跳过空值
             if (value === null || value === undefined || value === '') {
                 return;
             }
 
-            // 跳过系统字段，但保留有用的元数据
-            if (['index', 'source'].includes(key)) {
+            // 🔧 修复：跳过内部元数据字段
+            if (key === 'index' || key === 'source' || key.startsWith('_')) {
+                console.log(`[NPCPanel] 🔧 跳过内部字段: ${key}`);
                 return;
             }
 
-            // 映射col_x字段为中文字段名
-            if (fieldMapping[key]) {
-                cleanedFields[fieldMapping[key]] = String(value).trim();
-            } else if (key.startsWith('col_')) {
-                // 对于未映射的col_x字段，使用通用名称
-                const colNum = key.replace('col_', '');
-                cleanedFields[`字段${colNum}`] = String(value).trim();
-            } else {
-                // 保留其他有意义的字段
-                cleanedFields[key] = value;
+            // 🔧 修复：使用动态字段映射获取显示名称
+            let displayName = fieldDisplayNames[key];
+            
+            if (!displayName) {
+                // 如果没有找到映射，尝试处理col_x格式
+                if (key.startsWith('col_')) {
+                    const colNum = parseInt(key.replace('col_', ''));
+                    // 尝试从数字索引获取映射
+                    displayName = fieldDisplayNames[colNum] || fieldDisplayNames[String(colNum)];
+                }
             }
-        });
 
-        // 🔧 确保基本字段存在
-        if (!cleanedFields['NPC名称'] && rawFields.col_1) {
-            cleanedFields['NPC名称'] = String(rawFields.col_1).trim();
-        }
+            // 使用显示名称或原始键名
+            const fieldKey = displayName || key;
+            cleanedFields[fieldKey] = typeof value === 'string' ? value.trim() : value;
+        });
 
         console.log('[NPCPanel] 🧹 字段清理完成:', Object.keys(cleanedFields));
         return cleanedFields;
+    }
+
+    /**
+     * 🆕 获取interaction面板的字段显示名称映射（动态从配置构建）
+     */
+    getInteractionFieldDisplayNames() {
+        try {
+            // 🔧 修复：直接从扩展配置动态构建字段映射
+            const context = window.SillyTavern?.getContext?.();
+            if (!context) {
+                console.warn('[NPCPanel] ⚠️ 无法获取SillyTavern上下文');
+                return this.getFallbackFieldMapping();
+            }
+
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings?.['Information bar integration tool'] || {};
+            const interactionConfig = configs.interaction;
+
+            if (!interactionConfig) {
+                console.warn('[NPCPanel] ⚠️ interaction面板配置不存在');
+                return this.getFallbackFieldMapping();
+            }
+
+            const fieldMapping = {};
+            let columnIndex = 1;
+
+            // 🎯 获取所有启用的基础字段（按配置顺序）
+            // 🔧 关键修复：排除已经在subItems中的字段，避免重复
+            const subItemKeys = (interactionConfig.subItems || []).map(item => item.key);
+            
+            const baseFieldKeys = Object.keys(interactionConfig).filter(key =>
+                key !== 'enabled' &&
+                key !== 'subItems' &&
+                key !== 'description' &&
+                key !== 'icon' &&
+                key !== 'required' &&
+                key !== 'prompts' &&
+                key !== 'memoryInject' &&
+                !subItemKeys.includes(key) &&  // 🔧 关键：排除subItems中的字段
+                typeof interactionConfig[key] === 'object' &&
+                interactionConfig[key].enabled === true
+            );
+
+            console.log('[NPCPanel] 📋 启用的基础字段:', baseFieldKeys);
+
+            // 为每个基础字段创建映射
+            baseFieldKeys.forEach((key) => {
+                const field = interactionConfig[key];
+                let displayName = field.displayName || field.name || key;
+
+                // 🔧 修复：如果displayName是英文key，转换为中文
+                displayName = this.translateFieldDisplayName(displayName, key);
+
+                // 🔧 关键修复：使用数字索引作为键
+                fieldMapping[String(columnIndex)] = displayName;
+                fieldMapping[key] = displayName;  // 同时支持英文key
+                fieldMapping[`col_${columnIndex}`] = displayName;  // 同时支持col_x格式
+
+                console.log(`[NPCPanel] 📝 列${columnIndex}: ${key} => "${displayName}"`);
+                columnIndex++;
+            });
+
+            // 🎯 获取启用的自定义子项
+            const enabledSubItems = (interactionConfig.subItems || []).filter(item => item.enabled);
+            console.log('[NPCPanel] 📋 启用的自定义子项:', enabledSubItems.map(item => item.key));
+
+            enabledSubItems.forEach((item) => {
+                const displayName = item.displayName || item.key;
+
+                fieldMapping[String(columnIndex)] = displayName;
+                fieldMapping[item.key] = displayName;
+                fieldMapping[`col_${columnIndex}`] = displayName;
+
+                console.log(`[NPCPanel] 📝 列${columnIndex}: ${item.key} => "${displayName}"`);
+                columnIndex++;
+            });
+
+            console.log('[NPCPanel] ✅ 动态字段映射构建完成，共', Object.keys(fieldMapping).length / 3, '个字段');
+            return fieldMapping;
+
+        } catch (error) {
+            console.error('[NPCPanel] ❌ 获取字段映射失败:', error);
+            return this.getFallbackFieldMapping();
+        }
+    }
+
+    /**
+     * 🆕 回退字段映射表
+     */
+    getFallbackFieldMapping() {
+        console.log('[NPCPanel] ⚠️ 使用回退映射表');
+        return {
+            'name': '对象名称', '1': '对象名称', 'col_1': '对象名称',
+            'type': '对象类型', '2': '对象类型', 'col_2': '对象类型',
+            'status': '当前状态', '3': '当前状态', 'col_3': '当前状态',
+            'relationship': '关系类型', '4': '关系类型', 'col_4': '关系类型',
+            'intimacy': '亲密度', '5': '亲密度', 'col_5': '亲密度',
+            'description': '背景/描述', '6': '背景/描述', 'col_6': '背景/描述',
+            'appearance': '外貌特征', '7': '外貌特征', 'col_7': '外貌特征',
+            'outfit': '服装/装备', '8': '服装/装备', 'col_8': '服装/装备',
+            'notes': '备注', '9': '备注', 'col_9': '备注'
+        };
+    }
+
+    /**
+     * 🆕 将英文字段名转换为中文显示名称
+     */
+    translateFieldDisplayName(displayName, fieldKey) {
+        // 如果已经是中文，直接返回
+        if (/[\u4e00-\u9fa5]/.test(displayName)) {
+            return displayName;
+        }
+
+        // 🎯 interaction面板字段的中英文映射表
+        const enToCnMapping = {
+            // 基础字段
+            'name': '对象名称',
+            'type': '对象类型',
+            'status': '当前状态',
+            'location': '所在位置',
+            'mood': '情绪状态',
+            'activity': '当前活动',
+            'availability': '可用性',
+            'priority': '优先级',
+            'relationship': '关系类型',
+            'intimacy': '亲密度',
+            'trust': '信任度',
+            'friendship': '友谊度',
+            'romance': '浪漫度',
+            'respect': '尊重度',
+            'dependency': '依赖度',
+            'conflict': '冲突度',
+            'lastContact': '最后联系',
+            'frequency': '联系频率',
+            'history': '互动历史',
+            'notes': '备注',
+            'goals': '目标',
+            'secrets': '秘密',
+            'autoRecord': '自动记录',
+            'appearance': '外貌特征',
+            'outfit': '服装/装备',
+            'description': '背景/描述',
+            'personality': '性格特征',
+            'faction': '所属派系',
+            'occupation': '职业/身份'
+        };
+
+        return enToCnMapping[displayName] || enToCnMapping[fieldKey] || displayName;
     }
 
     /**
@@ -1338,12 +1515,22 @@ export class NPCManagementPanel {
         if (npc.fields && Object.keys(npc.fields).length > 0) {
             content += '## 角色信息\n\n';
             
+            // 🔧 修复：过滤掉内部元数据字段
             Object.entries(npc.fields).forEach(([fieldName, value]) => {
-                if (value && value.toString().trim()) {
-                    // 格式化字段名
-                    const displayName = this.getFieldDisplayName(fieldName);
-                    content += `**${displayName}**: ${value}\n`;
+                // 🔧 跳过内部元数据字段
+                if (fieldName === 'index' || fieldName === 'source' || fieldName.startsWith('_')) {
+                    console.log(`[NPCPanel] 🔧 跳过内部字段（世界书）: ${fieldName}`);
+                    return;
                 }
+
+                // 跳过空值
+                if (!value || value.toString().trim() === '') {
+                    return;
+                }
+
+                // 格式化字段名 - 字段已经是显示名称了（经过cleanAndMapFields处理）
+                const displayName = this.getFieldDisplayName(fieldName);
+                content += `**${displayName}**: ${value}\n`;
             });
         }
         

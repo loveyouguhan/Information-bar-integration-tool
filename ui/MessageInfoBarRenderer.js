@@ -4122,7 +4122,18 @@ export class MessageInfoBarRenderer {
             const integrationSystemSettings = basicSettings.integrationSystem || {};
             const isPluginEnabled = integrationSystemSettings.enabled !== false; // 默认启用，除非明确设置为false
 
-            return isPluginEnabled;
+            // 🔧 新增：检查"在聊天中渲染信息栏"设置
+            const renderInChatSettings = basicSettings.renderInChat || {};
+            const isRenderInChatEnabled = renderInChatSettings.enabled !== false; // 默认启用，除非明确设置为false
+
+            console.log('[MessageInfoBarRenderer] 🔍 启用状态检查:', {
+                pluginEnabled: isPluginEnabled,
+                renderInChatEnabled: isRenderInChatEnabled,
+                finalResult: isPluginEnabled && isRenderInChatEnabled
+            });
+
+            // 只有当插件启用且允许在聊天中渲染时，才返回true
+            return isPluginEnabled && isRenderInChatEnabled;
 
         } catch (error) {
             console.error('[MessageInfoBarRenderer] ❌ 检查启用状态失败:', error);
