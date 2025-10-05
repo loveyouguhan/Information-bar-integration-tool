@@ -1007,6 +1007,16 @@ export class UnifiedDataCore {
             this.eventSystem.on('xml:data:parsed', async (eventData) => {
                 await this.handleXMLDataParsed(eventData);
             });
+
+            // 🔧 新增：监听消息删除事件
+            this.eventSystem.on('message:deleted', async (data) => {
+                await this.handleMessageDeleted(data);
+            });
+
+            // 🔧 新增：监听消息重新生成事件
+            this.eventSystem.on('message:regenerated', async (data) => {
+                await this.handleMessageRegenerated(data);
+            });
         }
 
         // 保留备份定时器，但间隔更长（30分钟）
@@ -3957,14 +3967,15 @@ export class UnifiedDataCore {
      */
     async cleanupSTScriptVariables(chatId, panelId, fieldKey, scope) {
         try {
+            // 🔧 已移除：STScript数据同步功能已删除
             // 清理全局infobar变量
-            if (window.SillyTavernInfobar?.modules?.stScriptDataSync) {
-                const stScript = window.SillyTavernInfobar.modules.stScriptDataSync;
-                if (stScript.clearCache) {
-                    await stScript.clearCache();
-                    console.log('[UnifiedDataCore] 🧹 已清理STScript变量缓存');
-                }
-            }
+            // if (window.SillyTavernInfobar?.modules?.stScriptDataSync) {
+            //     const stScript = window.SillyTavernInfobar.modules.stScriptDataSync;
+            //     if (stScript.clearCache) {
+            //         await stScript.clearCache();
+            //         console.log('[UnifiedDataCore] 🧹 已清理STScript变量缓存');
+            //     }
+            // }
 
             // 清理特定的变量缓存
             if (window.infobar_data) {
@@ -4348,6 +4359,147 @@ export class UnifiedDataCore {
 
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 清理组织特定数据失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理消息删除事件
+     */
+    async handleMessageDeleted(data) {
+        try {
+            console.log('[UnifiedDataCore] 🗑️ 处理消息删除事件');
+
+            // 检查是否需要跳过回溯（用户消息删除）
+            if (data && data.skipRollback === true) {
+                console.log('[UnifiedDataCore] ℹ️ 跳过数据回溯（删除的是用户消息）');
+                return;
+            }
+
+            console.log('[UnifiedDataCore] 🔄 开始数据回溯...');
+
+            // 获取当前聊天ID
+            const chatId = data?.chatId || this.getCurrentChatId();
+            if (!chatId) {
+                console.warn('[UnifiedDataCore] ⚠️ 无法获取聊天ID，跳过数据回溯');
+                return;
+            }
+
+            // 清理最近的历史记录
+            await this.clearRecentHistory(chatId);
+
+            // 清理最近的持久化记忆
+            await this.clearRecentPersistentMemory(chatId);
+
+            console.log('[UnifiedDataCore] ✅ 消息删除数据回溯完成');
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 处理消息删除事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理消息重新生成事件
+     */
+    async handleMessageRegenerated(data) {
+        try {
+            console.log('[UnifiedDataCore] 🔄 处理消息重新生成事件');
+
+            // 获取当前聊天ID
+            const chatId = data?.chatId || this.getCurrentChatId();
+            if (!chatId) {
+                console.warn('[UnifiedDataCore] ⚠️ 无法获取聊天ID，跳过数据回溯');
+                return;
+            }
+
+            console.log('[UnifiedDataCore] 🔄 开始数据回溯（重新生成）...');
+
+            // 清理最近的历史记录
+            await this.clearRecentHistory(chatId);
+
+            // 清理最近的持久化记忆
+            await this.clearRecentPersistentMemory(chatId);
+
+            console.log('[UnifiedDataCore] ✅ 消息重新生成数据回溯完成');
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 处理消息重新生成事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：清理最近的历史记录
+     */
+    async clearRecentHistory(chatId) {
+        try {
+            console.log('[UnifiedDataCore] 🧹 清理最近的历史记录...');
+
+            const chatData = await this.getChatData(chatId);
+            if (!chatData || !chatData.history) {
+                console.log('[UnifiedDataCore] ℹ️ 没有历史记录需要清理');
+                return;
+            }
+
+            // 清理最近30分钟内的历史记录
+            const now = Date.now();
+            const recentThreshold = 30 * 60 * 1000; // 30分钟
+
+            const originalCount = chatData.history.length;
+            chatData.history = chatData.history.filter(entry => {
+                return (now - entry.timestamp) > recentThreshold;
+            });
+
+            const clearedCount = originalCount - chatData.history.length;
+
+            // 保存更新后的数据
+            await this.setChatData(chatId, chatData);
+
+            console.log(`[UnifiedDataCore] ✅ 已清理 ${clearedCount} 条最近的历史记录`);
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理最近历史记录失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：清理最近的持久化记忆
+     */
+    async clearRecentPersistentMemory(chatId) {
+        try {
+            console.log('[UnifiedDataCore] 🧹 清理最近的持久化记忆...');
+
+            const persistentMemory = await this.getPersistentMemory();
+            if (!persistentMemory || Object.keys(persistentMemory).length === 0) {
+                console.log('[UnifiedDataCore] ℹ️ 没有持久化记忆需要清理');
+                return;
+            }
+
+            // 清理最近30分钟内更新的持久化记忆
+            const now = Date.now();
+            const recentThreshold = 30 * 60 * 1000; // 30分钟
+
+            let clearedCount = 0;
+
+            for (const [panelId, panelMemory] of Object.entries(persistentMemory)) {
+                for (const [key, memoryData] of Object.entries(panelMemory)) {
+                    if (memoryData.lastUpdated && (now - memoryData.lastUpdated) < recentThreshold) {
+                        delete persistentMemory[panelId][key];
+                        clearedCount++;
+                    }
+                }
+
+                // 如果面板的持久化记忆为空，删除整个面板
+                if (Object.keys(persistentMemory[panelId]).length === 0) {
+                    delete persistentMemory[panelId];
+                }
+            }
+
+            // 保存更新后的持久化记忆
+            await this.setPersistentMemory(persistentMemory);
+
+            console.log(`[UnifiedDataCore] ✅ 已清理 ${clearedCount} 条最近的持久化记忆`);
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 清理最近持久化记忆失败:', error);
         }
     }
 }

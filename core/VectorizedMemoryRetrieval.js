@@ -690,11 +690,16 @@ export class VectorizedMemoryRetrieval {
 
     /**
      * 使用Transformers.js向量化
+     * 🔧 优化：增强引擎状态验证和错误处理
      */
     async vectorizeWithTransformers(text) {
         try {
-            if (!this.vectorEngines.transformers) {
-                throw new Error('Transformers.js引擎未初始化');
+            // 🔧 新增：完整的引擎状态验证
+            const engineStatus = this.validateTransformersEngine();
+
+            if (!engineStatus.available) {
+                console.log('[VectorizedMemoryRetrieval] 🔄 Transformers引擎不可用，原因:', engineStatus.reason);
+                return await this.vectorizeWithFallback(text);
             }
 
             // 🔧 修复：检查是否为fallback模式
@@ -808,37 +813,187 @@ export class VectorizedMemoryRetrieval {
     }
 
     /**
+     * 🔧 新增：验证Transformers引擎状态
+     */
+    validateTransformersEngine() {
+        const result = {
+            available: false,
+            reason: '',
+            engineType: null
+        };
+
+        try {
+            if (!this.vectorEngines.transformers) {
+                result.reason = '引擎未初始化';
+                return result;
+            }
+
+            if (this.vectorEngines.transformers === 'fallback') {
+                result.reason = '已设置为fallback模式';
+                return result;
+            }
+
+            if (typeof this.vectorEngines.transformers !== 'function') {
+                result.reason = '引擎类型错误，期望function类型';
+                return result;
+            }
+
+            // 🔧 新增：检查引擎健康状态
+            if (this.vectorEngines.transformers.isHealthy &&
+                !this.vectorEngines.transformers.isHealthy()) {
+                result.reason = '引擎健康检查失败';
+                return result;
+            }
+
+            result.available = true;
+            result.engineType = 'transformers';
+            return result;
+
+        } catch (error) {
+            result.reason = `验证过程异常: ${error.message}`;
+            return result;
+        }
+    }
+
+    /**
      * 降级向量化方法（基于文本特征）
+     * 🔧 优化：增强TF-IDF算法和语义特征提取
+     * 🚀 紧急修复：使用多哈希位置提升向量质量
+     * 🎯 最终修复：添加字符级n-gram特征解决中文分词问题
      */
     async vectorizeWithFallback(text) {
         try {
-            console.log('[VectorizedMemoryRetrieval] 🔄 使用降级向量化方法');
-            
-            // 简单的文本特征向量化
-            const words = text.toLowerCase().split(/\s+/);
+            console.log('[VectorizedMemoryRetrieval] 🔄 使用降级向量化方法（字符级n-gram）');
+
+            // 清理文本
+            const cleanText = text.toLowerCase().replace(/[^\u4e00-\u9fa5a-z0-9\s]/g, '');
+
+            if (cleanText.length === 0) {
+                return new Array(this.settings.vectorDimensions).fill(0);
+            }
+
             const vector = new Array(this.settings.vectorDimensions).fill(0);
-            
-            // 基于词频和位置的简单向量化
-            words.forEach((word, index) => {
-                const hash = this.simpleHash(word);
-                const pos = hash % this.settings.vectorDimensions;
-                vector[pos] += 1 / (index + 1); // 位置权重
+            const features = new Map(); // 存储所有特征及其频率
+
+            // 🎯 方法1：词级特征（适用于英文和有空格的文本）
+            const words = cleanText.split(/\s+/).filter(w => w.length > 1);
+            words.forEach(word => {
+                features.set(`word:${word}`, (features.get(`word:${word}`) || 0) + 1);
             });
-            
+
+            // 🎯 方法2：字符级2-gram特征（适用于中文）
+            for (let i = 0; i < cleanText.length - 1; i++) {
+                const bigram = cleanText.substring(i, i + 2);
+                if (bigram.trim().length === 2) { // 跳过包含空格的bigram
+                    features.set(`2gram:${bigram}`, (features.get(`2gram:${bigram}`) || 0) + 1);
+                }
+            }
+
+            // 🎯 方法3：字符级3-gram特征（增强语义理解）
+            for (let i = 0; i < cleanText.length - 2; i++) {
+                const trigram = cleanText.substring(i, i + 3);
+                if (trigram.trim().length === 3) { // 跳过包含空格的trigram
+                    features.set(`3gram:${trigram}`, (features.get(`3gram:${trigram}`) || 0) + 1);
+                }
+            }
+
+            // 🎯 方法4：单字符特征（作为补充）
+            for (let i = 0; i < cleanText.length; i++) {
+                const char = cleanText[i];
+                if (char.trim().length > 0) { // 跳过空格
+                    features.set(`char:${char}`, (features.get(`char:${char}`) || 0) + 1);
+                }
+            }
+
+            // 计算总特征数
+            const totalFeatures = Array.from(features.values()).reduce((sum, freq) => sum + freq, 0);
+
+            // 🚀 向量化所有特征
+            let featureIndex = 0;
+            for (const [feature, freq] of features) {
+                // TF权重
+                const tfWeight = freq / totalFeatures;
+
+                // 位置权重（早期特征更重要）
+                const positionWeight = 1 / Math.log(featureIndex + 2);
+
+                // 特征类型权重
+                let typeWeight = 1.0;
+                if (feature.startsWith('word:')) typeWeight = 1.5; // 词级特征最重要
+                else if (feature.startsWith('3gram:')) typeWeight = 1.3; // 3-gram次之
+                else if (feature.startsWith('2gram:')) typeWeight = 1.2; // 2-gram再次
+                else if (feature.startsWith('char:')) typeWeight = 0.8; // 单字符权重较低
+
+                // 使用5个哈希位置（减少以平衡性能）
+                for (let hashSeed = 0; hashSeed < 5; hashSeed++) {
+                    const hash = this.improvedHash(feature, hashSeed);
+                    const pos = hash % this.settings.vectorDimensions;
+
+                    // 累加权重到向量
+                    vector[pos] += positionWeight * tfWeight * typeWeight;
+                }
+
+                featureIndex++;
+            }
+
             // 归一化
             const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
             if (magnitude > 0) {
                 for (let i = 0; i < vector.length; i++) {
                     vector[i] /= magnitude;
                 }
+            } else {
+                // 如果向量全为0，返回均匀分布的向量
+                const uniformValue = 1 / Math.sqrt(this.settings.vectorDimensions);
+                for (let i = 0; i < this.settings.vectorDimensions; i++) {
+                    vector[i] = uniformValue;
+                }
             }
-            
+
+            console.log(`[VectorizedMemoryRetrieval] ✅ 提取了 ${features.size} 个特征`);
             return vector;
-            
+
         } catch (error) {
             console.error('[VectorizedMemoryRetrieval] ❌ 降级向量化失败:', error);
             return null;
         }
+    }
+
+    /**
+     * 🚀 新增：改进的哈希函数（支持多种子）
+     */
+    improvedHash(str, seed = 0) {
+        let hash = seed * 0x9e3779b9; // 使用黄金比例常数
+
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+            hash = hash ^ (hash >>> 16); // 混合高位和低位
+        }
+
+        return Math.abs(hash);
+    }
+
+    /**
+     * 🔧 新增：计算词的语义权重
+     */
+    calculateSemanticWeight(word) {
+        let weight = 1.0;
+
+        // 长词权重更高
+        if (word.length > 6) weight *= 1.3;
+        else if (word.length > 4) weight *= 1.1;
+
+        // 包含数字或特殊字符的词权重更高（可能是专有名词）
+        if (/[0-9]/.test(word)) weight *= 1.2;
+        if (/[A-Z]/.test(word)) weight *= 1.15;
+
+        // 常见停用词权重降低
+        const stopWords = ['the', 'is', 'at', 'which', 'on', 'a', 'an', 'and', 'or', 'but'];
+        if (stopWords.includes(word.toLowerCase())) weight *= 0.5;
+
+        return weight;
     }
 
     /**
@@ -1042,6 +1197,10 @@ export class VectorizedMemoryRetrieval {
             this.vectorIndex = [];
             this.memoryIndex.clear();
 
+            // 🔧 修复：从DeepMemoryManager获取记忆
+            const deepMemories = await this.getDeepMemories();
+            console.log(`[VectorizedMemoryRetrieval] 📚 从DeepMemoryManager获取到 ${deepMemories.length} 条记忆`);
+
             // 获取AI总结历史
             const aiSummaries = await this.getAISummaryHistory();
 
@@ -1050,6 +1209,9 @@ export class VectorizedMemoryRetrieval {
 
             // 获取聊天历史
             const chatHistory = await this.getChatHistory();
+
+            // 🔧 修复：优先索引DeepMemoryManager的记忆
+            await this.indexMemories(deepMemories, 'deep_memory');
 
             // 索引AI总结
             await this.indexMemories(aiSummaries, 'ai_summary');
@@ -1082,6 +1244,50 @@ export class VectorizedMemoryRetrieval {
             console.error('[VectorizedMemoryRetrieval] ❌ 构建记忆索引失败:', error);
             this.isIndexing = false;
             this.handleError(error);
+        }
+    }
+
+    /**
+     * 🔧 新增：从DeepMemoryManager获取记忆
+     */
+    async getDeepMemories() {
+        try {
+            const memories = [];
+
+            // 尝试从全局获取DeepMemoryManager
+            const deepMemoryManager = window.SillyTavernInfobar?.modules?.deepMemoryManager;
+
+            if (!deepMemoryManager) {
+                console.log('[VectorizedMemoryRetrieval] ⚠️ DeepMemoryManager未找到');
+                return memories;
+            }
+
+            // 从所有记忆层获取记忆
+            const layers = ['sensory', 'shortTerm', 'longTerm', 'deepArchive'];
+
+            for (const layerName of layers) {
+                const layer = deepMemoryManager.memoryLayers[layerName];
+                if (layer && layer.size > 0) {
+                    for (const [id, memory] of layer) {
+                        memories.push({
+                            id: memory.id,
+                            content: memory.content,
+                            type: memory.type,
+                            timestamp: memory.timestamp,
+                            importance: memory.importance,
+                            layer: layerName,
+                            metadata: memory.metadata
+                        });
+                    }
+                }
+            }
+
+            console.log(`[VectorizedMemoryRetrieval] ✅ 从DeepMemoryManager获取了 ${memories.length} 条记忆`);
+            return memories;
+
+        } catch (error) {
+            console.error('[VectorizedMemoryRetrieval] ❌ 获取DeepMemories失败:', error);
+            return [];
         }
     }
 
@@ -1321,16 +1527,62 @@ export class VectorizedMemoryRetrieval {
     }
 
     /**
-     * 处理记忆更新事件
+     * 🔧 修复：处理记忆更新事件（增量索引）
      */
     async handleMemoryUpdated(data) {
         try {
-            console.log('[VectorizedMemoryRetrieval] 📝 处理记忆更新事件');
+            console.log('[VectorizedMemoryRetrieval] 📝 处理记忆更新事件:', data.action);
 
             if (!this.settings.autoVectorize) return;
 
-            // 增量更新索引
-            await this.buildMemoryIndex();
+            // 如果是添加操作，进行增量索引
+            if (data.action === 'add' && data.memory) {
+                const memory = data.memory;
+
+                // 检查是否已经索引
+                if (this.memoryIndex.has(memory.id)) {
+                    console.log('[VectorizedMemoryRetrieval] ⚠️ 记忆已索引，跳过');
+                    return;
+                }
+
+                // 向量化内容
+                const content = memory.content || '';
+                if (!content) return;
+
+                const vector = await this.vectorizeText(content);
+                if (!vector) return;
+
+                // 创建索引条目
+                const indexEntry = {
+                    id: memory.id,
+                    content: content,
+                    vector: vector,
+                    type: 'deep_memory',
+                    timestamp: memory.timestamp || Date.now(),
+                    metadata: {
+                        layer: data.layer,
+                        importance: memory.importance,
+                        source: memory.source,
+                        memoryType: memory.type
+                    }
+                };
+
+                // 添加到索引
+                this.vectorIndex.push(indexEntry);
+                this.memoryIndex.set(indexEntry.id, indexEntry);
+
+                console.log(`[VectorizedMemoryRetrieval] ✅ 增量索引完成: ${memory.id}`);
+                console.log(`[VectorizedMemoryRetrieval] 📊 当前索引大小: ${this.vectorIndex.length}`);
+
+                // 保存索引
+                if (this.settings.useLocalStorage) {
+                    await this.saveIndexToStorage();
+                }
+            } else {
+                // 其他操作（删除、更新等）需要重建索引
+                console.log('[VectorizedMemoryRetrieval] 🔄 重建索引...');
+                await this.buildMemoryIndex();
+            }
 
         } catch (error) {
             console.error('[VectorizedMemoryRetrieval] ❌ 处理记忆更新事件失败:', error);
@@ -1531,19 +1783,55 @@ export class VectorizedMemoryRetrieval {
     }
 
     /**
-     * 🔧 新增：简化的搜索相似记忆方法
+     * 🔧 修复：使用向量索引进行语义搜索
      */
-    searchSimilarMemories(query, maxResults = 5) {
+    async searchSimilarMemories(query, maxResults = 5) {
         try {
             console.log('[VectorizedMemoryRetrieval] 🔍 搜索相似记忆:', query);
 
-            // 使用基础搜索
-            return this.basicSearch(query, { maxResults }).then(result => {
-                return result.results || [];
-            }).catch(error => {
-                console.error('[VectorizedMemoryRetrieval] ❌ 搜索相似记忆失败:', error);
+            // 如果索引为空，返回空结果
+            if (this.vectorIndex.length === 0) {
+                console.log('[VectorizedMemoryRetrieval] ⚠️ 向量索引为空，无法搜索');
                 return [];
-            });
+            }
+
+            // 向量化查询
+            const queryVector = await this.vectorizeText(query);
+            if (!queryVector) {
+                console.log('[VectorizedMemoryRetrieval] ⚠️ 查询向量化失败');
+                return [];
+            }
+
+            // 计算与所有索引条目的相似度
+            const results = [];
+            for (const entry of this.vectorIndex) {
+                if (!entry.vector) continue;
+
+                const similarity = this.calculateCosineSimilarity(queryVector, entry.vector);
+
+                // 只保留相似度高于阈值的结果
+                if (similarity > 0.1) { // 降低阈值以获得更多结果
+                    results.push({
+                        memory: {
+                            id: entry.id,
+                            content: entry.content,
+                            type: entry.type,
+                            timestamp: entry.timestamp,
+                            metadata: entry.metadata
+                        },
+                        similarity: similarity
+                    });
+                }
+            }
+
+            // 按相似度排序并限制结果数量
+            const sortedResults = results
+                .sort((a, b) => b.similarity - a.similarity)
+                .slice(0, maxResults);
+
+            console.log(`[VectorizedMemoryRetrieval] ✅ 向量搜索完成，找到 ${sortedResults.length} 个结果`);
+
+            return sortedResults;
 
         } catch (error) {
             console.error('[VectorizedMemoryRetrieval] ❌ 搜索相似记忆失败:', error);

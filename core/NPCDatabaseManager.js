@@ -470,7 +470,11 @@ export class NPCDatabaseManager {
             npcs.forEach(n => {
                 const npc = this.ensureNpc(n.name);
                 const before = JSON.stringify(npc.fields);
-                npc.fields = this.mergeFields(npc.fields, n.fields);
+
+                // 🔧 修复：清理内部字段，避免泄漏到NPC数据库
+                const cleanedFields = this.cleanInternalFields(n.fields);
+
+                npc.fields = this.mergeFields(npc.fields, cleanedFields);
                 npc.appearCount = (npc.appearCount || 0) + 1;
                 npc.lastSeen = Date.now();
                 npc.lastMessageId = messageId;
@@ -606,12 +610,20 @@ export class NPCDatabaseManager {
                     // 查找名称字段（通常是col_1或第一个字段）
                     let npcName = '';
 
-                    // 优先查找col_1字段（根据真实数据格式）
+                    // 🔧 修复：优先查找col_1字段（根据真实数据格式）
                     if (npcData.col_1) {
                         npcName = String(npcData.col_1).trim();
+                    } else if (npcData['1']) {
+                        // 回退到数字键格式
+                        npcName = String(npcData['1']).trim();
                     } else if (keys.length > 0) {
-                        // 如果没有col_1，使用第一个字段
-                        npcName = String(npcData[keys[0]]).trim();
+                        // 🔧 修复：如果没有col_1，使用第一个非索引字段
+                        // 跳过col_0索引列
+                        const firstDataKey = keys.find(key => key !== 'col_0' && key !== '0');
+                        if (firstDataKey) {
+                            npcName = String(npcData[firstDataKey]).trim();
+                            console.log(`[NPCDB] 📝 使用字段 ${firstDataKey} 作为NPC名称: ${npcName}`);
+                        }
                     }
 
                     // 如果没有找到有效名称，使用索引
@@ -645,7 +657,42 @@ export class NPCDatabaseManager {
     }
 
     /**
+     * 🆕 清理内部字段（避免泄漏到NPC数据库）
+     */
+    cleanInternalFields(fields) {
+        const cleanedFields = {};
+
+        Object.entries(fields).forEach(([key, value]) => {
+            // 跳过纯数字键
+            if (/^\d+$/.test(key)) {
+                console.log(`[NPCDB] 🧹 清理纯数字字段: ${key}`);
+                return;
+            }
+
+            // 跳过col_x格式字段
+            if (/^col_\d+$/.test(key)) {
+                console.log(`[NPCDB] 🧹 清理col_x字段: ${key}`);
+                return;
+            }
+
+            // 跳过内部字段
+            if (key === 'index' || key === 'source' || key.startsWith('_')) {
+                console.log(`[NPCDB] 🧹 清理内部字段: ${key}`);
+                return;
+            }
+
+            // 保留有效字段
+            cleanedFields[key] = value;
+        });
+
+        console.log(`[NPCDB] ✅ 字段清理完成: ${Object.keys(fields).length} -> ${Object.keys(cleanedFields).length}`);
+        return cleanedFields;
+    }
+
+    /**
      * 🚀 新增：将数组格式字段映射为标准字段（支持数字键和col_x格式）
+     * 🔧 修复：使用有意义的字段名存储，避免col_x格式泄漏到世界书
+     * 🔧 修复：检测并跳过col_0索引列，避免字段错位
      */
     mapArrayFieldsToStandard(npcData, index) {
         // 🔧 修复：自动检测字段键的格式（数字键 vs col_x格式）
@@ -654,8 +701,21 @@ export class NPCDatabaseManager {
 
         console.log(`[NPCDB] 🔍 字段格式检测: 数字键=${hasNumericKeys}, col_x键=${hasColKeys}`);
 
+        // 🔧 新增：检测是否存在col_0索引列
+        const hasIndexColumn = npcData.hasOwnProperty('col_0') || npcData.hasOwnProperty('0');
+        if (hasIndexColumn) {
+            console.log(`[NPCDB] ⚠️ 检测到索引列（col_0），将自动跳过`);
+            console.log(`[NPCDB] 📊 索引列值: ${npcData['col_0'] || npcData['0']}`);
+        }
+
         // 🔧 修复：根据实际数据格式选择正确的键名
+        // 如果存在col_0索引列，则从col_1开始映射到字段1
+        // 如果不存在col_0，则从col_1开始映射到字段1（保持原有逻辑）
         const getFieldValue = (fieldIndex) => {
+            // 🔧 关键修复：如果存在col_0索引列，需要调整索引
+            // 字段映射: col_1 -> 字段1, col_2 -> 字段2, ...
+            // 但如果存在col_0，则: col_1 -> 字段1, col_2 -> 字段2, ...（不变）
+
             // 优先使用数字键
             if (npcData[fieldIndex] !== undefined) {
                 return npcData[fieldIndex];
@@ -667,38 +727,205 @@ export class NPCDatabaseManager {
             return '';
         };
 
+        // 🔧 修复：获取字段显示名称映射
+        const fieldMapping = this.getFieldDisplayNameMapping();
+
         const mappedFields = {
             // 基础信息
             index: index,
-            source: 'array_format',
-
-            // 🎯 标准字段映射（使用动态键访问）
-            '1': getFieldValue(1),  // 通常是NPC名称
-            '2': getFieldValue(2),  // 对象类型
-            '3': getFieldValue(3),  // 当前状态
-            '4': getFieldValue(4),  // 关系类型
-            '5': getFieldValue(5),  // 亲密度
-            '6': getFieldValue(6),  // 背景/描述
-            '7': getFieldValue(7),  // 外貌特征
-            '8': getFieldValue(8),  // 服装/装备
-            '9': getFieldValue(9),  // 备注
-
-            // 保留原始数据用于调试
-            _原始数据: npcData,
-            _解析时间: new Date().toISOString()
+            source: 'array_format'
         };
 
-        // 🔧 清理空值字段（除了元数据字段）
-        Object.keys(mappedFields).forEach(key => {
-            const value = mappedFields[key];
-            if ((value === '' || value === null || value === undefined) && !key.startsWith('_') && key !== 'index' && key !== 'source') {
-                delete mappedFields[key];
-            }
+        // 🔧 关键修复：动态获取实际的字段数量，而不是硬编码20
+        // 1. 从npcData中获取所有数字键和col_x键
+        const allKeys = Object.keys(npcData);
+        const numericKeys = allKeys.filter(key => /^\d+$/.test(key)).map(Number);
+        const colKeys = allKeys.filter(key => /^col_(\d+)$/.test(key)).map(key => {
+            const match = key.match(/^col_(\d+)$/);
+            return match ? parseInt(match[1]) : 0;
         });
 
+        // 2. 获取最大索引
+        const maxNumericIndex = numericKeys.length > 0 ? Math.max(...numericKeys) : 0;
+        const maxColIndex = colKeys.length > 0 ? Math.max(...colKeys) : 0;
+        const maxFieldIndex = Math.max(maxNumericIndex, maxColIndex);
+
+        console.log(`[NPCDB] 📊 字段索引范围: 数字键最大=${maxNumericIndex}, col_x最大=${maxColIndex}, 实际最大=${maxFieldIndex}`);
+
+        // 🔧 修复：使用有意义的字段名存储，避免col_x格式
+        // 遍历所有实际存在的字段索引
+        for (let i = 1; i <= maxFieldIndex; i++) {
+            const value = getFieldValue(i);
+            if (value !== '' && value !== null && value !== undefined) {
+                // 🔧 关键修复：使用字段显示名称而不是col_x格式
+                const displayName = fieldMapping[`col_${i}`] || fieldMapping[String(i)];
+
+                if (displayName && !/^\d+$/.test(displayName)) {
+                    // 使用有意义的字段名
+                    mappedFields[displayName] = value;
+                    console.log(`[NPCDB] 📝 映射字段 col_${i} -> ${displayName}: ${String(value).substring(0, 50)}${String(value).length > 50 ? '...' : ''}`);
+                } else {
+                    // 如果没有找到映射，记录警告但仍然保存（使用col_x格式）
+                    console.warn(`[NPCDB] ⚠️ 字段 col_${i} 没有映射，值: ${String(value).substring(0, 50)}`);
+                    mappedFields[`col_${i}`] = value; // 保存原始格式，避免数据丢失
+                }
+            }
+        }
+
+        // 保留原始数据用于调试
+        mappedFields._原始数据 = npcData;
+        mappedFields._解析时间 = new Date().toISOString();
+        mappedFields._字段数量 = maxFieldIndex;
+
         const npcName = getFieldValue(1) || 'Unknown';
-        console.log(`[NPCDB] 🗂️ 字段映射完成 ${npcName}:`, Object.keys(mappedFields).filter(k => !k.startsWith('_') && k !== 'index' && k !== 'source'));
+        const fieldCount = Object.keys(mappedFields).filter(k => !k.startsWith('_') && k !== 'index' && k !== 'source').length;
+        console.log(`[NPCDB] 🗂️ 字段映射完成 ${npcName}: 共${fieldCount}个字段`, Object.keys(mappedFields).filter(k => !k.startsWith('_') && k !== 'index' && k !== 'source'));
         return mappedFields;
+    }
+
+    /**
+     * 🆕 获取字段显示名称映射（从扩展配置动态构建）
+     */
+    getFieldDisplayNameMapping() {
+        try {
+            console.log('[NPCDB] 🔍 开始构建动态字段映射...');
+
+            // 🔧 关键修复：使用DataTable的getAllEnabledPanels()获取正确的面板配置
+            const dataTable = window.SillyTavernInfobar?.modules?.dataTable;
+            if (!dataTable || typeof dataTable.getAllEnabledPanels !== 'function') {
+                console.warn('[NPCDB] ⚠️ DataTable模块不可用，使用降级方案');
+                return this.getFallbackFieldMapping();
+            }
+
+            // 获取所有启用的面板配置
+            const enabledPanels = dataTable.getAllEnabledPanels();
+            const interactionPanel = enabledPanels.find(panel =>
+                panel.key === 'interaction' || panel.id === 'interaction'
+            );
+
+            if (!interactionPanel) {
+                console.warn('[NPCDB] ⚠️ 未找到interaction面板配置');
+                return this.getFallbackFieldMapping();
+            }
+
+            console.log('[NPCDB] ✅ 找到interaction面板配置:', interactionPanel);
+
+            const fieldMapping = {};
+
+            // 🎯 关键修复：直接使用subItems的顺序，这是用户界面的实际顺序
+            if (interactionPanel.subItems && Array.isArray(interactionPanel.subItems)) {
+                let validColumnIndex = 1; // 有效列号计数器
+
+                interactionPanel.subItems.forEach((subItem, index) => {
+                    if (subItem.enabled !== false) {
+                        const displayName = subItem.displayName || subItem.name || subItem.key;
+                        const fieldKey = subItem.key || displayName;
+
+                        // 🔧 跳过无效字段（纯数字的key和name）
+                        if (/^\d+$/.test(fieldKey) && /^\d+$/.test(displayName)) {
+                            console.log(`[NPCDB] ⚠️ 跳过无效字段 [${index + 1}]: key="${fieldKey}", name="${displayName}"`);
+                            return;
+                        }
+
+                        // 🔧 创建多种格式的映射，确保兼容性
+                        // 1. 字段键 -> 显示名称
+                        if (fieldKey && !/^\d+$/.test(fieldKey)) {
+                            fieldMapping[fieldKey] = displayName;
+                        }
+
+                        // 2. 数字索引 -> 显示名称（使用有效列号）
+                        fieldMapping[String(validColumnIndex)] = displayName;
+
+                        // 3. col_x格式 -> 显示名称（使用有效列号）
+                        fieldMapping[`col_${validColumnIndex}`] = displayName;
+
+                        // 4. 显示名称 -> 显示名称（自映射，用于查找）
+                        if (displayName && !/^\d+$/.test(displayName)) {
+                            fieldMapping[displayName] = displayName;
+                        }
+
+                        console.log(`[NPCDB] 📝 字段映射 [有效列${validColumnIndex}]: ${fieldKey} => "${displayName}"`);
+                        validColumnIndex++;
+                    }
+                });
+
+                const validFieldCount = validColumnIndex - 1;
+                console.log('[NPCDB] ✅ 动态字段映射构建完成，共', validFieldCount, '个有效字段');
+                console.log('[NPCDB] 📊 完整映射表:', fieldMapping);
+                return fieldMapping;
+            } else {
+                console.warn('[NPCDB] ⚠️ interaction面板没有subItems配置');
+                return this.getFallbackFieldMapping();
+            }
+
+        } catch (error) {
+            console.error('[NPCDB] ❌ 获取字段映射失败:', error);
+            return this.getFallbackFieldMapping();
+        }
+    }
+
+    /**
+     * 🆕 回退字段映射表
+     */
+    getFallbackFieldMapping() {
+        console.log('[NPCDB] ⚠️ 使用回退映射表');
+        return {
+            'name': '对象名称', '1': '对象名称', 'col_1': '对象名称',
+            'type': '对象类型', '2': '对象类型', 'col_2': '对象类型',
+            'status': '当前状态', '3': '当前状态', 'col_3': '当前状态',
+            'relationship': '关系类型', '4': '关系类型', 'col_4': '关系类型',
+            'intimacy': '亲密度', '5': '亲密度', 'col_5': '亲密度',
+            'description': '背景/描述', '6': '背景/描述', 'col_6': '背景/描述',
+            'appearance': '外貌特征', '7': '外貌特征', 'col_7': '外貌特征',
+            'outfit': '服装/装备', '8': '服装/装备', 'col_8': '服装/装备',
+            'notes': '备注', '9': '备注', 'col_9': '备注'
+        };
+    }
+
+    /**
+     * 🆕 将英文字段名转换为中文显示名称
+     */
+    translateFieldDisplayName(displayName, fieldKey) {
+        // 如果已经是中文，直接返回
+        if (/[\u4e00-\u9fa5]/.test(displayName)) {
+            return displayName;
+        }
+
+        // 🎯 interaction面板字段的中英文映射表
+        const enToCnMapping = {
+            // 基础字段
+            'name': '对象名称',
+            'type': '对象类型',
+            'status': '当前状态',
+            'location': '所在位置',
+            'mood': '情绪状态',
+            'activity': '当前活动',
+            'availability': '可用性',
+            'priority': '优先级',
+            'relationship': '关系类型',
+            'intimacy': '亲密度',
+            'trust': '信任度',
+            'friendship': '友谊度',
+            'romance': '浪漫度',
+            'respect': '尊重度',
+            'dependency': '依赖度',
+            'conflict': '冲突度',
+            'lastContact': '最后联系',
+            'frequency': '联系频率',
+            'history': '互动历史',
+            'notes': '备注',
+            'goals': '目标',
+            'secrets': '秘密',
+            'autoRecord': '自动记录',
+            'appearance': '外貌特征',
+            'outfit': '服装/装备',
+            'description': '背景/描述',
+            'personality': '性格特征',
+            'faction': '所属派系',
+            'occupation': '职业/身份'
+        };
+
+        return enToCnMapping[displayName] || enToCnMapping[fieldKey] || displayName;
     }
 
     /**

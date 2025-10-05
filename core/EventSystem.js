@@ -1107,15 +1107,15 @@ export class EventSystem {
             // 🔧 优化：获取消息ID用于缓存
             const messageId = this.extractMessageId(messageData);
 
-            // 解析XML数据，启用缓存机制
-            const parsedData = this.xmlParser.parseInfobarData(messageContent, {
+            // 🔧 修复：parseInfobarData是异步方法，必须使用await
+            const parsedData = await this.xmlParser.parseInfobarData(messageContent, {
                 skipIfCached: true,
                 messageId: messageId
             });
             if (!parsedData) {
                 console.warn('[EventSystem] ⚠️ XML数据解析失败');
                 console.log('[EventSystem] 🔒 保持现有数据不变，避免清空数据表格');
-                
+
                 // 🔧 修复：解析失败时，触发一个特殊事件通知其他组件保持现状
                 this.emit('infobar_data_parse_failed', {
                     type: type,
@@ -1123,7 +1123,7 @@ export class EventSystem {
                     reason: 'XML解析失败',
                     timestamp: Date.now()
                 });
-                
+
                 return false;
             }
 
@@ -1268,6 +1268,7 @@ export class EventSystem {
                     const characterId = context?.characterId || 'default';
 
                     if (smartPromptSystem && typeof smartPromptSystem.executeOperationCommands === 'function') {
+                        // 🔧 修复：executeOperationCommands是异步方法，必须使用await等待执行完成
                         // 执行操作指令，内部会直接写回 chatData.infobar_data.panels 结构
                         await smartPromptSystem.executeOperationCommands(operations, characterId);
 
@@ -1583,17 +1584,22 @@ export class EventSystem {
                     }
                 }
 
-                // 触发AI记忆总结
-                const aiMemorySummarizer = infoBarTool.modules.summaryManager?.aiMemorySummarizer;
-                if (aiMemorySummarizer && aiMemorySummarizer.handleMessageReceived && aiMemorySummarizer.settings?.enabled) {
-                    try {
-                        console.log('[EventSystem] 📝 调用AI记忆总结器处理消息');
-                        await aiMemorySummarizer.handleMessageReceived(memoryData);
-                        console.log('[EventSystem] ✅ AI记忆总结处理完成');
-                    } catch (error) {
-                        console.error('[EventSystem] ❌ AI记忆总结处理失败:', error);
-                    }
-                }
+                // 🔧 修复：禁用自动调用AI记忆总结器
+                // AI记忆总结已内置在智能提示词中，由AI在响应时自动生成
+                // 不需要再调用API单独生成，这样可以：
+                // 1. 避免阻塞消息发送
+                // 2. 避免额外的API调用
+                // 3. AI记忆总结与信息栏数据一起生成，保持一致性
+                // const aiMemorySummarizer = infoBarTool.modules.summaryManager?.aiMemorySummarizer;
+                // if (aiMemorySummarizer && aiMemorySummarizer.handleMessageReceived && aiMemorySummarizer.settings?.enabled) {
+                //     try {
+                //         console.log('[EventSystem] 📝 调用AI记忆总结器处理消息');
+                //         await aiMemorySummarizer.handleMessageReceived(memoryData);
+                //         console.log('[EventSystem] ✅ AI记忆总结处理完成');
+                //     } catch (error) {
+                //         console.error('[EventSystem] ❌ AI记忆总结处理失败:', error);
+                //     }
+                // }
 
                 // 触发智能记忆分类
                 const intelligentMemoryClassifier = infoBarTool.modules.intelligentMemoryClassifier;

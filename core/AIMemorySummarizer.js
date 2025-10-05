@@ -21,20 +21,22 @@ export class AIMemorySummarizer {
         this.smartPromptSystem = smartPromptSystem;
         
         // AI总结设置
+        // 🔧 重要修复：AI记忆总结已内置在智能提示词中，由AI自动生成
+        // 不需要再通过API单独调用生成，默认禁用自动触发
         this.settings = {
-            enabled: true,                     // 🔧 修复：默认启用AI总结，确保记忆系统正常工作
-            // 🔧 修改：启用消息级别处理，不再跟随楼层触发
-            followSummaryFloor: false,         // ❌ 不跟随楼层，改为消息级别触发
-            messageLevelSummary: true,         // ✅ 启用消息级别总结，每条重要消息都会触发
-            batchSize: 3,                      // 🔧 减小批量处理大小，提高响应速度
-            importanceThreshold: 0.3,          // 🔧 进一步降低重要性阈值，处理更多消息
+            enabled: false,                    // 🔧 修复：默认禁用，AI记忆总结由智能提示词内置生成
+            // 🔧 修改：禁用消息级别触发，改为只在传统总结时配合生成
+            followSummaryFloor: true,          // ✅ 跟随楼层触发（仅在传统总结启用时）
+            messageLevelSummary: false,        // ❌ 禁用消息级别总结，避免每条消息都调用API
+            batchSize: 3,                      // 批量处理大小
+            importanceThreshold: 0.3,          // 重要性阈值
             summaryCache: true,                // 启用总结缓存
             preventDuplication: true,          // 防重复机制
             memoryClassification: true,        // 记忆分类
             autoTagging: true,                 // 自动标记
             maxSummaryLength: 200,             // 最大总结长度
-            minSummaryLength: 20,              // 🔧 进一步降低最小总结长度
-            immediateProcessing: true          // 🔧 新增：立即处理模式
+            minSummaryLength: 20,              // 最小总结长度
+            immediateProcessing: false         // 🔧 修复：禁用立即处理模式
         };
         
         // 缓存和状态管理
@@ -182,6 +184,7 @@ export class AIMemorySummarizer {
 
     /**
      * 绑定事件监听器
+     * 🔧 重要修复：AI记忆总结已内置在智能提示词中，不需要监听事件自动触发
      */
     bindEventListeners() {
         try {
@@ -189,27 +192,32 @@ export class AIMemorySummarizer {
 
             if (!this.eventSystem) return;
 
-            // 监听消息接收事件
-            this.eventSystem.on('message:received', (data) => {
-                this.handleMessageReceived(data);
-            });
+            // 🔧 修复：禁用自动触发的事件监听
+            // AI记忆总结已由智能提示词内置生成，不需要监听消息事件
+            // 这样可以避免每次消息都调用API生成总结，导致阻塞
+            
+            // 禁用：监听消息接收事件
+            // this.eventSystem.on('message:received', (data) => {
+            //     this.handleMessageReceived(data);
+            // });
 
-            // 监听总结完成事件
+            // 保留：监听总结完成事件（仅用于配合传统总结）
             this.eventSystem.on('summary:created', (data) => {
                 this.handleSummaryCreated(data);
             });
 
-            // 监听聊天切换事件
+            // 保留：监听聊天切换事件
             this.eventSystem.on('chat:changed', (data) => {
                 this.handleChatChanged(data);
             });
 
-            // 🔧 新增：监听SummaryManager设置变化事件
+            // 保留：监听SummaryManager设置变化事件
             this.eventSystem.on('summary-settings:changed', (data) => {
                 this.handleSummarySettingsChanged(data);
             });
 
-            console.log('[AIMemorySummarizer] ✅ 事件监听器绑定完成');
+            console.log('[AIMemorySummarizer] ✅ 事件监听器绑定完成（已禁用自动触发）');
+            console.log('[AIMemorySummarizer] ℹ️ AI记忆总结由智能提示词内置生成，不再监听消息事件');
 
         } catch (error) {
             console.error('[AIMemorySummarizer] ❌ 绑定事件监听器失败:', error);
@@ -239,9 +247,17 @@ export class AIMemorySummarizer {
 
     /**
      * 处理消息接收事件
+     * 🔧 重要修复：此方法已废弃，不应该被调用
+     * AI记忆总结已内置在智能提示词中，由AI自动生成
      */
     async handleMessageReceived(data) {
         try {
+            // 🔧 强制禁用：无论设置如何，都不处理
+            console.log('[AIMemorySummarizer] ⚠️ handleMessageReceived已废弃，AI记忆总结由智能提示词内置生成');
+            return;
+
+            // 以下代码已废弃，保留用于参考
+            /* 
             if (!this.settings.enabled) {
                 console.log('[AIMemorySummarizer] ⚠️ AI记忆总结已禁用');
                 return;
@@ -271,6 +287,7 @@ export class AIMemorySummarizer {
 
             console.log('[AIMemorySummarizer] 📝 开始处理新消息的AI总结...');
             await this.processMessageSummary(data);
+            */
 
             // 处理队列中的消息
             await this.processQueue();

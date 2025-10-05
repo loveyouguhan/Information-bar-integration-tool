@@ -117,13 +117,14 @@ export class XMLDataParser {
                 }
             });
 
-            // 添加自定义面板支持
-            if (configs.customPanels) {
-                Object.keys(configs.customPanels).forEach(panelId => {
-                    const panel = configs.customPanels[panelId];
-                    if (panel && panel.enabled) {
-                        this.supportedPanels.add(panelId);
-                        console.log(`[XMLDataParser] 📊 添加自定义面板支持: ${panelId}`);
+            // 🔧 修复：添加自定义面板支持（customPanels是对象，键是面板ID）
+            if (configs.customPanels && typeof configs.customPanels === 'object') {
+                Object.entries(configs.customPanels).forEach(([panelId, panel]) => {
+                    if (panel && panel.enabled !== false) {
+                        // 自定义面板使用key或id作为标识符
+                        const actualPanelId = panel.key || panel.id || panelId;
+                        this.supportedPanels.add(actualPanelId);
+                        console.log(`[XMLDataParser] 📊 添加自定义面板支持: ${actualPanelId} (${panel.name || '未命名'})`);
                     }
                 });
             }
@@ -147,9 +148,9 @@ export class XMLDataParser {
      * 解析消息中的infobar_data
      * @param {string} messageContent - 消息内容
      * @param {Object} options - 解析选项
-     * @returns {Object|null} 解析结果
+     * @returns {Promise<Object|null>} 解析结果
      */
-    parseInfobarData(messageContent, options = {}) {
+    async parseInfobarData(messageContent, options = {}) {
         try {
             const { skipIfCached = true, messageId = null } = options;
 
@@ -180,13 +181,14 @@ export class XMLDataParser {
                 return null;
             }
 
-            // 首先尝试解析XML注释格式的数据
-            let parsedData = this.parseXMLCommentData(infobarContent);
+            // 🔧 修复：parseXMLCommentData是异步方法，必须使用await
+            let parsedData = await this.parseXMLCommentData(infobarContent);
 
             // 如果XML注释格式解析失败，尝试直接解析面板数据格式
             if (!parsedData) {
                 console.log('[XMLDataParser] ℹ️ XML注释格式解析失败，尝试直接面板格式解析...');
-                parsedData = this.parseDirectPanelFormat(infobarContent);
+                // 🔧 修复：parseDirectPanelFormat是异步方法，必须使用await
+                parsedData = await this.parseDirectPanelFormat(infobarContent);
             }
 
             if (!parsedData) {
@@ -287,9 +289,9 @@ export class XMLDataParser {
     /**
      * 解析XML注释格式的数据
      * @param {string} content - XML注释内容
-     * @returns {Object|null} 解析结果
+     * @returns {Promise<Object|null>} 解析结果
      */
-    parseXMLCommentData(content) {
+    async parseXMLCommentData(content) {
         try {
             // 🔧 严格验证：检查是否是XML注释格式
             if (!content.includes('<!--') || !content.includes('-->')) {
@@ -322,8 +324,8 @@ export class XMLDataParser {
 
                 console.log('[XMLDataParser] 📝 提取到面板数据内容，长度:', dataContent.length);
 
-                // 🔧 修复：解析面板数据，如果返回null说明格式不正确
-                const parseResult = this.parsePanelData(dataContent);
+                // 🔧 修复：parsePanelData是异步方法，必须使用await
+                const parseResult = await this.parsePanelData(dataContent);
 
                 if (parseResult && typeof parseResult === 'object' && Object.keys(parseResult).length > 0) {
                     // 合并解析结果
@@ -348,9 +350,9 @@ export class XMLDataParser {
     /**
      * 直接解析面板数据格式（非XML注释格式）
      * @param {string} content - 面板数据内容
-     * @returns {Object|null} 解析结果
+     * @returns {Promise<Object|null>} 解析结果
      */
-    parseDirectPanelFormat(content) {
+    async parseDirectPanelFormat(content) {
         try {
             console.log('[XMLDataParser] 🔍 开始直接面板格式解析...');
 
@@ -367,8 +369,8 @@ export class XMLDataParser {
 
             console.log('[XMLDataParser] 📝 开始解析直接面板数据，长度:', content.length);
 
-            // 直接解析面板数据
-            const parseResult = this.parsePanelData(content);
+            // 🔧 修复：parsePanelData是异步方法，必须使用await
+            const parseResult = await this.parsePanelData(content);
 
             if (parseResult && typeof parseResult === 'object' && Object.keys(parseResult).length > 0) {
                 console.log('[XMLDataParser] ✅ 直接面板格式解析成功，包含', Object.keys(parseResult).length, '个面板');
@@ -452,9 +454,9 @@ export class XMLDataParser {
     /**
      * 解析面板数据
      * @param {string} dataContent - 数据内容
-     * @returns {Object} 解析结果
+     * @returns {Promise<Object>} 解析结果
      */
-    parsePanelData(dataContent) {
+    async parsePanelData(dataContent) {
         try {
             const result = {};
 
@@ -467,7 +469,8 @@ export class XMLDataParser {
             // 🚀 新增：检查是否是操作指令格式
             if (this.isOperationCommandFormat(dataContent)) {
                 console.log('[XMLDataParser] 🚀 检测到操作指令格式，使用操作指令解析器');
-                return this.parseOperationCommands(dataContent);
+                // 🔧 修复：parseOperationCommands是异步方法，必须使用await
+                return await this.parseOperationCommands(dataContent);
             }
 
             // 🔧 严格验证：检查是否包含有效的面板数据格式
@@ -550,9 +553,9 @@ export class XMLDataParser {
     /**
      * 🚀 解析操作指令格式
      * @param {string} dataContent - 操作指令内容
-     * @returns {Object} 解析结果
+     * @returns {Promise<Object>} 解析结果
      */
-    parseOperationCommands(dataContent) {
+    async parseOperationCommands(dataContent) {
         try {
             console.log('[XMLDataParser] 🚀 开始解析操作指令格式...');
 
@@ -565,7 +568,8 @@ export class XMLDataParser {
                     continue; // 跳过空行和注释
                 }
 
-                const operation = this.parseOperationCommand(trimmedLine);
+                // 🔧 修复：parseOperationCommand是异步方法，必须使用await
+                const operation = await this.parseOperationCommand(trimmedLine);
                 if (operation) {
                     operations.push(operation);
                     console.log(`[XMLDataParser] ✅ 解析操作指令:`, operation);
@@ -594,9 +598,9 @@ export class XMLDataParser {
     /**
      * 🚀 解析单个操作指令
      * @param {string} commandLine - 操作指令行
-     * @returns {Object|null} 操作对象
+     * @returns {Promise<Object|null>} 操作对象
      */
-    parseOperationCommand(commandLine) {
+    async parseOperationCommand(commandLine) {
         try {
             // 正则表达式匹配操作指令格式：add persona(1 {"1"，"张三"，"2"，"24"}) - 支持大小写
             const operationRegex = /^(add|update|delete|ADD|UPDATE|DELETE)\s+(\w+)\((\d+)(?:\s*\{([^}]*)\})?\)$/i;
@@ -634,7 +638,9 @@ export class XMLDataParser {
                 operationData.data = this.parseOperationDataParameters(dataParams);
 
                 // 🚨 新增：验证字段是否在允许的字段列表中
-                if (!this.validatePanelFields(panelName, operationData.data)) {
+                // 🔧 修复：validatePanelFields是异步方法，必须使用await
+                const isValid = await this.validatePanelFields(panelName, operationData.data);
+                if (!isValid) {
                     const errorMsg = `🚨🚨🚨 CRITICAL ERROR: AI尝试在面板 "${panelName}" 中使用不存在的字段！
 ❌ 禁止操作：AI不能创建新字段或使用未启用的字段
 🚨 系统拒绝此操作以防止数据污染！`;

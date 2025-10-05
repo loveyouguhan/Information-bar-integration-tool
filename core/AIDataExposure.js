@@ -19,7 +19,8 @@ export class AIDataExposure {
         this.eventSystem = dependencies.eventSystem || window.SillyTavernInfobar?.eventSource;
         this.fieldRuleManager = dependencies.fieldRuleManager || window.SillyTavernInfobar?.modules?.fieldRuleManager;
         this.panelRuleManager = dependencies.panelRuleManager || window.SillyTavernInfobar?.modules?.panelRuleManager;
-        this.stScriptDataSync = dependencies.stScriptDataSync || window.SillyTavernInfobar?.modules?.stScriptDataSync;
+        // 🔧 已移除：STScript数据同步功能已删除
+        // this.stScriptDataSync = dependencies.stScriptDataSync || window.SillyTavernInfobar?.modules?.stScriptDataSync;
         
         // 状态管理
         this.initialized = false;
@@ -207,8 +208,8 @@ export class AIDataExposure {
         try {
             this.recordAccess('*', '*');
             
-            // 从 STScript 同步模块获取完整的 infobar 结构
-            const infobarData = await this.stScriptDataSync?.getInfobarStructure() || {};
+            // 🔧 已移除：不再从STScript获取数据，直接从UnifiedDataCore获取
+            const infobarData = {};
             
             const result = {
                 panels: {},
@@ -313,9 +314,8 @@ export class AIDataExposure {
         try {
             this.recordAccess(panelName, '*');
 
-            // 从 STScript 同步模块获取面板数据
-            const infobarData = await this.stScriptDataSync?.getInfobarStructure() || {};
-            const panelData = infobarData[panelName];
+            // 🔧 已移除：不再从STScript获取数据，直接从UnifiedDataCore获取
+            const panelData = await this.unifiedDataCore?.getData(panelName) || null;
 
             if (!panelData) {
                 return null;
@@ -604,8 +604,8 @@ export class AIDataExposure {
                 unifiedDataCore: !!this.unifiedDataCore,
                 eventSystem: !!this.eventSystem,
                 fieldRuleManager: !!this.fieldRuleManager,
-                panelRuleManager: !!this.panelRuleManager,
-                stScriptDataSync: !!this.stScriptDataSync
+                panelRuleManager: !!this.panelRuleManager
+                // 🔧 已移除：STScript数据同步功能已删除
             }
         };
     }

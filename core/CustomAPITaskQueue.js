@@ -154,6 +154,20 @@ export class CustomAPITaskQueue {
             // 获取消息内容
             const messageContent = data.mes || '';
 
+            // 🔧 新增：检查消息字数是否达到阈值
+            const messageLength = messageContent.length;
+            const minLength = this.getMinMessageLength();
+
+            console.log(`[CustomAPITaskQueue] 📏 消息字数检查: ${messageLength}字 (阈值: ${minLength}字)`);
+
+            if (messageLength < minLength) {
+                console.log(`[CustomAPITaskQueue] ⚠️ 消息字数(${messageLength})低于阈值(${minLength})，跳过信息栏数据生成`);
+                this.showLowLengthNotification(messageLength, minLength);
+                return;
+            }
+
+            console.log(`[CustomAPITaskQueue] ✅ 消息字数达到阈值，继续处理`);
+
             // 添加信息栏数据生成任务（高优先级）
             this.addTask({
                 type: 'INFOBAR_DATA',
@@ -180,12 +194,13 @@ export class CustomAPITaskQueue {
                 }
             }
 
-            // 添加记忆处理任务（低优先级）
-            this.addTask({
-                type: 'MEMORY',
-                data: { content: messageContent },
-                source: 'main_api_response'
-            });
+            // 🔧 修复：记忆处理任务改为非阻塞，且不调用AI记忆总结（AI记忆总结已内置在智能提示词中，由AI自动生成）
+            // 只进行记忆分类和存储，不再调用API生成AI记忆总结
+            // this.addTask({
+            //     type: 'MEMORY',
+            //     data: { content: messageContent },
+            //     source: 'main_api_response'
+            // });
 
         } catch (error) {
             console.error('[CustomAPITaskQueue] ❌ 处理主API返回事件失败:', error);
@@ -396,6 +411,12 @@ export class CustomAPITaskQueue {
             throw new Error('SummaryManager模块不可用');
         }
 
+        // 🔧 关键修复：在执行前再次检查传统总结是否启用
+        if (!summaryManager.settings?.autoSummaryEnabled) {
+            console.log('[CustomAPITaskQueue] ⏸️ 传统总结已禁用，跳过总结任务');
+            return;
+        }
+
         console.log('[CustomAPITaskQueue] 📝 执行总结生成任务');
         await summaryManager.generateSummary({ type: 'auto' });
     }
@@ -478,17 +499,27 @@ export class CustomAPITaskQueue {
     shouldGenerateSummary() {
         try {
             const sm = window.SillyTavernInfobar?.modules?.summaryManager;
-            if (!sm) return false;
+            if (!sm) {
+                console.log('[CustomAPITaskQueue] ℹ️ SummaryManager未初始化，不生成总结');
+                return false;
+            }
 
-            // 自动总结开关
-            if (sm.settings && sm.settings.autoSummaryEnabled === false) return false;
+            // 🔧 关键修复：第一优先级检查 - 自动总结开关必须启用
+            if (!sm.settings || sm.settings.autoSummaryEnabled !== true) {
+                console.log('[CustomAPITaskQueue] ⏸️ 传统总结未启用 (autoSummaryEnabled=false)，不生成总结');
+                return false;
+            }
 
             // 避免总结过程中的重复触发
-            if (sm.summaryInProgress) return false;
+            if (sm.summaryInProgress) {
+                console.log('[CustomAPITaskQueue] ⏸️ 总结正在进行中，跳过');
+                return false;
+            }
 
             // 冷却时间：防止短时间内频繁触发
             const now = Date.now();
             if (this.summaryCooldownMs && (now - (this.lastSummaryEnqueueTime || 0) < this.summaryCooldownMs)) {
+                console.log('[CustomAPITaskQueue] ⏸️ 总结冷却期中，跳过');
                 return false;
             }
 
@@ -496,13 +527,17 @@ export class CustomAPITaskQueue {
             const context = window.SillyTavern?.getContext?.();
             const currentCount = context?.chat?.length ?? sm.lastMessageCount ?? 0;
             if (typeof sm.shouldTriggerSummary === 'function') {
-                return sm.shouldTriggerSummary(currentCount);
+                const shouldTrigger = sm.shouldTriggerSummary(currentCount);
+                console.log('[CustomAPITaskQueue] 📊 楼层检查结果:', { currentCount, shouldTrigger });
+                return shouldTrigger;
             }
 
             // 兜底：按楼层阈值判断
             const lastId = sm.lastSummaryMessageId ?? 0;
             const floor = sm.settings?.summaryFloorCount ?? 20;
-            return (currentCount - lastId) >= floor;
+            const shouldTrigger = (currentCount - lastId) >= floor;
+            console.log('[CustomAPITaskQueue] 📊 兜底楼层检查:', { currentCount, lastId, floor, shouldTrigger });
+            return shouldTrigger;
         } catch (e) {
             console.error('[CustomAPITaskQueue] shouldGenerateSummary error:', e);
             return false;
@@ -581,5 +616,49 @@ export class CustomAPITaskQueue {
             errorCount: this.errorCount,
             queueStatus: this.getQueueStatus()
         };
+    }
+
+    /**
+     * 🆕 获取最小消息字数阈值
+     */
+    getMinMessageLength() {
+        try {
+            const context = window.SillyTavern?.getContext?.();
+            if (!context) {
+                console.warn('[CustomAPITaskQueue] ⚠️ 无法获取SillyTavern上下文，使用默认阈值500');
+                return 500;
+            }
+
+            const extensionSettings = context.extensionSettings;
+            const apiConfig = extensionSettings?.['Information bar integration tool']?.apiConfig || {};
+
+            // 获取用户设置的阈值，默认500字
+            const minLength = apiConfig.minMessageLength || 500;
+
+            return minLength;
+        } catch (error) {
+            console.error('[CustomAPITaskQueue] ❌ 获取最小消息字数阈值失败:', error);
+            return 500; // 默认500字
+        }
+    }
+
+    /**
+     * 🆕 显示字数不足通知
+     */
+    showLowLengthNotification(actualLength, minLength) {
+        try {
+            // 尝试使用SillyTavern的通知系统
+            if (typeof toastr !== 'undefined') {
+                toastr.info(
+                    `AI消息字数(${actualLength})低于阈值(${minLength})，已跳过信息栏数据生成`,
+                    '信息栏数据生成',
+                    { timeOut: 3000 }
+                );
+            } else {
+                console.log(`[CustomAPITaskQueue] 💡 AI消息字数(${actualLength})低于阈值(${minLength})，已跳过信息栏数据生成`);
+            }
+        } catch (error) {
+            console.error('[CustomAPITaskQueue] ❌ 显示通知失败:', error);
+        }
     }
 }

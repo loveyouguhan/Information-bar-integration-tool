@@ -78,6 +78,10 @@ export class DeepMemoryManager {
             emotionalClassifier: null,             // 情感分类器
             temporalClassifier: null               // 时间分类器
         };
+
+        // 🔧 修复：防止重复绑定事件监听器
+        this.eventListenersBound = false;         // 事件监听器绑定标志
+        this.boundHandlers = null;                // 绑定的处理函数引用
         
         // 性能统计
         this.stats = {
@@ -298,6 +302,17 @@ export class DeepMemoryManager {
             if (this.settings.autoSave !== false) { // 默认启用自动保存
                 await this.saveMemoryData();
                 console.log('[DeepMemoryManager] 💾 记忆数据已自动保存');
+            }
+
+            // 🔧 新增：触发记忆更新事件，通知向量化系统索引新记忆
+            if (this.eventSystem) {
+                this.eventSystem.emit('memory:updated', {
+                    action: 'add',
+                    memory: memory,
+                    layer: 'sensory',
+                    timestamp: Date.now()
+                });
+                console.log('[DeepMemoryManager] 📢 已触发memory:updated事件');
             }
 
             return memory;
@@ -988,35 +1003,52 @@ export class DeepMemoryManager {
 
             if (!this.eventSystem) return;
 
+            // 🔧 修复：先解绑旧的监听器（如果存在）
+            if (this.boundHandlers) {
+                console.log('[DeepMemoryManager] 🔓 解绑旧的事件监听器...');
+                this.eventSystem.off('ai-summary:created', this.boundHandlers.aiSummaryCreated);
+                this.eventSystem.off('message:received', this.boundHandlers.messageReceived);
+                this.eventSystem.off('chat:changed', this.boundHandlers.chatChanged);
+                this.eventSystem.off('vectorized-memory-retrieval:memory-indexed', this.boundHandlers.memoryIndexed);
+                this.eventSystem.off('MESSAGE_DELETED', this.boundHandlers.messageDeleted);
+                this.eventSystem.off('MESSAGE_REGENERATED', this.boundHandlers.messageRegenerated);
+            }
+
+            // 🔧 修复：防止重复绑定事件监听器
+            if (this.eventListenersBound) {
+                console.log('[DeepMemoryManager] ⚠️ 事件监听器已绑定，重新绑定');
+            }
+
+            // 创建绑定的处理函数引用（用于后续解绑）
+            this.boundHandlers = {
+                aiSummaryCreated: (data) => this.handleAISummaryCreated(data),
+                messageReceived: (data) => this.handleMessageReceived(data),
+                chatChanged: (data) => this.handleChatChanged(data),
+                memoryIndexed: (data) => this.handleVectorizedMemoryIndexed(data),
+                messageDeleted: (data) => this.handleMessageDeleted(data),
+                messageRegenerated: (data) => this.handleMessageRegenerated(data)
+            };
+
             // 监听AI总结创建事件
-            this.eventSystem.on('ai-summary:created', (data) => {
-                this.handleAISummaryCreated(data);
-            });
+            this.eventSystem.on('ai-summary:created', this.boundHandlers.aiSummaryCreated);
 
             // 监听消息接收事件
-            this.eventSystem.on('message:received', (data) => {
-                this.handleMessageReceived(data);
-            });
+            this.eventSystem.on('message:received', this.boundHandlers.messageReceived);
 
             // 监听聊天切换事件
-            this.eventSystem.on('chat:changed', (data) => {
-                this.handleChatChanged(data);
-            });
+            this.eventSystem.on('chat:changed', this.boundHandlers.chatChanged);
 
             // 监听向量化记忆创建事件
-            this.eventSystem.on('vectorized-memory-retrieval:memory-indexed', (data) => {
-                this.handleVectorizedMemoryIndexed(data);
-            });
+            this.eventSystem.on('vectorized-memory-retrieval:memory-indexed', this.boundHandlers.memoryIndexed);
 
             // 🔧 新增：监听消息删除事件
-            this.eventSystem.on('MESSAGE_DELETED', (data) => {
-                this.handleMessageDeleted(data);
-            });
+            this.eventSystem.on('MESSAGE_DELETED', this.boundHandlers.messageDeleted);
 
             // 🔧 新增：监听消息重新生成事件
-            this.eventSystem.on('MESSAGE_REGENERATED', (data) => {
-                this.handleMessageRegenerated(data);
-            });
+            this.eventSystem.on('MESSAGE_REGENERATED', this.boundHandlers.messageRegenerated);
+
+            // 标记已绑定
+            this.eventListenersBound = true;
 
             console.log('[DeepMemoryManager] ✅ 事件监听器绑定完成');
 
@@ -1063,6 +1095,28 @@ export class DeepMemoryManager {
             if (!this.settings.enabled) {
                 console.log('[DeepMemoryManager] ⚠️ 深度记忆管理器未启用，跳过处理');
                 return;
+            }
+
+            // 🔧 修复：防止重复处理同一条消息
+            const messageId = data.messageId || data.timestamp || Date.now();
+            const messageKey = `${messageId}_${data.message || data.mes || ''}`.substring(0, 100);
+
+            if (!this.processedMessages) {
+                this.processedMessages = new Set();
+            }
+
+            if (this.processedMessages.has(messageKey)) {
+                console.log('[DeepMemoryManager] ⚠️ 消息已处理，跳过重复处理');
+                return;
+            }
+
+            // 标记消息已处理
+            this.processedMessages.add(messageKey);
+
+            // 限制Set大小，防止内存泄漏
+            if (this.processedMessages.size > 1000) {
+                const firstKey = this.processedMessages.values().next().value;
+                this.processedMessages.delete(firstKey);
             }
 
             // 🔧 修复：更强大的消息内容提取逻辑
@@ -1413,8 +1467,13 @@ export class DeepMemoryManager {
 
             if (!this.settings.enabled) return;
 
-            // 保存当前聊天的记忆数据
-            await this.saveMemoryData();
+            // 🔧 修复：只有当记忆层不为空时才保存数据，避免覆盖有效数据
+            if (this.stats.totalMemories > 0) {
+                console.log('[DeepMemoryManager] 💾 保存当前聊天的记忆数据...');
+                await this.saveMemoryData();
+            } else {
+                console.log('[DeepMemoryManager] ⚠️ 记忆层为空，跳过保存（避免覆盖有效数据）');
+            }
 
             // 🔧 修复：清理所有层级的记忆数据，而不仅仅是sensory层
             console.log('[DeepMemoryManager] 🧹 清理所有记忆层级...');

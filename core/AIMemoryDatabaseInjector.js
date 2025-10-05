@@ -67,7 +67,7 @@ export class AIMemoryDatabaseInjector {
             // 记忆管理
             memoryLifecycle: 'session',             // 记忆生命周期：session, permanent, auto
             memoryRotation: true,                   // 启用记忆轮换
-            smartCompression: true,                 // 智能压缩
+            smartCompression: false,                // 🔧 修复：禁用智能压缩（避免调用API）
             vectorizedSearch: true,                 // 向量化搜索
             
             // 性能优化
@@ -806,20 +806,27 @@ export class AIMemoryDatabaseInjector {
             // 2. 简化重复内容
             compressed = this.simplifyRepeatedContent(compressed);
             
-            // 3. 使用智能压缩（如果可用）
-            if (this.aiMemorySummarizer) {
-                try {
-                    const summarized = await this.aiMemorySummarizer.summarizeText(compressed, {
-                        maxLength: Math.floor(compressed.length * this.injectorConfig.compressionRatio),
-                        preserveKeyInfo: true
-                    });
-                    if (summarized && summarized.length < compressed.length) {
-                        compressed = summarized;
-                    }
-                } catch (error) {
-                    console.warn('[AIMemoryDatabaseInjector] ⚠️ AI压缩失败，使用基础压缩:', error.message);
-                }
-            }
+            // 🔧 关键修复：禁用智能压缩（调用API）
+            // 使用基础压缩方法代替，避免频繁调用API导致阻塞
+            // 智能压缩会调用AIMemorySummarizer.summarizeText() -> SummaryManager.callSummaryAPI()
+            // 这会导致每次压缩记忆都调用API，严重阻塞消息发送
+            
+            // 3. 使用智能压缩（已禁用，避免API调用）
+            // if (this.aiMemorySummarizer) {
+            //     try {
+            //         const summarized = await this.aiMemorySummarizer.summarizeText(compressed, {
+            //             maxLength: Math.floor(compressed.length * this.injectorConfig.compressionRatio),
+            //             preserveKeyInfo: true
+            //         });
+            //         if (summarized && summarized.length < compressed.length) {
+            //             compressed = summarized;
+            //         }
+            //     } catch (error) {
+            //         console.warn('[AIMemoryDatabaseInjector] ⚠️ AI压缩失败，使用基础压缩:', error.message);
+            //     }
+            // }
+            
+            console.log('[AIMemoryDatabaseInjector] ℹ️ 使用基础压缩（不调用API），避免阻塞');
             
             // 缓存压缩结果
             this.compressionCache.set(content, compressed);
