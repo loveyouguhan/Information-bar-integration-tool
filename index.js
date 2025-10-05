@@ -20,7 +20,6 @@ import { APIIntegration } from './core/APIIntegration.js';
 import { SmartPromptSystem } from './core/SmartPromptSystem.js';
 import { XMLDataParser } from './core/XMLDataParser.js';
 import { DataSnapshotManager } from './core/DataSnapshotManager.js';
-import { STScriptDataSync } from './core/STScriptDataSync.js';
 import { FieldRuleManager } from './core/FieldRuleManager.js';
 import { PanelRuleManager } from './core/PanelRuleManager.js';
 import { AIDataExposure } from './core/AIDataExposure.js';
@@ -33,6 +32,8 @@ import { NPCManagementPanel } from './ui/NPCManagementPanel.js';
 import { WorldBookManager } from './core/WorldBookManager.js';
 import { WorldBookConfigPanel } from './ui/WorldBookConfigPanel.js';
 import { AIMemoryDatabaseInjector } from './core/AIMemoryDatabaseInjector.js';
+import { ContentFilterManager } from './core/ContentFilterManager.js';
+import { MessageFilterHook } from './core/MessageFilterHook.js';
 
 // 导入UI组件
 import { InfoBarSettings } from './ui/InfoBarSettings.js';
@@ -111,6 +112,8 @@ class InformationBarIntegrationTool {
         this.aiTemplateAssistant = null;
         this.templateManager = null;
         this.variableSystemPrompt = null;
+        this.contentFilterManager = null;
+        this.messageFilterHook = null;
 
         // UI组件
         this.infoBarSettings = null;
@@ -201,6 +204,14 @@ class InformationBarIntegrationTool {
         // 初始化事件系统
         this.eventSystem = new EventSystem();
 
+        // 🔧 新增：初始化内容过滤管理器（需要在事件系统之后，用于过滤发送到主API的内容）
+        this.contentFilterManager = new ContentFilterManager(this.eventSystem);
+        console.log('[InfoBarTool] ✅ 内容过滤管理器初始化完成');
+
+        // 🔧 新增：初始化消息过滤Hook（需要在内容过滤管理器之后）
+        this.messageFilterHook = new MessageFilterHook(this.contentFilterManager);
+        console.log('[InfoBarTool] ✅ 消息过滤Hook初始化完成');
+
         // 初始化数据核心
         this.dataCore = new UnifiedDataCore(this.eventSystem);
         await this.dataCore.init();
@@ -279,18 +290,16 @@ class InformationBarIntegrationTool {
         this.variableSystemPrompt = new VariableSystemPrompt(this.eventSystem);
         await this.variableSystemPrompt.init();
 
-        // 🔧 修改：禁用STScript数据同步系统
-        console.log('[InfoBarTool] ⏸️ STScript数据同步系统已被禁用');
+        // 🔧 已删除：STScript数据同步系统不再需要
         this.stscriptDataSync = null;
 
-        // 初始化AI数据暴露模块（STScript同步系统已禁用）
+        // 初始化AI数据暴露模块
         try {
             this.aiDataExposure = new AIDataExposure({
                 unifiedDataCore: this.dataCore,
                 eventSystem: this.eventSystem,
                 fieldRuleManager: this.fieldRuleManager,
-                panelRuleManager: this.panelRuleManager,
-                stScriptDataSync: null // 🔧 修改：STScript同步系统已禁用
+                panelRuleManager: this.panelRuleManager
             });
             await this.aiDataExposure.init();
             console.log('[InfoBarTool] ✅ AI数据暴露模块初始化完成');
@@ -438,7 +447,6 @@ class InformationBarIntegrationTool {
             xmlDataParser: this.xmlDataParser,
             dataSnapshotManager: this.dataSnapshotManager,
             aiDataExposure: this.aiDataExposure,
-            stScriptDataSync: null, // 🔧 修改：STScript同步系统已禁用
             summaryManager: this.summaryManager,
             aiMemorySummarizer: this.aiMemorySummarizer,
             vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
@@ -606,6 +614,16 @@ class InformationBarIntegrationTool {
     onAppReady() {
         console.log('[InfoBarTool] 🎯 SillyTavern应用就绪');
         this.eventSystem.emit('app:ready');
+        
+        // 🔧 新增：安装消息过滤Hook，在发送到主API之前应用正则表达式过滤
+        if (this.messageFilterHook) {
+            try {
+                this.messageFilterHook.install();
+                console.log('[InfoBarTool] ✅ 消息过滤Hook已安装');
+            } catch (error) {
+                console.error('[InfoBarTool] ❌ 安装消息过滤Hook失败:', error);
+            }
+        }
     }
 
     /**
@@ -740,7 +758,6 @@ class InformationBarIntegrationTool {
             xmlDataParser: this.xmlDataParser,
             aiDataExposure: this.aiDataExposure, // 🔧 添加：AI数据暴露模块
                 dataSnapshotManager: this.dataSnapshotManager,
-                stScriptDataSync: null, // 🔧 修改：STScript同步系统已禁用
                 summaryManager: this.summaryManager,
                 aiMemorySummarizer: this.aiMemorySummarizer,
                 vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
@@ -758,6 +775,8 @@ class InformationBarIntegrationTool {
                 npcManagementPanel: this.npcManagementPanel,
                 worldBookManager: this.worldBookManager,
                 worldBookConfigPanel: this.worldBookConfigPanel,
+                contentFilterManager: this.contentFilterManager, // 🔧 新增：内容过滤管理器
+                messageFilterHook: this.messageFilterHook, // 🔧 新增：消息过滤Hook
                 // 🔧 修复：添加自定义API任务队列模块
                 customAPITaskQueue: this.infoBarSettings?.customAPITaskQueue
             };
@@ -816,7 +835,8 @@ window.SillyTavernInfobar = {
     },
     eventSource: informationBarTool.eventSystem
 };
-window.STScriptDataSync = STScriptDataSync;
+// 🔧 已移除：STScript数据同步功能已删除
+// window.STScriptDataSync = STScriptDataSync;
 
 // 🔧 修复：确保规则管理器在运行时始终可用的备用机制
 setTimeout(() => {
