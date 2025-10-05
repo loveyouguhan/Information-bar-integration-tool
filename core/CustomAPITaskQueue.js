@@ -345,27 +345,38 @@ export class CustomAPITaskQueue {
         } catch (error) {
             console.error(`[CustomAPITaskQueue] ❌ 任务执行失败: ${task.id}`, error);
 
-            // 重试逻辑
-            if (task.retries < task.maxRetries) {
-                task.retries++;
-                task.status = 'pending';
+            // 🔧 修复：检查是否是用户主动中止的错误
+            const isUserAbort = error.name === 'AbortError' || error.isUserAbort === true;
 
-                // 重新入队，延迟重试
-                setTimeout(() => {
-                    this.taskQueue.unshift(task);
-                    console.log(`[CustomAPITaskQueue] 🔄 任务重试: ${task.id} (第${task.retries}次)`);
-                }, 1000 * task.retries); // 递增延迟
-
-            } else {
-                // 重试次数用尽，标记为失败
-                task.status = 'failed';
-                task.error = error.message;
+            if (isUserAbort) {
+                // 用户主动中止，不重试，直接标记为取消
+                task.status = 'cancelled';
+                task.error = '用户已中止';
                 this.stats.failedTasks++;
+                console.log(`[CustomAPITaskQueue] 🛑 任务已被用户中止: ${task.id}`);
+            } else {
+                // 其他错误，执行重试逻辑
+                if (task.retries < task.maxRetries) {
+                    task.retries++;
+                    task.status = 'pending';
 
-                console.error(`[CustomAPITaskQueue] 💀 任务最终失败: ${task.id}`);
+                    // 重新入队，延迟重试
+                    setTimeout(() => {
+                        this.taskQueue.unshift(task);
+                        console.log(`[CustomAPITaskQueue] 🔄 任务重试: ${task.id} (第${task.retries}次)`);
+                    }, 1000 * task.retries); // 递增延迟
+
+                } else {
+                    // 重试次数用尽，标记为失败
+                    task.status = 'failed';
+                    task.error = error.message;
+                    this.stats.failedTasks++;
+
+                    console.error(`[CustomAPITaskQueue] 💀 任务最终失败: ${task.id}`);
+                }
+
+                this.handleError(error);
             }
-
-            this.handleError(error);
         } finally {
             this.isProcessing = false;
             this.processingTask = null;
