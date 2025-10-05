@@ -846,7 +846,11 @@ export class InfoBarSettings {
                             <i class="fa fa-users"></i>
                             NPC管理
                         </button>
-                        <div class="tool-desc">管理全局变量、宏定义和自定义函数；打开NPC数据库管理界面</div>
+                        <button class="btn btn-danger" id="clear-memory-database-btn" data-action="clear-memory-database" style="margin-left:8px;">
+                            <i class="fa fa-trash"></i>
+                            清空AI记忆数据库
+                        </button>
+                        <div class="tool-desc">管理全局变量、宏定义和自定义函数；打开NPC数据库管理界面；清空AI记忆数据库（用于解决记忆混乱问题）</div>
                     </div>
                 </div>
             </div>
@@ -5085,11 +5089,74 @@ export class InfoBarSettings {
                         console.error('[InfoBarSettings] ❌ 打开NPC管理面板失败:', e);
                     }
                     break;
+                case 'clear-memory-database':
+                    console.log('[InfoBarSettings] 🧹 清空AI记忆数据库...');
+                    this.clearMemoryDatabaseUI();
+                    break;
                 default:
                     console.log(`[InfoBarSettings] 🔘 处理操作: ${action}`);
             }
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理操作失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 清空AI记忆数据库（UI方法）
+     */
+    async clearMemoryDatabaseUI() {
+        try {
+            console.log('[InfoBarSettings] 🧹 准备清空AI记忆数据库...');
+
+            // 显示确认对话框
+            const confirmed = confirm(
+                '确定要清空AI记忆数据库吗？\n\n' +
+                '此操作将删除所有记忆数据，包括：\n' +
+                '• 感知记忆（最新记忆）\n' +
+                '• 短期记忆（近期记忆）\n' +
+                '• 长期记忆（重要记忆）\n' +
+                '• 深度归档（历史记忆）\n\n' +
+                '此操作不可撤销！清空后AI将不再记得之前的对话内容。'
+            );
+
+            if (!confirmed) {
+                console.log('[InfoBarSettings] 🚫 用户取消清空操作');
+                return;
+            }
+
+            // 获取AI记忆注入器模块
+            const aiMemoryInjector = window.SillyTavernInfobar?.modules?.aiMemoryDatabaseInjector;
+
+            if (!aiMemoryInjector) {
+                console.error('[InfoBarSettings] ❌ AI记忆数据库模块不可用');
+                this.showNotification('❌ AI记忆数据库模块不可用', 'error');
+                return;
+            }
+
+            // 执行清空操作
+            console.log('[InfoBarSettings] 🔄 开始清空AI记忆数据库...');
+            const success = aiMemoryInjector.clearMemoryDatabase();
+
+            if (success) {
+                console.log('[InfoBarSettings] ✅ AI记忆数据库已清空');
+                this.showNotification('✅ AI记忆数据库已成功清空', 'success');
+
+                // 🔧 刷新记忆增强面板的状态显示（如果存在）
+                if (this.visible && this.modal) {
+                    const refreshBtn = this.modal.querySelector('#refresh-memory-status');
+                    if (refreshBtn) {
+                        console.log('[InfoBarSettings] 🔄 刷新记忆状态显示...');
+                        this.refreshMemoryStatus();
+                    }
+                }
+            } else {
+                console.error('[InfoBarSettings] ❌ 清空AI记忆数据库失败');
+                this.showNotification('❌ 清空AI记忆数据库失败', 'error');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 清空AI记忆数据库失败:', error);
+            this.showNotification('❌ 清空失败: ' + error.message, 'error');
         }
     }
 
@@ -17467,6 +17534,10 @@ export class InfoBarSettings {
      * 使用自定义API处理剧情内容
      */
     async processWithCustomAPI(plotContent) {
+        // 🔧 修复：用户主动触发新生成时，重置中止标志
+        console.log('[InfoBarSettings] 🔄 用户触发新的自定义API生成，重置中止标志');
+        this._customAPIAborted = false;
+
         // 🔧 优化：如果有任务队列，使用任务队列处理
         if (this.customAPITaskQueue) {
             console.log('[InfoBarSettings] 📋 使用任务队列处理自定义API调用');
@@ -17487,6 +17558,16 @@ export class InfoBarSettings {
      */
     async processWithCustomAPIInternal(plotContent) {
         try {
+            // 🔧 修复：在开始处理前检查中止标志
+            if (this._customAPIAborted) {
+                console.log('[InfoBarSettings] 🛑 检测到中止标志，拒绝新的API请求');
+                // 抛出特殊错误，让任务队列知道这是用户主动中止
+                const abortError = new Error('用户已中止API生成');
+                abortError.name = 'AbortError';
+                abortError.isUserAbort = true;
+                throw abortError;
+            }
+
             // 并发保护：防止重复触发
             if (this._customAPIProcessing) {
                 console.warn('[InfoBarSettings] ⚠️ 自定义API处理已在进行中，忽略重复调用');
@@ -17494,6 +17575,13 @@ export class InfoBarSettings {
                 return;
             }
             this._customAPIProcessing = true;
+
+            // 🔧 修复：不要在这里重置中止标志，保持用户的中止意图
+            // 只在真正开始新的生成时才重置（由外部调用者控制）
+            // this._customAPIAborted = false; // ❌ 删除
+
+            // 🔧 新增：创建AbortController用于中止请求
+            this.currentAPIController = new AbortController();
 
             console.log('[InfoBarSettings] 🚀 开始使用自定义API处理剧情内容...');
 
@@ -17601,8 +17689,24 @@ export class InfoBarSettings {
             let attempt = 0;
             let lastError = null;
             while (attempt <= maxRetry) {
+                // 🔧 新增：检查是否已中止
+                if (this._customAPIAborted) {
+                    console.log('[InfoBarSettings] 🛑 检测到中止标志，停止处理');
+                    return;
+                }
+
                 attempt++;
-                const result = await this.sendCustomAPIRequest(messages, { skipSystemPrompt: false });
+                const result = await this.sendCustomAPIRequest(messages, {
+                    skipSystemPrompt: false,
+                    signal: this.currentAPIController?.signal // 传递AbortSignal
+                });
+
+                // 🔧 新增：再次检查是否已中止
+                if (this._customAPIAborted) {
+                    console.log('[InfoBarSettings] 🛑 检测到中止标志，停止处理');
+                    return;
+                }
+
                 if (result && result.success && typeof result.text === 'string' && result.text.trim().length > 0) {
                     console.log('[InfoBarSettings] ✅ 自定义API返回结果，长度:', result.text.length, ' 尝试次数:', attempt);
                     await this.processAPIResult(result.text);
@@ -17626,11 +17730,32 @@ export class InfoBarSettings {
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 使用自定义API处理失败:', error);
-            // 🔧 新增：显示自定义API错误提示
-            this.showCustomAPIStatus('error', error.message);
+
+            // 🔧 修复：检查是否是中止错误
+            if (error.name === 'AbortError' || this._customAPIAborted || error.isUserAbort) {
+                console.log('[InfoBarSettings] 🛑 API请求已被中止');
+                // 中止时不显示错误提示，因为已经显示了中止提示
+                // 🔧 修复：重新抛出错误，让任务队列知道任务被中止
+                throw error;
+            } else {
+                // 🔧 新增：显示自定义API错误提示
+                this.showCustomAPIStatus('error', error.message);
+                // 🔧 修复：重新抛出错误，让任务队列知道任务失败
+                throw error;
+            }
         } finally {
             // 复位并发标记
             this._customAPIProcessing = false;
+
+            // 🔧 新增：清理AbortController
+            if (this.currentAPIController) {
+                this.currentAPIController = null;
+            }
+            // 🔧 新增：清理统一的超时句柄
+            if (this.currentAPITimeoutId) {
+                clearTimeout(this.currentAPITimeoutId);
+                this.currentAPITimeoutId = null;
+            }
         }
     }
 
@@ -17664,17 +17789,36 @@ export class InfoBarSettings {
                     toastClass += ' error';
                     autoHide = true;
                     break;
+                case 'aborted':
+                    toastContent = '⚠️ 自定义API生成已中止';
+                    toastClass += ' aborted';
+                    autoHide = true;
+                    break;
             }
 
             // 创建提示元素
             const toast = document.createElement('div');
             toast.className = toastClass;
-            toast.innerHTML = `
-                <div class="toast-content">
-                    <span class="toast-text">${toastContent}</span>
-                    <button class="toast-close" onclick="this.parentElement.parentElement.remove()">×</button>
-                </div>
-            `;
+
+            // 🔧 新增：为generating状态添加中止按钮
+            if (status === 'generating') {
+                toast.innerHTML = `
+                    <div class="toast-content">
+                        <span class="toast-text">${toastContent}</span>
+                        <div class="toast-actions">
+                            <button class="toast-abort-btn" data-action="abort-api">中止</button>
+                            <button class="toast-close" onclick="this.parentElement.parentElement.remove()">×</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                toast.innerHTML = `
+                    <div class="toast-content">
+                        <span class="toast-text">${toastContent}</span>
+                        <button class="toast-close" onclick="this.parentElement.parentElement.remove()">×</button>
+                    </div>
+                `;
+            }
 
             // 添加样式
             if (!document.getElementById('custom-api-status-styles')) {
@@ -17706,6 +17850,10 @@ export class InfoBarSettings {
                         background: linear-gradient(135deg, #ef4444, #dc2626);
                         color: white;
                     }
+                    .custom-api-status-toast.aborted {
+                        background: linear-gradient(135deg, #f59e0b, #d97706);
+                        color: white;
+                    }
                     .toast-content {
                         display: flex;
                         align-items: center;
@@ -17717,6 +17865,27 @@ export class InfoBarSettings {
                         font-size: 14px;
                         font-weight: 500;
                     }
+                    .toast-actions {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        margin-left: 12px;
+                    }
+                    .toast-abort-btn {
+                        background: rgba(255, 255, 255, 0.2);
+                        border: 1px solid rgba(255, 255, 255, 0.3);
+                        color: white;
+                        font-size: 12px;
+                        font-weight: 500;
+                        cursor: pointer;
+                        padding: 4px 12px;
+                        border-radius: 4px;
+                        transition: all 0.2s;
+                    }
+                    .toast-abort-btn:hover {
+                        background: rgba(255, 255, 255, 0.3);
+                        border-color: rgba(255, 255, 255, 0.5);
+                    }
                     .toast-close {
                         background: none;
                         border: none;
@@ -17725,7 +17894,6 @@ export class InfoBarSettings {
                         font-weight: bold;
                         cursor: pointer;
                         padding: 0;
-                        margin-left: 12px;
                         opacity: 0.8;
                         transition: opacity 0.2s;
                     }
@@ -17759,6 +17927,18 @@ export class InfoBarSettings {
             // 添加到页面
             document.body.appendChild(toast);
 
+            // 🔧 新增：绑定中止按钮事件
+            if (status === 'generating') {
+                const abortBtn = toast.querySelector('.toast-abort-btn');
+                if (abortBtn) {
+                    abortBtn.addEventListener('click', () => {
+                        console.log('[InfoBarSettings] 🛑 用户点击中止按钮');
+                        this.abortCustomAPIGeneration();
+                        toast.remove();
+                    });
+                }
+            }
+
             // 自动隐藏
             if (autoHide) {
                 setTimeout(() => {
@@ -17779,6 +17959,86 @@ export class InfoBarSettings {
             console.error('[InfoBarSettings] ❌ 显示自定义API状态提示失败:', error);
         }
     }
+
+    /**
+     * 🆕 中止自定义API生成
+     */
+    async abortCustomAPIGeneration() {
+        try {
+            console.log('[InfoBarSettings] 🛑 中止自定义API生成...');
+
+            // 🔧 修复：设置中止标志（这个标志会阻止新的API请求）
+            this._customAPIAborted = true;
+
+            // 🔧 修复：复位处理标志
+            this._customAPIProcessing = false;
+
+            // 🔧 修复：先通知后端取消（如果可能），再本地中止
+            await this.sendBackendCancelIfPossible();
+            if (this.currentAPIController) {
+                console.log('[InfoBarSettings] 🛑 中止正在进行的API请求');
+                this.currentAPIController.abort();
+                this.currentAPIController = null;
+            }
+
+            // 🔧 修复：清空任务队列中的待处理任务
+            const taskQueue = window.SillyTavernInfobar?.modules?.customAPITaskQueue;
+            if (taskQueue && taskQueue.taskQueue) {
+                const beforeCount = taskQueue.taskQueue.length;
+                // 移除所有INFOBAR_DATA类型的待处理任务
+                taskQueue.taskQueue = taskQueue.taskQueue.filter(task => task.type !== 'INFOBAR_DATA');
+                const afterCount = taskQueue.taskQueue.length;
+                const removedCount = beforeCount - afterCount;
+                if (removedCount > 0) {
+                    console.log(`[InfoBarSettings] 🗑️ 已清除 ${removedCount} 个待处理的信息栏数据生成任务`);
+                }
+            }
+
+            // 显示中止提示
+            this.showCustomAPIStatus('aborted');
+
+            console.log('[InfoBarSettings] ✅ 自定义API生成已中止');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 中止自定义API生成失败:', error);
+        }
+    }
+
+    /**
+     * 发送后端取消请求（若使用了SillyTavern本地反代）
+     */
+    async sendBackendCancelIfPossible() {
+        try {
+            if (!this.lastRequestUrl || !this.currentAPIRequestId) return;
+            const isBackendGenerate = this.lastRequestUrl.includes('/api/backends/chat-completions/generate');
+            if (!isBackendGenerate) return;
+
+            const cancelUrl = `${window.location.origin}/api/backends/chat-completions/cancel`;
+            // 获取CSRF令牌
+            const csrfResp = await fetch('/csrf-token');
+            const csrfData = await csrfResp.json();
+            const csrfToken = csrfData.token;
+
+            const payload = { request_id: this.currentAPIRequestId };
+            await fetch(cancelUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken,
+                    'X-Request-ID': this.currentAPIRequestId
+                },
+                body: JSON.stringify(payload)
+            });
+            console.log('[InfoBarSettings] 🛑 已向后端发送取消请求:', payload);
+        } catch (err) {
+            console.warn('[InfoBarSettings] ⚠️ 发送取消请求失败（将忽略并继续本地中止）：', err);
+        } finally {
+            // 清理请求ID
+            this.currentAPIRequestId = null;
+            this.lastRequestUrl = null;
+        }
+    }
+
 
     /**
      * 导出数据功能
@@ -19099,7 +19359,11 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
             // 构建生成请求
             const generateUrl = `${window.location.origin}/api/backends/chat-completions/generate`;
-            
+
+            // 标记本次请求ID与URL（用于后续取消）
+            this.currentAPIRequestId = this.currentAPIRequestId || `ib_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            this.lastRequestUrl = generateUrl;
+
             // 🔧 关键修复：使用正确的chat_completion_source
             // SillyTavern后端期望使用实际的API源（如"openai"），而不是"custom"
             const requestBody = {
@@ -19128,13 +19392,16 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 messagesCount: messages.length
             });
 
+            // 为请求附加可跟踪的Request-ID，便于后端取消
+            const genHeaders = {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken,
+                'X-Request-ID': this.currentAPIRequestId
+            };
             const response = await fetch(generateUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken
-                },
-                body: JSON.stringify(requestBody)
+                headers: genHeaders,
+                body: JSON.stringify({ ...requestBody, request_id: this.currentAPIRequestId })
             });
 
             console.log('[InfoBarSettings] 📊 本地反代响应状态:', response.status);
@@ -19275,30 +19542,38 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
         let response;
         try {
+            // 🔧 新增：构建fetch选项，包含AbortSignal
+            const fetchOptions = {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'SillyTavern-InfoBar/1.0'
+                },
+                body: JSON.stringify(requestBody)
+            };
+
+            // 🔧 新增：如果提供了signal，添加到fetch选项中
+            if (options.signal) {
+                fetchOptions.signal = options.signal;
+                console.log('[InfoBarSettings] 🛑 已添加AbortSignal到请求');
+            }
+
             // 🔧 修复：使用APIIntegration的CORS兼容fetch方法
             if (this.apiIntegration && typeof this.apiIntegration.proxyCompatibleFetch === 'function') {
                 console.log('[InfoBarSettings] ✅ 使用CORS兼容的fetch方法');
-                response = await this.apiIntegration.proxyCompatibleFetch(requestUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'User-Agent': 'SillyTavern-InfoBar/1.0'
-                    },
-                    body: JSON.stringify(requestBody)
-                });
+                response = await this.apiIntegration.proxyCompatibleFetch(requestUrl, fetchOptions);
             } else {
                 console.warn('[InfoBarSettings] ⚠️ APIIntegration不可用，使用原生fetch');
-                response = await fetch(requestUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'User-Agent': 'SillyTavern-InfoBar/1.0'
-                    },
-                    body: JSON.stringify(requestBody)
-                });
+                response = await fetch(requestUrl, fetchOptions);
             }
         } catch (fetchError) {
             console.error('[InfoBarSettings] ❌ Gemini原生请求失败:', fetchError);
+
+            // 🔧 新增：检查是否是中止错误
+            if (fetchError.name === 'AbortError') {
+                console.log('[InfoBarSettings] 🛑 请求已被中止');
+                throw fetchError;
+            }
 
             // 检查是否是CORS错误
             if (fetchError.message.includes('CORS_BLOCKED') ||
@@ -28704,17 +28979,35 @@ ${userTemplate}
                 }
             }
 
-            // 🔧 修复：添加超时和重试机制
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+            // 🔧 修复：使用统一的AbortController与中止按钮打通
+            const controller = this.currentAPIController || (this.currentAPIController = new AbortController());
+            // 统一超时句柄，便于在finally中清理
+            this.currentAPITimeoutId = setTimeout(() => {
+                try { controller.abort(); } catch (e) { /* noop */ }
+            }, 60000); // 60秒超时
+
+            // 生成并附加可追踪的请求ID
+            this.currentAPIRequestId = this.currentAPIRequestId || `ib_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            this.lastRequestUrl = apiConfig.endpoint;
 
             let response;
             let retryCount = 0;
             const maxRetries = apiConfig.retryCount || 2;
 
             while (retryCount <= maxRetries) {
+                // 每次尝试前先检查是否已中止
+                if (this._customAPIAborted || controller.signal.aborted) {
+                    const abortErr = new Error('用户已中止API生成');
+                    abortErr.name = 'AbortError';
+                    abortErr.isUserAbort = true;
+                    throw abortErr;
+                }
+
                 try {
                     console.log(`[InfoBarSettings] 🌐 发送API请求 (尝试 ${retryCount + 1}/${maxRetries + 1})`);
+
+                    // 为请求头附加可追踪的Request-ID，供服务端取消
+                    try { if (headers && typeof headers === 'object') { headers['X-Request-ID'] = this.currentAPIRequestId; } } catch {}
 
                     response = await fetch(apiConfig.endpoint, {
                         method: 'POST',
@@ -28723,7 +29016,7 @@ ${userTemplate}
                         signal: controller.signal
                     });
 
-                    clearTimeout(timeoutId);
+                    clearTimeout(this.currentAPITimeoutId);
 
                     if (response.ok) {
                         break; // 成功，跳出重试循环
@@ -28738,10 +29031,16 @@ ${userTemplate}
                         throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
                     }
                 } catch (error) {
-                    clearTimeout(timeoutId);
+                    clearTimeout(this.currentAPITimeoutId);
 
                     if (error.name === 'AbortError') {
-                        throw new Error('API请求超时，请稍后重试');
+                        // 如果是用户主动中止，保留AbortError并上抛给任务队列
+                        if (this._customAPIAborted || controller.signal.aborted) {
+                            error.isUserAbort = true;
+                            throw error;
+                        }
+                        // 否则是超时等中止
+                        throw error;
                     } else if (retryCount < maxRetries && (error.message.includes('fetch') || error.message.includes('network'))) {
                         console.warn(`[InfoBarSettings] ⚠️ 网络错误，${2 ** retryCount}秒后重试:`, error.message);
                         await new Promise(resolve => setTimeout(resolve, 1000 * (2 ** retryCount)));
