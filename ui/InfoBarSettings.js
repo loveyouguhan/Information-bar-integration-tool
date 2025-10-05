@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 信息栏设置界面
  *
  * 负责管理信息栏的设置界面：
@@ -5297,6 +5297,11 @@ export class InfoBarSettings {
                         <small>请求失败时的重试次数</small>
                     </div>
                     <div class="form-group">
+                        <label>最小消息字数阈值</label>
+                        <input type="number" id="api-min-message-length" name="apiConfig.minMessageLength" min="0" max="10000" step="50" value="500" />
+                        <small>AI消息字数低于此阈值时，跳过信息栏数据生成（默认500字）。设置为0表示不检查字数。</small>
+                    </div>
+                    <div class="form-group">
                         <div class="checkbox-wrapper">
                             <input type="checkbox" id="api-merge-messages" name="apiConfig.mergeMessages" checked />
                             <label for="api-merge-messages" class="checkbox-label">合并消息</label>
@@ -6103,6 +6108,36 @@ export class InfoBarSettings {
                                     <span class="input-unit">条消息</span>
                                 </div>
                                 <div class="setting-hint">每隔多少条消息进行一次总结</div>
+                            </div>
+                        </div>
+
+                        <!-- 🆕 新增：手动总结范围选择 -->
+                        <div class="setting-row">
+                            <div class="setting-group">
+                                <label class="setting-label" for="content-summary-range-mode">手动总结模式</label>
+                                <select id="content-summary-range-mode" class="setting-select">
+                                    <option value="recent">总结最近N层</option>
+                                    <option value="custom">自定义范围</option>
+                                </select>
+                                <div class="setting-hint">选择手动总结时使用的范围模式</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row" id="content-custom-range-row" style="display: none;">
+                            <div class="setting-group">
+                                <label class="setting-label">自定义总结范围</label>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <div class="input-group" style="flex: 1;">
+                                        <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">起始楼层</label>
+                                        <input type="number" id="content-custom-range-start" min="1" value="1" style="width: 100%;" />
+                                    </div>
+                                    <span style="color: var(--SmartThemeQuoteColor, #888);">至</span>
+                                    <div class="input-group" style="flex: 1;">
+                                        <label style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">结束楼层</label>
+                                        <input type="number" id="content-custom-range-end" min="1" value="20" style="width: 100%;" />
+                                    </div>
+                                </div>
+                                <div class="setting-hint">指定要总结的楼层范围（楼层号从1开始）</div>
                             </div>
                         </div>
 
@@ -19064,26 +19099,23 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
             // 构建生成请求
             const generateUrl = `${window.location.origin}/api/backends/chat-completions/generate`;
+            
+            // 🔧 关键修复：使用正确的chat_completion_source
+            // SillyTavern后端期望使用实际的API源（如"openai"），而不是"custom"
             const requestBody = {
                 messages: messages,
                 model: apiConfig.model,
                 temperature: apiConfig.temperature || 0.7,
                 frequency_penalty: 0,
-                presence_penalty: 0.12,
+                presence_penalty: 0,
                 top_p: 1.0,
-                max_tokens: apiConfig.maxTokens || 2000,
+                max_tokens: apiConfig.maxTokens || 20000,
                 stream: false,
-                chat_completion_source: "custom",
-                custom_url: apiConfig.endpoint || apiConfig.baseUrl,
-                custom_include_headers: "",
-                group_names: [],
-                include_reasoning: false,
-                reasoning_effort: "medium",
-                enable_web_search: false,
-                request_images: false,
-                custom_prompt_post_processing: "strict",
+                // 🔧 修复：使用"openai"作为chat_completion_source
+                chat_completion_source: "openai",
+                // 🔧 修复：使用reverse_proxy字段指定反代地址
                 reverse_proxy: apiConfig.endpoint || apiConfig.baseUrl,
-                proxy_password: apiConfig.apiKey
+                proxy_password: apiConfig.apiKey || ""
             };
 
             console.log('[InfoBarSettings] 📝 本地反代请求参数:', {
@@ -20286,6 +20318,14 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 });
             }
 
+            // 🆕 新增：总结范围模式变化事件
+            const summaryRangeModeSelect = this.modal.querySelector('#content-summary-range-mode');
+            if (summaryRangeModeSelect) {
+                summaryRangeModeSelect.addEventListener('change', (e) => {
+                    this.handleSummaryRangeModeChange(e.target.value);
+                });
+            }
+
             // 手动总结按钮事件
             const manualSummaryBtn = this.modal.querySelector('#header-manual-summary-btn');
             if (manualSummaryBtn) {
@@ -20565,6 +20605,27 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
     }
 
     /**
+     * 🆕 新增：处理总结范围模式变化
+     */
+    handleSummaryRangeModeChange(rangeMode) {
+        try {
+            console.log('[InfoBarSettings] 🔄 总结范围模式变化:', rangeMode);
+
+            const customRangeRow = this.modal.querySelector('#content-custom-range-row');
+            if (customRangeRow) {
+                if (rangeMode === 'custom') {
+                    customRangeRow.style.display = 'block';
+                } else {
+                    customRangeRow.style.display = 'none';
+                }
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理总结范围模式变化失败:', error);
+        }
+    }
+
+    /**
      * 🔧 新增：处理自动隐藏启用状态变化
      */
     handleAutoHideEnabledChange(enabled) {
@@ -20703,6 +20764,175 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
     }
 
     /**
+     * 🆕 新增：显示总结预览对话框（参考添加面板对话框的成功实现）
+     */
+    async showSummaryPreview(summaryRange, messages, existingSummaries) {
+        return new Promise((resolve) => {
+            try {
+                console.log('[InfoBarSettings] 📋 显示总结预览对话框...');
+
+                // 检查是否与已有总结重复
+                const hasOverlap = this.checkSummaryOverlap(summaryRange, existingSummaries);
+
+                // 计算总结信息
+                const messageCount = summaryRange.end - summaryRange.start + 1;
+                const startFloor = summaryRange.start + 1; // 转换为1基索引
+                const endFloor = summaryRange.end + 1;
+
+                // 获取预览消息
+                const previewMessages = messages.slice(summaryRange.start, Math.min(summaryRange.start + 3, summaryRange.end + 1));
+                const lastMessages = messages.slice(Math.max(summaryRange.end - 2, summaryRange.start), summaryRange.end + 1);
+
+                // 🆕 检测是否为移动端
+                const isMobile = window.innerWidth <= 768;
+
+                // 构建重复警告HTML
+                const overlapWarningHTML = hasOverlap ? `
+                    <div style="background: rgba(255, 165, 0, 0.1); border-left: 4px solid #ffa500; padding: 10px; margin-bottom: 12px; border-radius: 4px;">
+                        <div style="color: #ffa500; font-weight: bold; margin-bottom: 6px; font-size: 13px;">⚠️ 检测到与已有总结重复</div>
+                        <div style="font-size: 12px; color: var(--SmartThemeQuoteColor, #888);">
+                            该范围与已有总结存在重叠。继续总结将创建新的总结记录。
+                        </div>
+                    </div>
+                ` : '';
+
+                // 构建预览消息HTML
+                const previewMessagesHTML = previewMessages.map((msg, idx) => `
+                    <div style="margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--SmartThemeBorderColor, #333); font-size: 12px;">
+                        <div style="color: var(--SmartThemeQuoteColor, #888); font-size: 11px;">楼层 ${summaryRange.start + idx + 1}</div>
+                        <div style="margin-top: 4px; word-break: break-word;">${this.truncateText(msg.mes || '', 80)}</div>
+                    </div>
+                `).join('');
+
+                const lastMessagesHTML = lastMessages.map((msg, idx) => `
+                    <div style="margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--SmartThemeBorderColor, #333); font-size: 12px;">
+                        <div style="color: var(--SmartThemeQuoteColor, #888); font-size: 11px;">楼层 ${Math.max(summaryRange.end - 2, summaryRange.start) + idx + 1}</div>
+                        <div style="margin-top: 4px; word-break: break-word;">${this.truncateText(msg.mes || '', 80)}</div>
+                    </div>
+                `).join('');
+
+                // 创建对话框HTML（参考添加面板对话框）
+                const dialogHTML = `
+                    <div class="summary-preview-dialog-overlay ${isMobile ? 'mobile-mode' : ''}" id="summary-preview-dialog">
+                        <div class="summary-preview-dialog ${isMobile ? 'mobile-mode' : ''}">
+                            <div class="dialog-header">
+                                <h3 style="margin: 0; font-size: 16px; color: var(--SmartThemeAccentColor, #4a9eff);">📋 总结预览</h3>
+                            </div>
+
+                            <div class="dialog-body">
+                                ${overlapWarningHTML}
+
+                                <div style="margin-bottom: 12px;">
+                                    <div style="font-weight: bold; margin-bottom: 6px; font-size: 13px;">📊 总结范围</div>
+                                    <div style="background: var(--SmartThemeSurfaceColor, #252525); padding: 10px; border-radius: 4px; font-size: 12px;">
+                                        <div style="margin-bottom: 4px;">楼层范围：<span style="color: var(--SmartThemeAccentColor, #4a9eff);">${startFloor} - ${endFloor}</span></div>
+                                        <div>消息数量：<span style="color: var(--SmartThemeAccentColor, #4a9eff);">${messageCount} 条</span></div>
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 12px;">
+                                    <div style="font-weight: bold; margin-bottom: 6px; font-size: 13px;">📝 开始部分预览</div>
+                                    <div style="background: var(--SmartThemeSurfaceColor, #252525); padding: 10px; border-radius: 4px; max-height: 120px; overflow-y: auto;">
+                                        ${previewMessagesHTML}
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 12px;">
+                                    <div style="font-weight: bold; margin-bottom: 6px; font-size: 13px;">📝 结束部分预览</div>
+                                    <div style="background: var(--SmartThemeSurfaceColor, #252525); padding: 10px; border-radius: 4px; max-height: 120px; overflow-y: auto;">
+                                        ${lastMessagesHTML}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="dialog-footer">
+                                <button class="btn-cancel" id="summary-preview-cancel">取消</button>
+                                <button class="btn-confirm" id="summary-preview-confirm">确认总结</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // 添加对话框到页面
+                document.body.insertAdjacentHTML('beforeend', dialogHTML);
+
+                // 绑定事件
+                const dialog = document.querySelector('#summary-preview-dialog');
+                const cancelBtn = dialog.querySelector('#summary-preview-cancel');
+                const confirmBtn = dialog.querySelector('#summary-preview-confirm');
+
+                const closeDialog = () => {
+                    if (dialog && dialog.parentNode) {
+                        dialog.remove();
+                    }
+                };
+
+                cancelBtn?.addEventListener('click', () => {
+                    closeDialog();
+                    resolve(false);
+                });
+
+                confirmBtn?.addEventListener('click', () => {
+                    closeDialog();
+                    resolve(true);
+                });
+
+                // 点击背景关闭
+                dialog?.addEventListener('click', (e) => {
+                    if (e.target === dialog) {
+                        closeDialog();
+                        resolve(false);
+                    }
+                });
+
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 显示总结预览失败:', error);
+                resolve(true); // 出错时默认继续
+            }
+        });
+    }
+
+    /**
+     * 🆕 新增：检查总结范围是否与已有总结重叠
+     */
+    checkSummaryOverlap(proposedRange, existingSummaries) {
+        try {
+            if (!existingSummaries || existingSummaries.length === 0) {
+                return false;
+            }
+
+            for (const summary of existingSummaries) {
+                if (!summary.messageRange) continue;
+
+                const existingStart = summary.messageRange.start;
+                const existingEnd = summary.messageRange.end;
+                const proposedStart = proposedRange.start;
+                const proposedEnd = proposedRange.end;
+
+                // 检查是否有重叠
+                if (!(proposedEnd < existingStart || proposedStart > existingEnd)) {
+                    return true;
+                }
+            }
+
+            return false;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 检查总结重叠失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 🆕 新增：截断文本
+     */
+    truncateText(text, maxLength) {
+        if (!text) return '';
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    }
+
+    /**
      * 触发手动总结
      */
     async triggerManualSummary() {
@@ -20716,6 +20946,69 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
         try {
             console.log('[InfoBarSettings] 🖊️ 触发手动总结...');
 
+            // 获取总结管理器
+            const infoBarTool = window.SillyTavernInfobar;
+            const summaryManager = infoBarTool?.modules?.summaryManager;
+
+            if (!summaryManager) {
+                throw new Error('总结管理器未初始化');
+            }
+
+            // 🆕 获取当前聊天的消息
+            const context = SillyTavern.getContext();
+            const chat = context?.chat;
+            if (!chat || chat.length === 0) {
+                throw new Error('当前聊天没有消息');
+            }
+
+            // 🆕 获取总结范围模式
+            const rangeModeSelect = this.modal.querySelector('#content-summary-range-mode');
+            const rangeMode = rangeModeSelect?.value || 'recent';
+
+            // 🆕 计算总结范围
+            let summaryRange;
+            if (rangeMode === 'custom') {
+                // 自定义范围模式
+                const startInput = this.modal.querySelector('#content-custom-range-start');
+                const endInput = this.modal.querySelector('#content-custom-range-end');
+
+                const startFloor = parseInt(startInput?.value || '1');
+                const endFloor = parseInt(endInput?.value || chat.length);
+
+                // 转换为0基索引
+                const start = Math.max(0, startFloor - 1);
+                const end = Math.min(chat.length - 1, endFloor - 1);
+
+                if (start > end) {
+                    throw new Error('起始楼层不能大于结束楼层');
+                }
+
+                summaryRange = { start, end };
+            } else {
+                // 最近N层模式
+                const floorCountInput = this.modal.querySelector('#content-summary-floor-count');
+                const floorCount = parseInt(floorCountInput?.value || '20');
+
+                const end = chat.length - 1;
+                const start = Math.max(0, end - floorCount + 1);
+
+                summaryRange = { start, end };
+            }
+
+            console.log('[InfoBarSettings] 📊 总结范围:', summaryRange);
+
+            // 🆕 获取已有总结历史
+            const existingSummaries = await summaryManager.getSummaryHistory();
+
+            // 🆕 显示预览对话框
+            const confirmed = await this.showSummaryPreview(summaryRange, chat, existingSummaries);
+
+            if (!confirmed) {
+                console.log('[InfoBarSettings] ℹ️ 用户取消了总结');
+                this.showMessage('已取消总结', 'info');
+                return;
+            }
+
             // 设置进行中标志
             this._summaryInProgress = true;
 
@@ -20728,20 +21021,13 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 `;
             }
 
-            // 获取总结管理器
-            const infoBarTool = window.SillyTavernInfobar;
-            const summaryManager = infoBarTool?.modules?.summaryManager;
-
-            if (!summaryManager) {
-                throw new Error('总结管理器未初始化');
-            }
-
             // 获取当前设置
             const settings = this.getCurrentSummarySettings();
 
-            // 调用总结管理器进行总结
+            // 🆕 调用总结管理器进行总结，传入自定义范围
             const result = await summaryManager.generateSummary({
                 type: 'manual',
+                customRange: summaryRange, // 传入自定义范围
                 ...settings
             });
 
@@ -22143,6 +22429,61 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             }
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 添加自定义面板字段映射失败:', error);
+        }
+
+        // 🔧 新增：动态添加基础面板的自定义字段映射（如interaction面板的自定义字段）
+        try {
+            const context = window.SillyTavern?.getContext?.();
+            if (context) {
+                const extensionSettings = context.extensionSettings;
+                const configs = extensionSettings?.['Information bar integration tool'] || {};
+
+                // 遍历所有基础面板配置
+                for (const [panelId, panelConfig] of Object.entries(configs)) {
+                    // 跳过非面板配置
+                    if (!panelConfig || typeof panelConfig !== 'object' || !panelConfig.subItems) {
+                        continue;
+                    }
+
+                    // 只处理基础面板（已经在baseMapping中存在的面板）
+                    if (!baseMapping[panelId]) {
+                        continue;
+                    }
+
+                    // 为基础面板添加自定义字段映射
+                    const customFieldMapping = {};
+                    if (Array.isArray(panelConfig.subItems)) {
+                        panelConfig.subItems.forEach(subItem => {
+                            if (subItem.key) {
+                                // 🔧 修复：优先使用displayName，如果没有则使用name作为显示名称
+                                const displayName = subItem.displayName || subItem.name || subItem.key;
+
+                                // 使用字段的key作为映射键
+                                customFieldMapping[subItem.key] = displayName;
+
+                                // 🔧 兼容性：同时支持name字段（如果与key不同）
+                                if (subItem.name && subItem.name !== subItem.key) {
+                                    customFieldMapping[subItem.name] = displayName;
+                                }
+                            }
+                        });
+                    }
+
+                    // 🔧 关键修复：合并自定义字段映射到基础面板映射
+                    if (Object.keys(customFieldMapping).length > 0) {
+                        baseMapping[panelId] = {
+                            ...(baseMapping[panelId] || {}), // 保留已有的基础映射
+                            ...customFieldMapping              // 添加自定义字段映射
+                        };
+                        // 🔧 修复：只在首次生成时输出日志，避免重复日志
+                        if (!this._cachedCompleteMapping) {
+                            console.log(`[InfoBarSettings] 📊 添加基础面板自定义字段映射: ${panelId}`, customFieldMapping);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 添加基础面板自定义字段映射失败:', error);
         }
 
         // 🔧 新增：缓存映射结果

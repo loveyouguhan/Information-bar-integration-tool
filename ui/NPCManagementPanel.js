@@ -682,6 +682,7 @@ export class NPCManagementPanel {
 
     /**
      * 🚀 新增：清理和映射字段数据（使用动态字段配置）
+     * 🔧 修复：保留所有有效字段，包括用户自定义字段
      */
     cleanAndMapFields(rawFields) {
         if (!rawFields || typeof rawFields !== 'object') {
@@ -708,9 +709,15 @@ export class NPCManagementPanel {
                 return;
             }
 
+            // 🔧 新增：跳过纯数字键（这些是col_x格式的索引，不是真实字段名）
+            if (/^\d+$/.test(key)) {
+                console.log(`[NPCPanel] 🔧 跳过纯数字索引: ${key}`);
+                return;
+            }
+
             // 🔧 修复：使用动态字段映射获取显示名称
             let displayName = fieldDisplayNames[key];
-            
+
             if (!displayName) {
                 // 如果没有找到映射，尝试处理col_x格式
                 if (key.startsWith('col_')) {
@@ -720,8 +727,25 @@ export class NPCManagementPanel {
                 }
             }
 
-            // 使用显示名称或原始键名
-            const fieldKey = displayName || key;
+            // 🔧 新增：如果displayName是纯数字，跳过（这是col_x格式的索引，不是真实字段名）
+            if (displayName && /^\d+$/.test(displayName)) {
+                console.log(`[NPCPanel] 🔧 跳过纯数字显示名称: ${displayName} (来自 ${key})`);
+                return;
+            }
+
+            // 🔧 修复：优先使用显示名称，如果没有映射且原始键名包含中文，则保留原始键名
+            let fieldKey;
+            if (displayName) {
+                fieldKey = displayName;
+            } else if (/[\u4e00-\u9fa5]/.test(key)) {
+                // 原始键名包含中文，说明是用户自定义字段，直接使用
+                fieldKey = key;
+            } else {
+                // 既没有映射，也不包含中文，跳过
+                console.log(`[NPCPanel] 🔧 跳过未映射的非中文字段: ${key}`);
+                return;
+            }
+
             cleanedFields[fieldKey] = typeof value === 'string' ? value.trim() : value;
         });
 
@@ -730,82 +754,79 @@ export class NPCManagementPanel {
     }
 
     /**
-     * 🆕 获取interaction面板的字段显示名称映射（动态从配置构建）
+     * 🆕 获取interaction面板的字段显示名称映射（完全动态，无硬编码）
      */
     getInteractionFieldDisplayNames() {
         try {
-            // 🔧 修复：直接从扩展配置动态构建字段映射
-            const context = window.SillyTavern?.getContext?.();
-            if (!context) {
-                console.warn('[NPCPanel] ⚠️ 无法获取SillyTavern上下文');
+            console.log('[NPCPanel] 🔍 开始构建动态字段映射...');
+
+            // 🔧 修复：使用DataTable的getAllEnabledPanels()获取正确的面板配置
+            const dataTable = window.SillyTavernInfobar?.modules?.dataTable;
+            if (!dataTable || typeof dataTable.getAllEnabledPanels !== 'function') {
+                console.warn('[NPCPanel] ⚠️ DataTable模块不可用，使用降级方案');
                 return this.getFallbackFieldMapping();
             }
 
-            const extensionSettings = context.extensionSettings;
-            const configs = extensionSettings?.['Information bar integration tool'] || {};
-            const interactionConfig = configs.interaction;
-
-            if (!interactionConfig) {
-                console.warn('[NPCPanel] ⚠️ interaction面板配置不存在');
-                return this.getFallbackFieldMapping();
-            }
-
-            const fieldMapping = {};
-            let columnIndex = 1;
-
-            // 🎯 获取所有启用的基础字段（按配置顺序）
-            // 🔧 关键修复：排除已经在subItems中的字段，避免重复
-            const subItemKeys = (interactionConfig.subItems || []).map(item => item.key);
-            
-            const baseFieldKeys = Object.keys(interactionConfig).filter(key =>
-                key !== 'enabled' &&
-                key !== 'subItems' &&
-                key !== 'description' &&
-                key !== 'icon' &&
-                key !== 'required' &&
-                key !== 'prompts' &&
-                key !== 'memoryInject' &&
-                !subItemKeys.includes(key) &&  // 🔧 关键：排除subItems中的字段
-                typeof interactionConfig[key] === 'object' &&
-                interactionConfig[key].enabled === true
+            // 获取所有启用的面板配置
+            const enabledPanels = dataTable.getAllEnabledPanels();
+            const interactionPanel = enabledPanels.find(panel =>
+                panel.key === 'interaction' || panel.id === 'interaction'
             );
 
-            console.log('[NPCPanel] 📋 启用的基础字段:', baseFieldKeys);
+            if (!interactionPanel) {
+                console.warn('[NPCPanel] ⚠️ 未找到interaction面板配置');
+                return this.getFallbackFieldMapping();
+            }
 
-            // 为每个基础字段创建映射
-            baseFieldKeys.forEach((key) => {
-                const field = interactionConfig[key];
-                let displayName = field.displayName || field.name || key;
+            console.log('[NPCPanel] ✅ 找到interaction面板配置:', interactionPanel);
 
-                // 🔧 修复：如果displayName是英文key，转换为中文
-                displayName = this.translateFieldDisplayName(displayName, key);
+            const fieldMapping = {};
 
-                // 🔧 关键修复：使用数字索引作为键
-                fieldMapping[String(columnIndex)] = displayName;
-                fieldMapping[key] = displayName;  // 同时支持英文key
-                fieldMapping[`col_${columnIndex}`] = displayName;  // 同时支持col_x格式
+            // 🎯 关键修复：直接使用subItems的顺序，这是用户界面的实际顺序
+            if (interactionPanel.subItems && Array.isArray(interactionPanel.subItems)) {
+                let validColumnIndex = 1; // 有效列号计数器
 
-                console.log(`[NPCPanel] 📝 列${columnIndex}: ${key} => "${displayName}"`);
-                columnIndex++;
-            });
+                interactionPanel.subItems.forEach((subItem, index) => {
+                    if (subItem.enabled !== false) {
+                        const displayName = subItem.displayName || subItem.name || subItem.key;
+                        const fieldKey = subItem.key || displayName;
 
-            // 🎯 获取启用的自定义子项
-            const enabledSubItems = (interactionConfig.subItems || []).filter(item => item.enabled);
-            console.log('[NPCPanel] 📋 启用的自定义子项:', enabledSubItems.map(item => item.key));
+                        // 🔧 跳过无效字段（纯数字的key和name）
+                        if (/^\d+$/.test(fieldKey) && /^\d+$/.test(displayName)) {
+                            console.log(`[NPCPanel] ⚠️ 跳过无效字段 [${index + 1}]: key="${fieldKey}", name="${displayName}"`);
+                            return;
+                        }
 
-            enabledSubItems.forEach((item) => {
-                const displayName = item.displayName || item.key;
+                        // 🔧 创建多种格式的映射，确保兼容性
+                        // 1. 字段键 -> 显示名称
+                        if (fieldKey && !/^\d+$/.test(fieldKey)) {
+                            fieldMapping[fieldKey] = displayName;
+                        }
 
-                fieldMapping[String(columnIndex)] = displayName;
-                fieldMapping[item.key] = displayName;
-                fieldMapping[`col_${columnIndex}`] = displayName;
+                        // 2. 数字索引 -> 显示名称（使用有效列号）
+                        fieldMapping[String(validColumnIndex)] = displayName;
 
-                console.log(`[NPCPanel] 📝 列${columnIndex}: ${item.key} => "${displayName}"`);
-                columnIndex++;
-            });
+                        // 3. col_x格式 -> 显示名称（使用有效列号）
+                        fieldMapping[`col_${validColumnIndex}`] = displayName;
 
-            console.log('[NPCPanel] ✅ 动态字段映射构建完成，共', Object.keys(fieldMapping).length / 3, '个字段');
-            return fieldMapping;
+                        // 4. 显示名称 -> 显示名称（自映射，用于查找）
+                        if (displayName && !/^\d+$/.test(displayName)) {
+                            fieldMapping[displayName] = displayName;
+                        }
+
+                        console.log(`[NPCPanel] 📝 字段映射 [有效列${validColumnIndex}]: ${fieldKey} => "${displayName}"`);
+                        validColumnIndex++;
+                    }
+                });
+
+                const validFieldCount = validColumnIndex - 1;
+                console.log('[NPCPanel] ✅ 动态字段映射构建完成，共', validFieldCount, '个有效字段');
+                console.log('[NPCPanel] 📊 完整映射表:', fieldMapping);
+                return fieldMapping;
+            } else {
+                console.warn('[NPCPanel] ⚠️ interaction面板没有subItems配置');
+                return this.getFallbackFieldMapping();
+            }
 
         } catch (error) {
             console.error('[NPCPanel] ❌ 获取字段映射失败:', error);
@@ -829,6 +850,80 @@ export class NPCManagementPanel {
             'outfit': '服装/装备', '8': '服装/装备', 'col_8': '服装/装备',
             'notes': '备注', '9': '备注', 'col_9': '备注'
         };
+    }
+
+    /**
+     * 🆕 获取按照数据表格顺序排序的字段条目
+     */
+    getSortedFieldEntries(fields) {
+        try {
+            // 获取字段顺序映射
+            const dataTable = window.SillyTavernInfobar?.modules?.dataTable;
+            if (!dataTable || typeof dataTable.getAllEnabledPanels !== 'function') {
+                console.warn('[NPCPanel] ⚠️ DataTable模块不可用，使用默认顺序');
+                return Object.entries(fields);
+            }
+
+            // 获取interaction面板配置
+            const enabledPanels = dataTable.getAllEnabledPanels();
+            const interactionPanel = enabledPanels.find(panel =>
+                panel.key === 'interaction' || panel.id === 'interaction'
+            );
+
+            if (!interactionPanel || !interactionPanel.subItems) {
+                console.warn('[NPCPanel] ⚠️ 未找到interaction面板配置，使用默认顺序');
+                return Object.entries(fields);
+            }
+
+            // 构建字段顺序映射：字段名 -> 顺序索引
+            const fieldOrderMap = new Map();
+            interactionPanel.subItems.forEach((subItem, index) => {
+                if (subItem.enabled !== false) {
+                    const displayName = subItem.displayName || subItem.name || subItem.key;
+                    fieldOrderMap.set(displayName, index);
+
+                    // 同时添加key的映射
+                    if (subItem.key && subItem.key !== displayName) {
+                        fieldOrderMap.set(subItem.key, index);
+                    }
+                }
+            });
+
+            console.log('[NPCPanel] 📊 字段顺序映射:', Array.from(fieldOrderMap.entries()));
+
+            // 过滤并排序字段
+            const sortedEntries = Object.entries(fields)
+                // 过滤掉内部字段
+                .filter(([key]) => {
+                    return key !== 'index' &&
+                           key !== 'source' &&
+                           !key.startsWith('_');
+                })
+                // 按照配置顺序排序
+                .sort(([keyA], [keyB]) => {
+                    const orderA = fieldOrderMap.get(keyA);
+                    const orderB = fieldOrderMap.get(keyB);
+
+                    // 如果两个字段都在映射中，按照映射顺序排序
+                    if (orderA !== undefined && orderB !== undefined) {
+                        return orderA - orderB;
+                    }
+
+                    // 如果只有一个在映射中，有映射的排在前面
+                    if (orderA !== undefined) return -1;
+                    if (orderB !== undefined) return 1;
+
+                    // 如果都不在映射中，保持原顺序（按字母排序）
+                    return keyA.localeCompare(keyB);
+                });
+
+            console.log('[NPCPanel] ✅ 字段排序完成:', sortedEntries.map(([k]) => k));
+            return sortedEntries;
+
+        } catch (error) {
+            console.error('[NPCPanel] ❌ 字段排序失败:', error);
+            return Object.entries(fields);
+        }
     }
 
     /**
@@ -995,9 +1090,11 @@ export class NPCManagementPanel {
         if (panel) {
             panel.style.display = '';
             const fields = npc.fields || {};
+
+            // 🔧 修复：按照数据表格的字段顺序显示
             const fieldsHTML = Object.keys(fields).length ? `
                 <div class="kv">
-                    ${Object.entries(fields).map(([k,v]) => `
+                    ${this.getSortedFieldEntries(fields).map(([k,v]) => `
                         <div style="opacity:.8;">${this.escape(k)}</div>
                         <div style="white-space: pre-wrap;">${this.escape(String(v))}</div>
                     `).join('')}
@@ -1514,8 +1611,8 @@ export class NPCManagementPanel {
         // NPC字段数据
         if (npc.fields && Object.keys(npc.fields).length > 0) {
             content += '## 角色信息\n\n';
-            
-            // 🔧 修复：过滤掉内部元数据字段
+
+            // 🔧 修复：改进字段过滤逻辑，保留所有有效字段（包括自定义字段）
             Object.entries(npc.fields).forEach(([fieldName, value]) => {
                 // 🔧 跳过内部元数据字段
                 if (fieldName === 'index' || fieldName === 'source' || fieldName.startsWith('_')) {
@@ -1528,9 +1625,21 @@ export class NPCManagementPanel {
                     return;
                 }
 
-                // 格式化字段名 - 字段已经是显示名称了（经过cleanAndMapFields处理）
+                // 🔧 修复：获取字段显示名称
                 const displayName = this.getFieldDisplayName(fieldName);
-                content += `**${displayName}**: ${value}\n`;
+
+                // 🔧 修复：如果获取到了有效的显示名称，就使用它
+                // 否则，检查原始字段名是否包含中文（用户自定义字段）
+                if (displayName && displayName !== fieldName) {
+                    // 找到了映射，使用显示名称
+                    content += `**${displayName}**: ${value}\n`;
+                } else if (/[\u4e00-\u9fa5]/.test(fieldName)) {
+                    // 原始字段名包含中文，说明是用户自定义字段，直接使用
+                    content += `**${fieldName}**: ${value}\n`;
+                } else {
+                    // 既没有映射，也不包含中文，跳过
+                    console.log(`[NPCPanel] 🔧 跳过未映射的非中文字段（世界书）: ${fieldName}`);
+                }
             });
         }
         
@@ -1554,25 +1663,57 @@ export class NPCManagementPanel {
     }
 
     /**
-     * 🎯 获取字段显示名称
+     * 🎯 获取字段显示名称（使用动态字段配置）
      */
     getFieldDisplayName(fieldName) {
-        const fieldNameMap = {
-            'name': '姓名',
-            'age': '年龄', 
-            'gender': '性别',
-            'occupation': '职业',
-            'personality': '性格',
-            'appearance': '外貌',
-            'background': '背景',
-            'relationship': '关系',
-            'status': '状态',
-            'location': '位置',
-            'description': '描述',
-            'notes': '备注'
-        };
-        
-        return fieldNameMap[fieldName] || fieldName.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
+        try {
+            // 🔧 修复：使用InfoBarSettings的完整映射表
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings;
+
+            if (infoBarSettings && infoBarSettings.getCompleteDisplayNameMapping) {
+                const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
+
+                // 优先从interaction面板映射中查找
+                if (completeMapping.interaction && completeMapping.interaction[fieldName]) {
+                    return completeMapping.interaction[fieldName];
+                }
+
+                // 否则在所有面板映射中查找
+                for (const [panelId, panelMapping] of Object.entries(completeMapping)) {
+                    if (panelMapping[fieldName]) {
+                        return panelMapping[fieldName];
+                    }
+                }
+            }
+
+            // 🔧 备用方案：硬编码映射表（用于降级）
+            const fieldNameMap = {
+                'name': '姓名',
+                'age': '年龄',
+                'gender': '性别',
+                'occupation': '职业',
+                'personality': '性格',
+                'appearance': '外貌',
+                'background': '背景',
+                'relationship': '关系',
+                'status': '状态',
+                'location': '位置',
+                'description': '描述',
+                'notes': '备注'
+            };
+
+            if (fieldNameMap[fieldName]) {
+                return fieldNameMap[fieldName];
+            }
+
+            // 🔧 最后的降级方案：格式化字段名
+            return fieldName.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
+
+        } catch (error) {
+            console.error('[NPCPanel] ❌ 获取字段显示名称失败:', error);
+            return fieldName;
+        }
     }
 
     /**

@@ -309,9 +309,20 @@ export class DataTable {
 
     /**
      * 获取所有启用的面板配置
+     * 🔧 添加缓存机制，避免重复计算
      */
     getAllEnabledPanels() {
         try {
+            // 🔧 缓存机制：检查缓存是否有效
+            const cacheKey = 'enabledPanels';
+            const cacheTime = 5000; // 缓存5秒
+            
+            if (this._panelsCache && 
+                this._panelsCacheTime && 
+                (Date.now() - this._panelsCacheTime < cacheTime)) {
+                return this._panelsCache;
+            }
+            
             const context = SillyTavern.getContext();
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings['Information bar integration tool'] || {};
@@ -394,9 +405,9 @@ export class DataTable {
                                         value: subItem.value || '',
                                         source: 'panelManagement' // 标记来源
                                     });
-                                } else {
-                                    console.log(`[DataTable] ⚠️ 跳过重复的子项: ${subItem.name} (已存在: ${existingItem.name})`);
                                 }
+                                // 🔧 移除日志：这是正常行为，不需要每次都输出
+                                // 避免大量重复日志导致性能问题
                             });
                         }
 
@@ -411,7 +422,8 @@ export class DataTable {
                                 count: allSubItems.length
                             });
 
-                            console.log(`[DataTable] 📊 基础面板 ${panelId}: ${allSubItems.length} 个子项 (基础设置: ${enabledSubItems.length}, 自定义: ${panel.subItems?.length || 0})`);
+                            // 🔧 减少日志输出，避免性能问题
+                            // console.log(`[DataTable] 📊 基础面板 ${panelId}: ${allSubItems.length} 个子项`);
                         }
                     }
                 }
@@ -425,7 +437,8 @@ export class DataTable {
                         const allSubItems = panel.subItems || [];
                         // 🔧 修复：只显示启用的子项，与基础面板逻辑保持一致
                         const enabledSubItems = allSubItems.filter(subItem => subItem.enabled !== false);
-                        console.log(`[DataTable] 📊 自定义面板 ${panelId}: 所有子项 ${allSubItems.length}, 启用子项 ${enabledSubItems.length}`);
+                        // 🔧 减少日志输出，避免性能问题
+                        // console.log(`[DataTable] 📊 自定义面板 ${panelId}: ${enabledSubItems.length} 个子项`);
                         
                         if (enabledSubItems.length > 0) {
                             enabledPanels.push({
@@ -442,12 +455,25 @@ export class DataTable {
             }
 
             console.log(`[DataTable] 📋 找到 ${enabledPanels.length} 个启用的面板:`, enabledPanels.map(p => p.name));
+            // 🔧 缓存结果
+            this._panelsCache = enabledPanels;
+            this._panelsCacheTime = Date.now();
+            
             return enabledPanels;
 
         } catch (error) {
             console.error('[DataTable] ❌ 获取启用面板失败:', error);
             return [];
         }
+    }
+    
+    /**
+     * 🔧 清除面板缓存（在面板配置变更时调用）
+     */
+    clearPanelsCache() {
+        this._panelsCache = null;
+        this._panelsCacheTime = null;
+        console.log('[DataTable] 🗑️ 已清除面板缓存');
     }
 
     /**
@@ -2633,11 +2659,12 @@ export class DataTable {
                 throw new Error('没有找到启用的面板');
             }
 
-            // 2. 获取STScript同步模块
-            const stScriptSync = window.SillyTavernInfobar?.modules?.stScriptDataSync;
-            if (!stScriptSync) {
-                throw new Error('无法获取STScript同步模块');
-            }
+            // 🔧 已移除：STScript数据同步功能已删除
+            // 不再需要STScript同步模块
+            // const stScriptSync = window.SillyTavernInfobar?.modules?.stScriptDataSync;
+            // if (!stScriptSync) {
+            //     throw new Error('无法获取STScript同步模块');
+            // }
 
             // 3. 为每个启用的面板生成变量结构
             const generatedStructures = {};
@@ -5726,6 +5753,7 @@ export class DataTable {
             if (this.eventSystem) {
                 this.eventSystem.on('panel:config:changed', () => {
                     console.log('[DataTable] 📋 收到面板配置变更事件，刷新表格结构');
+                    this.clearPanelsCache(); // 🔧 清除缓存
                     this.refreshTableStructure();
                 });
             }
