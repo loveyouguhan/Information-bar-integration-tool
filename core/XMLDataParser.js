@@ -262,22 +262,58 @@ export class XMLDataParser {
     }
 
     /**
-     * 提取infobar_data标签内容
+     * 提取infobar_data标签内容（宽松模式）
+     * 参考Amily2项目的extractContentByTag方法，支持多种格式
      * @param {string} content - 消息内容
      * @returns {string|null} 提取的内容
      */
     extractInfobarDataContent(content) {
         try {
-            // 使用正则表达式提取infobar_data标签内容
-            const regex = /<infobar_data>([\s\S]*?)<\/infobar_data>/;
-            const match = content.match(regex);
+            console.log('[XMLDataParser] 🔍 开始提取infobar_data标签内容...');
+
+            // 🚀 策略1: 标准格式 - <infobar_data>...</infobar_data>
+            let regex = /<infobar_data>([\s\S]*?)<\/infobar_data>/i;
+            let match = content.match(regex);
 
             if (match && match[1]) {
                 const extractedContent = match[1].trim();
-                console.log('[XMLDataParser] 📄 提取到infobar_data内容，长度:', extractedContent.length);
+                console.log('[XMLDataParser] ✅ 提取成功（标准格式），长度:', extractedContent.length);
                 return extractedContent;
             }
 
+            // 🚀 策略2: 宽松格式 - 忽略大小写和空格
+            regex = /<\s*infobar_data\s*>([\s\S]*?)<\s*\/\s*infobar_data\s*>/i;
+            match = content.match(regex);
+
+            if (match && match[1]) {
+                const extractedContent = match[1].trim();
+                console.log('[XMLDataParser] ✅ 提取成功（宽松格式），长度:', extractedContent.length);
+                return extractedContent;
+            }
+
+            // � 策略3: 贪婪模式 - 提取最后一个infobar_data标签
+            const allMatches = content.match(/<infobar_data>([\s\S]*?)<\/infobar_data>/gi);
+            if (allMatches && allMatches.length > 0) {
+                const lastMatch = allMatches[allMatches.length - 1];
+                const innerMatch = lastMatch.match(/<infobar_data>([\s\S]*?)<\/infobar_data>/i);
+                if (innerMatch && innerMatch[1]) {
+                    const extractedContent = innerMatch[1].trim();
+                    console.log('[XMLDataParser] ✅ 提取成功（贪婪模式，最后一个），长度:', extractedContent.length);
+                    return extractedContent;
+                }
+            }
+
+            // 🚀 策略4: 部分标签 - 只有开始标签
+            regex = /<infobar_data>([\s\S]*?)$/i;
+            match = content.match(regex);
+
+            if (match && match[1] && match[1].trim().length > 20) {
+                const extractedContent = match[1].trim();
+                console.log('[XMLDataParser] ⚠️ 提取成功（部分标签，缺少结束标签），长度:', extractedContent.length);
+                return extractedContent;
+            }
+
+            console.log('[XMLDataParser] ℹ️ 未找到infobar_data标签');
             return null;
 
         } catch (error) {
@@ -287,58 +323,102 @@ export class XMLDataParser {
     }
 
     /**
-     * 解析XML注释格式的数据
+     * 解析XML注释格式的数据（宽松模式）
+     * 参考Amily2项目，支持多种注释格式和不完整的注释
      * @param {string} content - XML注释内容
      * @returns {Promise<Object|null>} 解析结果
      */
     async parseXMLCommentData(content) {
         try {
-            // 🔧 严格验证：检查是否是XML注释格式
-            if (!content.includes('<!--') || !content.includes('-->')) {
-                console.log('[XMLDataParser] ℹ️ 内容不包含XML注释格式，跳过解析');
-                return null;
-            }
+            console.log('[XMLDataParser] � 开始解析XML注释格式...');
 
-            // 🔧 严格提取：只提取XML注释内容，忽略其他文本
-            const commentMatches = content.match(/<!--([\s\S]*?)-->/g);
-            if (!commentMatches || commentMatches.length === 0) {
-                console.log('[XMLDataParser] ℹ️ 未找到有效的XML注释，跳过解析');
+            // 🚀 宽松检查：只要包含注释标记之一即可
+            const hasCommentStart = content.includes('<!--');
+            const hasCommentEnd = content.includes('-->');
+
+            if (!hasCommentStart && !hasCommentEnd) {
+                console.log('[XMLDataParser] ℹ️ 内容不包含XML注释格式，跳过解析');
                 return null;
             }
 
             let totalParsed = {};
             let hasValidData = false;
 
-            // 🔧 遍历所有XML注释，只解析包含面板数据的注释
-            for (const commentMatch of commentMatches) {
-                const match = commentMatch.match(/<!--([\s\S]*?)-->/);
-                if (!match || !match[1]) continue;
+            // � 策略1: 标准完整注释 - <!--...-->
+            const completeComments = content.match(/<!--([\s\S]*?)-->/g);
+            if (completeComments && completeComments.length > 0) {
+                console.log(`[XMLDataParser] 📝 找到 ${completeComments.length} 个完整XML注释`);
 
-                const dataContent = match[1].trim();
+                for (const commentMatch of completeComments) {
+                    const match = commentMatch.match(/<!--([\s\S]*?)-->/);
+                    if (!match || !match[1]) continue;
 
-                // 🔧 严格验证：检查注释内容是否像面板数据格式
-                if (!this.isValidPanelDataFormat(dataContent)) {
-                    console.log('[XMLDataParser] ℹ️ 跳过非面板数据格式的注释内容');
-                    continue;
+                    const dataContent = match[1].trim();
+
+                    // 🚀 宽松验证：只要内容长度足够就尝试解析
+                    if (dataContent.length < 10) {
+                        console.log('[XMLDataParser] ℹ️ 注释内容太短，跳过');
+                        continue;
+                    }
+
+                    console.log('[XMLDataParser] 📝 尝试解析注释内容，长度:', dataContent.length);
+
+                    const parseResult = await this.parsePanelData(dataContent);
+
+                    if (parseResult && typeof parseResult === 'object' && Object.keys(parseResult).length > 0) {
+                        Object.assign(totalParsed, parseResult);
+                        hasValidData = true;
+                        console.log('[XMLDataParser] ✅ 注释解析成功');
+                    }
                 }
+            }
 
-                console.log('[XMLDataParser] 📝 提取到面板数据内容，长度:', dataContent.length);
+            // 🚀 策略2: 不完整注释 - 只有开始标记 <!--...
+            if (!hasValidData && hasCommentStart && !hasCommentEnd) {
+                console.log('[XMLDataParser] 🔍 检测到不完整注释（缺少结束标记），尝试解析...');
+                const incompleteMatch = content.match(/<!--([\s\S]*)$/);
+                if (incompleteMatch && incompleteMatch[1]) {
+                    const dataContent = incompleteMatch[1].trim();
 
-                // 🔧 修复：parsePanelData是异步方法，必须使用await
-                const parseResult = await this.parsePanelData(dataContent);
+                    if (dataContent.length >= 10) {
+                        console.log('[XMLDataParser] � 尝试解析不完整注释，长度:', dataContent.length);
+                        const parseResult = await this.parsePanelData(dataContent);
 
-                if (parseResult && typeof parseResult === 'object' && Object.keys(parseResult).length > 0) {
-                    // 合并解析结果
-                    Object.assign(totalParsed, parseResult);
-                    hasValidData = true;
+                        if (parseResult && typeof parseResult === 'object' && Object.keys(parseResult).length > 0) {
+                            Object.assign(totalParsed, parseResult);
+                            hasValidData = true;
+                            console.log('[XMLDataParser] ✅ 不完整注释解析成功');
+                        }
+                    }
+                }
+            }
+
+            // 🚀 策略3: 只有结束标记 ...-->
+            if (!hasValidData && !hasCommentStart && hasCommentEnd) {
+                console.log('[XMLDataParser] � 检测到不完整注释（缺少开始标记），尝试解析...');
+                const incompleteMatch = content.match(/^([\s\S]*?)-->/);
+                if (incompleteMatch && incompleteMatch[1]) {
+                    const dataContent = incompleteMatch[1].trim();
+
+                    if (dataContent.length >= 10) {
+                        console.log('[XMLDataParser] 📝 尝试解析不完整注释，长度:', dataContent.length);
+                        const parseResult = await this.parsePanelData(dataContent);
+
+                        if (parseResult && typeof parseResult === 'object' && Object.keys(parseResult).length > 0) {
+                            Object.assign(totalParsed, parseResult);
+                            hasValidData = true;
+                            console.log('[XMLDataParser] ✅ 不完整注释解析成功');
+                        }
+                    }
                 }
             }
 
             if (!hasValidData) {
-                console.log('[XMLDataParser] ℹ️ 所有XML注释都不包含有效的面板数据格式');
+                console.log('[XMLDataParser] ℹ️ 所有XML注释都未能解析出有效数据');
                 return null;
             }
 
+            console.log('[XMLDataParser] ✅ XML注释解析完成，共解析出', Object.keys(totalParsed).length, '个面板');
             return totalParsed;
 
         } catch (error) {
@@ -348,37 +428,67 @@ export class XMLDataParser {
     }
 
     /**
-     * 直接解析面板数据格式（非XML注释格式）
+     * 直接解析面板数据格式（非XML注释格式，宽松模式）
+     * 参考Amily2项目，尝试多种解析策略
      * @param {string} content - 面板数据内容
      * @returns {Promise<Object|null>} 解析结果
      */
     async parseDirectPanelFormat(content) {
         try {
-            console.log('[XMLDataParser] 🔍 开始直接面板格式解析...');
+            console.log('[XMLDataParser] 🔍 开始直接面板格式解析（宽松模式）...');
 
             if (!content || typeof content !== 'string') {
                 console.log('[XMLDataParser] ℹ️ 内容为空或格式不正确');
                 return null;
             }
 
-            // 检查是否包含面板数据的基本特征
-            if (!this.isValidPanelDataFormat(content)) {
-                console.log('[XMLDataParser] ℹ️ 内容不符合面板数据格式');
+            // 🚀 宽松验证：只要内容长度足够就尝试解析
+            if (content.trim().length < 10) {
+                console.log('[XMLDataParser] ℹ️ 内容太短，跳过解析');
                 return null;
             }
 
             console.log('[XMLDataParser] 📝 开始解析直接面板数据，长度:', content.length);
 
-            // 🔧 修复：parsePanelData是异步方法，必须使用await
-            const parseResult = await this.parsePanelData(content);
+            // � 策略1: 直接尝试解析（最宽松）
+            let parseResult = await this.parsePanelData(content);
 
             if (parseResult && typeof parseResult === 'object' && Object.keys(parseResult).length > 0) {
-                console.log('[XMLDataParser] ✅ 直接面板格式解析成功，包含', Object.keys(parseResult).length, '个面板');
+                console.log('[XMLDataParser] ✅ 直接面板格式解析成功（策略1），包含', Object.keys(parseResult).length, '个面板');
                 return parseResult;
-            } else {
-                console.log('[XMLDataParser] ℹ️ 直接面板格式解析未返回有效数据');
-                return null;
             }
+
+            // 🚀 策略2: 尝试清理内容后再解析
+            console.log('[XMLDataParser] 🔍 策略1失败，尝试清理内容后再解析...');
+            const cleanedContent = content
+                .replace(/^[\s\n\r]+/, '') // 移除开头空白
+                .replace(/[\s\n\r]+$/, '') // 移除结尾空白
+                .replace(/\r\n/g, '\n')    // 统一换行符
+                .replace(/\r/g, '\n');     // 统一换行符
+
+            parseResult = await this.parsePanelData(cleanedContent);
+
+            if (parseResult && typeof parseResult === 'object' && Object.keys(parseResult).length > 0) {
+                console.log('[XMLDataParser] ✅ 直接面板格式解析成功（策略2），包含', Object.keys(parseResult).length, '个面板');
+                return parseResult;
+            }
+
+            // 🚀 策略3: 尝试提取可能的面板数据块
+            console.log('[XMLDataParser] 🔍 策略2失败，尝试提取面板数据块...');
+            const panelBlockMatch = content.match(/【[^】]+】[\s\S]*?(?=【|$)/g);
+            if (panelBlockMatch && panelBlockMatch.length > 0) {
+                console.log(`[XMLDataParser] 📝 找到 ${panelBlockMatch.length} 个可能的面板数据块`);
+                const combinedBlocks = panelBlockMatch.join('\n');
+                parseResult = await this.parsePanelData(combinedBlocks);
+
+                if (parseResult && typeof parseResult === 'object' && Object.keys(parseResult).length > 0) {
+                    console.log('[XMLDataParser] ✅ 直接面板格式解析成功（策略3），包含', Object.keys(parseResult).length, '个面板');
+                    return parseResult;
+                }
+            }
+
+            console.log('[XMLDataParser] ℹ️ 所有解析策略都未能提取有效数据');
+            return null;
 
         } catch (error) {
             console.error('[XMLDataParser] ❌ 直接面板格式解析失败:', error);
@@ -452,7 +562,7 @@ export class XMLDataParser {
     }
 
     /**
-     * 解析面板数据
+     * 解析面板数据（宽松模式，支持多种格式）
      * @param {string} dataContent - 数据内容
      * @returns {Promise<Object>} 解析结果
      */
@@ -471,6 +581,13 @@ export class XMLDataParser {
                 console.log('[XMLDataParser] 🚀 检测到操作指令格式，使用操作指令解析器');
                 // 🔧 修复：parseOperationCommands是异步方法，必须使用await
                 return await this.parseOperationCommands(dataContent);
+            }
+
+            // 🚀 新增：尝试简化格式解析（类似Amily2的宽松解析）
+            const simpleFormatResult = this.parseSimpleFormat(dataContent);
+            if (simpleFormatResult && Object.keys(simpleFormatResult).length > 0) {
+                console.log('[XMLDataParser] ✅ 简化格式解析成功');
+                return simpleFormatResult;
             }
 
             // 🔧 严格验证：检查是否包含有效的面板数据格式
@@ -1824,5 +1941,102 @@ export class XMLDataParser {
 
         // 过滤掉空值和过短的值
         return separated.filter(v => v && v.length > 0);
+    }
+
+    /**
+     * 🚀 解析简化格式（宽松模式，参考Amily2项目）
+     * 支持格式：
+     * 【面板名】
+     * 字段1: 值1
+     * 字段2: 值2
+     * @param {string} content - 内容
+     * @returns {Object|null} 解析结果
+     */
+    parseSimpleFormat(content) {
+        try {
+            console.log('[XMLDataParser] 🔍 尝试简化格式解析...');
+
+            const result = {};
+            const lines = content.split('\n');
+            let currentPanel = null;
+            let currentPanelData = {};
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine) continue;
+
+                // 检测面板标题：【面板名】或 [面板名]
+                const panelMatch = trimmedLine.match(/^[【\[]([^】\]]+)[】\]]/);
+                if (panelMatch) {
+                    // 保存上一个面板的数据
+                    if (currentPanel && Object.keys(currentPanelData).length > 0) {
+                        result[currentPanel] = currentPanelData;
+                        console.log(`[XMLDataParser] ✅ 解析面板: ${currentPanel}, 包含 ${Object.keys(currentPanelData).length} 个字段`);
+                    }
+
+                    // 开始新面板
+                    currentPanel = panelMatch[1].trim();
+                    currentPanelData = {};
+                    console.log(`[XMLDataParser] 📝 检测到面板: ${currentPanel}`);
+                    continue;
+                }
+
+                // 检测字段：字段名: 值 或 字段名：值
+                const fieldMatch = trimmedLine.match(/^([^:：]+)[:：]\s*(.+)$/);
+                if (fieldMatch && currentPanel) {
+                    const fieldName = fieldMatch[1].trim();
+                    const fieldValue = fieldMatch[2].trim();
+
+                    // 将字段名映射到英文（如果需要）
+                    const mappedFieldName = this.mapChineseFieldToEnglish(fieldName);
+                    currentPanelData[mappedFieldName] = fieldValue;
+                    console.log(`[XMLDataParser] 📝 解析字段: ${fieldName} (${mappedFieldName}) = ${fieldValue}`);
+                }
+            }
+
+            // 保存最后一个面板的数据
+            if (currentPanel && Object.keys(currentPanelData).length > 0) {
+                result[currentPanel] = currentPanelData;
+                console.log(`[XMLDataParser] ✅ 解析面板: ${currentPanel}, 包含 ${Object.keys(currentPanelData).length} 个字段`);
+            }
+
+            if (Object.keys(result).length > 0) {
+                console.log(`[XMLDataParser] ✅ 简化格式解析成功，共解析 ${Object.keys(result).length} 个面板`);
+                return result;
+            }
+
+            console.log('[XMLDataParser] ℹ️ 简化格式解析未找到有效数据');
+            return null;
+
+        } catch (error) {
+            console.error('[XMLDataParser] ❌ 简化格式解析失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🚀 将中文字段名映射到英文
+     * @param {string} chineseField - 中文字段名
+     * @returns {string} 英文字段名
+     */
+    mapChineseFieldToEnglish(chineseField) {
+        const mapping = {
+            '姓名': 'name',
+            '名字': 'name',
+            '年龄': 'age',
+            '性别': 'gender',
+            '职业': 'occupation',
+            '身份': 'identity',
+            '地点': 'location',
+            '位置': 'location',
+            '时间': 'time',
+            '状态': 'status',
+            '心情': 'mood',
+            '关系': 'relationship',
+            '描述': 'description',
+            '备注': 'notes'
+        };
+
+        return mapping[chineseField] || chineseField;
     }
 }

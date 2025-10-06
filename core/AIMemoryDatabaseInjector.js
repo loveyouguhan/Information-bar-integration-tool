@@ -54,7 +54,7 @@ export class AIMemoryDatabaseInjector {
         // 注入器配置
         this.injectorConfig = {
             // 核心开关
-            enabled: true,                          // 是否启用记忆注入
+            enabled: false,                         // 🔧 修复：默认禁用记忆注入
             mainAPIOnly: true,                      // 只注入给主API
             ignoreCustomAPI: true,                  // 忽略自定义API状态
             
@@ -115,7 +115,7 @@ export class AIMemoryDatabaseInjector {
     async init() {
         try {
             console.log('[AIMemoryDatabaseInjector] 🚀 开始初始化AI记忆数据库注入器...');
-            
+
             // 获取SillyTavern上下文
             this.context = SillyTavern.getContext();
             if (!this.context) {
@@ -129,19 +129,30 @@ export class AIMemoryDatabaseInjector {
             } else {
                 console.log('[AIMemoryDatabaseInjector] ✅ 已获取SillyTavern原生事件系统');
             }
-            
+
+            // 🔧 修复：检查用户设置，如果所有记忆功能都禁用，跳过初始化
+            const userSettings = await this.getUserSettings();
+            if (!userSettings.aiMemoryDatabaseEnabled) {
+                console.log('[AIMemoryDatabaseInjector] ⏸️ AI记忆数据库功能已禁用，跳过初始化');
+                this.initialized = true;
+                return;
+            }
+
+            // 🔧 修复：延迟获取当前聊天ID（确保SillyTavern已完全初始化）
+            await this.initCurrentChatId();
+
             // 初始化记忆数据库
             await this.initMemoryDatabase();
-            
+
             // 绑定事件监听器
             this.bindEventListeners();
-            
+
             // 启动记忆管理器
             await this.startMemoryManager();
-            
+
             this.initialized = true;
             console.log('[AIMemoryDatabaseInjector] ✅ AI记忆数据库注入器初始化完成');
-            
+
             // 触发初始化完成事件
             if (this.eventSystem) {
                 this.eventSystem.emit('memoryInjector:initialized', {
@@ -149,10 +160,42 @@ export class AIMemoryDatabaseInjector {
                     config: this.injectorConfig
                 });
             }
-            
+
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 初始化失败:', error);
             this.handleError(error);
+        }
+    }
+
+    /**
+     * 🔧 修复：初始化当前聊天ID（延迟获取，确保SillyTavern已完全初始化）
+     */
+    async initCurrentChatId() {
+        try {
+            // 方法1: 从UnifiedDataCore获取
+            if (this.unifiedDataCore && typeof this.unifiedDataCore.getCurrentChatId === 'function') {
+                this.currentChatId = this.unifiedDataCore.getCurrentChatId();
+                if (this.currentChatId) {
+                    console.log('[AIMemoryDatabaseInjector] 📍 从UnifiedDataCore获取聊天ID:', this.currentChatId);
+                    return;
+                }
+            }
+
+            // 方法2: 从SillyTavern上下文获取
+            const context = SillyTavern?.getContext?.();
+            if (context && context.chatId) {
+                this.currentChatId = context.chatId;
+                console.log('[AIMemoryDatabaseInjector] 📍 从SillyTavern上下文获取聊天ID:', this.currentChatId);
+                return;
+            }
+
+            // 方法3: 延迟重试（等待SillyTavern初始化）
+            console.log('[AIMemoryDatabaseInjector] ⏳ 聊天ID暂时不可用，将在首次使用时获取');
+            this.currentChatId = null;
+
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 初始化聊天ID失败:', error);
+            this.currentChatId = null;
         }
     }
 
@@ -162,10 +205,10 @@ export class AIMemoryDatabaseInjector {
     async initMemoryDatabase() {
         try {
             console.log('[AIMemoryDatabaseInjector] 📊 初始化记忆数据库...');
-            
+
             // 加载现有记忆数据
             await this.loadExistingMemories();
-            
+
             // 初始化记忆分类器
             await this.initMemoryClassifier();
             
@@ -186,8 +229,14 @@ export class AIMemoryDatabaseInjector {
     async loadExistingMemories() {
         try {
             console.log('[AIMemoryDatabaseInjector] 📥 加载现有记忆数据...');
-            
-            // 从总结管理器获取记忆
+
+            // 🔧 修复：优先从持久化存储加载当前聊天的记忆数据
+            if (this.currentChatId) {
+                console.log('[AIMemoryDatabaseInjector] 📥 从持久化存储加载聊天记忆数据...');
+                await this.loadMemoryDataForChat(this.currentChatId);
+            }
+
+            // 从总结管理器获取记忆（作为补充）
             if (this.summaryManager) {
                 try {
                     // 🔧 修复：使用正确的方法名获取总结记忆
@@ -197,7 +246,7 @@ export class AIMemoryDatabaseInjector {
                     } else if (typeof this.summaryManager.getSummaryHistory === 'function') {
                         summaries = await this.summaryManager.getSummaryHistory() || [];
                     }
-                    
+
                     // 限制数量
                     const recentSummaries = summaries.slice(0, 20);
                     for (const summary of recentSummaries) {
@@ -208,8 +257,8 @@ export class AIMemoryDatabaseInjector {
                     console.warn('[AIMemoryDatabaseInjector] ⚠️ 从总结管理器加载记忆失败:', error.message);
                 }
             }
-            
-            // 从深度记忆管理器获取记忆
+
+            // 从深度记忆管理器获取记忆（作为补充）
             if (this.deepMemoryManager) {
                 try {
                     // 🔧 修复：使用正确的方法名获取深度记忆
@@ -222,7 +271,7 @@ export class AIMemoryDatabaseInjector {
                     console.warn('[AIMemoryDatabaseInjector] ⚠️ 从深度记忆管理器加载记忆失败:', error.message);
                 }
             }
-            
+
             // 从向量化检索系统获取记忆
             if (this.vectorizedMemoryRetrieval) {
                 try {
@@ -232,7 +281,7 @@ export class AIMemoryDatabaseInjector {
                     console.warn('[AIMemoryDatabaseInjector] ⚠️ 向量化记忆初始化失败:', error.message);
                 }
             }
-            
+
             // 统计记忆数据
             this.updateMemoryStats();
             
@@ -295,6 +344,12 @@ export class AIMemoryDatabaseInjector {
             // 监听SillyTavern的消息接收事件
             this.sillyTavernEventSource.on('message_received', this.handleMessageReceived.bind(this));
 
+            // 🔧 修复：监听SillyTavern的消息删除事件
+            this.sillyTavernEventSource.on('MESSAGE_DELETED', this.handleSTMessageDeleted.bind(this));
+
+            // 🔧 修复：监听SillyTavern的消息重新生成事件（swipe）
+            this.sillyTavernEventSource.on('MESSAGE_SWIPED', this.handleSTMessageSwiped.bind(this));
+
             console.log('[AIMemoryDatabaseInjector] ✅ SillyTavern原生事件监听器绑定完成');
 
         } catch (error) {
@@ -325,6 +380,9 @@ export class AIMemoryDatabaseInjector {
 
             // 🔧 新增：监听消息重新生成事件
             this.eventSystem.on('MESSAGE_REGENERATED', this.handleMessageRegenerated.bind(this));
+
+            // 🔧 修复：监听聊天切换事件（确保记忆数据隔离）
+            this.eventSystem.on('chat:changed', this.handleChatSwitch.bind(this));
 
             console.log('[AIMemoryDatabaseInjector] ✅ 内部事件监听器绑定完成');
 
@@ -359,17 +417,30 @@ export class AIMemoryDatabaseInjector {
     async handleGenerationStarted(data) {
         try {
             console.log('[AIMemoryDatabaseInjector] 🚀 生成开始，检测API类型并进行记忆注入...');
-            
+
+            // 🔧 修复1：检查用户是否启用了AI记忆数据库功能
+            if (!this.injectorConfig.enabled) {
+                console.log('[AIMemoryDatabaseInjector] ⚠️ AI记忆数据库注入器已禁用，跳过注入');
+                return;
+            }
+
+            // 🔧 修复2：检查用户设置
+            const userSettings = await this.getUserSettings();
+            if (!userSettings.aiMemoryDatabaseEnabled) {
+                console.log('[AIMemoryDatabaseInjector] ⚠️ 用户已禁用AI记忆数据库功能，跳过注入');
+                return;
+            }
+
             // 🔧 关键：只检测主API，不受自定义API影响
             const isMainAPI = await this.detectMainAPI();
-            
+
             if (!isMainAPI) {
                 console.log('[AIMemoryDatabaseInjector] 🚫 非主API请求，跳过记忆注入');
                 return;
             }
-            
+
             console.log('[AIMemoryDatabaseInjector] ✅ 检测到主API请求，开始注入AI记忆数据库...');
-            
+
             // 准备记忆数据
             const memoryData = await this.prepareMemoryData();
             
@@ -478,22 +549,81 @@ export class AIMemoryDatabaseInjector {
     async prepareMemoryData() {
         try {
             console.log('[AIMemoryDatabaseInjector] 📋 准备记忆数据...');
-            
+
             const memoryEntries = [];
-            
+
             // 🧠 收集不同类型的记忆
 
-            // 🚀 0. 感知层记忆（最新的重要记忆，优先级最高）
-            const sensoryMemories = await this.getSensoryMemories();
-            memoryEntries.push(...sensoryMemories);
+            // 🔧 修复：优先从DeepMemoryManager获取记忆（真正的记忆数据）
+            if (this.deepMemoryManager && this.deepMemoryManager.initialized) {
+                console.log('[AIMemoryDatabaseInjector] 🧠 从DeepMemoryManager获取记忆...');
 
-            // 1. 短期记忆（当前会话重要信息）
-            const shortTermMemories = await this.getShortTermMemories();
-            memoryEntries.push(...shortTermMemories);
+                try {
+                    // 获取DeepMemoryManager的记忆层
+                    const deepMemoryLayers = this.deepMemoryManager.memoryLayers;
 
-            // 2. 长期记忆（持久化重要记忆）
-            const longTermMemories = await this.getLongTermMemories();
-            memoryEntries.push(...longTermMemories);
+                    if (deepMemoryLayers) {
+                        // 1. 感知层记忆（最新的）
+                        if (deepMemoryLayers.sensory && deepMemoryLayers.sensory.size > 0) {
+                            for (const [id, memory] of deepMemoryLayers.sensory) {
+                                memoryEntries.push({
+                                    type: 'sensory',
+                                    content: memory.content || memory.summary || String(memory),
+                                    importance: memory.importance || 0.9,
+                                    timestamp: memory.timestamp || Date.now(),
+                                    source: 'deep_memory_sensory'
+                                });
+                            }
+                            console.log(`[AIMemoryDatabaseInjector] ✅ 获取感知层记忆: ${deepMemoryLayers.sensory.size} 条`);
+                        }
+
+                        // 2. 短期记忆
+                        if (deepMemoryLayers.shortTerm && deepMemoryLayers.shortTerm.size > 0) {
+                            for (const [id, memory] of deepMemoryLayers.shortTerm) {
+                                memoryEntries.push({
+                                    type: 'short_term',
+                                    content: memory.content || memory.summary || String(memory),
+                                    importance: memory.importance || 0.7,
+                                    timestamp: memory.timestamp || Date.now(),
+                                    source: 'deep_memory_short_term'
+                                });
+                            }
+                            console.log(`[AIMemoryDatabaseInjector] ✅ 获取短期记忆: ${deepMemoryLayers.shortTerm.size} 条`);
+                        }
+
+                        // 3. 长期记忆（最重要的）
+                        if (deepMemoryLayers.longTerm && deepMemoryLayers.longTerm.size > 0) {
+                            for (const [id, memory] of deepMemoryLayers.longTerm) {
+                                memoryEntries.push({
+                                    type: 'long_term',
+                                    content: memory.content || memory.summary || String(memory),
+                                    importance: memory.importance || 0.8,
+                                    timestamp: memory.timestamp || Date.now(),
+                                    source: 'deep_memory_long_term'
+                                });
+                            }
+                            console.log(`[AIMemoryDatabaseInjector] ✅ 获取长期记忆: ${deepMemoryLayers.longTerm.size} 条`);
+                        }
+                    }
+                } catch (deepMemoryError) {
+                    console.error('[AIMemoryDatabaseInjector] ❌ 从DeepMemoryManager获取记忆失败:', deepMemoryError);
+                }
+            } else {
+                console.warn('[AIMemoryDatabaseInjector] ⚠️ DeepMemoryManager不可用，使用备用记忆源');
+
+                // 备用方案：使用本地记忆数据库
+                // 🚀 0. 感知层记忆（最新的重要记忆，优先级最高）
+                const sensoryMemories = await this.getSensoryMemories();
+                memoryEntries.push(...sensoryMemories);
+
+                // 1. 短期记忆（当前会话重要信息）
+                const shortTermMemories = await this.getShortTermMemories();
+                memoryEntries.push(...shortTermMemories);
+
+                // 2. 长期记忆（持久化重要记忆）
+                const longTermMemories = await this.getLongTermMemories();
+                memoryEntries.push(...longTermMemories);
+            }
 
             // 3. 向量化检索记忆（相关性记忆）
             const vectorMemories = await this.getVectorizedMemories();
@@ -502,16 +632,16 @@ export class AIMemoryDatabaseInjector {
             // 4. 智能分类记忆（高优先级记忆）
             const classifiedMemories = await this.getClassifiedMemories();
             memoryEntries.push(...classifiedMemories);
-            
+
             // 📊 记忆优先级排序和筛选
             const processedMemories = await this.processMemoryEntries(memoryEntries);
-            
+
             // 📦 记忆压缩和优化
             const optimizedMemories = await this.optimizeMemoryData(processedMemories);
-            
+
             console.log(`[AIMemoryDatabaseInjector] 📋 准备完成，记忆条目: ${optimizedMemories.length}`);
             return optimizedMemories;
-            
+
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 准备记忆数据失败:', error);
             return [];
@@ -1327,38 +1457,94 @@ export class AIMemoryDatabaseInjector {
     async handleMessageReceived(data) {
         try {
             if (!data || data.is_user !== false) return;
-            
-            // 分析AI回复内容，提取潜在的记忆信息
-            const memoryContent = await this.extractMemoryFromMessage(data.mes);
-            if (memoryContent) {
-                await this.addToMemoryDatabase('ai_response', {
-                    content: memoryContent,
-                    importance: 0.6,
-                    source: 'ai_response_analysis'
+
+            console.log('[AIMemoryDatabaseInjector] 📥 接收到AI消息，开始提取记忆总结...');
+
+            // 🔧 修复：使用正确的方法提取AI记忆总结
+            const memorySummary = await this.extractAIMemorySummaryFromMessage(data.mes);
+
+            if (memorySummary) {
+                console.log('[AIMemoryDatabaseInjector] ✅ 成功提取AI记忆总结');
+
+                // 将记忆总结添加到数据库
+                await this.addToMemoryDatabase('ai_memory_summary', {
+                    content: memorySummary.content,
+                    importance: memorySummary.importance || 0.8,
+                    tags: memorySummary.tags || [],
+                    category: memorySummary.category || '角色互动',
+                    source: 'ai_memory_summary',
+                    messageId: data.messageId || Date.now(),
+                    timestamp: Date.now()
                 });
+
+                console.log('[AIMemoryDatabaseInjector] ✅ AI记忆总结已添加到数据库');
+            } else {
+                console.log('[AIMemoryDatabaseInjector] ℹ️ 消息中未找到AI记忆总结标签');
             }
-            
+
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 处理消息接收事件失败:', error);
         }
     }
 
     /**
-     * 从消息中提取记忆
+     * 🔧 修复：从消息中提取AI记忆总结（正确解析格式）
      */
-    async extractMemoryFromMessage(message) {
+    async extractAIMemorySummaryFromMessage(message) {
         try {
-            // 简单的关键词提取
-            const keywords = ['记住', '重要', '决定', '发生', '改变', '关系', '感情'];
-            const hasKeywords = keywords.some(keyword => message.includes(keyword));
-            
-            if (hasKeywords && message.length > 50) {
-                return message.substring(0, 200) + (message.length > 200 ? '...' : '');
+            if (!message || typeof message !== 'string') {
+                return null;
             }
-            
+
+            // 🔧 优先尝试新格式（多行）：<AI_MEMORY_SUMMARY>\n<!--\n{...}\n-->\n</AI_MEMORY_SUMMARY>
+            const newFormatMultilineRegex = /<AI_MEMORY_SUMMARY>\s*<!--\s*([\s\S]*?)\s*-->\s*<\/AI_MEMORY_SUMMARY>/;
+            const newMultilineMatch = message.match(newFormatMultilineRegex);
+
+            if (newMultilineMatch && newMultilineMatch[1]) {
+                try {
+                    const jsonContent = newMultilineMatch[1].trim();
+                    const summary = JSON.parse(jsonContent);
+                    console.log('[AIMemoryDatabaseInjector] ✅ 检测到新格式AI记忆总结（多行）');
+                    return summary;
+                } catch (parseError) {
+                    console.error('[AIMemoryDatabaseInjector] ❌ 解析JSON失败:', parseError);
+                }
+            }
+
+            // 🔧 兼容新格式（单行）：<AI_MEMORY_SUMMARY><!--{...}--></AI_MEMORY_SUMMARY>
+            const newFormatSinglelineRegex = /<AI_MEMORY_SUMMARY><!--([\s\S]*?)--><\/AI_MEMORY_SUMMARY>/;
+            const newSinglelineMatch = message.match(newFormatSinglelineRegex);
+
+            if (newSinglelineMatch && newSinglelineMatch[1]) {
+                try {
+                    const jsonContent = newSinglelineMatch[1].trim();
+                    const summary = JSON.parse(jsonContent);
+                    console.log('[AIMemoryDatabaseInjector] ✅ 检测到新格式AI记忆总结（单行）');
+                    return summary;
+                } catch (parseError) {
+                    console.error('[AIMemoryDatabaseInjector] ❌ 解析JSON失败:', parseError);
+                }
+            }
+
+            // 🔧 向后兼容：尝试旧格式 [AI_MEMORY_SUMMARY]...[/AI_MEMORY_SUMMARY]
+            const oldFormatRegex = /\[AI_MEMORY_SUMMARY\]([\s\S]*?)\[\/AI_MEMORY_SUMMARY\]/;
+            const oldMatch = message.match(oldFormatRegex);
+
+            if (oldMatch && oldMatch[1]) {
+                try {
+                    const jsonContent = oldMatch[1].trim();
+                    const summary = JSON.parse(jsonContent);
+                    console.log('[AIMemoryDatabaseInjector] ⚠️ 检测到旧格式AI记忆总结（建议升级到新格式）');
+                    return summary;
+                } catch (parseError) {
+                    console.error('[AIMemoryDatabaseInjector] ❌ 解析JSON失败:', parseError);
+                }
+            }
+
             return null;
+
         } catch (error) {
-            console.error('[AIMemoryDatabaseInjector] ❌ 提取记忆失败:', error);
+            console.error('[AIMemoryDatabaseInjector] ❌ 提取AI记忆总结失败:', error);
             return null;
         }
     }
@@ -1480,21 +1666,48 @@ export class AIMemoryDatabaseInjector {
         try {
             console.log('[AIMemoryDatabaseInjector] 🧹 清理最近的记忆数据...');
 
-            // 清理感知记忆（最新的记忆）
+            // 🔧 修复：更彻底地清理记忆数据
+            // 1. 清理所有感知记忆（最新的记忆）
             const sensoryCount = this.memoryDatabase.sensoryMemory.size;
             this.memoryDatabase.sensoryMemory.clear();
 
-            // 清理短期记忆中的最近记忆（保留重要的记忆）
+            // 2. 清理短期记忆中的最近记忆
             const now = Date.now();
-            const recentThreshold = 30 * 60 * 1000; // 30分钟内的记忆
+            const recentThreshold = 5 * 60 * 1000; // 🔧 修复：缩短到5分钟（原来30分钟太长）
+            let shortTermCleared = 0;
 
             for (const [id, memory] of this.memoryDatabase.shortTermMemory) {
                 if (now - memory.timestamp < recentThreshold) {
                     this.memoryDatabase.shortTermMemory.delete(id);
+                    shortTermCleared++;
                 }
             }
 
-            console.log(`[AIMemoryDatabaseInjector] ✅ 已清理 ${sensoryCount} 个感知记忆和最近的短期记忆`);
+            // 3. 🆕 清理长期记忆中的最近记忆（重要改进）
+            const longTermThreshold = 10 * 60 * 1000; // 10分钟内的长期记忆也清理
+            let longTermCleared = 0;
+
+            for (const [id, memory] of this.memoryDatabase.longTermMemory) {
+                if (now - memory.timestamp < longTermThreshold) {
+                    this.memoryDatabase.longTermMemory.delete(id);
+                    longTermCleared++;
+                }
+            }
+
+            console.log(`[AIMemoryDatabaseInjector] ✅ 已清理记忆: 感知记忆 ${sensoryCount} 个, 短期记忆 ${shortTermCleared} 个, 长期记忆 ${longTermCleared} 个`);
+
+            // 🆕 更新记忆统计
+            this.updateMemoryStats();
+
+            // 🆕 触发记忆清理事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('memoryInjector:memoryCleared', {
+                    sensoryCount,
+                    shortTermCleared,
+                    longTermCleared,
+                    timestamp: Date.now()
+                });
+            }
 
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 清理最近记忆失败:', error);
@@ -1515,6 +1728,102 @@ export class AIMemoryDatabaseInjector {
                 count: this.errorCount,
                 timestamp: Date.now()
             });
+        }
+    }
+
+    /**
+     * 🔧 新增：获取用户设置
+     */
+    async getUserSettings() {
+        try {
+            // 🔧 修复：优先从extensionSettings加载设置
+            try {
+                const context = SillyTavern?.getContext?.();
+                const extensionSettings = context?.extensionSettings?.['Information bar integration tool'];
+                const memoryEnhancement = extensionSettings?.memoryEnhancement;
+
+                if (memoryEnhancement) {
+                    const enhancement = memoryEnhancement.enhancement || {};
+                    const semantic = memoryEnhancement.semantic || {};
+
+                    return {
+                        // AI记忆数据库：检查是否有任何记忆增强功能启用
+                        aiMemoryDatabaseEnabled:
+                            enhancement.deepMemory === true ||
+                            enhancement.intelligentClassifier === true ||
+                            enhancement.memoryMaintenance === true ||
+                            enhancement.contextualRetrieval === true ||
+                            enhancement.userProfile === true ||
+                            enhancement.knowledgeGraph === true ||
+                            enhancement.timeAware === true ||
+                            enhancement.stIntegration === true ||
+                            semantic.enabled === true,
+
+                        // AI记忆总结器：跟随总结功能
+                        aiMemorySummarizerEnabled: memoryEnhancement.summary?.aiSummary === true,
+
+                        // 语义搜索：检查向量化记忆检索
+                        semanticSearchEnabled: semantic.enabled === true,
+
+                        // 深度记忆管理器
+                        deepMemoryManagerEnabled: enhancement.deepMemory === true,
+
+                        // 智能记忆分类器
+                        intelligentMemoryClassifierEnabled: enhancement.intelligentClassifier === true,
+
+                        // 记忆增强核心：检查是否有任何功能启用
+                        memoryEnhancementCoreEnabled:
+                            enhancement.deepMemory === true ||
+                            enhancement.intelligentClassifier === true ||
+                            enhancement.memoryMaintenance === true ||
+                            enhancement.contextualRetrieval === true ||
+                            enhancement.userProfile === true ||
+                            enhancement.knowledgeGraph === true ||
+                            enhancement.timeAware === true ||
+                            enhancement.stIntegration === true ||
+                            semantic.enabled === true
+                    };
+                }
+            } catch (error) {
+                console.warn('[AIMemoryDatabaseInjector] ⚠️ 从extensionSettings加载设置失败:', error);
+            }
+
+            // 向后兼容：从UnifiedDataCore获取用户设置
+            if (this.unifiedDataCore && typeof this.unifiedDataCore.getData === 'function') {
+                const settings = await this.unifiedDataCore.getData('user_settings', 'global');
+                if (settings) {
+                    return {
+                        aiMemoryDatabaseEnabled: settings.aiMemoryDatabaseEnabled !== false,
+                        aiMemorySummarizerEnabled: settings.aiMemorySummarizerEnabled !== false,
+                        semanticSearchEnabled: settings.semanticSearchEnabled !== false,
+                        deepMemoryManagerEnabled: settings.deepMemoryManagerEnabled !== false,
+                        intelligentMemoryClassifierEnabled: settings.intelligentMemoryClassifierEnabled !== false,
+                        memoryEnhancementCoreEnabled: settings.memoryEnhancementCoreEnabled !== false
+                    };
+                }
+            }
+
+            // 🔧 修复：默认全部禁用（而不是启用）
+            return {
+                aiMemoryDatabaseEnabled: false,
+                aiMemorySummarizerEnabled: false,
+                semanticSearchEnabled: false,
+                deepMemoryManagerEnabled: false,
+                intelligentMemoryClassifierEnabled: false,
+                memoryEnhancementCoreEnabled: false
+            };
+
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 获取用户设置失败:', error);
+            // 🔧 修复：出错时默认全部禁用（而不是启用）
+            return {
+                aiMemoryDatabaseEnabled: false,
+                aiMemorySummarizerEnabled: false,
+                semanticSearchEnabled: false,
+                deepMemoryManagerEnabled: false,
+                intelligentMemoryClassifierEnabled: false,
+                memoryEnhancementCoreEnabled: false
+            };
         }
     }
 
@@ -1579,6 +1888,185 @@ export class AIMemoryDatabaseInjector {
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 清空记忆数据库失败:', error);
             return false;
+        }
+    }
+
+    /**
+     * 🔧 修复：处理SillyTavern原生消息删除事件
+     */
+    async handleSTMessageDeleted(data) {
+        try {
+            console.log('[AIMemoryDatabaseInjector] 🗑️ 处理SillyTavern消息删除事件');
+
+            if (!this.initialized) return;
+
+            // 检查是否需要跳过回溯（用户消息删除）
+            if (data && data.is_user === true) {
+                console.log('[AIMemoryDatabaseInjector] ℹ️ 跳过记忆回溯（删除的是用户消息）');
+                return;
+            }
+
+            console.log('[AIMemoryDatabaseInjector] 🔄 开始记忆数据回溯（删除）...');
+
+            // 清理最近的记忆数据
+            await this.clearRecentMemoryData();
+
+            console.log('[AIMemoryDatabaseInjector] ✅ 消息删除记忆回溯完成');
+
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 处理SillyTavern消息删除事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 修复：处理SillyTavern原生消息重新生成事件（swipe）
+     */
+    async handleSTMessageSwiped(data) {
+        try {
+            console.log('[AIMemoryDatabaseInjector] 🔄 处理SillyTavern消息重新生成事件（swipe）');
+
+            if (!this.initialized) return;
+
+            console.log('[AIMemoryDatabaseInjector] 🔄 开始记忆数据回溯（重新生成）...');
+
+            // 清理最近的记忆数据
+            await this.clearRecentMemoryData();
+
+            console.log('[AIMemoryDatabaseInjector] ✅ 消息重新生成记忆回溯完成');
+
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 处理SillyTavern消息重新生成事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 修复：处理聊天切换事件（确保记忆数据隔离）
+     */
+    async handleChatSwitch(data) {
+        try {
+            console.log('[AIMemoryDatabaseInjector] 🔄 处理聊天切换事件');
+
+            if (!this.initialized) return;
+
+            // 获取新的聊天ID（多种方式）
+            let newChatId = data?.chatId;
+            if (!newChatId && this.unifiedDataCore && typeof this.unifiedDataCore.getCurrentChatId === 'function') {
+                newChatId = this.unifiedDataCore.getCurrentChatId();
+            }
+            if (!newChatId) {
+                const context = SillyTavern?.getContext?.();
+                newChatId = context?.chatId;
+            }
+
+            if (!newChatId) {
+                console.warn('[AIMemoryDatabaseInjector] ⚠️ 无法获取新聊天ID');
+                return;
+            }
+
+            // 检查是否真的切换了聊天
+            const oldChatId = this.currentChatId;
+            if (newChatId === oldChatId) {
+                console.log('[AIMemoryDatabaseInjector] ℹ️ 聊天ID未变化，跳过处理');
+                return;
+            }
+
+            console.log('[AIMemoryDatabaseInjector] 🔄 聊天切换:', oldChatId, '->', newChatId);
+
+            // 🔧 步骤1：保存当前聊天的记忆数据
+            if (oldChatId && this.stats.totalMemories > 0) {
+                console.log('[AIMemoryDatabaseInjector] 💾 保存当前聊天的记忆数据...');
+                await this.saveMemoryDataForChat(oldChatId);
+            }
+
+            // 🔧 步骤2：清理内存中的记忆数据
+            console.log('[AIMemoryDatabaseInjector] 🧹 清理内存中的记忆数据...');
+            this.memoryDatabase.sensoryMemory.clear();
+            this.memoryDatabase.shortTermMemory.clear();
+            this.memoryDatabase.longTermMemory.clear();
+            this.memoryDatabase.deepArchive.clear();
+
+            // 🔧 步骤3：重置统计信息
+            this.stats.totalMemories = 0;
+            this.stats.sensoryMemories = 0;
+            this.stats.shortTermMemories = 0;
+            this.stats.longTermMemories = 0;
+            this.stats.deepArchiveMemories = 0;
+
+            // 🔧 步骤4：更新当前聊天ID
+            this.currentChatId = newChatId;
+
+            // 🔧 步骤5：加载新聊天的记忆数据
+            console.log('[AIMemoryDatabaseInjector] 📥 加载新聊天的记忆数据...');
+            await this.loadMemoryDataForChat(newChatId);
+
+            console.log('[AIMemoryDatabaseInjector] ✅ 聊天切换处理完成');
+            console.log(`[AIMemoryDatabaseInjector] 📊 新聊天记忆统计: 总计 ${this.stats.totalMemories} 个记忆`);
+
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 处理聊天切换事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 修复：保存指定聊天的记忆数据
+     */
+    async saveMemoryDataForChat(chatId) {
+        try {
+            if (!this.unifiedDataCore || !chatId) return;
+
+            console.log('[AIMemoryDatabaseInjector] 💾 保存聊天记忆数据:', chatId);
+
+            // 保存各层记忆数据，使用聊天ID作为键的一部分
+            const layers = ['sensoryMemory', 'shortTermMemory', 'longTermMemory', 'deepArchive'];
+            for (const layerName of layers) {
+                const layerData = Object.fromEntries(this.memoryDatabase[layerName]);
+                const storageKey = `ai_memory_${layerName}_${chatId}`;
+                await this.unifiedDataCore.setData(storageKey, layerData);
+            }
+
+            console.log(`[AIMemoryDatabaseInjector] ✅ 聊天记忆数据保存完成 (聊天: ${chatId})`);
+
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 保存聊天记忆数据失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 修复：加载指定聊天的记忆数据
+     */
+    async loadMemoryDataForChat(chatId) {
+        try {
+            if (!this.unifiedDataCore || !chatId) return;
+
+            console.log('[AIMemoryDatabaseInjector] 📥 加载聊天记忆数据:', chatId);
+
+            // 加载各层记忆数据
+            const layers = [
+                { name: 'sensoryMemory', map: this.memoryDatabase.sensoryMemory },
+                { name: 'shortTermMemory', map: this.memoryDatabase.shortTermMemory },
+                { name: 'longTermMemory', map: this.memoryDatabase.longTermMemory },
+                { name: 'deepArchive', map: this.memoryDatabase.deepArchive }
+            ];
+
+            for (const layer of layers) {
+                const storageKey = `ai_memory_${layer.name}_${chatId}`;
+                const layerData = await this.unifiedDataCore.getData(storageKey);
+
+                if (layerData && Object.keys(layerData).length > 0) {
+                    for (const [id, memory] of Object.entries(layerData)) {
+                        layer.map.set(id, memory);
+                    }
+                    console.log(`[AIMemoryDatabaseInjector] ✅ 已加载 ${layer.name}: ${Object.keys(layerData).length} 个记忆`);
+                }
+            }
+
+            // 更新统计信息
+            this.updateMemoryStats();
+
+            console.log(`[AIMemoryDatabaseInjector] ✅ 聊天记忆数据加载完成 (聊天: ${chatId}, 总计: ${this.stats.totalMemories})`);
+
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 加载聊天记忆数据失败:', error);
         }
     }
 }

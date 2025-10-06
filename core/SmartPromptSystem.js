@@ -735,7 +735,8 @@ ${panelRulesSection}
 
 请在每次回复的最后输出AI记忆总结：
 
-[AI_MEMORY_SUMMARY]
+<AI_MEMORY_SUMMARY>
+<!--
 {
   "type": "ai_memory",
   "content": "简洁的剧情总结内容（100-200字）",
@@ -745,7 +746,8 @@ ${panelRulesSection}
   "timestamp": ${Date.now()},
   "messageId": "msg_xxx"
 }
-[/AI_MEMORY_SUMMARY]
+-->
+</AI_MEMORY_SUMMARY>
 
 **要求：**
 - 提取核心剧情要点和重要对话
@@ -1416,9 +1418,10 @@ ${aiMemoryInstruction}
 
         return `### AI记忆总结输出
 
-请在回复后输出AI记忆总结，**严禁使用代码块格式**，直接输出如下格式：
+请在回复后输出AI记忆总结，使用以下多行格式：
 
-[AI_MEMORY_SUMMARY]
+<AI_MEMORY_SUMMARY>
+<!--
 {
   "type": "ai_memory",
   "content": "简洁的记忆总结内容（20-200字）",
@@ -1428,12 +1431,16 @@ ${aiMemoryInstruction}
   "timestamp": ${Date.now()},
   "messageId": "${currentMessageId}"
 }
-[/AI_MEMORY_SUMMARY]
+-->
+</AI_MEMORY_SUMMARY>
 
 **严格要求**：
-- 绝对不要使用三个反引号包裹AI记忆总结
-- 绝对不要使用代码块格式
-- 直接输出[AI_MEMORY_SUMMARY]标签和JSON内容
+- 必须使用<AI_MEMORY_SUMMARY>标签包裹
+- 开始标签<AI_MEMORY_SUMMARY>单独一行
+- HTML注释开始符<!--单独一行
+- JSON内容多行格式
+- HTML注释结束符-->单独一行
+- 结束标签</AI_MEMORY_SUMMARY>单独一行
 - 提取当前对话的核心要点
 - 重点关注角色行为、情感变化、剧情发展
 - 保持客观中性的叙述风格
@@ -5317,8 +5324,9 @@ infobar_data标签（独立输出，必须后输出）`;
 
 请在每次回复的最后输出AI记忆总结：
 
-**格式要求：**
-[AI_MEMORY_SUMMARY]
+**格式要求（必须严格遵守多行格式）：**
+<AI_MEMORY_SUMMARY>
+<!--
 {
   "type": "ai_memory",
   "content": "简洁的剧情总结内容（100-200字）",
@@ -5328,7 +5336,8 @@ infobar_data标签（独立输出，必须后输出）`;
   "timestamp": ${Date.now()},
   "messageId": "msg_xxx"
 }
-[/AI_MEMORY_SUMMARY]
+-->
+</AI_MEMORY_SUMMARY>
 
 **总结要求：**
 - 提取核心剧情要点和重要对话
@@ -5668,7 +5677,17 @@ infobar_data标签（独立输出，必须后输出）`;
                 let messageContent = messageTextElement.innerHTML;
                 let hasChanges = false;
 
-                // 1. 过滤AI记忆总结标签
+                // 1. 过滤AI记忆总结标签（支持多种格式）
+                // 新格式（多行和单行）：<AI_MEMORY_SUMMARY><!--...--></AI_MEMORY_SUMMARY>
+                if (messageContent.includes('<AI_MEMORY_SUMMARY>')) {
+                    // 多行格式：<AI_MEMORY_SUMMARY>\n<!--\n{...}\n-->\n</AI_MEMORY_SUMMARY>
+                    messageContent = messageContent.replace(
+                        /<AI_MEMORY_SUMMARY>\s*<!--[\s\S]*?-->\s*<\/AI_MEMORY_SUMMARY>/g,
+                        ''
+                    );
+                    hasChanges = true;
+                }
+                // 旧格式：[AI_MEMORY_SUMMARY]...[/AI_MEMORY_SUMMARY]（向后兼容）
                 if (messageContent.includes('[AI_MEMORY_SUMMARY]')) {
                     // 移除带代码块的格式
                     messageContent = messageContent.replace(
@@ -5763,8 +5782,8 @@ infobar_data标签（独立输出，必须后输出）`;
                 return;
             }
 
-            // 检查消息是否包含AI记忆总结标签
-            if (!messageContent.includes('[AI_MEMORY_SUMMARY]')) {
+            // 检查消息是否包含AI记忆总结标签（支持新旧两种格式）
+            if (!messageContent.includes('<AI_MEMORY_SUMMARY>') && !messageContent.includes('[AI_MEMORY_SUMMARY]')) {
                 return;
             }
 
@@ -5780,21 +5799,44 @@ infobar_data标签（独立输出，必须后输出）`;
     }
 
     /**
-     * 🔧 新增：提取AI记忆总结
+     * 🔧 新增：提取AI记忆总结（支持多种格式）
      */
     extractAIMemorySummary(messageContent) {
         try {
-            const regex = /\[AI_MEMORY_SUMMARY\]([\s\S]*?)\[\/AI_MEMORY_SUMMARY\]/;
-            const match = messageContent.match(regex);
+            // 🔧 优先尝试新格式（多行）：<AI_MEMORY_SUMMARY>\n<!--\n{...}\n-->\n</AI_MEMORY_SUMMARY>
+            const newFormatMultilineRegex = /<AI_MEMORY_SUMMARY>\s*<!--\s*([\s\S]*?)\s*-->\s*<\/AI_MEMORY_SUMMARY>/;
+            const newMultilineMatch = messageContent.match(newFormatMultilineRegex);
 
-            if (match && match[1]) {
-                const jsonContent = match[1].trim();
+            if (newMultilineMatch && newMultilineMatch[1]) {
+                const jsonContent = newMultilineMatch[1].trim();
+                console.log('[SmartPromptSystem] ✅ 检测到新格式AI记忆总结（多行）');
+                return JSON.parse(jsonContent);
+            }
+
+            // 🔧 兼容新格式（单行）：<AI_MEMORY_SUMMARY><!--{...}--></AI_MEMORY_SUMMARY>
+            const newFormatSinglelineRegex = /<AI_MEMORY_SUMMARY><!--([\s\S]*?)--><\/AI_MEMORY_SUMMARY>/;
+            const newSinglelineMatch = messageContent.match(newFormatSinglelineRegex);
+
+            if (newSinglelineMatch && newSinglelineMatch[1]) {
+                const jsonContent = newSinglelineMatch[1].trim();
+                console.log('[SmartPromptSystem] ✅ 检测到新格式AI记忆总结（单行）');
+                return JSON.parse(jsonContent);
+            }
+
+            // 🔧 向后兼容：尝试旧格式 [AI_MEMORY_SUMMARY]...[/AI_MEMORY_SUMMARY]
+            const oldFormatRegex = /\[AI_MEMORY_SUMMARY\]([\s\S]*?)\[\/AI_MEMORY_SUMMARY\]/;
+            const oldMatch = messageContent.match(oldFormatRegex);
+
+            if (oldMatch && oldMatch[1]) {
+                const jsonContent = oldMatch[1].trim();
+                console.log('[SmartPromptSystem] ⚠️ 检测到旧格式AI记忆总结（建议升级到新格式）');
                 return JSON.parse(jsonContent);
             }
 
             return null;
         } catch (error) {
             console.error('[SmartPromptSystem] ❌ 提取AI记忆总结失败:', error);
+            console.error('[SmartPromptSystem] 错误详情:', error.message);
             return null;
         }
     }

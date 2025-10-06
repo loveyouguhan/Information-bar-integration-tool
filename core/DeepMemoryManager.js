@@ -28,7 +28,7 @@ export class DeepMemoryManager {
         
         // 深度记忆管理设置
         this.settings = {
-            enabled: false,                        // 是否启用深度记忆管理
+            enabled: false,                        // 🔧 修复：默认禁用深度记忆管理
             autoSave: true,                        // 🔧 新增：自动保存记忆数据
             sensoryMemoryCapacity: 100,            // 感知记忆容量
             shortTermMemoryCapacity: 500,          // 短期记忆容量
@@ -107,13 +107,20 @@ export class DeepMemoryManager {
     async init() {
         try {
             console.log('[DeepMemoryManager] 📊 开始初始化深度记忆管理器...');
-            
+
             // 加载设置
             await this.loadSettings();
-            
+
+            // 🔧 修复：如果禁用，跳过初始化
+            if (!this.settings.enabled) {
+                console.log('[DeepMemoryManager] ⏸️ 深度记忆管理器已禁用，跳过初始化');
+                this.initialized = true;
+                return;
+            }
+
             // 初始化记忆分类器
             await this.initializeMemoryClassifiers();
-            
+
             // 加载现有记忆数据
             await this.loadExistingMemories();
 
@@ -122,16 +129,16 @@ export class DeepMemoryManager {
                 console.log('[DeepMemoryManager] 🔄 初始化时未加载到数据，启动延迟重试机制...');
                 this.startDelayedLoadRetry();
             }
-            
+
             // 绑定事件监听器
             this.bindEventListeners();
-            
+
             // 启动记忆维护任务
             this.startMemoryMaintenance();
-            
+
             this.initialized = true;
             console.log('[DeepMemoryManager] ✅ 深度记忆管理器初始化完成');
-            
+
             // 触发初始化完成事件
             if (this.eventSystem) {
                 this.eventSystem.emit('deep-memory-manager:initialized', {
@@ -140,7 +147,7 @@ export class DeepMemoryManager {
                     totalMemories: this.stats.totalMemories
                 });
             }
-            
+
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 初始化失败:', error);
             this.handleError(error);
@@ -153,23 +160,57 @@ export class DeepMemoryManager {
     async loadSettings() {
         try {
             console.log('[DeepMemoryManager] 📥 加载深度记忆管理设置...');
-            
-            if (!this.unifiedDataCore) return;
-            
-            const savedSettings = await this.unifiedDataCore.getData('deep_memory_settings');
-            if (savedSettings) {
-                // 🔧 修复：确保新的默认设置不会被旧的存储设置覆盖
-                this.settings = { ...this.settings, ...savedSettings };
 
-                // 确保autoSave设置存在（向后兼容）
-                if (this.settings.autoSave === undefined) {
-                    this.settings.autoSave = true;
-                    console.log('[DeepMemoryManager] 🔧 添加缺失的autoSave设置');
+            // 🔧 修复：优先从extensionSettings加载设置
+            try {
+                const context = SillyTavern?.getContext?.();
+                const extensionSettings = context?.extensionSettings?.['Information bar integration tool'];
+                const memoryEnhancement = extensionSettings?.memoryEnhancement;
+
+                if (memoryEnhancement?.deep) {
+                    console.log('[DeepMemoryManager] 📥 从extensionSettings加载设置:', memoryEnhancement.deep);
+
+                    // 合并设置，优先使用extensionSettings中的值
+                    this.settings = {
+                        ...this.settings,
+                        enabled: memoryEnhancement.deep.enabled !== undefined ? memoryEnhancement.deep.enabled : this.settings.enabled,
+                        autoMemoryMigration: memoryEnhancement.deep.autoMemoryMigration !== undefined ? memoryEnhancement.deep.autoMemoryMigration : this.settings.autoMemoryMigration,
+                        memoryConflictResolution: memoryEnhancement.deep.conflictResolution !== undefined ? memoryEnhancement.deep.conflictResolution : this.settings.memoryConflictResolution
+                    };
+
+                    // 合并容量设置
+                    if (memoryEnhancement.deep.capacities) {
+                        const capacities = memoryEnhancement.deep.capacities;
+                        if (capacities.sensory !== undefined) this.settings.sensoryMemoryCapacity = capacities.sensory;
+                        if (capacities.shortTerm !== undefined) this.settings.shortTermMemoryCapacity = capacities.shortTerm;
+                        if (capacities.longTerm !== undefined) this.settings.longTermMemoryCapacity = capacities.longTerm;
+                        if (capacities.deepArchive !== undefined) this.settings.deepArchiveCapacity = capacities.deepArchive;
+                    }
+
+                    console.log('[DeepMemoryManager] ✅ 从extensionSettings加载设置成功');
                 }
-
-                console.log('[DeepMemoryManager] ✅ 深度记忆管理设置加载完成:', this.settings);
+            } catch (error) {
+                console.warn('[DeepMemoryManager] ⚠️ 从extensionSettings加载设置失败，使用默认值:', error);
             }
-            
+
+            // 🔧 向后兼容：尝试从unifiedDataCore加载（如果extensionSettings没有数据）
+            if (this.unifiedDataCore) {
+                const savedSettings = await this.unifiedDataCore.getData('deep_memory_settings');
+                if (savedSettings) {
+                    // 只合并unifiedDataCore中有但extensionSettings中没有的设置
+                    this.settings = { ...savedSettings, ...this.settings };
+                    console.log('[DeepMemoryManager] 📥 从unifiedDataCore加载了额外设置');
+                }
+            }
+
+            // 确保autoSave设置存在（向后兼容）
+            if (this.settings.autoSave === undefined) {
+                this.settings.autoSave = true;
+                console.log('[DeepMemoryManager] 🔧 添加缺失的autoSave设置');
+            }
+
+            console.log('[DeepMemoryManager] ✅ 深度记忆管理设置加载完成:', this.settings);
+
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 加载设置失败:', error);
         }
@@ -1010,8 +1051,8 @@ export class DeepMemoryManager {
                 this.eventSystem.off('message:received', this.boundHandlers.messageReceived);
                 this.eventSystem.off('chat:changed', this.boundHandlers.chatChanged);
                 this.eventSystem.off('vectorized-memory-retrieval:memory-indexed', this.boundHandlers.memoryIndexed);
-                this.eventSystem.off('MESSAGE_DELETED', this.boundHandlers.messageDeleted);
-                this.eventSystem.off('MESSAGE_REGENERATED', this.boundHandlers.messageRegenerated);
+                this.eventSystem.off('message:deleted', this.boundHandlers.messageDeleted);
+                this.eventSystem.off('message:regenerated', this.boundHandlers.messageRegenerated);
             }
 
             // 🔧 修复：防止重复绑定事件监听器
@@ -1042,10 +1083,10 @@ export class DeepMemoryManager {
             this.eventSystem.on('vectorized-memory-retrieval:memory-indexed', this.boundHandlers.memoryIndexed);
 
             // 🔧 新增：监听消息删除事件
-            this.eventSystem.on('MESSAGE_DELETED', this.boundHandlers.messageDeleted);
+            this.eventSystem.on('message:deleted', this.boundHandlers.messageDeleted);
 
             // 🔧 新增：监听消息重新生成事件
-            this.eventSystem.on('MESSAGE_REGENERATED', this.boundHandlers.messageRegenerated);
+            this.eventSystem.on('message:regenerated', this.boundHandlers.messageRegenerated);
 
             // 标记已绑定
             this.eventListenersBound = true;
@@ -1532,9 +1573,12 @@ export class DeepMemoryManager {
      */
     async handleMessageDeleted(data) {
         try {
-            console.log('[DeepMemoryManager] 🗑️ 处理消息删除事件');
+            console.log('[DeepMemoryManager] 🗑️ 处理消息删除事件', data);
 
-            if (!this.settings.enabled) return;
+            if (!this.settings.enabled) {
+                console.log('[DeepMemoryManager] ⚠️ 深度记忆管理未启用，跳过处理');
+                return;
+            }
 
             // 检查是否需要跳过回溯（用户消息删除）
             if (data && data.skipRollback === true) {
@@ -1542,7 +1586,7 @@ export class DeepMemoryManager {
                 return;
             }
 
-            console.log('[DeepMemoryManager] 🔄 开始记忆数据回溯...');
+            console.log('[DeepMemoryManager] 🔄 开始记忆数据回溯（AI消息被删除）...');
 
             // 获取当前聊天ID
             const chatId = data?.chatId || this.unifiedDataCore?.getCurrentChatId();
@@ -1551,11 +1595,40 @@ export class DeepMemoryManager {
                 return;
             }
 
-            // 清理最近的记忆数据（感知记忆层）
+            console.log('[DeepMemoryManager] 📍 聊天ID:', chatId);
+            console.log('[DeepMemoryManager] 📊 回溯前记忆统计:', {
+                sensory: this.memoryLayers.sensory.size,
+                shortTerm: this.memoryLayers.shortTerm.size,
+                longTerm: this.memoryLayers.longTerm.size,
+                deepArchive: this.memoryLayers.deepArchive.size,
+                total: this.stats.totalMemories
+            });
+
+            // 1. 清理最近的记忆数据
             await this.clearRecentMemories();
 
-            // 重新加载记忆数据
+            // 2. 🔧 新增：清理UnifiedDataCore中的AI记忆数据
+            if (this.unifiedDataCore) {
+                console.log('[DeepMemoryManager] 🧹 清理UnifiedDataCore中的AI记忆数据...');
+                try {
+                    // 清理AI记忆摘要
+                    await this.unifiedDataCore.deleteData('ai_memory_summary', 'chat');
+                    console.log('[DeepMemoryManager] ✅ 已清理AI记忆摘要');
+                } catch (coreError) {
+                    console.warn('[DeepMemoryManager] ⚠️ 清理UnifiedDataCore数据失败:', coreError);
+                }
+            }
+
+            // 3. 重新加载记忆数据
             await this.loadExistingMemories();
+
+            console.log('[DeepMemoryManager] 📊 回溯后记忆统计:', {
+                sensory: this.memoryLayers.sensory.size,
+                shortTerm: this.memoryLayers.shortTerm.size,
+                longTerm: this.memoryLayers.longTerm.size,
+                deepArchive: this.memoryLayers.deepArchive.size,
+                total: this.stats.totalMemories
+            });
 
             console.log('[DeepMemoryManager] ✅ 消息删除记忆回溯完成');
 
@@ -1569,9 +1642,12 @@ export class DeepMemoryManager {
      */
     async handleMessageRegenerated(data) {
         try {
-            console.log('[DeepMemoryManager] 🔄 处理消息重新生成事件');
+            console.log('[DeepMemoryManager] 🔄 处理消息重新生成事件', data);
 
-            if (!this.settings.enabled) return;
+            if (!this.settings.enabled) {
+                console.log('[DeepMemoryManager] ⚠️ 深度记忆管理未启用，跳过处理');
+                return;
+            }
 
             // 获取当前聊天ID
             const chatId = data?.chatId || this.unifiedDataCore?.getCurrentChatId();
@@ -1581,12 +1657,39 @@ export class DeepMemoryManager {
             }
 
             console.log('[DeepMemoryManager] 🔄 开始记忆数据回溯（重新生成）...');
+            console.log('[DeepMemoryManager] 📍 聊天ID:', chatId);
+            console.log('[DeepMemoryManager] 📊 回溯前记忆统计:', {
+                sensory: this.memoryLayers.sensory.size,
+                shortTerm: this.memoryLayers.shortTerm.size,
+                longTerm: this.memoryLayers.longTerm.size,
+                deepArchive: this.memoryLayers.deepArchive.size,
+                total: this.stats.totalMemories
+            });
 
-            // 清理最近的记忆数据
+            // 1. 清理最近的记忆数据
             await this.clearRecentMemories();
 
-            // 重新加载记忆数据
+            // 2. 🔧 新增：清理UnifiedDataCore中的AI记忆数据
+            if (this.unifiedDataCore) {
+                console.log('[DeepMemoryManager] 🧹 清理UnifiedDataCore中的AI记忆数据...');
+                try {
+                    await this.unifiedDataCore.deleteData('ai_memory_summary', 'chat');
+                    console.log('[DeepMemoryManager] ✅ 已清理AI记忆摘要');
+                } catch (coreError) {
+                    console.warn('[DeepMemoryManager] ⚠️ 清理UnifiedDataCore数据失败:', coreError);
+                }
+            }
+
+            // 3. 重新加载记忆数据
             await this.loadExistingMemories();
+
+            console.log('[DeepMemoryManager] 📊 回溯后记忆统计:', {
+                sensory: this.memoryLayers.sensory.size,
+                shortTerm: this.memoryLayers.shortTerm.size,
+                longTerm: this.memoryLayers.longTerm.size,
+                deepArchive: this.memoryLayers.deepArchive.size,
+                total: this.stats.totalMemories
+            });
 
             console.log('[DeepMemoryManager] ✅ 消息重新生成记忆回溯完成');
 
@@ -1602,27 +1705,59 @@ export class DeepMemoryManager {
         try {
             console.log('[DeepMemoryManager] 🧹 清理最近的记忆数据...');
 
-            // 清理感知记忆层（最新的记忆）
+            let totalCleared = 0;
+
+            // 1. 清理感知记忆层（最新的记忆）
             const sensoryMemoryCount = this.memoryLayers.sensory.size;
             this.memoryLayers.sensory.clear();
+            totalCleared += sensoryMemoryCount;
 
-            // 清理短期记忆中的最近记忆（保留重要的长期记忆）
+            // 2. 清理短期记忆中的最近记忆
             const now = Date.now();
-            const recentThreshold = 30 * 60 * 1000; // 30分钟内的记忆
+            const recentThreshold = 5 * 60 * 1000; // 🔧 修改为5分钟内的记忆（更激进的清理）
 
+            const shortTermCleared = [];
             for (const [id, memory] of this.memoryLayers.shortTerm) {
                 if (now - memory.timestamp < recentThreshold) {
                     this.memoryLayers.shortTerm.delete(id);
                     this.memoryIndex.delete(id);
+                    shortTermCleared.push(id);
+                }
+            }
+            totalCleared += shortTermCleared.length;
+
+            // 3. 🔧 新增：清理向量化记忆索引中的最近记忆
+            if (this.vectorizedMemoryRetrieval) {
+                console.log('[DeepMemoryManager] 🔍 清理向量化记忆索引...');
+                try {
+                    // 获取所有向量化记忆
+                    const allVectorMemories = await this.vectorizedMemoryRetrieval.getAllMemories?.() || [];
+
+                    // 找出需要删除的记忆ID
+                    const vectorMemoriesToDelete = allVectorMemories
+                        .filter(vm => now - vm.timestamp < recentThreshold)
+                        .map(vm => vm.id);
+
+                    // 删除向量化记忆
+                    for (const id of vectorMemoriesToDelete) {
+                        await this.vectorizedMemoryRetrieval.deleteMemory?.(id);
+                    }
+
+                    console.log(`[DeepMemoryManager] 🗑️ 已清理 ${vectorMemoriesToDelete.length} 个向量化记忆`);
+                    totalCleared += vectorMemoriesToDelete.length;
+                } catch (vectorError) {
+                    console.warn('[DeepMemoryManager] ⚠️ 清理向量化记忆失败:', vectorError);
                 }
             }
 
-            // 更新统计信息
-            this.stats.totalMemories = this.memoryLayers.shortTerm.size +
+            // 4. 更新统计信息
+            this.stats.totalMemories = this.memoryLayers.sensory.size +
+                                      this.memoryLayers.shortTerm.size +
                                       this.memoryLayers.longTerm.size +
                                       this.memoryLayers.deepArchive.size;
 
-            console.log(`[DeepMemoryManager] ✅ 已清理 ${sensoryMemoryCount} 个感知记忆和最近的短期记忆`);
+            console.log(`[DeepMemoryManager] ✅ 已清理 ${totalCleared} 个最近记忆`);
+            console.log(`[DeepMemoryManager] 📊 剩余记忆: ${this.stats.totalMemories} 个`);
 
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 清理最近记忆失败:', error);

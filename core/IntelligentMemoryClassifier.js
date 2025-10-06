@@ -111,30 +111,37 @@ export class IntelligentMemoryClassifier {
     async init() {
         try {
             console.log('[IntelligentMemoryClassifier] 📊 开始初始化智能记忆分类器...');
-            
+
             // 加载设置
             await this.loadSettings();
-            
+
+            // 🔧 修复：如果禁用，跳过初始化
+            if (!this.settings.enabled) {
+                console.log('[IntelligentMemoryClassifier] ⏸️ 智能记忆分类器已禁用，跳过初始化');
+                this.initialized = true;
+                return;
+            }
+
             // 初始化分类引擎
             await this.initializeClassificationEngines();
-            
+
             // 加载分类模型
             await this.loadClassificationModels();
-            
+
             // 初始化质量保证系统
             await this.initializeQualityAssurance();
-            
+
             // 绑定事件监听器
             this.bindEventListeners();
-            
+
             // 启动自适应学习
             if (this.settings.adaptationEnabled) {
                 this.startAdaptiveLearning();
             }
-            
+
             this.initialized = true;
             console.log('[IntelligentMemoryClassifier] ✅ 智能记忆分类器初始化完成');
-            
+
             // 触发初始化完成事件
             if (this.eventSystem) {
                 this.eventSystem.emit('intelligent-memory-classifier:initialized', {
@@ -143,7 +150,7 @@ export class IntelligentMemoryClassifier {
                     totalModels: Object.keys(this.classificationModels).length
                 });
             }
-            
+
         } catch (error) {
             console.error('[IntelligentMemoryClassifier] ❌ 初始化失败:', error);
             this.handleError(error);
@@ -156,15 +163,47 @@ export class IntelligentMemoryClassifier {
     async loadSettings() {
         try {
             console.log('[IntelligentMemoryClassifier] 📥 加载智能分类设置...');
-            
-            if (!this.unifiedDataCore) return;
-            
-            const savedSettings = await this.unifiedDataCore.getData('intelligent_classifier_settings');
-            if (savedSettings) {
-                this.settings = { ...this.settings, ...savedSettings };
-                console.log('[IntelligentMemoryClassifier] ✅ 智能分类设置加载完成:', this.settings);
+
+            // 🔧 修复：优先从extensionSettings加载设置
+            try {
+                const context = SillyTavern?.getContext?.();
+                const extensionSettings = context?.extensionSettings?.['Information bar integration tool'];
+                const memoryEnhancement = extensionSettings?.memoryEnhancement;
+
+                if (memoryEnhancement?.classifier) {
+                    if (memoryEnhancement.classifier.enabled !== undefined) {
+                        this.settings.enabled = memoryEnhancement.classifier.enabled;
+                    }
+                    if (memoryEnhancement.classifier.semanticClustering !== undefined) {
+                        this.settings.semanticClustering = memoryEnhancement.classifier.semanticClustering;
+                    }
+                    if (memoryEnhancement.classifier.temporalPatternRecognition !== undefined) {
+                        this.settings.temporalPatternRecognition = memoryEnhancement.classifier.temporalPatternRecognition;
+                    }
+                    if (memoryEnhancement.classifier.importancePrediction !== undefined) {
+                        this.settings.importancePrediction = memoryEnhancement.classifier.importancePrediction;
+                    }
+                    if (memoryEnhancement.classifier.classificationConfidenceThreshold !== undefined) {
+                        this.settings.classificationConfidenceThreshold = memoryEnhancement.classifier.classificationConfidenceThreshold;
+                    }
+                    if (memoryEnhancement.classifier.adaptiveLearning !== undefined) {
+                        this.settings.adaptationEnabled = memoryEnhancement.classifier.adaptiveLearning;
+                    }
+                    console.log('[IntelligentMemoryClassifier] 📥 从extensionSettings加载设置成功');
+                }
+            } catch (error) {
+                console.warn('[IntelligentMemoryClassifier] ⚠️ 从extensionSettings加载设置失败:', error);
             }
-            
+
+            // 向后兼容：从unifiedDataCore加载其他设置
+            if (this.unifiedDataCore) {
+                const savedSettings = await this.unifiedDataCore.getData('intelligent_classifier_settings');
+                if (savedSettings) {
+                    this.settings = { ...savedSettings, ...this.settings };
+                    console.log('[IntelligentMemoryClassifier] ✅ 智能分类设置加载完成:', this.settings);
+                }
+            }
+
         } catch (error) {
             console.error('[IntelligentMemoryClassifier] ❌ 加载设置失败:', error);
         }

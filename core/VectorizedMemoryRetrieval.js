@@ -1,27 +1,30 @@
 /**
  * 向量化记忆检索系统
- * 
+ *
  * 负责语义搜索和向量化记忆管理：
  * - 多引擎向量化支持（Transformers.js、OpenAI等）
  * - 语义相似度搜索
  * - 记忆向量化和索引
  * - 智能检索和排序
  * - 与AI记忆总结器深度集成
- * 
+ *
  * @class VectorizedMemoryRetrieval
  */
+
+import { VectorAPIAdapter } from './VectorAPIAdapter.js';
+import { CustomVectorAPIAdapter } from './CustomVectorAPIAdapter.js';
 
 export class VectorizedMemoryRetrieval {
     constructor(unifiedDataCore, eventSystem, aiMemorySummarizer) {
         console.log('[VectorizedMemoryRetrieval] 🔍 向量化记忆检索系统初始化开始');
-        
+
         this.unifiedDataCore = unifiedDataCore;
         this.eventSystem = eventSystem;
         this.aiMemorySummarizer = aiMemorySummarizer;
-        
+
         // 向量化设置
         this.settings = {
-            enabled: true,                     // 🔧 修复：启用向量化检索
+            enabled: false,                    // 🔧 修复：默认禁用向量化检索
             vectorEngine: 'transformers',      // 向量化引擎类型
             embeddingModel: 'Supabase/gte-small', // 嵌入模型
             vectorDimensions: 384,             // 向量维度
@@ -30,9 +33,17 @@ export class VectorizedMemoryRetrieval {
             maxResults: 15,                    // 🔧 增加最大返回结果数
             batchSize: 50,                     // 批量处理大小
             autoVectorize: true,               // 自动向量化新记忆
-            useLocalStorage: true,             // 使用本地存储
-            fallbackMode: true,                // 🔧 新增：启用fallback模式
-            enableBasicSearch: true            // 🔧 新增：启用基础搜索作为备选
+            useLocalStorage: true,             // 使用本地存储（旧方案）
+            useNativeVectorAPI: false,         // 🚀 使用原生向量API（需要SillyTavern向量扩展支持）
+            useCustomVectorAPI: false,         // 🚀 新增：使用自定义向量API
+            customVectorAPI: {                 // 🚀 新增：自定义向量API配置
+                url: '',                       // API地址
+                apiKey: '',                    // API密钥
+                model: ''                      // 模型名称
+            },
+            storageSizeLimit: 10,              // 🚀 新增：存储大小限制（MB），0表示不限制
+            fallbackMode: true,                // 🔧 启用fallback模式
+            enableBasicSearch: true            // 🔧 启用基础搜索作为备选
         };
         
         // 向量化引擎
@@ -41,13 +52,22 @@ export class VectorizedMemoryRetrieval {
             openai: null,                      // OpenAI引擎
             custom: null                       // 自定义引擎
         };
-        
+
+        // 🚀 原生向量API适配器
+        this.vectorAPI = new VectorAPIAdapter({
+            context: window.SillyTavern?.getContext?.(),
+            unifiedDataCore: this.unifiedDataCore
+        });
+
+        // 🚀 新增：自定义向量API适配器
+        this.customVectorAPI = new CustomVectorAPIAdapter(this.settings.customVectorAPI);
+
         // 向量缓存和索引
         this.vectorCache = new Map();         // 向量缓存
         this.memoryIndex = new Map();         // 记忆索引
         this.vectorIndex = [];                // 向量索引数组
         this.isIndexing = false;              // 是否正在索引
-        
+
         // 性能统计
         this.stats = {
             totalVectorized: 0,                // 总向量化数量
@@ -56,11 +76,11 @@ export class VectorizedMemoryRetrieval {
             avgSearchTime: 0,                  // 平均搜索时间
             lastIndexTime: 0                   // 最后索引时间
         };
-        
+
         // 初始化状态
         this.initialized = false;
         this.errorCount = 0;
-        
+
         console.log('[VectorizedMemoryRetrieval] 🏗️ 构造函数完成');
     }
 
@@ -70,25 +90,32 @@ export class VectorizedMemoryRetrieval {
     async init() {
         try {
             console.log('[VectorizedMemoryRetrieval] 📊 开始初始化向量化记忆检索系统...');
-            
+
             // 加载设置
             await this.loadSettings();
-            
+
+            // 🔧 修复：如果禁用，跳过初始化
+            if (!this.settings.enabled) {
+                console.log('[VectorizedMemoryRetrieval] ⏸️ 向量化记忆检索已禁用，跳过初始化');
+                this.initialized = true;
+                return;
+            }
+
             // 初始化向量化引擎
             await this.initializeVectorEngines();
-            
+
             // 绑定事件监听器
             this.bindEventListeners();
-            
+
             // 加载现有向量缓存
             await this.loadVectorCache();
-            
+
             // 构建记忆索引
             await this.buildMemoryIndex();
-            
+
             this.initialized = true;
             console.log('[VectorizedMemoryRetrieval] ✅ 向量化记忆检索系统初始化完成');
-            
+
             // 触发初始化完成事件
             if (this.eventSystem) {
                 this.eventSystem.emit('vectorized-memory-retrieval:initialized', {
@@ -97,7 +124,7 @@ export class VectorizedMemoryRetrieval {
                     indexSize: this.vectorIndex.length
                 });
             }
-            
+
         } catch (error) {
             console.error('[VectorizedMemoryRetrieval] ❌ 初始化失败:', error);
             this.handleError(error);
@@ -110,15 +137,41 @@ export class VectorizedMemoryRetrieval {
     async loadSettings() {
         try {
             console.log('[VectorizedMemoryRetrieval] 📥 加载向量化设置...');
-            
-            if (!this.unifiedDataCore) return;
-            
-            const savedSettings = await this.unifiedDataCore.getData('vectorized_memory_settings');
-            if (savedSettings) {
-                this.settings = { ...this.settings, ...savedSettings };
-                console.log('[VectorizedMemoryRetrieval] ✅ 向量化设置加载完成:', this.settings);
+
+            // 🔧 修复：优先从extensionSettings加载设置
+            try {
+                const context = SillyTavern?.getContext?.();
+                const extensionSettings = context?.extensionSettings?.['Information bar integration tool'];
+                const memoryEnhancement = extensionSettings?.memoryEnhancement;
+
+                if (memoryEnhancement?.vector) {
+                    if (memoryEnhancement.vector.enabled !== undefined) {
+                        this.settings.enabled = memoryEnhancement.vector.enabled;
+                    }
+                    if (memoryEnhancement.vector.vectorEngine !== undefined) {
+                        this.settings.vectorEngine = memoryEnhancement.vector.vectorEngine;
+                    }
+                    if (memoryEnhancement.vector.similarityThreshold !== undefined) {
+                        this.settings.similarityThreshold = memoryEnhancement.vector.similarityThreshold;
+                    }
+                    if (memoryEnhancement.vector.maxResults !== undefined) {
+                        this.settings.maxResults = memoryEnhancement.vector.maxResults;
+                    }
+                    console.log('[VectorizedMemoryRetrieval] 📥 从extensionSettings加载设置成功');
+                }
+            } catch (error) {
+                console.warn('[VectorizedMemoryRetrieval] ⚠️ 从extensionSettings加载设置失败:', error);
             }
-            
+
+            // 向后兼容：从unifiedDataCore加载其他设置
+            if (this.unifiedDataCore) {
+                const savedSettings = await this.unifiedDataCore.getData('vectorized_memory_settings');
+                if (savedSettings) {
+                    this.settings = { ...savedSettings, ...this.settings };
+                    console.log('[VectorizedMemoryRetrieval] ✅ 向量化设置加载完成:', this.settings);
+                }
+            }
+
         } catch (error) {
             console.error('[VectorizedMemoryRetrieval] ❌ 加载设置失败:', error);
         }
@@ -131,17 +184,23 @@ export class VectorizedMemoryRetrieval {
         try {
             console.log('[VectorizedMemoryRetrieval] 🔄 更新向量化设置:', newSettings);
             this.settings = { ...this.settings, ...newSettings };
-            
+
+            // 🚀 新增：更新自定义向量API配置
+            if (newSettings.customVectorAPI) {
+                this.customVectorAPI.updateConfig(newSettings.customVectorAPI);
+                console.log('[VectorizedMemoryRetrieval] 🔧 自定义向量API配置已更新');
+            }
+
             // 保存设置
             if (this.unifiedDataCore) {
                 await this.unifiedDataCore.setData('vectorized_memory_settings', this.settings);
             }
-            
+
             // 如果引擎类型改变，重新初始化
             if (newSettings.vectorEngine && newSettings.vectorEngine !== this.settings.vectorEngine) {
                 await this.initializeVectorEngines();
             }
-            
+
         } catch (error) {
             console.error('[VectorizedMemoryRetrieval] ❌ 更新设置失败:', error);
         }
@@ -654,16 +713,33 @@ export class VectorizedMemoryRetrieval {
             }
             
             let vector = null;
-            
-            switch (this.settings.vectorEngine) {
-                case 'transformers':
-                    vector = await this.vectorizeWithTransformers(text);
-                    break;
-                case 'openai':
-                    vector = await this.vectorizeWithOpenAI(text);
-                    break;
-                default:
-                    vector = await this.vectorizeWithFallback(text);
+
+            // 🚀 新增：优先使用自定义向量API
+            if (this.settings.useCustomVectorAPI && this.customVectorAPI.isConfigValid()) {
+                try {
+                    console.log('[VectorizedMemoryRetrieval] 🌐 使用自定义向量API');
+                    vector = await this.customVectorAPI.vectorizeText(text);
+                } catch (error) {
+                    console.error('[VectorizedMemoryRetrieval] ❌ 自定义向量API失败:', error);
+                    if (!this.settings.fallbackMode) {
+                        throw error;
+                    }
+                    console.log('[VectorizedMemoryRetrieval] 🔄 降级到默认引擎');
+                }
+            }
+
+            // 如果自定义API失败或未启用，使用默认引擎
+            if (!vector) {
+                switch (this.settings.vectorEngine) {
+                    case 'transformers':
+                        vector = await this.vectorizeWithTransformers(text);
+                        break;
+                    case 'openai':
+                        vector = await this.vectorizeWithOpenAI(text);
+                        break;
+                    default:
+                        vector = await this.vectorizeWithFallback(text);
+                }
             }
             
             if (vector) {
@@ -1066,7 +1142,12 @@ export class VectorizedMemoryRetrieval {
                 throw new Error('查询向量化失败');
             }
 
-            // 搜索相似向量
+            // 🚀 新方案：使用原生向量API
+            if (this.settings.useNativeVectorAPI) {
+                return await this.semanticSearchWithNativeAPI(query, queryVector, options);
+            }
+
+            // 旧方案：本地搜索
             const searchResults = [];
 
             for (const indexEntry of this.vectorIndex) {
@@ -1131,6 +1212,68 @@ export class VectorizedMemoryRetrieval {
                 error: error.message,
                 timestamp: Date.now()
             };
+        }
+    }
+
+    /**
+     * 🚀 新增：使用原生向量API进行语义搜索
+     */
+    async semanticSearchWithNativeAPI(query, queryVector, options = {}) {
+        try {
+            const startTime = Date.now();
+            console.log('[VectorizedMemoryRetrieval] 🚀 使用原生向量API进行搜索');
+
+            const {
+                maxResults = this.settings.maxResults,
+                similarityThreshold = this.settings.similarityThreshold,
+                includeMetadata = true
+            } = options;
+
+            // 使用原生API查询
+            const results = await this.vectorAPI.queryVectors(query, queryVector, {
+                knowledgeBaseId: 'default',
+                topK: maxResults,
+                threshold: similarityThreshold
+            });
+
+            // 转换结果格式
+            const formattedResults = results.map(result => ({
+                id: result.metadata?.id || result.hash,
+                content: result.text,
+                similarity: result.score || 0,
+                type: result.metadata?.type || 'unknown',
+                timestamp: result.metadata?.timestamp || Date.now(),
+                metadata: includeMetadata ? result.metadata : undefined
+            }));
+
+            // 更新统计
+            const searchTime = Date.now() - startTime;
+            this.stats.searchCount++;
+            this.stats.avgSearchTime = (this.stats.avgSearchTime * (this.stats.searchCount - 1) + searchTime) / this.stats.searchCount;
+
+            console.log(`[VectorizedMemoryRetrieval] ✅ 原生API搜索完成，找到 ${formattedResults.length} 个结果，耗时 ${searchTime}ms`);
+
+            // 触发搜索完成事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('vectorized-memory-retrieval:search-completed', {
+                    query: query,
+                    resultCount: formattedResults.length,
+                    searchTime: searchTime,
+                    timestamp: Date.now()
+                });
+            }
+
+            return {
+                query: query,
+                results: formattedResults,
+                totalResults: formattedResults.length,
+                searchTime: searchTime,
+                timestamp: Date.now()
+            };
+
+        } catch (error) {
+            console.error('[VectorizedMemoryRetrieval] ❌ 原生API搜索失败:', error);
+            throw error;
         }
     }
 
@@ -1614,9 +1757,18 @@ export class VectorizedMemoryRetrieval {
      */
     async saveIndexToStorage() {
         try {
+            // 🚀 新方案：使用原生向量API
+            if (this.settings.useNativeVectorAPI) {
+                return await this.saveIndexToNativeAPI();
+            }
+
+            // 旧方案：使用本地存储
             if (!this.settings.useLocalStorage || !this.unifiedDataCore) return;
 
-            console.log('[VectorizedMemoryRetrieval] 💾 保存索引到存储...');
+            console.log('[VectorizedMemoryRetrieval] 💾 保存索引到存储（旧方案）...');
+
+            // 🚀 新增：检查并清理超大数据
+            await this.checkAndCleanOversizedData();
 
             // 保存向量缓存
             const cacheObject = Object.fromEntries(this.vectorCache);
@@ -1633,10 +1785,126 @@ export class VectorizedMemoryRetrieval {
 
             await this.unifiedDataCore.setData('vector_index_metadata', indexMetadata);
 
-            console.log('[VectorizedMemoryRetrieval] ✅ 索引保存完成');
+            console.log('[VectorizedMemoryRetrieval] ✅ 索引保存完成（旧方案）');
 
         } catch (error) {
             console.error('[VectorizedMemoryRetrieval] ❌ 保存索引失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：检查并清理超大向量数据
+     */
+    async checkAndCleanOversizedData() {
+        try {
+            // 如果没有设置大小限制，跳过
+            if (!this.settings.storageSizeLimit || this.settings.storageSizeLimit <= 0) {
+                return;
+            }
+
+            // 计算当前数据大小（估算）
+            const cacheSize = JSON.stringify(Object.fromEntries(this.vectorCache)).length;
+            const indexSize = JSON.stringify(this.vectorIndex).length;
+            const totalSize = cacheSize + indexSize;
+            const totalSizeMB = totalSize / (1024 * 1024);
+
+            console.log(`[VectorizedMemoryRetrieval] 📊 当前向量数据大小: ${totalSizeMB.toFixed(2)} MB`);
+
+            // 如果超过限制，删除最旧的数据
+            if (totalSizeMB > this.settings.storageSizeLimit) {
+                console.log(`[VectorizedMemoryRetrieval] ⚠️ 向量数据超过限制 (${this.settings.storageSizeLimit} MB)，开始清理...`);
+
+                // 按时间戳排序，删除最旧的数据
+                this.vectorIndex.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+                // 计算需要删除的数量（删除20%的旧数据）
+                const deleteCount = Math.ceil(this.vectorIndex.length * 0.2);
+                const deletedEntries = this.vectorIndex.splice(0, deleteCount);
+
+                // 从缓存中删除对应的向量
+                deletedEntries.forEach(entry => {
+                    const cacheKey = `${entry.type}_${entry.id}`;
+                    this.vectorCache.delete(cacheKey);
+                });
+
+                console.log(`[VectorizedMemoryRetrieval] ✅ 已清理 ${deleteCount} 条旧数据`);
+
+                // 重新计算大小
+                const newCacheSize = JSON.stringify(Object.fromEntries(this.vectorCache)).length;
+                const newIndexSize = JSON.stringify(this.vectorIndex).length;
+                const newTotalSize = newCacheSize + newIndexSize;
+                const newTotalSizeMB = newTotalSize / (1024 * 1024);
+
+                console.log(`[VectorizedMemoryRetrieval] 📊 清理后数据大小: ${newTotalSizeMB.toFixed(2)} MB`);
+            }
+
+        } catch (error) {
+            console.error('[VectorizedMemoryRetrieval] ❌ 检查并清理超大数据失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：保存索引到原生向量API
+     */
+    async saveIndexToNativeAPI() {
+        try {
+            console.log('[VectorizedMemoryRetrieval] 💾 使用原生向量API保存索引...');
+
+            if (this.vectorIndex.length === 0) {
+                console.log('[VectorizedMemoryRetrieval] ℹ️ 没有需要保存的向量');
+                return;
+            }
+
+            // 准备向量数据
+            const vectors = this.vectorIndex.map(entry => ({
+                content: entry.content,
+                vector: entry.vector,
+                metadata: {
+                    id: entry.id,
+                    type: entry.type,
+                    timestamp: entry.timestamp,
+                    ...entry.metadata
+                }
+            }));
+
+            // 批量插入
+            const batchSize = this.settings.batchSize || 50;
+            let totalInserted = 0;
+            let hasError = false;
+
+            for (let i = 0; i < vectors.length; i += batchSize) {
+                const batch = vectors.slice(i, i + batchSize);
+                try {
+                    const result = await this.vectorAPI.insertVectors(batch, 'default');
+                    if (result.success) {
+                        totalInserted += result.count;
+                    }
+                } catch (batchError) {
+                    console.error(`[VectorizedMemoryRetrieval] ❌ 批次 ${i}-${i+batchSize} 插入失败:`, batchError);
+                    hasError = true;
+                    // 继续处理下一批
+                }
+            }
+
+            if (hasError) {
+                console.warn('[VectorizedMemoryRetrieval] ⚠️ 部分向量插入失败，建议检查SillyTavern向量扩展配置');
+            }
+
+            console.log(`[VectorizedMemoryRetrieval] ✅ 索引保存完成，共插入 ${totalInserted}/${vectors.length} 个向量`);
+
+        } catch (error) {
+            console.error('[VectorizedMemoryRetrieval] ❌ 保存索引到原生API失败:', error);
+            console.warn('[VectorizedMemoryRetrieval] ⚠️ 原生向量API不可用，请检查：');
+            console.warn('  1. SillyTavern是否安装了向量扩展');
+            console.warn('  2. 向量扩展是否正确配置');
+            console.warn('  3. 可以在设置中禁用useNativeVectorAPI，使用旧存储方案');
+
+            // 自动降级到旧方案
+            if (this.settings.fallbackMode) {
+                console.log('[VectorizedMemoryRetrieval] 🔄 自动降级到旧存储方案');
+                this.settings.useNativeVectorAPI = false;
+                await this.saveIndexToStorage(); // 递归调用，会使用旧方案
+            }
         }
     }
 
@@ -1836,6 +2104,156 @@ export class VectorizedMemoryRetrieval {
         } catch (error) {
             console.error('[VectorizedMemoryRetrieval] ❌ 搜索相似记忆失败:', error);
             return [];
+        }
+    }
+
+    /**
+     * 🚀 新增：数据迁移工具 - 从旧存储迁移到原生向量API
+     */
+    async migrateToNativeVectorAPI() {
+        try {
+            console.log('[VectorizedMemoryRetrieval] 🔄 开始迁移向量数据到原生API...');
+
+            // 检查是否已经使用原生API
+            if (this.settings.useNativeVectorAPI) {
+                console.log('[VectorizedMemoryRetrieval] ℹ️ 已经在使用原生向量API');
+            }
+
+            // 1. 从旧存储加载数据
+            const oldCacheData = await this.unifiedDataCore.getData('vector_cache');
+            const oldIndexMetadata = await this.unifiedDataCore.getData('vector_index_metadata');
+
+            if (!oldCacheData && !oldIndexMetadata && this.vectorIndex.length === 0) {
+                console.log('[VectorizedMemoryRetrieval] ℹ️ 没有需要迁移的数据');
+                return { success: true, migrated: 0, message: '没有需要迁移的数据' };
+            }
+
+            // 2. 统计需要迁移的数据量
+            const totalVectors = this.vectorIndex.length;
+            console.log(`[VectorizedMemoryRetrieval] 📊 发现 ${totalVectors} 个向量需要迁移`);
+
+            if (totalVectors === 0) {
+                // 尝试重建索引
+                console.log('[VectorizedMemoryRetrieval] 🔄 尝试重建向量索引...');
+                await this.buildMemoryIndex();
+
+                if (this.vectorIndex.length === 0) {
+                    console.log('[VectorizedMemoryRetrieval] ℹ️ 没有可迁移的向量数据');
+                    return { success: true, migrated: 0, message: '没有可迁移的向量数据' };
+                }
+            }
+
+            // 3. 启用原生API
+            this.settings.useNativeVectorAPI = true;
+            await this.unifiedDataCore.setData('vectorized_memory_settings', this.settings);
+
+            // 4. 保存到新存储（使用原生API）
+            console.log('[VectorizedMemoryRetrieval] 💾 开始保存到原生向量API...');
+            await this.saveIndexToNativeAPI();
+
+            // 5. 验证迁移
+            const vectorCount = await this.vectorAPI.getVectorCount('default');
+            console.log(`[VectorizedMemoryRetrieval] 📊 原生API中的向量数量: ${vectorCount}`);
+
+            // 6. 清理旧数据（可选，保留备份）
+            console.log('[VectorizedMemoryRetrieval] 🗑️ 清理旧存储数据...');
+            await this.unifiedDataCore.setData('vector_cache_backup', oldCacheData);
+            await this.unifiedDataCore.setData('vector_index_metadata_backup', oldIndexMetadata);
+            await this.unifiedDataCore.setData('vector_cache', null);
+            await this.unifiedDataCore.setData('vector_index_metadata', null);
+
+            console.log('[VectorizedMemoryRetrieval] ✅ 数据迁移完成');
+
+            return {
+                success: true,
+                migrated: this.vectorIndex.length,
+                vectorCountInAPI: vectorCount,
+                message: `成功迁移 ${this.vectorIndex.length} 个向量到原生API`
+            };
+
+        } catch (error) {
+            console.error('[VectorizedMemoryRetrieval] ❌ 数据迁移失败:', error);
+            return {
+                success: false,
+                error: error.message,
+                message: `迁移失败: ${error.message}`
+            };
+        }
+    }
+
+    /**
+     * 🚀 新增：检查迁移状态
+     */
+    async checkMigrationStatus() {
+        try {
+            // 检查旧数据
+            const oldCacheData = await this.unifiedDataCore.getData('vector_cache');
+            const oldIndexMetadata = await this.unifiedDataCore.getData('vector_index_metadata');
+            const hasOldData = !!(oldCacheData || oldIndexMetadata);
+
+            // 检查新数据
+            const vectorCountInAPI = await this.vectorAPI.getVectorCount('default');
+            const hasNewData = vectorCountInAPI > 0;
+
+            // 检查配置
+            const usingNativeAPI = this.settings.useNativeVectorAPI;
+
+            return {
+                hasOldData: hasOldData,
+                hasNewData: hasNewData,
+                usingNativeAPI: usingNativeAPI,
+                vectorCountInAPI: vectorCountInAPI,
+                vectorIndexSize: this.vectorIndex.length,
+                needsMigration: hasOldData && !hasNewData,
+                migrationComplete: !hasOldData && hasNewData && usingNativeAPI
+            };
+
+        } catch (error) {
+            console.error('[VectorizedMemoryRetrieval] ❌ 检查迁移状态失败:', error);
+            return {
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * 🚀 新增：回滚到旧存储方案
+     */
+    async rollbackToOldStorage() {
+        try {
+            console.log('[VectorizedMemoryRetrieval] 🔄 回滚到旧存储方案...');
+
+            // 1. 禁用原生API
+            this.settings.useNativeVectorAPI = false;
+            await this.unifiedDataCore.setData('vectorized_memory_settings', this.settings);
+
+            // 2. 恢复备份数据
+            const backupCache = await this.unifiedDataCore.getData('vector_cache_backup');
+            const backupMetadata = await this.unifiedDataCore.getData('vector_index_metadata_backup');
+
+            if (backupCache) {
+                await this.unifiedDataCore.setData('vector_cache', backupCache);
+            }
+            if (backupMetadata) {
+                await this.unifiedDataCore.setData('vector_index_metadata', backupMetadata);
+            }
+
+            // 3. 重新加载
+            await this.loadVectorCache();
+
+            console.log('[VectorizedMemoryRetrieval] ✅ 回滚完成');
+
+            return {
+                success: true,
+                message: '成功回滚到旧存储方案'
+            };
+
+        } catch (error) {
+            console.error('[VectorizedMemoryRetrieval] ❌ 回滚失败:', error);
+            return {
+                success: false,
+                error: error.message
+            };
         }
     }
 }

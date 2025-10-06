@@ -905,13 +905,15 @@ ${messageContent}
                     throw new Error('InfoBarSettings未初始化');
                 }
 
-                // 检查自定义API是否启用
+                // 🔧 修复：检查自定义API配置（不检查enabled状态）
+                // 用户只要配置了API，就应该能够使用，不需要额外启用开关
                 const context = SillyTavern.getContext();
                 const extensionSettings = context.extensionSettings['Information bar integration tool'];
                 const apiConfig = extensionSettings?.apiConfig;
 
-                if (!apiConfig?.enabled || !apiConfig?.apiKey || !apiConfig?.model) {
-                    throw new Error('自定义API未启用或配置不完整');
+                // 🔧 修复：只检查必要的配置项，不检查enabled状态
+                if (!apiConfig?.apiKey || !apiConfig?.model) {
+                    throw new Error('自定义API配置不完整：缺少API密钥或模型配置');
                 }
 
                 console.log('[SummaryManager] 📡 使用API配置:', {
