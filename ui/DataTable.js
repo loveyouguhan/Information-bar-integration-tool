@@ -687,57 +687,59 @@ export class DataTable {
     }
 
     /**
-     * 🔧 计算数据哈希值 - 用于检测数据结构变化（修复版）
+     * 🔧 计算数据哈希值 - 用于检测数据变化（宽松策略）
      */
     calculateDataHash(data) {
         try {
-            // 🔧 修复：创建稳定的数据结构表示，排除动态内容
-            const structure = data.map(item => {
-                // 只包含影响表格结构的稳定字段
-                const stableStructure = {
+            // 🔧 修复：采用更宽松的策略，包含数据内容
+            // 这样数据内容变化时，哈希值也会变化，表格会正确更新
+            const dataRepresentation = data.map(item => {
+                const representation = {
                     panel: item.panel,
                     field: item.field,
                     hasRowData: !!item.rowData
                 };
 
-                // 🔧 修复：只统计数据字段的数量和类型，不包含具体值
+                // 🔧 修复：包含所有数据字段的值，不过滤任何字段
                 if (item.rowData) {
+                    // 获取所有字段并排序，确保顺序一致
                     const keys = Object.keys(item.rowData).sort();
-                    // 过滤掉可能包含时间戳或随机ID的字段
-                    const stableKeys = keys.filter(key => {
-                        const value = item.rowData[key];
-                        // 排除包含时间戳、UUID、随机数的字段
-                        if (typeof value === 'string') {
-                            return !value.match(/\d{4}-\d{2}-\d{2}|\d{13,}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
-                        }
-                        return true;
-                    });
 
-                    stableStructure.fieldCount = stableKeys.length;
-                    stableStructure.fieldTypes = stableKeys.map(key => typeof item.rowData[key]).sort();
+                    // 🔧 关键修复：包含字段的实际值，而不仅仅是类型
+                    representation.fields = {};
+                    keys.forEach(key => {
+                        const value = item.rowData[key];
+                        // 将值转换为字符串以便比较
+                        if (value !== null && value !== undefined) {
+                            representation.fields[key] = String(value);
+                        } else {
+                            representation.fields[key] = '';
+                        }
+                    });
                 } else {
-                    stableStructure.fieldCount = 0;
-                    stableStructure.fieldTypes = [];
+                    representation.fields = {};
                 }
 
-                return stableStructure;
+                return representation;
             });
 
-            // 🔧 修复：生成稳定的哈希值
-            const structureString = JSON.stringify(structure);
+            // 🔧 修复：生成包含数据内容的哈希值
+            const dataString = JSON.stringify(dataRepresentation);
             let hash = 0;
-            for (let i = 0; i < structureString.length; i++) {
-                const char = structureString.charCodeAt(i);
+            for (let i = 0; i < dataString.length; i++) {
+                const char = dataString.charCodeAt(i);
                 hash = ((hash << 5) - hash) + char;
                 hash = hash & hash; // 转换为32位整数
             }
 
             const finalHash = Math.abs(hash).toString();
-            console.log('[DataTable] 🔍 稳定哈希计算完成:', finalHash);
+            console.log('[DataTable] 🔍 数据哈希计算完成（宽松策略）:', finalHash);
+            console.log('[DataTable] 📊 数据项数量:', data.length);
             return finalHash;
         } catch (error) {
             console.error('[DataTable] ❌ 计算数据哈希失败:', error);
-            return 'fallback_hash'; // 使用固定的降级方案
+            // 🔧 修复：降级方案使用时间戳，确保每次都不同
+            return 'fallback_' + Date.now();
         }
     }
 
@@ -4009,11 +4011,9 @@ export class DataTable {
 
                     // 提取有效的数据字段（排除元数据）
                     Object.entries(panelData).forEach(([fieldName, fieldValue]) => {
-                        // 跳过元数据字段和空值
-                        if (!['lastUpdated', 'source', 'enabled'].includes(fieldName) && 
-                            fieldValue !== null && 
-                            fieldValue !== undefined && 
-                            String(fieldValue).trim() !== '') {
+                        // 🔧 修复：使用统一的数据验证方法
+                        if (!['lastUpdated', 'source', 'enabled'].includes(fieldName) &&
+                            this.isValidDisplayValue(fieldValue)) {
                             cleanRowData[fieldName] = fieldValue;
                             hasValidData = true;
                         }
@@ -4248,16 +4248,32 @@ export class DataTable {
     }
 
     /**
-     * 🔧 检查值是否适合显示
+     * 🔧 检查值是否适合显示 - 与MessageInfoBarRenderer保持一致
      * @param {*} value - 要检查的值
      * @returns {boolean}
      */
     isValidDisplayValue(value) {
-        return value !== null && 
-               value !== undefined && 
-               value !== '' && 
-               String(value).trim() !== '' &&
-               String(value).trim() !== '-';
+        // 🔧 修复：使用与MessageInfoBarRenderer相同的验证逻辑
+        if (!value || value === null || value === undefined) {
+            return false;
+        }
+
+        const strValue = String(value).trim().toLowerCase();
+
+        // 检查空字符串
+        if (strValue === '' || strValue === 'null' || strValue === 'undefined') {
+            return false;
+        }
+
+        // 🔧 修复：过滤无效的占位符文本（与MessageInfoBarRenderer保持一致）
+        const invalidPlaceholders = [
+            '待补全', '暂无', '缺失', '空', '无数据', '无信息',
+            'null', 'undefined', 'missing', 'tbd', 'to be determined',
+            'not mentioned', 'not specified', 'blank', 'empty', 'void', 'nil', 'na', 'n/a',
+            '-', '—', '无', 'none', 'unknown', '未知', '未提及', '未指定'
+        ];
+
+        return !invalidPlaceholders.includes(strValue);
     }
 
     /**

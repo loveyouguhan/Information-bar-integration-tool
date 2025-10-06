@@ -5603,6 +5603,169 @@ export class InfoBarSettings {
                                 </div>
                             </div>
                         </div>
+
+                        <!-- 🆕 新增六大核心功能模块状态 -->
+                        <div class="module-status-card" data-module="memoryMaintenance">
+                            <div class="module-header">
+                                <span class="module-icon">🔧</span>
+                                <span class="module-name">记忆自动维护</span>
+                                <span class="module-status" id="memory-maintenance-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">清理:</span>
+                                    <span class="stat-value" id="memory-maintenance-cleanups">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">压缩:</span>
+                                    <span class="stat-value" id="memory-maintenance-compressions">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="module-status-card" data-module="contextualRetrieval">
+                            <div class="module-header">
+                                <span class="module-icon">🔍</span>
+                                <span class="module-name">上下文感知检索</span>
+                                <span class="module-status" id="contextual-retrieval-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">查询:</span>
+                                    <span class="stat-value" id="contextual-retrieval-queries">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">缓存:</span>
+                                    <span class="stat-value" id="contextual-retrieval-cache-hits">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="module-status-card" data-module="userProfile">
+                            <div class="module-header">
+                                <span class="module-icon">👤</span>
+                                <span class="module-name">用户画像</span>
+                                <span class="module-status" id="user-profile-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">画像:</span>
+                                    <span class="stat-value" id="user-profile-count">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">置信度:</span>
+                                    <span class="stat-value" id="user-profile-confidence">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="module-status-card" data-module="knowledgeGraph">
+                            <div class="module-header">
+                                <span class="module-icon">🕸️</span>
+                                <span class="module-name">知识图谱</span>
+                                <span class="module-status" id="knowledge-graph-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">三元组:</span>
+                                    <span class="stat-value" id="knowledge-graph-triples">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">实体:</span>
+                                    <span class="stat-value" id="knowledge-graph-entities">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="module-status-card" data-module="timeAware">
+                            <div class="module-header">
+                                <span class="module-icon">⏰</span>
+                                <span class="module-name">时间感知记忆</span>
+                                <span class="module-status" id="time-aware-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">事件:</span>
+                                    <span class="stat-value" id="time-aware-events">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">衰减:</span>
+                                    <span class="stat-value" id="time-aware-decayed">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="module-status-card" data-module="stIntegration">
+                            <div class="module-header">
+                                <span class="module-icon">🔗</span>
+                                <span class="module-name">SillyTavern集成</span>
+                                <span class="module-status" id="st-integration-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">注入:</span>
+                                    <span class="stat-value" id="st-integration-injections">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">耗时:</span>
+                                    <span class="stat-value" id="st-integration-avg-time">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 🆕 六大核心功能模块启用选项 -->
+                <div class="setting-row enhancement-modules-section">
+                    <h5 style="color: #FF9800; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🚀 记忆增强核心功能</h5>
+                    <div class="setting-hint" style="margin-bottom: 15px;">以下功能默认禁用，请根据需要启用</div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-maintenance-enabled" />
+                            <span class="checkbox-text">🔧 记忆自动维护系统</span>
+                        </label>
+                        <div class="setting-hint">自动清理、压缩和质量评估记忆数据</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="contextual-retrieval-enabled" />
+                            <span class="checkbox-text">🔍 上下文感知检索</span>
+                        </label>
+                        <div class="setting-hint">混合检索、重排序和语义缓存</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="user-profile-enabled" />
+                            <span class="checkbox-text">👤 用户画像管理</span>
+                        </label>
+                        <div class="setting-hint">自动学习用户偏好和个性化记忆</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="knowledge-graph-enabled" />
+                            <span class="checkbox-text">🕸️ 知识图谱管理</span>
+                        </label>
+                        <div class="setting-hint">三元组提取、图谱查询和推理</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="time-aware-enabled" />
+                            <span class="checkbox-text">⏰ 时间感知记忆</span>
+                        </label>
+                        <div class="setting-hint">时间线管理、遗忘曲线和间隔重复</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="st-integration-enabled" />
+                            <span class="checkbox-text">🔗 SillyTavern深度集成</span>
+                        </label>
+                        <div class="setting-hint">自动记忆注入和事件集成</div>
                     </div>
                 </div>
 
@@ -5652,6 +5815,61 @@ export class InfoBarSettings {
                 </div>
 
                 <div class="setting-row vectorized-memory-options" id="memory-vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-vector-storage-mode">向量数据存储方式</label>
+                        <select id="memory-vector-storage-mode" class="setting-select">
+                            <option value="local">聊天文件存储（默认）</option>
+                            <option value="native">原生向量API（推荐）</option>
+                            <option value="custom">自定义向量API</option>
+                        </select>
+                        <div class="setting-hint">选择向量数据的存储位置和方式</div>
+                    </div>
+                </div>
+
+                <div class="setting-row vectorized-memory-options vector-storage-hint" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                    <div class="setting-group">
+                        <div class="setting-hint" id="vector-storage-hint-text" style="padding: 10px; background: #f5f5f5; border-radius: 4px; font-size: 12px;">
+                            <strong>聊天文件存储：</strong>向量数据存储在聊天文件中，无需额外配置，但数据量大时可能影响性能。
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-row vectorized-memory-options local-storage-options" id="local-storage-size-limit" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-vector-storage-size-limit">向量存储大小限制</label>
+                        <div class="input-group">
+                            <input type="number" id="memory-vector-storage-size-limit" min="1" max="100" value="10" />
+                            <span class="input-unit">MB</span>
+                        </div>
+                        <div class="setting-hint">当向量数据超过此大小时，自动删除最旧的数据。设置为0表示不限制。</div>
+                    </div>
+                </div>
+
+                <div class="setting-row vectorized-memory-options custom-vector-api-options" id="custom-vector-api-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-custom-vector-api-url">自定义API地址</label>
+                        <input type="text" id="memory-custom-vector-api-url" class="setting-input" placeholder="https://api.example.com/embeddings" />
+                        <div class="setting-hint">外部向量化API的完整URL地址</div>
+                    </div>
+                </div>
+
+                <div class="setting-row vectorized-memory-options custom-vector-api-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-custom-vector-api-key">API密钥</label>
+                        <input type="password" id="memory-custom-vector-api-key" class="setting-input" placeholder="sk-..." />
+                        <div class="setting-hint">访问自定义API所需的密钥</div>
+                    </div>
+                </div>
+
+                <div class="setting-row vectorized-memory-options custom-vector-api-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-custom-vector-model">模型名称</label>
+                        <input type="text" id="memory-custom-vector-model" class="setting-input" placeholder="text-embedding-ada-002" />
+                        <div class="setting-hint">使用的嵌入模型名称</div>
+                    </div>
+                </div>
+
+                <div class="setting-row vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
                     <div class="setting-group">
                         <label class="setting-label" for="memory-vector-engine">向量化引擎</label>
                         <select id="memory-vector-engine" class="setting-select">
@@ -5812,6 +6030,129 @@ export class InfoBarSettings {
                             <span class="checkbox-text">自适应学习</span>
                         </label>
                         <div class="setting-hint">从用户反馈中学习和改进</div>
+                    </div>
+                </div>
+
+                <!-- 🗑️ 数据清理工具 -->
+                <div class="setting-row memory-cleanup-section" style="margin-top: 30px; border-top: 2px solid var(--SmartThemeBorderColor, #333); padding-top: 20px;">
+                    <h5 style="color: #F44336; margin: 0 0 15px 0; font-size: 14px; font-weight: 600;">🗑️ 数据清理工具</h5>
+                    <div class="setting-hint" style="margin-bottom: 15px; color: #FF9800;">
+                        ⚠️ 警告：清理操作不可撤销，请谨慎使用！建议在清理前先导出备份数据。
+                    </div>
+
+                    <div class="cleanup-buttons-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <!-- 清理AI记忆数据库 -->
+                        <div class="cleanup-button-wrapper">
+                            <button class="cleanup-btn" id="cleanup-ai-memory-database" style="
+                                width: 100%;
+                                padding: 12px 20px;
+                                background: linear-gradient(135deg, #FF5722 0%, #F44336 100%);
+                                color: white;
+                                border: none;
+                                border-radius: 8px;
+                                font-size: 14px;
+                                font-weight: 600;
+                                cursor: pointer;
+                                transition: all 0.3s ease;
+                                box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+                            ">
+                                🗑️ 清理AI记忆数据库
+                            </button>
+                            <div class="setting-hint" style="margin-top: 8px; font-size: 12px;">
+                                清空所有AI记忆总结数据（感知层、短期、长期、归档）
+                            </div>
+                        </div>
+
+                        <!-- 清理向量化数据 -->
+                        <div class="cleanup-button-wrapper">
+                            <button class="cleanup-btn" id="cleanup-vector-data" style="
+                                width: 100%;
+                                padding: 12px 20px;
+                                background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+                                color: white;
+                                border: none;
+                                border-radius: 8px;
+                                font-size: 14px;
+                                font-weight: 600;
+                                cursor: pointer;
+                                transition: all 0.3s ease;
+                                box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+                            ">
+                                🗑️ 清理向量化数据
+                            </button>
+                            <div class="setting-hint" style="margin-top: 8px; font-size: 12px;">
+                                清空所有向量索引和嵌入数据
+                            </div>
+                        </div>
+
+                        <!-- 清理深度记忆数据 -->
+                        <div class="cleanup-button-wrapper">
+                            <button class="cleanup-btn" id="cleanup-deep-memory" style="
+                                width: 100%;
+                                padding: 12px 20px;
+                                background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
+                                color: white;
+                                border: none;
+                                border-radius: 8px;
+                                font-size: 14px;
+                                font-weight: 600;
+                                cursor: pointer;
+                                transition: all 0.3s ease;
+                                box-shadow: 0 2px 8px rgba(156, 39, 176, 0.3);
+                            ">
+                                🗑️ 清理深度记忆数据
+                            </button>
+                            <div class="setting-hint" style="margin-top: 8px; font-size: 12px;">
+                                清空四层记忆架构中的所有数据
+                            </div>
+                        </div>
+
+                        <!-- 清理知识图谱数据 -->
+                        <div class="cleanup-button-wrapper">
+                            <button class="cleanup-btn" id="cleanup-knowledge-graph" style="
+                                width: 100%;
+                                padding: 12px 20px;
+                                background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+                                color: white;
+                                border: none;
+                                border-radius: 8px;
+                                font-size: 14px;
+                                font-weight: 600;
+                                cursor: pointer;
+                                transition: all 0.3s ease;
+                                box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+                            ">
+                                🗑️ 清理知识图谱
+                            </button>
+                            <div class="setting-hint" style="margin-top: 8px; font-size: 12px;">
+                                清空所有知识图谱三元组和关系数据
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 危险操作：清空所有记忆数据 -->
+                    <div class="cleanup-danger-zone" style="margin-top: 25px; padding: 15px; background: rgba(244, 67, 54, 0.1); border: 2px solid #F44336; border-radius: 8px;">
+                        <h6 style="color: #F44336; margin: 0 0 10px 0; font-size: 13px; font-weight: 600;">
+                            ⚠️ 危险操作区域
+                        </h6>
+                        <button class="cleanup-btn-danger" id="cleanup-all-memory-data" style="
+                            width: 100%;
+                            padding: 12px 20px;
+                            background: linear-gradient(135deg, #D32F2F 0%, #B71C1C 100%);
+                            color: white;
+                            border: 2px solid #F44336;
+                            border-radius: 8px;
+                            font-size: 14px;
+                            font-weight: 700;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                            box-shadow: 0 2px 8px rgba(211, 47, 47, 0.4);
+                        ">
+                            💥 清空所有记忆数据（危险）
+                        </button>
+                        <div class="setting-hint" style="margin-top: 10px; font-size: 12px; color: #F44336;">
+                            ⚠️ 此操作将清空所有记忆增强相关数据，包括AI记忆、向量数据、深度记忆、知识图谱、用户画像等。此操作不可撤销！
+                        </div>
                     </div>
                 </div>
             </div>
@@ -7496,6 +7837,9 @@ export class InfoBarSettings {
                 if (memoryEnhancementData && typeof memoryEnhancementData === 'object') {
                     extensionSettings['Information bar integration tool'].memoryEnhancement = memoryEnhancementData;
                     console.log('[InfoBarSettings] 🧠 已收集记忆增强设置并写入配置');
+
+                    // 🔧 修复：同步设置到各个记忆增强模块
+                    await this.syncMemoryEnhancementSettingsToModules(memoryEnhancementData);
                 }
             }
 
@@ -7667,6 +8011,116 @@ export class InfoBarSettings {
     }
 
     /**
+     * 🔧 新增：同步记忆增强设置到各个模块
+     */
+    async syncMemoryEnhancementSettingsToModules(memoryEnhancementData) {
+        try {
+            console.log('[InfoBarSettings] 🔄 开始同步记忆增强设置到各模块...');
+
+            const infoBarTool = window.SillyTavernInfobar;
+            if (!infoBarTool || !infoBarTool.modules) {
+                console.warn('[InfoBarSettings] ⚠️ InfoBar工具未找到，无法同步设置');
+                return;
+            }
+
+            const modules = infoBarTool.modules;
+
+            // 1. 同步DeepMemoryManager设置
+            if (modules.deepMemoryManager && memoryEnhancementData.deep) {
+                await modules.deepMemoryManager.updateSettings({
+                    enabled: memoryEnhancementData.deep.enabled,
+                    autoMemoryMigration: memoryEnhancementData.deep.autoMemoryMigration,
+                    memoryConflictResolution: memoryEnhancementData.deep.conflictResolution,
+                    sensoryMemoryCapacity: memoryEnhancementData.deep.capacities?.sensory,
+                    shortTermMemoryCapacity: memoryEnhancementData.deep.capacities?.shortTerm,
+                    longTermMemoryCapacity: memoryEnhancementData.deep.capacities?.longTerm,
+                    deepArchiveCapacity: memoryEnhancementData.deep.capacities?.deepArchive
+                });
+                console.log('[InfoBarSettings] ✅ DeepMemoryManager设置已同步');
+            }
+
+            // 2. 同步VectorizedMemoryRetrieval设置
+            if (modules.vectorizedMemoryRetrieval && memoryEnhancementData.vector) {
+                const storageMode = memoryEnhancementData.vector.storageMode || 'local';
+                await modules.vectorizedMemoryRetrieval.updateSettings({
+                    enabled: memoryEnhancementData.vector.enabled,
+                    vectorEngine: memoryEnhancementData.vector.vectorEngine,
+                    similarityThreshold: memoryEnhancementData.vector.similarityThreshold,
+                    maxResults: memoryEnhancementData.vector.maxResults,
+                    useLocalStorage: storageMode === 'local',
+                    useNativeVectorAPI: storageMode === 'native',
+                    useCustomVectorAPI: storageMode === 'custom',
+                    customVectorAPI: memoryEnhancementData.vector.customAPI || {}
+                });
+                console.log('[InfoBarSettings] ✅ VectorizedMemoryRetrieval设置已同步');
+            }
+
+            // 3. 同步IntelligentMemoryClassifier设置
+            if (modules.intelligentMemoryClassifier && memoryEnhancementData.classifier) {
+                await modules.intelligentMemoryClassifier.updateSettings({
+                    enabled: memoryEnhancementData.classifier.enabled,
+                    semanticClustering: memoryEnhancementData.classifier.semanticClustering,
+                    temporalPatternRecognition: memoryEnhancementData.classifier.temporalPatternRecognition,
+                    importancePrediction: memoryEnhancementData.classifier.importancePrediction,
+                    classificationConfidenceThreshold: memoryEnhancementData.classifier.classificationConfidenceThreshold,
+                    adaptiveLearning: memoryEnhancementData.classifier.adaptiveLearning
+                });
+                console.log('[InfoBarSettings] ✅ IntelligentMemoryClassifier设置已同步');
+            }
+
+            // 4. 同步六大核心功能模块设置
+            if (memoryEnhancementData.enhancement) {
+                const enhancement = memoryEnhancementData.enhancement;
+
+                // MemoryMaintenanceSystem
+                if (modules.memoryMaintenanceSystem) {
+                    await modules.memoryMaintenanceSystem.updateSettings({
+                        enabled: enhancement.memoryMaintenance
+                    });
+                    console.log('[InfoBarSettings] ✅ MemoryMaintenanceSystem设置已同步');
+                }
+
+                // ContextualRetrieval
+                if (modules.contextualRetrieval) {
+                    await modules.contextualRetrieval.updateSettings({
+                        enabled: enhancement.contextualRetrieval
+                    });
+                    console.log('[InfoBarSettings] ✅ ContextualRetrieval设置已同步');
+                }
+
+                // UserProfileManager
+                if (modules.userProfileManager) {
+                    await modules.userProfileManager.updateSettings({
+                        enabled: enhancement.userProfile
+                    });
+                    console.log('[InfoBarSettings] ✅ UserProfileManager设置已同步');
+                }
+
+                // KnowledgeGraphManager
+                if (modules.knowledgeGraphManager) {
+                    await modules.knowledgeGraphManager.updateSettings({
+                        enabled: enhancement.knowledgeGraph
+                    });
+                    console.log('[InfoBarSettings] ✅ KnowledgeGraphManager设置已同步');
+                }
+
+                // TimeAwareMemoryManager
+                if (modules.timeAwareMemoryManager) {
+                    await modules.timeAwareMemoryManager.updateSettings({
+                        enabled: enhancement.timeAware
+                    });
+                    console.log('[InfoBarSettings] ✅ TimeAwareMemoryManager设置已同步');
+                }
+            }
+
+            console.log('[InfoBarSettings] ✅ 所有记忆增强模块设置同步完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 同步记忆增强设置到模块失败:', error);
+        }
+    }
+
+    /**
      * 收集记忆增强面板的设置（使用元素ID）
      */
     collectMemoryEnhancementFormData() {
@@ -7698,7 +8152,14 @@ export class InfoBarSettings {
                     enabled: getBool('memory-vectorized-memory-enabled'),
                     vectorEngine: getVal('memory-vector-engine'),
                     similarityThreshold: getNum('memory-similarity-threshold'),
-                    maxResults: getNum('memory-max-search-results')
+                    maxResults: getNum('memory-max-search-results'),
+                    storageMode: getVal('memory-vector-storage-mode') || 'local',
+                    storageSizeLimit: getNum('memory-vector-storage-size-limit') || 10,
+                    customAPI: {
+                        url: getVal('memory-custom-vector-api-url') || '',
+                        apiKey: getVal('memory-custom-vector-api-key') || '',
+                        model: getVal('memory-custom-vector-model') || ''
+                    }
                 },
                 deep: {
                     enabled: getBool('memory-deep-memory-enabled'),
@@ -7719,6 +8180,14 @@ export class InfoBarSettings {
                     importancePrediction: getBool('memory-importance-prediction'),
                     classificationConfidenceThreshold: getNum('memory-classification-confidence-threshold'),
                     adaptiveLearning: getBool('memory-adaptive-learning')
+                },
+                enhancement: {
+                    memoryMaintenance: getBool('memory-maintenance-enabled'),
+                    contextualRetrieval: getBool('contextual-retrieval-enabled'),
+                    userProfile: getBool('user-profile-enabled'),
+                    knowledgeGraph: getBool('knowledge-graph-enabled'),
+                    timeAware: getBool('time-aware-enabled'),
+                    stIntegration: getBool('st-integration-enabled')
                 }
             };
 
@@ -31350,6 +31819,125 @@ ${dataExamples}
     }
 
     /**
+     * 🚀 新增：处理向量存储模式变化
+     */
+    handleVectorStorageModeChange(mode, silent = false) {
+        try {
+            console.log('[InfoBarSettings] 📦 向量存储模式变化:', mode);
+
+            // 更新提示文本
+            const hintText = this.modal.querySelector('#vector-storage-hint-text');
+            if (hintText) {
+                switch (mode) {
+                    case 'local':
+                        hintText.innerHTML = '<strong>聊天文件存储：</strong>向量数据存储在聊天文件中，无需额外配置，但数据量大时可能影响性能。';
+                        break;
+                    case 'native':
+                        hintText.innerHTML = '<strong>原生向量API：</strong>使用SillyTavern内置的向量API，性能最优，支持大规模数据。需要安装并配置向量扩展。';
+                        break;
+                    case 'custom':
+                        hintText.innerHTML = '<strong>自定义向量API：</strong>使用外部向量化API服务，灵活性高。需要配置API地址和密钥。';
+                        break;
+                }
+            }
+
+            // 显示/隐藏自定义API配置选项
+            const customApiOptions = this.modal.querySelectorAll('.custom-vector-api-options');
+            customApiOptions.forEach(option => {
+                option.style.display = mode === 'custom' ? 'block' : 'none';
+            });
+
+            // 🚀 新增：显示/隐藏本地存储大小限制选项
+            const localStorageOptions = this.modal.querySelectorAll('.local-storage-options');
+            localStorageOptions.forEach(option => {
+                option.style.display = mode === 'local' ? 'block' : 'none';
+            });
+
+            // 更新向量化记忆检索系统设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedMemoryRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+            if (vectorizedMemoryRetrieval) {
+                const settings = {
+                    useLocalStorage: mode === 'local',
+                    useNativeVectorAPI: mode === 'native',
+                    useCustomVectorAPI: mode === 'custom'
+                };
+
+                vectorizedMemoryRetrieval.updateSettings(settings);
+
+                console.log('[InfoBarSettings] ✅ 向量存储模式已更新:', settings);
+            }
+
+            // 🔧 修复：只在非静默模式下显示提示消息
+            if (!silent) {
+                const modeNames = {
+                    'local': '聊天文件存储',
+                    'native': '原生向量API',
+                    'custom': '自定义向量API'
+                };
+
+                this.showMessage(
+                    `✅ 向量存储模式已切换为: ${modeNames[mode]}`,
+                    'success'
+                );
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理向量存储模式变化失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：处理自定义向量API配置变化
+     */
+    handleCustomVectorApiConfigChange() {
+        try {
+            const apiUrl = this.modal.querySelector('#memory-custom-vector-api-url')?.value || '';
+            const apiKey = this.modal.querySelector('#memory-custom-vector-api-key')?.value || '';
+            const model = this.modal.querySelector('#memory-custom-vector-model')?.value || '';
+
+            console.log('[InfoBarSettings] 🔧 自定义向量API配置变化');
+
+            // 更新向量化记忆检索系统设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedMemoryRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+            if (vectorizedMemoryRetrieval) {
+                vectorizedMemoryRetrieval.updateSettings({
+                    customVectorAPI: {
+                        url: apiUrl,
+                        apiKey: apiKey,
+                        model: model
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理自定义向量API配置变化失败:', error);
+        }
+    }
+
+    /**
+     * 🚀 新增：处理向量存储大小限制变化
+     */
+    handleVectorStorageSizeLimitChange(sizeLimit) {
+        try {
+            console.log('[InfoBarSettings] 📏 向量存储大小限制变化:', sizeLimit, 'MB');
+
+            // 更新向量化记忆检索系统设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedMemoryRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+            if (vectorizedMemoryRetrieval) {
+                vectorizedMemoryRetrieval.updateSettings({
+                    storageSizeLimit: sizeLimit
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理向量存储大小限制变化失败:', error);
+        }
+    }
+
+    /**
      * 🔍 处理相似度阈值变化
      */
     handleSimilarityThresholdChange(value) {
@@ -31673,6 +32261,151 @@ ${dataExamples}
     }
 
     /**
+     * 🆕 处理记忆自动维护系统启用状态变化
+     */
+    handleMemoryMaintenanceEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🔧 记忆自动维护系统启用状态变化:', enabled);
+
+            const infoBarTool = window.SillyTavernInfobar;
+            const memoryMaintenanceSystem = infoBarTool?.modules?.memoryMaintenanceSystem;
+            if (memoryMaintenanceSystem) {
+                memoryMaintenanceSystem.settings.enabled = enabled;
+                console.log('[InfoBarSettings] ✅ 记忆自动维护系统设置已更新');
+            }
+
+            this.showMessage(
+                enabled ? '✅ 记忆自动维护系统已启用' : '❌ 记忆自动维护系统已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理记忆自动维护系统启用状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理上下文感知检索启用状态变化
+     */
+    handleContextualRetrievalEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🔍 上下文感知检索启用状态变化:', enabled);
+
+            const infoBarTool = window.SillyTavernInfobar;
+            const contextualRetrieval = infoBarTool?.modules?.contextualRetrieval;
+            if (contextualRetrieval) {
+                contextualRetrieval.settings.enabled = enabled;
+                console.log('[InfoBarSettings] ✅ 上下文感知检索设置已更新');
+            }
+
+            this.showMessage(
+                enabled ? '✅ 上下文感知检索已启用' : '❌ 上下文感知检索已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理上下文感知检索启用状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理用户画像管理启用状态变化
+     */
+    handleUserProfileEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 👤 用户画像管理启用状态变化:', enabled);
+
+            const infoBarTool = window.SillyTavernInfobar;
+            const userProfileManager = infoBarTool?.modules?.userProfileManager;
+            if (userProfileManager) {
+                userProfileManager.settings.enabled = enabled;
+                console.log('[InfoBarSettings] ✅ 用户画像管理设置已更新');
+            }
+
+            this.showMessage(
+                enabled ? '✅ 用户画像管理已启用' : '❌ 用户画像管理已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理用户画像管理启用状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理知识图谱管理启用状态变化
+     */
+    handleKnowledgeGraphEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🕸️ 知识图谱管理启用状态变化:', enabled);
+
+            const infoBarTool = window.SillyTavernInfobar;
+            const knowledgeGraphManager = infoBarTool?.modules?.knowledgeGraphManager;
+            if (knowledgeGraphManager) {
+                knowledgeGraphManager.settings.enabled = enabled;
+                console.log('[InfoBarSettings] ✅ 知识图谱管理设置已更新');
+            }
+
+            this.showMessage(
+                enabled ? '✅ 知识图谱管理已启用' : '❌ 知识图谱管理已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理知识图谱管理启用状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理时间感知记忆启用状态变化
+     */
+    handleTimeAwareEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] ⏰ 时间感知记忆启用状态变化:', enabled);
+
+            const infoBarTool = window.SillyTavernInfobar;
+            const timeAwareMemoryManager = infoBarTool?.modules?.timeAwareMemoryManager;
+            if (timeAwareMemoryManager) {
+                timeAwareMemoryManager.settings.enabled = enabled;
+                console.log('[InfoBarSettings] ✅ 时间感知记忆设置已更新');
+            }
+
+            this.showMessage(
+                enabled ? '✅ 时间感知记忆已启用' : '❌ 时间感知记忆已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理时间感知记忆启用状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理SillyTavern深度集成启用状态变化
+     */
+    async handleSTIntegrationEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🔗 SillyTavern深度集成启用状态变化:', enabled);
+
+            const infoBarTool = window.SillyTavernInfobar;
+            const sillyTavernIntegration = infoBarTool?.modules?.sillyTavernIntegration;
+            if (sillyTavernIntegration && typeof sillyTavernIntegration.updateSettings === 'function') {
+                // 🔧 修复：使用updateSettings方法更新设置
+                await sillyTavernIntegration.updateSettings({ enabled: enabled });
+                console.log('[InfoBarSettings] ✅ SillyTavern深度集成设置已更新');
+            }
+
+            this.showMessage(
+                enabled ? '✅ SillyTavern深度集成已启用' : '❌ SillyTavern深度集成已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理SillyTavern深度集成启用状态变化失败:', error);
+        }
+    }
+
+    /**
      * 🧠 绑定记忆增强面板事件
      */
     bindMemoryEnhancementEvents() {
@@ -31712,6 +32445,44 @@ ${dataExamples}
             if (memoryVectorEngine) {
                 memoryVectorEngine.addEventListener('change', (e) => {
                     this.handleVectorEngineChange(e.target.value);
+                });
+            }
+
+            // 🚀 新增：向量存储模式选择事件
+            const memoryVectorStorageMode = this.modal.querySelector('#memory-vector-storage-mode');
+            if (memoryVectorStorageMode) {
+                memoryVectorStorageMode.addEventListener('change', (e) => {
+                    this.handleVectorStorageModeChange(e.target.value);
+                });
+            }
+
+            // 🚀 新增：自定义向量API配置事件
+            const customVectorApiUrl = this.modal.querySelector('#memory-custom-vector-api-url');
+            if (customVectorApiUrl) {
+                customVectorApiUrl.addEventListener('input', (e) => {
+                    this.handleCustomVectorApiConfigChange();
+                });
+            }
+
+            const customVectorApiKey = this.modal.querySelector('#memory-custom-vector-api-key');
+            if (customVectorApiKey) {
+                customVectorApiKey.addEventListener('input', (e) => {
+                    this.handleCustomVectorApiConfigChange();
+                });
+            }
+
+            const customVectorModel = this.modal.querySelector('#memory-custom-vector-model');
+            if (customVectorModel) {
+                customVectorModel.addEventListener('input', (e) => {
+                    this.handleCustomVectorApiConfigChange();
+                });
+            }
+
+            // 🚀 新增：向量存储大小限制事件
+            const vectorStorageSizeLimit = this.modal.querySelector('#memory-vector-storage-size-limit');
+            if (vectorStorageSizeLimit) {
+                vectorStorageSizeLimit.addEventListener('input', (e) => {
+                    this.handleVectorStorageSizeLimitChange(parseInt(e.target.value) || 0);
                 });
             }
 
@@ -31773,6 +32544,85 @@ ${dataExamples}
                 });
             }
 
+            // 🆕 六大核心功能模块事件
+            const memoryMaintenanceEnabled = this.modal.querySelector('#memory-maintenance-enabled');
+            if (memoryMaintenanceEnabled) {
+                memoryMaintenanceEnabled.addEventListener('change', (e) => {
+                    this.handleMemoryMaintenanceEnabledChange(e.target.checked);
+                });
+            }
+
+            const contextualRetrievalEnabled = this.modal.querySelector('#contextual-retrieval-enabled');
+            if (contextualRetrievalEnabled) {
+                contextualRetrievalEnabled.addEventListener('change', (e) => {
+                    this.handleContextualRetrievalEnabledChange(e.target.checked);
+                });
+            }
+
+            const userProfileEnabled = this.modal.querySelector('#user-profile-enabled');
+            if (userProfileEnabled) {
+                userProfileEnabled.addEventListener('change', (e) => {
+                    this.handleUserProfileEnabledChange(e.target.checked);
+                });
+            }
+
+            const knowledgeGraphEnabled = this.modal.querySelector('#knowledge-graph-enabled');
+            if (knowledgeGraphEnabled) {
+                knowledgeGraphEnabled.addEventListener('change', (e) => {
+                    this.handleKnowledgeGraphEnabledChange(e.target.checked);
+                });
+            }
+
+            const timeAwareEnabled = this.modal.querySelector('#time-aware-enabled');
+            if (timeAwareEnabled) {
+                timeAwareEnabled.addEventListener('change', (e) => {
+                    this.handleTimeAwareEnabledChange(e.target.checked);
+                });
+            }
+
+            const stIntegrationEnabled = this.modal.querySelector('#st-integration-enabled');
+            if (stIntegrationEnabled) {
+                stIntegrationEnabled.addEventListener('change', (e) => {
+                    this.handleSTIntegrationEnabledChange(e.target.checked);
+                });
+            }
+
+            // 🗑️ 数据清理按钮事件
+            const cleanupAIMemoryBtn = this.modal.querySelector('#cleanup-ai-memory-database');
+            if (cleanupAIMemoryBtn) {
+                cleanupAIMemoryBtn.addEventListener('click', () => {
+                    this.handleCleanupAIMemoryDatabase();
+                });
+            }
+
+            const cleanupVectorBtn = this.modal.querySelector('#cleanup-vector-data');
+            if (cleanupVectorBtn) {
+                cleanupVectorBtn.addEventListener('click', () => {
+                    this.handleCleanupVectorData();
+                });
+            }
+
+            const cleanupDeepMemoryBtn = this.modal.querySelector('#cleanup-deep-memory');
+            if (cleanupDeepMemoryBtn) {
+                cleanupDeepMemoryBtn.addEventListener('click', () => {
+                    this.handleCleanupDeepMemory();
+                });
+            }
+
+            const cleanupKnowledgeGraphBtn = this.modal.querySelector('#cleanup-knowledge-graph');
+            if (cleanupKnowledgeGraphBtn) {
+                cleanupKnowledgeGraphBtn.addEventListener('click', () => {
+                    this.handleCleanupKnowledgeGraph();
+                });
+            }
+
+            const cleanupAllBtn = this.modal.querySelector('#cleanup-all-memory-data');
+            if (cleanupAllBtn) {
+                cleanupAllBtn.addEventListener('click', () => {
+                    this.handleCleanupAllMemoryData();
+                });
+            }
+
             console.log('[InfoBarSettings] ✅ 记忆增强面板事件绑定完成');
 
         } catch (error) {
@@ -31818,6 +32668,14 @@ ${dataExamples}
             const vecSimEl = this.modal.querySelector('#memory-similarity-threshold');
             const vecSimVal = this.modal.querySelector('#memory-similarity-value');
             const vecMaxEl = this.modal.querySelector('#memory-max-search-results');
+
+            // 🚀 新增：向量存储模式设置
+            const vecStorageModeEl = this.modal.querySelector('#memory-vector-storage-mode');
+            const vecCustomApiUrlEl = this.modal.querySelector('#memory-custom-vector-api-url');
+            const vecCustomApiKeyEl = this.modal.querySelector('#memory-custom-vector-api-key');
+            const vecCustomModelEl = this.modal.querySelector('#memory-custom-vector-model');
+            const vecStorageSizeLimitEl = this.modal.querySelector('#memory-vector-storage-size-limit');
+
             if (vecEnabledEl) vecEnabledEl.checked = !!vectorSettings.enabled;
             if (vecEngineEl && vectorSettings.vectorEngine) vecEngineEl.value = vectorSettings.vectorEngine;
             if (vecSimEl) {
@@ -31826,6 +32684,34 @@ ${dataExamples}
                 if (vecSimVal) vecSimVal.textContent = `${Math.round(v * 100)}%`;
             }
             if (vecMaxEl && typeof vectorSettings.maxResults === 'number') vecMaxEl.value = vectorSettings.maxResults;
+
+            // 🚀 新增：加载向量存储模式
+            if (vecStorageModeEl) {
+                let storageMode = 'local'; // 默认值
+                if (vectorSettings.useNativeVectorAPI) {
+                    storageMode = 'native';
+                } else if (vectorSettings.useCustomVectorAPI) {
+                    storageMode = 'custom';
+                }
+                vecStorageModeEl.value = storageMode;
+
+                // 🔧 修复：使用静默模式触发，避免显示不必要的提示
+                this.handleVectorStorageModeChange(storageMode, true);
+            }
+
+            // 🚀 新增：加载自定义API配置
+            if (vectorSettings.customVectorAPI) {
+                if (vecCustomApiUrlEl) vecCustomApiUrlEl.value = vectorSettings.customVectorAPI.url || '';
+                if (vecCustomApiKeyEl) vecCustomApiKeyEl.value = vectorSettings.customVectorAPI.apiKey || '';
+                if (vecCustomModelEl) vecCustomModelEl.value = vectorSettings.customVectorAPI.model || '';
+            }
+
+            // 🚀 新增：加载存储大小限制
+            if (vecStorageSizeLimitEl) {
+                const sizeLimit = typeof vectorSettings.storageSizeLimit === 'number' ? vectorSettings.storageSizeLimit : 10;
+                vecStorageSizeLimitEl.value = sizeLimit;
+            }
+
             this.modal.querySelectorAll('.vectorized-memory-options').forEach(opt => {
                 opt.style.display = vectorSettings.enabled ? 'block' : 'none';
             });
@@ -31881,6 +32767,43 @@ ${dataExamples}
                 if (clfConfVal) clfConfVal.textContent = `${Math.round(v * 100)}%`;
             }
             if (adapLearn) adapLearn.checked = !!clfSettings.adaptationEnabled;
+
+            // 🆕 六大核心功能模块设置
+            const enhancementSettings = savedMem.enhancement || {};
+
+            const memoryMaintenanceEnabled = this.modal.querySelector('#memory-maintenance-enabled');
+            const contextualRetrievalEnabled = this.modal.querySelector('#contextual-retrieval-enabled');
+            const userProfileEnabled = this.modal.querySelector('#user-profile-enabled');
+            const knowledgeGraphEnabled = this.modal.querySelector('#knowledge-graph-enabled');
+            const timeAwareEnabled = this.modal.querySelector('#time-aware-enabled');
+            const stIntegrationEnabled = this.modal.querySelector('#st-integration-enabled');
+
+            // 从模块或保存的设置中加载
+            const mms = infoBarTool?.modules?.memoryMaintenanceSystem;
+            const cr = infoBarTool?.modules?.contextualRetrieval;
+            const upm = infoBarTool?.modules?.userProfileManager;
+            const kgm = infoBarTool?.modules?.knowledgeGraphManager;
+            const tam = infoBarTool?.modules?.timeAwareMemoryManager;
+            const sti = infoBarTool?.modules?.sillyTavernIntegration;
+
+            if (memoryMaintenanceEnabled) {
+                memoryMaintenanceEnabled.checked = mms?.settings?.enabled ?? enhancementSettings.memoryMaintenance ?? false;
+            }
+            if (contextualRetrievalEnabled) {
+                contextualRetrievalEnabled.checked = cr?.settings?.enabled ?? enhancementSettings.contextualRetrieval ?? false;
+            }
+            if (userProfileEnabled) {
+                userProfileEnabled.checked = upm?.settings?.enabled ?? enhancementSettings.userProfile ?? false;
+            }
+            if (knowledgeGraphEnabled) {
+                knowledgeGraphEnabled.checked = kgm?.settings?.enabled ?? enhancementSettings.knowledgeGraph ?? false;
+            }
+            if (timeAwareEnabled) {
+                timeAwareEnabled.checked = tam?.settings?.enabled ?? enhancementSettings.timeAware ?? false;
+            }
+            if (stIntegrationEnabled) {
+                stIntegrationEnabled.checked = sti?.settings?.enabled ?? enhancementSettings.stIntegration ?? false;
+            }
 
             console.log('[InfoBarSettings] ✅ 记忆增强设置加载完成');
         } catch (error) {
@@ -31965,6 +32888,43 @@ ${dataExamples}
             if (aiMemoryDatabaseInjector) {
                 const status = aiMemoryDatabaseInjector.getStatus();
                 this.updateModuleStatus('injector', status);
+            }
+
+            // 🆕 更新六大核心功能模块状态
+            const memoryMaintenanceSystem = infoBarTool.modules?.memoryMaintenanceSystem;
+            if (memoryMaintenanceSystem) {
+                const status = memoryMaintenanceSystem.getStatus();
+                this.updateEnhancementModuleStatus('memoryMaintenance', status);
+            }
+
+            const contextualRetrieval = infoBarTool.modules?.contextualRetrieval;
+            if (contextualRetrieval) {
+                const status = contextualRetrieval.getStatus();
+                this.updateEnhancementModuleStatus('contextualRetrieval', status);
+            }
+
+            const userProfileManager = infoBarTool.modules?.userProfileManager;
+            if (userProfileManager) {
+                const status = userProfileManager.getStatus();
+                this.updateEnhancementModuleStatus('userProfile', status);
+            }
+
+            const knowledgeGraphManager = infoBarTool.modules?.knowledgeGraphManager;
+            if (knowledgeGraphManager) {
+                const status = knowledgeGraphManager.getStatus();
+                this.updateEnhancementModuleStatus('knowledgeGraph', status);
+            }
+
+            const timeAwareMemoryManager = infoBarTool.modules?.timeAwareMemoryManager;
+            if (timeAwareMemoryManager) {
+                const status = timeAwareMemoryManager.getStatus();
+                this.updateEnhancementModuleStatus('timeAware', status);
+            }
+
+            const sillyTavernIntegration = infoBarTool.modules?.sillyTavernIntegration;
+            if (sillyTavernIntegration) {
+                const status = sillyTavernIntegration.getStatus();
+                this.updateEnhancementModuleStatus('stIntegration', status);
             }
 
             console.log('[InfoBarSettings] ✅ 记忆系统状态刷新完成');
@@ -32058,6 +33018,65 @@ ${dataExamples}
 
         } catch (error) {
             console.error(`[InfoBarSettings] ❌ 更新模块状态失败 (${moduleName}):`, error);
+        }
+    }
+
+    /**
+     * 🆕 更新六大核心功能模块状态显示
+     */
+    updateEnhancementModuleStatus(moduleName, status) {
+        try {
+            // 状态指示器ID映射
+            const statusIdMap = {
+                'memoryMaintenance': 'memory-maintenance-status',
+                'contextualRetrieval': 'contextual-retrieval-status',
+                'userProfile': 'user-profile-status',
+                'knowledgeGraph': 'knowledge-graph-status',
+                'timeAware': 'time-aware-status',
+                'stIntegration': 'st-integration-status'
+            };
+
+            // 更新状态指示器
+            const statusElement = this.modal.querySelector(`#${statusIdMap[moduleName]}`);
+            if (statusElement) {
+                const isActive = status.initialized && status.enabled;
+                statusElement.className = `module-status ${isActive ? 'active' : status.errorCount > 0 ? 'error' : 'inactive'}`;
+            }
+
+            // 更新具体数据
+            switch (moduleName) {
+                case 'memoryMaintenance':
+                    this.updateElement('#memory-maintenance-cleanups', status.stats?.totalCleanups || 0);
+                    this.updateElement('#memory-maintenance-compressions', status.stats?.totalCompressions || 0);
+                    break;
+                case 'contextualRetrieval':
+                    this.updateElement('#contextual-retrieval-queries', status.stats?.totalQueries || 0);
+                    this.updateElement('#contextual-retrieval-cache-hits', status.stats?.cacheHits || 0);
+                    break;
+                case 'userProfile':
+                    this.updateElement('#user-profile-count', status.profilesCount || 0);
+                    const confidence = status.currentProfile?.confidence || 0;
+                    this.updateElement('#user-profile-confidence', `${Math.round(confidence * 100)}%`);
+                    break;
+                case 'knowledgeGraph':
+                    const currentGraph = status.currentGraph;
+                    this.updateElement('#knowledge-graph-triples', currentGraph?.triples?.length || 0);
+                    this.updateElement('#knowledge-graph-entities', currentGraph?.entities?.size || 0);
+                    break;
+                case 'timeAware':
+                    const currentTimeline = status.currentTimeline;
+                    this.updateElement('#time-aware-events', currentTimeline?.events?.length || 0);
+                    this.updateElement('#time-aware-decayed', status.stats?.totalDecayed || 0);
+                    break;
+                case 'stIntegration':
+                    this.updateElement('#st-integration-injections', status.stats?.totalInjections || 0);
+                    const avgTime = status.stats?.avgInjectionTime || 0;
+                    this.updateElement('#st-integration-avg-time', `${avgTime.toFixed(2)}ms`);
+                    break;
+            }
+
+        } catch (error) {
+            console.error(`[InfoBarSettings] ❌ 更新增强模块状态失败 (${moduleName}):`, error);
         }
     }
 
@@ -32890,5 +33909,348 @@ ${dataExamples}
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    /**
+     * 🗑️ 清理AI记忆数据库
+     */
+    async handleCleanupAIMemoryDatabase() {
+        try {
+            const confirmed = confirm(
+                '⚠️ 确认清理AI记忆数据库？\n\n' +
+                '此操作将清空所有AI记忆总结数据，包括：\n' +
+                '• 感知层记忆\n' +
+                '• 短期记忆\n' +
+                '• 长期记忆\n' +
+                '• 深度归档\n\n' +
+                '此操作不可撤销！'
+            );
+
+            if (!confirmed) return;
+
+            console.log('[InfoBarSettings] 🗑️ 开始清理AI记忆数据库...');
+
+            const infoBarTool = window.SillyTavernInfobar;
+            if (!infoBarTool?.modules?.aiMemoryDatabaseInjector) {
+                throw new Error('AI记忆数据库模块未找到');
+            }
+
+            // 清空记忆数据库
+            const injector = infoBarTool.modules.aiMemoryDatabaseInjector;
+            if (injector.memoryDatabase) {
+                injector.memoryDatabase.sensoryMemory.clear();
+                injector.memoryDatabase.shortTermMemory.clear();
+                injector.memoryDatabase.longTermMemory.clear();
+                injector.memoryDatabase.deepArchive.clear();
+                console.log('[InfoBarSettings] ✅ AI记忆数据库已清空');
+            }
+
+            this.showNotification('✅ AI记忆数据库已成功清空', 'success');
+            this.refreshMemoryStatus();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 清理AI记忆数据库失败:', error);
+            this.showNotification('❌ 清理AI记忆数据库失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🗑️ 清理向量化数据
+     */
+    async handleCleanupVectorData() {
+        try {
+            const confirmed = confirm(
+                '⚠️ 确认清理向量化数据？\n\n' +
+                '此操作将清空所有向量索引和嵌入数据。\n' +
+                '此操作不可撤销！'
+            );
+
+            if (!confirmed) return;
+
+            console.log('[InfoBarSettings] 🗑️ 开始清理向量化数据...');
+
+            const infoBarTool = window.SillyTavernInfobar;
+            if (!infoBarTool?.modules?.vectorizedMemoryRetrieval) {
+                throw new Error('向量化记忆检索模块未找到');
+            }
+
+            // 清空向量索引
+            const vectorModule = infoBarTool.modules.vectorizedMemoryRetrieval;
+            if (vectorModule.vectorIndex) {
+                vectorModule.vectorIndex.clear();
+            }
+            if (vectorModule.embeddingCache) {
+                vectorModule.embeddingCache.clear();
+            }
+
+            // 清空存储
+            const chatId = window.SillyTavern?.getContext?.()?.chatId;
+            if (chatId && vectorModule.unifiedDataCore) {
+                await vectorModule.unifiedDataCore.deleteData('vector_index', chatId);
+                console.log('[InfoBarSettings] ✅ 向量化数据已清空');
+            }
+
+            this.showNotification('✅ 向量化数据已成功清空', 'success');
+            this.refreshMemoryStatus();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 清理向量化数据失败:', error);
+            this.showNotification('❌ 清理向量化数据失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🗑️ 清理深度记忆数据
+     */
+    async handleCleanupDeepMemory() {
+        try {
+            const confirmed = confirm(
+                '⚠️ 确认清理深度记忆数据？\n\n' +
+                '此操作将清空四层记忆架构中的所有数据：\n' +
+                '• 感知记忆层\n' +
+                '• 短期记忆层\n' +
+                '• 长期记忆层\n' +
+                '• 深度归档层\n\n' +
+                '此操作不可撤销！'
+            );
+
+            if (!confirmed) return;
+
+            console.log('[InfoBarSettings] 🗑️ 开始清理深度记忆数据...');
+
+            const infoBarTool = window.SillyTavernInfobar;
+            if (!infoBarTool?.modules?.deepMemoryManager) {
+                throw new Error('深度记忆管理器模块未找到');
+            }
+
+            // 清空深度记忆层
+            const deepMemory = infoBarTool.modules.deepMemoryManager;
+            if (deepMemory.memoryLayers) {
+                deepMemory.memoryLayers.sensory.clear();
+                deepMemory.memoryLayers.shortTerm.clear();
+                deepMemory.memoryLayers.longTerm.clear();
+                deepMemory.memoryLayers.deepArchive.clear();
+            }
+
+            // 清空聊天级别记忆
+            if (deepMemory.chatMemories) {
+                deepMemory.chatMemories.clear();
+            }
+
+            // 清空存储
+            const chatId = window.SillyTavern?.getContext?.()?.chatId;
+            if (chatId && deepMemory.unifiedDataCore) {
+                await deepMemory.unifiedDataCore.deleteData('deep_memory', chatId);
+                console.log('[InfoBarSettings] ✅ 深度记忆数据已清空');
+            }
+
+            this.showNotification('✅ 深度记忆数据已成功清空', 'success');
+            this.refreshMemoryStatus();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 清理深度记忆数据失败:', error);
+            this.showNotification('❌ 清理深度记忆数据失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🗑️ 清理知识图谱数据
+     */
+    async handleCleanupKnowledgeGraph() {
+        try {
+            const confirmed = confirm(
+                '⚠️ 确认清理知识图谱数据？\n\n' +
+                '此操作将清空所有知识图谱三元组和关系数据。\n' +
+                '此操作不可撤销！'
+            );
+
+            if (!confirmed) return;
+
+            console.log('[InfoBarSettings] 🗑️ 开始清理知识图谱数据...');
+
+            const infoBarTool = window.SillyTavernInfobar;
+            if (!infoBarTool?.modules?.knowledgeGraphManager) {
+                throw new Error('知识图谱管理器模块未找到');
+            }
+
+            // 清空知识图谱
+            const kgManager = infoBarTool.modules.knowledgeGraphManager;
+            if (kgManager.graphs) {
+                kgManager.graphs.clear();
+            }
+
+            // 清空存储
+            const chatId = window.SillyTavern?.getContext?.()?.chatId;
+            if (chatId && kgManager.unifiedDataCore) {
+                await kgManager.unifiedDataCore.deleteData('knowledge_graph', chatId);
+                console.log('[InfoBarSettings] ✅ 知识图谱数据已清空');
+            }
+
+            this.showNotification('✅ 知识图谱数据已成功清空', 'success');
+            this.refreshMemoryStatus();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 清理知识图谱数据失败:', error);
+            this.showNotification('❌ 清理知识图谱数据失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🗑️ 清空所有记忆数据（危险操作）
+     */
+    async handleCleanupAllMemoryData() {
+        try {
+            const confirmed = confirm(
+                '💥 ⚠️ 危险操作警告 ⚠️ 💥\n\n' +
+                '您即将清空所有记忆增强相关数据！\n\n' +
+                '包括：\n' +
+                '• AI记忆数据库（所有层级）\n' +
+                '• 向量化索引和嵌入\n' +
+                '• 深度记忆架构数据\n' +
+                '• 知识图谱和关系\n' +
+                '• 用户画像数据\n' +
+                '• 时间线数据\n\n' +
+                '此操作不可撤销！\n\n' +
+                '请再次确认是否继续？'
+            );
+
+            if (!confirmed) return;
+
+            // 二次确认
+            const doubleConfirmed = confirm(
+                '⚠️ 最后确认 ⚠️\n\n' +
+                '您真的要清空所有记忆数据吗？\n' +
+                '这将删除所有聊天中的记忆增强数据！\n\n' +
+                '点击"确定"继续，点击"取消"放弃操作。'
+            );
+
+            if (!doubleConfirmed) return;
+
+            console.log('[InfoBarSettings] 💥 开始清空所有记忆数据...');
+
+            const infoBarTool = window.SillyTavernInfobar;
+            if (!infoBarTool?.modules) {
+                throw new Error('InfoBar模块未找到');
+            }
+
+            const modules = infoBarTool.modules;
+            let successCount = 0;
+            let failCount = 0;
+
+            // 1. 清理AI记忆数据库
+            try {
+                if (modules.aiMemoryDatabaseInjector?.memoryDatabase) {
+                    const db = modules.aiMemoryDatabaseInjector.memoryDatabase;
+                    db.sensoryMemory.clear();
+                    db.shortTermMemory.clear();
+                    db.longTermMemory.clear();
+                    db.deepArchive.clear();
+                    successCount++;
+                    console.log('[InfoBarSettings] ✅ AI记忆数据库已清空');
+                }
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 清理AI记忆数据库失败:', error);
+                failCount++;
+            }
+
+            // 2. 清理向量化数据
+            try {
+                if (modules.vectorizedMemoryRetrieval) {
+                    const vm = modules.vectorizedMemoryRetrieval;
+                    vm.vectorIndex?.clear();
+                    vm.embeddingCache?.clear();
+                    successCount++;
+                    console.log('[InfoBarSettings] ✅ 向量化数据已清空');
+                }
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 清理向量化数据失败:', error);
+                failCount++;
+            }
+
+            // 3. 清理深度记忆
+            try {
+                if (modules.deepMemoryManager?.memoryLayers) {
+                    const dm = modules.deepMemoryManager;
+                    dm.memoryLayers.sensory.clear();
+                    dm.memoryLayers.shortTerm.clear();
+                    dm.memoryLayers.longTerm.clear();
+                    dm.memoryLayers.deepArchive.clear();
+                    dm.chatMemories?.clear();
+                    successCount++;
+                    console.log('[InfoBarSettings] ✅ 深度记忆数据已清空');
+                }
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 清理深度记忆数据失败:', error);
+                failCount++;
+            }
+
+            // 4. 清理知识图谱
+            try {
+                if (modules.knowledgeGraphManager?.graphs) {
+                    modules.knowledgeGraphManager.graphs.clear();
+                    successCount++;
+                    console.log('[InfoBarSettings] ✅ 知识图谱数据已清空');
+                }
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 清理知识图谱数据失败:', error);
+                failCount++;
+            }
+
+            // 5. 清理用户画像
+            try {
+                if (modules.userProfileManager?.profiles) {
+                    modules.userProfileManager.profiles.clear();
+                    successCount++;
+                    console.log('[InfoBarSettings] ✅ 用户画像数据已清空');
+                }
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 清理用户画像数据失败:', error);
+                failCount++;
+            }
+
+            // 6. 清理时间线
+            try {
+                if (modules.timeAwareMemoryManager?.timelines) {
+                    modules.timeAwareMemoryManager.timelines.clear();
+                    successCount++;
+                    console.log('[InfoBarSettings] ✅ 时间线数据已清空');
+                }
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 清理时间线数据失败:', error);
+                failCount++;
+            }
+
+            // 7. 清理UnifiedDataCore中的记忆数据
+            try {
+                const chatId = window.SillyTavern?.getContext?.()?.chatId;
+                if (chatId && modules.deepMemoryManager?.unifiedDataCore) {
+                    const udc = modules.deepMemoryManager.unifiedDataCore;
+                    await udc.deleteData('deep_memory', chatId);
+                    await udc.deleteData('vector_index', chatId);
+                    await udc.deleteData('knowledge_graph', chatId);
+                    await udc.deleteData('user_profile', chatId);
+                    await udc.deleteData('timeline', chatId);
+                    successCount++;
+                    console.log('[InfoBarSettings] ✅ UnifiedDataCore记忆数据已清空');
+                }
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 清理UnifiedDataCore数据失败:', error);
+                failCount++;
+            }
+
+            console.log(`[InfoBarSettings] 💥 清理完成: 成功${successCount}项, 失败${failCount}项`);
+
+            if (failCount === 0) {
+                this.showNotification(`✅ 所有记忆数据已成功清空（${successCount}项）`, 'success');
+            } else {
+                this.showNotification(`⚠️ 部分数据清理失败（成功${successCount}项，失败${failCount}项）`, 'error');
+            }
+
+            this.refreshMemoryStatus();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 清空所有记忆数据失败:', error);
+            this.showNotification('❌ 清空所有记忆数据失败: ' + error.message, 'error');
+        }
     }
 }

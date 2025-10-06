@@ -4250,10 +4250,12 @@ export class MessageInfoBarRenderer {
             return false;
         }
 
+        // 🔧 修复：与DataTable保持一致的无效占位符列表
         const invalidPlaceholders = [
             '待补全', '暂无', '缺失', '空', '无数据', '无信息',
             'null', 'undefined', 'missing', 'tbd', 'to be determined',
-            'not mentioned', 'not specified', 'blank', 'empty', 'void', 'nil', 'na', 'n/a'
+            'not mentioned', 'not specified', 'blank', 'empty', 'void', 'nil', 'na', 'n/a',
+            '-', '—', '无', 'none', 'unknown', '未知', '未提及', '未指定'
         ];
 
         return !invalidPlaceholders.includes(strValue);
