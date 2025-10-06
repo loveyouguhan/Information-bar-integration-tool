@@ -44,6 +44,12 @@ import { AIMemorySummarizer } from './core/AIMemorySummarizer.js';
 import { VectorizedMemoryRetrieval } from './core/VectorizedMemoryRetrieval.js';
 import { DeepMemoryManager } from './core/DeepMemoryManager.js';
 import { IntelligentMemoryClassifier } from './core/IntelligentMemoryClassifier.js';
+import { MemoryMaintenanceSystem } from './core/MemoryMaintenanceSystem.js';
+import { ContextualRetrieval } from './core/ContextualRetrieval.js';
+import { UserProfileManager } from './core/UserProfileManager.js';
+import { KnowledgeGraphManager } from './core/KnowledgeGraphManager.js';
+import { TimeAwareMemoryManager } from './core/TimeAwareMemoryManager.js';
+import { SillyTavernIntegration } from './core/SillyTavernIntegration.js';
 import { FrontendDisplayManager } from './ui/FrontendDisplayManager.js';
 
 // 提前初始化控制台门禁：默认不输出信息栏日志，直到调试模式应用级别
@@ -398,6 +404,63 @@ class InformationBarIntegrationTool {
             this.deepMemoryManager
         );
         await this.intelligentMemoryClassifier.init();
+
+        // 🔧 新增：初始化记忆自动维护系统
+        this.memoryMaintenanceSystem = new MemoryMaintenanceSystem(
+            this.dataCore,
+            this.eventSystem,
+            this.deepMemoryManager,
+            this.vectorizedMemoryRetrieval
+        );
+        await this.memoryMaintenanceSystem.init();
+
+        // 🔍 新增：初始化上下文感知检索系统
+        this.contextualRetrieval = new ContextualRetrieval(
+            this.dataCore,
+            this.eventSystem,
+            this.vectorizedMemoryRetrieval,
+            this.deepMemoryManager
+        );
+        await this.contextualRetrieval.init();
+
+        // 👤 新增：初始化用户画像管理系统
+        this.userProfileManager = new UserProfileManager(
+            this.dataCore,
+            this.eventSystem,
+            this.deepMemoryManager,
+            this.contextualRetrieval
+        );
+        await this.userProfileManager.init();
+
+        // 🕸️ 新增：初始化知识图谱管理系统
+        this.knowledgeGraphManager = new KnowledgeGraphManager(
+            this.dataCore,
+            this.eventSystem,
+            this.deepMemoryManager,
+            this.userProfileManager
+        );
+        await this.knowledgeGraphManager.init();
+
+        // ⏰ 新增：初始化时间感知记忆管理系统
+        this.timeAwareMemoryManager = new TimeAwareMemoryManager(
+            this.dataCore,
+            this.eventSystem,
+            this.deepMemoryManager
+        );
+        await this.timeAwareMemoryManager.init();
+
+        // 🔗 新增：初始化SillyTavern深度集成
+        this.sillyTavernIntegration = new SillyTavernIntegration({
+            unifiedDataCore: this.dataCore,
+            eventSystem: this.eventSystem,
+            deepMemoryManager: this.deepMemoryManager,
+            contextualRetrieval: this.contextualRetrieval,
+            userProfileManager: this.userProfileManager,
+            knowledgeGraphManager: this.knowledgeGraphManager,
+            timeAwareMemoryManager: this.timeAwareMemoryManager,
+            memoryMaintenanceSystem: this.memoryMaintenanceSystem
+        });
+        await this.sillyTavernIntegration.init();
 
         // 🧠 新增：初始化AI记忆数据库注入器
         this.aiMemoryDatabaseInjector = new AIMemoryDatabaseInjector({
@@ -763,6 +826,12 @@ class InformationBarIntegrationTool {
                 vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
                 deepMemoryManager: this.deepMemoryManager,
                 intelligentMemoryClassifier: this.intelligentMemoryClassifier,
+                memoryMaintenanceSystem: this.memoryMaintenanceSystem, // 🔧 新增：记忆自动维护系统
+                contextualRetrieval: this.contextualRetrieval, // 🔍 新增：上下文感知检索系统
+                userProfileManager: this.userProfileManager, // 👤 新增：用户画像管理系统
+                knowledgeGraphManager: this.knowledgeGraphManager, // 🕸️ 新增：知识图谱管理系统
+                timeAwareMemoryManager: this.timeAwareMemoryManager, // ⏰ 新增：时间感知记忆管理系统
+                sillyTavernIntegration: this.sillyTavernIntegration, // 🔗 新增：SillyTavern深度集成
                 aiMemoryDatabaseInjector: this.aiMemoryDatabaseInjector, // 🧠 添加：AI记忆数据库注入器
                 frontendDisplayManager: this.frontendDisplayManager,
                 fieldRuleManager: this.fieldRuleManager,
