@@ -1,0 +1,11 @@
+{
+  "scriptName": "隐藏AI思考过程 (Hide AI Think Process)",
+  "description": "在发送到主API之前，隐藏<aiThinkProcess>标签及其内容（包括HTML注释），防止发送给主API",
+  "enabled": true,
+  "findRegex": "<aiThinkProcess>[\\s\\S]*?<\\/aiThinkProcess>",
+  "replaceString": "",
+  "trimStrings": true,
+  "placement": ["INPUT"],
+  "filterType": "DISPLAY_HIDE"
+}
+

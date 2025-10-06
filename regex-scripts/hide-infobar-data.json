@@ -1,0 +1,11 @@
+{
+  "scriptName": "隐藏信息栏数据 (Hide Infobar Data)",
+  "description": "在发送到主API之前，隐藏<infobar_data>标签及其内容（包括HTML注释），防止发送给主API",
+  "enabled": true,
+  "findRegex": "<infobar_data>[\\s\\S]*?<\\/infobar_data>",
+  "replaceString": "",
+  "trimStrings": true,
+  "placement": ["INPUT"],
+  "filterType": "DISPLAY_HIDE"
+}
+
