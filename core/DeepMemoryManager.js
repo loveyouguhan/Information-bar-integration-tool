@@ -223,19 +223,23 @@ export class DeepMemoryManager {
         try {
             console.log('[DeepMemoryManager] 🔄 更新深度记忆管理设置:', newSettings);
             this.settings = { ...this.settings, ...newSettings };
-            
+
             // 保存设置
             if (this.unifiedDataCore) {
                 await this.unifiedDataCore.setData('deep_memory_settings', this.settings);
             }
-            
+
             // 如果启用状态改变，重新初始化
             if (newSettings.hasOwnProperty('enabled')) {
                 if (newSettings.enabled && !this.initialized) {
                     await this.init();
+                } else if (newSettings.enabled && this.initialized && !this.eventListenersBound) {
+                    // 🔧 P0+修复：如果已初始化但事件监听器未绑定，手动绑定
+                    console.log('[DeepMemoryManager] 🔧 检测到事件监听器未绑定，正在绑定...');
+                    this.bindEventListeners();
                 }
             }
-            
+
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 更新设置失败:', error);
         }
@@ -291,9 +295,15 @@ export class DeepMemoryManager {
     async addMemoryToSensoryLayer(memoryData) {
         try {
             console.log('[DeepMemoryManager] 👁️ 添加记忆到感知记忆层...');
-            
+
             if (!this.settings.enabled) return null;
-            
+
+            // 🔧 P1修复：内容过滤 - 排除AI思考过程
+            if (!this.shouldStoreMemory(memoryData.content)) {
+                console.log('[DeepMemoryManager] 🚫 内容被过滤，不存储为记忆');
+                return null;
+            }
+
             // 创建记忆对象
             const memory = {
                 id: `sensory_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -302,18 +312,22 @@ export class DeepMemoryManager {
                 source: memoryData.source || 'unknown',
                 timestamp: Date.now(),
                 layer: 'sensory',
-                
+
                 // 初始评分
                 importance: 0,
                 recency: 1.0,
                 relevance: 0,
-                
+
                 // 元数据
                 metadata: {
                     originalData: memoryData,
                     processingStage: 'initial',
                     accessCount: 0,
-                    lastAccessed: Date.now()
+                    lastAccessed: Date.now(),
+                    // 🔧 P1修复：确保chatId被正确记录
+                    chatId: memoryData.metadata?.originalData?.chatId ||
+                           this.unifiedDataCore?.getCurrentChatId?.() ||
+                           'unknown'
                 }
             };
             
@@ -365,16 +379,63 @@ export class DeepMemoryManager {
     }
 
     /**
+     * 🔧 P1修复：判断内容是否应该被存储为记忆
+     * 过滤掉AI的思考过程、系统提示等不应该作为记忆的内容
+     */
+    shouldStoreMemory(content) {
+        if (!content || typeof content !== 'string') {
+            return false;
+        }
+
+        // 过滤模式列表
+        const filterPatterns = [
+            // AI思考过程标记
+            /^<thinking>/i,
+            /^- 当前处于何种情境/,
+            /^时间？.*地点？.*社会关系？/,
+            /^<interactive_input>/i,
+
+            // 系统提示和元指令
+            /^System:/i,
+            /^Assistant:/i,
+            /^\[System\]/i,
+            /^\[Assistant\]/i,
+
+            // 空内容或过短内容
+            /^\s*$/,
+
+            // 纯标点符号
+            /^[。，、；：？！,.;:?!\s]+$/
+        ];
+
+        // 检查是否匹配任何过滤模式
+        for (const pattern of filterPatterns) {
+            if (pattern.test(content)) {
+                console.log('[DeepMemoryManager] 🚫 内容匹配过滤模式:', pattern);
+                return false;
+            }
+        }
+
+        // 内容长度检查（太短的内容可能没有记忆价值）
+        if (content.trim().length < 5) {
+            console.log('[DeepMemoryManager] 🚫 内容过短，不存储');
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * 快速重要性评估
      */
     async quickImportanceEvaluation(memory) {
         try {
             let importance = 0;
-            
+
             // 基于内容长度的基础评分
             const contentLength = memory.content.length;
             importance += Math.min(contentLength / 1000, 0.3);
-            
+
             // 基于类型的评分
             const typeScores = {
                 'ai_summary': 0.8,
@@ -383,23 +444,23 @@ export class DeepMemoryManager {
                 'general': 0.3
             };
             importance += typeScores[memory.type] || 0.3;
-            
+
             // 基于关键词的评分
             const importantKeywords = [
                 '重要', '关键', '决定', '计划', '目标', '问题', '解决',
                 'important', 'key', 'decision', 'plan', 'goal', 'problem'
             ];
-            
+
             const content = memory.content.toLowerCase();
-            const keywordMatches = importantKeywords.filter(keyword => 
+            const keywordMatches = importantKeywords.filter(keyword =>
                 content.includes(keyword)
             ).length;
-            
+
             importance += keywordMatches * 0.1;
-            
+
             // 限制在0-1范围内
             return Math.min(Math.max(importance, 0), 1);
-            
+
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 快速重要性评估失败:', error);
             return 0.3; // 默认值
@@ -1049,7 +1110,10 @@ export class DeepMemoryManager {
                 console.log('[DeepMemoryManager] 🔓 解绑旧的事件监听器...');
                 this.eventSystem.off('ai-summary:created', this.boundHandlers.aiSummaryCreated);
                 this.eventSystem.off('message:received', this.boundHandlers.messageReceived);
+                // 🔧 P0+修复：解绑所有聊天切换事件
                 this.eventSystem.off('chat:changed', this.boundHandlers.chatChanged);
+                this.eventSystem.off('CHAT_CHANGED', this.boundHandlers.chatChanged);
+                this.eventSystem.off('chatChanged', this.boundHandlers.chatChanged);
                 this.eventSystem.off('vectorized-memory-retrieval:memory-indexed', this.boundHandlers.memoryIndexed);
                 this.eventSystem.off('message:deleted', this.boundHandlers.messageDeleted);
                 this.eventSystem.off('message:regenerated', this.boundHandlers.messageRegenerated);
@@ -1076,8 +1140,10 @@ export class DeepMemoryManager {
             // 监听消息接收事件
             this.eventSystem.on('message:received', this.boundHandlers.messageReceived);
 
-            // 监听聊天切换事件
+            // 🔧 P0+修复：监听聊天切换事件（兼容多种事件名）
             this.eventSystem.on('chat:changed', this.boundHandlers.chatChanged);
+            this.eventSystem.on('CHAT_CHANGED', this.boundHandlers.chatChanged);  // SillyTavern官方事件名
+            this.eventSystem.on('chatChanged', this.boundHandlers.chatChanged);   // 备用事件名
 
             // 监听向量化记忆创建事件
             this.eventSystem.on('vectorized-memory-retrieval:memory-indexed', this.boundHandlers.memoryIndexed);
@@ -1191,6 +1257,14 @@ export class DeepMemoryManager {
             if (messageContent && messageContent.length > 10) {
                 console.log('[DeepMemoryManager] 📝 处理消息:', messageContent.substring(0, 50) + '...');
 
+                // 🔧 P1修复：确保chatId被正确提取和记录
+                const currentChatId = this.unifiedDataCore?.getCurrentChatId?.() ||
+                                     data.chatId ||
+                                     data.metadata?.chatId ||
+                                     'unknown';
+
+                console.log('[DeepMemoryManager] 🆔 当前聊天ID:', currentChatId);
+
                 const memoryData = {
                     content: messageContent,
                     type: isUser ? 'user_message' : 'assistant_message',
@@ -1198,7 +1272,11 @@ export class DeepMemoryManager {
                     metadata: {
                         isUser: isUser,
                         timestamp: data.timestamp || Date.now(),
-                        originalData: data
+                        chatId: currentChatId,  // 🔧 P1修复：明确记录chatId
+                        originalData: {
+                            ...data,
+                            chatId: currentChatId  // 🔧 P1修复：在originalData中也记录chatId
+                        }
                     }
                 };
 
@@ -1422,50 +1500,56 @@ export class DeepMemoryManager {
 
     /**
      * 加载现有记忆数据
+     * @param {string} targetChatId - 可选的目标聊天ID，如果不提供则使用当前聊天ID
      */
-    async loadExistingMemories() {
+    async loadExistingMemories(targetChatId = null) {
         try {
             console.log('[DeepMemoryManager] 📥 加载现有记忆数据...');
 
             if (!this.unifiedDataCore) return;
 
-            // 🔧 修复：获取当前聊天ID，按聊天分别存储记忆数据
-            const currentChatId = this.unifiedDataCore.getCurrentChatId?.() || 'default';
-            console.log('[DeepMemoryManager] 📍 当前聊天ID:', currentChatId);
+            // 🔧 P0+修复：优先使用传入的targetChatId，否则使用当前聊天ID
+            const currentChatId = targetChatId || this.unifiedDataCore.getCurrentChatId?.() || 'default';
+            console.log('[DeepMemoryManager] 📍 目标聊天ID:', currentChatId);
+            if (targetChatId) {
+                console.log('[DeepMemoryManager] 🎯 使用指定的聊天ID:', targetChatId);
+            }
 
-            // 🔧 修复：兼容两种键名格式的记忆数据加载
             const layerNames = ['sensory', 'shortTerm', 'longTerm', 'deepArchive'];
+            let loadedCount = 0;
 
             for (const layerName of layerNames) {
-                // 优先尝试加载带聊天ID的数据
+                // 🔧 P0+修复：只加载带当前聊天ID的数据，不再加载历史数据
                 const layerKeyWithChat = `deep_memory_${layerName}_${currentChatId}`;
-                let layerData = await this.unifiedDataCore.getData(layerKeyWithChat);
-
-                // 如果没有找到，尝试加载不带聊天ID的历史数据
-                if (!layerData || Object.keys(layerData).length === 0) {
-                    const layerKeyLegacy = `deep_memory_${layerName}`;
-                    const legacyData = await this.unifiedDataCore.getData(layerKeyLegacy);
-                    if (legacyData && Object.keys(legacyData).length > 0) {
-                        console.log(`[DeepMemoryManager] 📥 从历史格式加载 ${layerName} 层数据: ${Object.keys(legacyData).length} 个记忆`);
-                        layerData = legacyData;
-
-                        // 🔧 迁移：将历史数据迁移到新格式
-                        await this.unifiedDataCore.setData(layerKeyWithChat, layerData);
-                        console.log(`[DeepMemoryManager] 🔄 已将 ${layerName} 层数据迁移到新格式`);
-                    }
-                }
+                const layerData = await this.unifiedDataCore.getData(layerKeyWithChat);
 
                 if (layerData && Object.keys(layerData).length > 0) {
+                    console.log(`[DeepMemoryManager] 📥 加载 ${layerName} 层数据: ${Object.keys(layerData).length} 个记忆`);
+
+                    // 🔧 P0+修复：验证每个记忆是否属于当前聊天
                     for (const [id, memory] of Object.entries(layerData)) {
-                        this.memoryLayers[layerName].set(id, memory);
-                        this.memoryIndex.set(id, memory);
-                        this.stats.totalMemories++;
+                        const memoryChatId = memory.metadata?.chatId ||
+                                           memory.metadata?.originalData?.chatId ||
+                                           'unknown';
+
+                        // 只加载属于当前聊天的记忆
+                        if (memoryChatId === currentChatId || memoryChatId === 'unknown') {
+                            this.memoryLayers[layerName].set(id, memory);
+                            this.memoryIndex.set(id, memory);
+                            this.stats.totalMemories++;
+                            loadedCount++;
+                        } else {
+                            console.warn(`[DeepMemoryManager] ⚠️ 跳过不属于当前聊天的记忆: ${id} (chatId: ${memoryChatId})`);
+                        }
                     }
-                    console.log(`[DeepMemoryManager] ✅ 已加载 ${layerName} 层: ${Object.keys(layerData).length} 个记忆`);
+
+                    console.log(`[DeepMemoryManager] ✅ ${layerName} 层加载完成: ${this.memoryLayers[layerName].size} 个记忆`);
+                } else {
+                    console.log(`[DeepMemoryManager] 📭 ${layerName} 层无数据`);
                 }
             }
 
-            console.log(`[DeepMemoryManager] ✅ 已加载 ${this.stats.totalMemories} 个记忆 (聊天: ${currentChatId})`);
+            console.log(`[DeepMemoryManager] ✅ 加载完成: ${loadedCount} 个记忆 (聊天: ${currentChatId})`);
 
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 加载现有记忆数据失败:', error);
@@ -1504,42 +1588,68 @@ export class DeepMemoryManager {
      */
     async handleChatChanged(data) {
         try {
-            console.log('[DeepMemoryManager] 🔄 处理聊天切换事件');
+            const newChatId = data?.chatId || this.unifiedDataCore?.getCurrentChatId?.();
+            console.log('[DeepMemoryManager] 🔄 处理聊天切换事件, 新聊天ID:', newChatId);
 
-            if (!this.settings.enabled) return;
-
-            // 🔧 修复：只有当记忆层不为空时才保存数据，避免覆盖有效数据
-            if (this.stats.totalMemories > 0) {
-                console.log('[DeepMemoryManager] 💾 保存当前聊天的记忆数据...');
-                await this.saveMemoryData();
-            } else {
-                console.log('[DeepMemoryManager] ⚠️ 记忆层为空，跳过保存（避免覆盖有效数据）');
+            if (!this.settings.enabled) {
+                console.log('[DeepMemoryManager] ⏸️ 深度记忆管理器已禁用，跳过聊天切换处理');
+                return;
             }
 
-            // 🔧 修复：清理所有层级的记忆数据，而不仅仅是sensory层
-            console.log('[DeepMemoryManager] 🧹 清理所有记忆层级...');
+            // 🔧 P0修复：保存当前聊天的记忆数据（如果有）
+            if (this.stats.totalMemories > 0) {
+                console.log('[DeepMemoryManager] 💾 保存当前聊天的记忆数据...');
+                console.log(`[DeepMemoryManager] 📊 保存前统计: ${this.stats.totalMemories} 个记忆`);
+                await this.saveMemoryData();
+            } else {
+                console.log('[DeepMemoryManager] ⚠️ 记忆层为空，跳过保存');
+            }
+
+            // 🔧 P0修复：强制清理所有层级的记忆数据
+            console.log('[DeepMemoryManager] 🧹 强制清理所有记忆层级...');
             this.memoryLayers.sensory.clear();
             this.memoryLayers.shortTerm.clear();
             this.memoryLayers.longTerm.clear();
             this.memoryLayers.deepArchive.clear();
 
-            // 🔧 修复：清理记忆索引
+            // 🔧 P0修复：清理所有索引和元数据
             this.memoryIndex.clear();
+            this.memoryMetadata.clear();
+            this.memoryRelations.clear();
+            this.memoryConflicts.clear();
 
-            // 🔧 修复：重置统计信息
+            // 🔧 P0修复：重置统计信息
             this.stats.totalMemories = 0;
             this.stats.memoryMigrations = 0;
+            this.stats.conflictsResolved = 0;
             this.stats.lastMaintenanceTime = Date.now();
 
-            // 🔧 修复：重新加载新聊天的记忆数据
+            console.log('[DeepMemoryManager] ✅ 内存清理完成');
+
+            // 🔧 P0修复：等待一小段时间确保清理完成
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 🔧 P0+修复：重新加载新聊天的记忆数据，传入新的chatId
             console.log('[DeepMemoryManager] 📥 重新加载新聊天的记忆数据...');
-            await this.loadExistingMemories();
+            console.log('[DeepMemoryManager] 🆔 目标聊天ID:', newChatId);
+            await this.loadExistingMemories(newChatId);
 
             console.log('[DeepMemoryManager] ✅ 聊天切换处理完成');
             console.log(`[DeepMemoryManager] 📊 新聊天记忆统计: 总计 ${this.stats.totalMemories} 个记忆`);
 
+            // 验证清理是否成功
+            const totalInMemory = this.memoryLayers.sensory.size +
+                                 this.memoryLayers.shortTerm.size +
+                                 this.memoryLayers.longTerm.size +
+                                 this.memoryLayers.deepArchive.size;
+
+            if (totalInMemory !== this.stats.totalMemories) {
+                console.warn('[DeepMemoryManager] ⚠️ 记忆统计不一致！内存中:', totalInMemory, '统计:', this.stats.totalMemories);
+            }
+
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 处理聊天切换事件失败:', error);
+            this.handleError(error);
         }
     }
 

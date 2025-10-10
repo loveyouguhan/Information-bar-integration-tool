@@ -1378,26 +1378,37 @@ export class UnifiedDataCore {
                 chat: allData.chat
             };
 
-            // 过滤掉备份数据
+            // 过滤掉备份数据和其他不必要的临时数据
             for (const [key, value] of Object.entries(allData.global)) {
-                if (!key.startsWith('backup_')) {
+                // 🔧 优化：排除备份、缓存、临时数据
+                if (!key.startsWith('backup_') && 
+                    !key.startsWith('cache_') && 
+                    !key.startsWith('temp_') &&
+                    !key.startsWith('_debug_')) {
                     filteredData.global[key] = value;
                 }
             }
 
+            // 🔧 优化：精简备份结构，只保留必要字段
             const backup = {
                 timestamp: Date.now(),
                 version: '1.0.0',
                 data: filteredData
+                // 移除了可能的冗余元数据字段
             };
 
             const backupKey = `backup_${backup.timestamp}`;
+            
+            // 🔧 优化：存储到文件系统，使用 'memory' 类型
+            // 这样可以利用 FileStorageManager 的自动清理机制
             await this.setData(backupKey, backup, 'global');
 
             // 清理旧备份
             await this.cleanOldBackups();
 
-            console.log('[UnifiedDataCore] ✅ 数据备份完成');
+            // 📊 输出备份大小信息
+            const backupSize = JSON.stringify(backup).length;
+            console.log(`[UnifiedDataCore] ✅ 数据备份完成 (大小: ${this.fileStorage.formatBytes(backupSize)})`);
 
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 创建备份失败:', error);
@@ -1407,26 +1418,37 @@ export class UnifiedDataCore {
 
     /**
      * 清理旧备份
+     * 🔧 修复：使用 FileStorageManager 的清理方法，因为备份存储在那里
      */
     async cleanOldBackups() {
         try {
-            const allData = this.localStorage.getAll();
-            const backupKeys = Object.keys(allData).filter(key => key.startsWith('backup_'));
-            
-            if (backupKeys.length > this.maxBackups) {
-                // 按时间戳排序，删除最旧的备份
-                backupKeys.sort((a, b) => {
-                    const timestampA = parseInt(a.split('_')[1]);
-                    const timestampB = parseInt(b.split('_')[1]);
-                    return timestampA - timestampB;
-                });
-                
-                const toDelete = backupKeys.slice(0, backupKeys.length - this.maxBackups);
-                for (const key of toDelete) {
-                    await this.deleteData(key, 'global');
+            // 🔧 修复：使用 FileStorageManager 的清理方法
+            // 传入 'backup_' pattern 只清理备份，不清理其他数据
+            if (this.fileStorage && this.fileStorage.cleanupOldBackups) {
+                const cleaned = await this.fileStorage.cleanupOldBackups('memory', this.maxBackups, 'backup_');
+                if (cleaned > 0) {
+                    console.log(`[UnifiedDataCore] 🗑️ 通过 FileStorageManager 清理了 ${cleaned} 个旧备份`);
                 }
+            } else {
+                // 降级方案：清理传统的localStorage备份（如果有）
+                const allData = this.localStorage.getAll();
+                const backupKeys = Object.keys(allData).filter(key => key.startsWith('backup_'));
                 
-                console.log(`[UnifiedDataCore] 🗑️ 清理了 ${toDelete.length} 个旧备份`);
+                if (backupKeys.length > this.maxBackups) {
+                    // 按时间戳排序，删除最旧的备份
+                    backupKeys.sort((a, b) => {
+                        const timestampA = parseInt(a.split('_')[1]);
+                        const timestampB = parseInt(b.split('_')[1]);
+                        return timestampA - timestampB;
+                    });
+                    
+                    const toDelete = backupKeys.slice(0, backupKeys.length - this.maxBackups);
+                    for (const key of toDelete) {
+                        await this.deleteData(key, 'global');
+                    }
+                    
+                    console.log(`[UnifiedDataCore] 🗑️ 清理了 ${toDelete.length} 个旧备份（传统方式）`);
+                }
             }
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 清理旧备份失败:', error);

@@ -254,7 +254,7 @@ export class FileStorageManager {
     /**
      * 后备方案：保存到localStorage
      */
-    saveToLocalStorage(type, key, data) {
+    async saveToLocalStorage(type, key, data) {
         try {
             const storageKey = `${this.MODULE_NAME}_file_${type}_${key}`;
             const storageData = {
@@ -262,10 +262,76 @@ export class FileStorageManager {
                 timestamp: Date.now(),
                 size: JSON.stringify(data).length
             };
-            localStorage.setItem(storageKey, JSON.stringify(storageData));
-            console.log(`[FileStorageManager] 📦 数据已保存到localStorage: ${type}/${key}`);
+            
+            const dataString = JSON.stringify(storageData);
+            
+            // 尝试保存
+            try {
+                localStorage.setItem(storageKey, dataString);
+                console.log(`[FileStorageManager] 📦 数据已保存到localStorage: ${type}/${key} (${this.formatBytes(dataString.length)})`);
+            } catch (quotaError) {
+                // 🔧 捕获配额超限错误
+                if (quotaError.name === 'QuotaExceededError' || quotaError.message.includes('quota')) {
+                    console.warn(`[FileStorageManager] ⚠️ localStorage空间不足 (保存 ${type}/${key})，开始智能清理...`);
+                    
+                    let totalCleaned = 0;
+                    
+                    // 策略1: 清理当前类型的旧数据（保留最新的3个）
+                    const cleaned1 = await this.cleanupOldBackups(type, 3);
+                    totalCleaned += cleaned1;
+                    
+                    // 如果当前类型是备份，策略2: 清理其他类型的缓存数据
+                    if (cleaned1 === 0 && type === 'memory') {
+                        console.log('[FileStorageManager] 🔄 尝试清理其他类型的缓存数据...');
+                        const cleaned2 = await this.cleanupOldBackups('cache', 2);
+                        const cleaned3 = await this.cleanupOldBackups('vectors', 2);
+                        totalCleaned += cleaned2 + cleaned3;
+                    }
+                    
+                    // 策略3: 如果仍然没有清理任何数据，清理过期数据
+                    if (totalCleaned === 0) {
+                        console.log('[FileStorageManager] 🔄 尝试清理过期数据（7天前）...');
+                        totalCleaned = await this.cleanupExpiredData(7 * 24 * 60 * 60 * 1000);
+                    }
+                    
+                    if (totalCleaned > 0) {
+                        console.log(`[FileStorageManager] 🧹 已清理 ${totalCleaned} 个旧数据项，重试保存...`);
+                        
+                        // 重试保存
+                        try {
+                            localStorage.setItem(storageKey, dataString);
+                            console.log(`[FileStorageManager] ✅ 清理后保存成功: ${type}/${key} (${this.formatBytes(dataString.length)})`);
+                        } catch (retryError) {
+                            console.error('[FileStorageManager] ❌ 清理后仍然保存失败:', retryError);
+                            
+                            // 最后的降级：激进清理（清理3天前的所有数据）
+                            console.log('[FileStorageManager] 🆘 执行激进清理策略...');
+                            const emergencyCleaned = await this.cleanupExpiredData(3 * 24 * 60 * 60 * 1000);
+                            
+                            if (emergencyCleaned > 0) {
+                                // 最后一次尝试
+                                try {
+                                    localStorage.setItem(storageKey, dataString);
+                                    console.log(`[FileStorageManager] ✅ 激进清理后保存成功: ${type}/${key}`);
+                                } catch (finalError) {
+                                    console.error('[FileStorageManager] ❌ 所有清理策略失败，数据过大无法保存');
+                                    throw finalError;
+                                }
+                            } else {
+                                throw retryError;
+                            }
+                        }
+                    } else {
+                        console.error('[FileStorageManager] ❌ 没有可清理的数据，保存失败');
+                        throw quotaError;
+                    }
+                } else {
+                    throw quotaError;
+                }
+            }
         } catch (error) {
             console.error('[FileStorageManager] ❌ 保存到localStorage失败:', error);
+            throw error; // 重新抛出错误，让调用者知道
         }
     }
 
@@ -561,6 +627,117 @@ export class FileStorageManager {
             return 0;
         } catch (error) {
             return 0;
+        }
+    }
+
+    /**
+     * 🧹 清理旧数据（localStorage版本）
+     * @param {string} type - 数据类型 ('memory', 'cache', 'vectors')
+     * @param {number} maxItems - 最大保留项数（默认5个）
+     * @param {string} pattern - 可选的键名模式（如 'backup_'）
+     * @returns {number} 清理的项数量
+     */
+    async cleanupOldBackups(type = 'memory', maxItems = 5, pattern = null) {
+        try {
+            console.log(`[FileStorageManager] 🧹 开始清理旧数据 (类型: ${type}, 最大保留: ${maxItems})...`);
+
+            if (typeof window === 'undefined') {
+                // Node.js环境不需要清理localStorage
+                return 0;
+            }
+
+            // 获取指定类型的所有键
+            const items = [];
+            const prefix = `${this.MODULE_NAME}_file_${type}_`;
+
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith(prefix)) {
+                    // 如果指定了pattern，只匹配包含该pattern的键
+                    if (pattern && !key.includes(pattern)) {
+                        continue;
+                    }
+
+                    try {
+                        const data = JSON.parse(localStorage.getItem(key));
+                        const timestamp = data.timestamp || 0;
+                        items.push({ key, timestamp, size: localStorage.getItem(key).length });
+                    } catch (error) {
+                        // 无法解析的数据，也加入清理列表（时间戳为0，会被优先删除）
+                        items.push({ key, timestamp: 0, size: 0 });
+                    }
+                }
+            }
+
+            if (items.length <= maxItems) {
+                console.log(`[FileStorageManager] ✅ 数据项数量 ${items.length} 在限制内 (${maxItems})，无需清理`);
+                return 0;
+            }
+
+            // 按时间戳排序，保留最新的
+            items.sort((a, b) => b.timestamp - a.timestamp);
+
+            // 删除超出限制的旧项
+            const toDelete = items.slice(maxItems);
+            let cleanedCount = 0;
+            let cleanedSize = 0;
+
+            for (const { key, size } of toDelete) {
+                try {
+                    localStorage.removeItem(key);
+                    cleanedCount++;
+                    cleanedSize += size;
+                    console.log(`[FileStorageManager] 🗑️ 删除旧数据: ${key.substring(0, 80)}... (${this.formatBytes(size)})`);
+                } catch (error) {
+                    console.warn(`[FileStorageManager] ⚠️ 删除数据失败: ${key}`, error.message);
+                }
+            }
+
+            console.log(`[FileStorageManager] ✅ 清理完成，删除了 ${cleanedCount} 个旧数据项，释放了 ${this.formatBytes(cleanedSize)}，保留了 ${maxItems} 个最新项`);
+            return cleanedCount;
+
+        } catch (error) {
+            console.error('[FileStorageManager] ❌ 清理旧数据失败:', error);
+            return 0;
+        }
+    }
+
+    /**
+     * 🔍 检查localStorage剩余空间
+     * @returns {Object} 空间使用情况
+     */
+    getLocalStorageSpaceInfo() {
+        try {
+            if (typeof window === 'undefined') {
+                return { used: 0, total: 0, available: 0, usagePercent: 0 };
+            }
+
+            // 计算当前使用量
+            let used = 0;
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key) {
+                    used += (key.length + (localStorage.getItem(key) || '').length) * 2; // UTF-16编码，每字符2字节
+                }
+            }
+
+            // localStorage通常限制为5-10MB，这里假设5MB
+            const total = 5 * 1024 * 1024; // 5MB
+            const available = total - used;
+            const usagePercent = (used / total * 100).toFixed(2);
+
+            return {
+                used,
+                total,
+                available,
+                usagePercent,
+                usedFormatted: this.formatBytes(used),
+                totalFormatted: this.formatBytes(total),
+                availableFormatted: this.formatBytes(available)
+            };
+        } catch (error) {
+            console.error('[FileStorageManager] ❌ 检查localStorage空间失败:', error);
+            return { used: 0, total: 0, available: 0, usagePercent: 0 };
         }
     }
 }
