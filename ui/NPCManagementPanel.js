@@ -32,6 +32,12 @@ export class NPCManagementPanel {
         this.worldBookSyncInProgress = false;
         this.lastWorldBookSyncTime = null;
 
+        // 🆕 新增：NPC数据源面板
+        this.sourcePanelId = localStorage.getItem('npcPanel_sourcePanel') || 'interaction';
+
+        // 🆕 新增：NPC目标世界书
+        this.targetWorldBook = localStorage.getItem('npcPanel_targetWorldBook') || 'auto';
+
         // 绑定
         this.show = this.show.bind(this);
         this.hide = this.hide.bind(this);
@@ -556,6 +562,40 @@ export class NPCManagementPanel {
     /**
      * 🚀 新增：切换自动同步功能
      */
+    /**
+     * 🆕 设置NPC数据源面板
+     */
+    setDataSourcePanel(panelId) {
+        try {
+            console.log('[NPCPanel] 🔄 设置NPC数据源面板:', panelId);
+            this.sourcePanelId = panelId;
+            
+            // 保存到localStorage
+            localStorage.setItem('npcPanel_sourcePanel', panelId);
+            
+            console.log('[NPCPanel] ✅ NPC数据源面板已更新为:', panelId);
+        } catch (error) {
+            console.error('[NPCPanel] ❌ 设置数据源面板失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 设置NPC目标世界书
+     */
+    setTargetWorldBook(worldBookName) {
+        try {
+            console.log('[NPCPanel] 🔄 设置NPC目标世界书:', worldBookName);
+            this.targetWorldBook = worldBookName;
+            
+            // 保存到localStorage
+            localStorage.setItem('npcPanel_targetWorldBook', worldBookName);
+            
+            console.log('[NPCPanel] ✅ NPC目标世界书已更新为:', worldBookName);
+        } catch (error) {
+            console.error('[NPCPanel] ❌ 设置目标世界书失败:', error);
+        }
+    }
+
     toggleAutoSync() {
         this.autoSyncEnabled = !this.autoSyncEnabled;
         console.log('[NPCPanel] 🔄 自动同步状态:', this.autoSyncEnabled ? '开启' : '关闭');
@@ -602,26 +642,30 @@ export class NPCManagementPanel {
                 throw new Error('无法访问统一数据核心');
             }
 
-            // 获取当前interaction数据
-            let interactionData = null;
-            if (unifiedDataCore.data && unifiedDataCore.data.has('interaction')) {
-                interactionData = unifiedDataCore.data.get('interaction');
+            // 🔧 修复：从指定的数据源面板获取数据
+            const sourcePanelId = this.sourcePanelId || 'interaction';
+            console.log('[NPCPanel] 📊 NPC数据源面板:', sourcePanelId);
+
+            let panelData = null;
+            if (unifiedDataCore.data && unifiedDataCore.data.has(sourcePanelId)) {
+                panelData = unifiedDataCore.data.get(sourcePanelId);
             }
 
-            if (!interactionData) {
-                throw new Error('当前没有可同步的interaction数据');
+            if (!panelData) {
+                throw new Error(`当前没有可同步的${sourcePanelId}面板数据`);
             }
 
-            console.log('[NPCPanel] 📊 找到interaction数据，类型:', Array.isArray(interactionData) ? '数组' : '对象');
-            console.log('[NPCPanel] 📊 数据长度:', Array.isArray(interactionData) ? interactionData.length : Object.keys(interactionData).length);
+            console.log('[NPCPanel] 📊 找到面板数据，类型:', Array.isArray(panelData) ? '数组' : '对象');
+            console.log('[NPCPanel] 📊 数据长度:', Array.isArray(panelData) ? panelData.length : Object.keys(panelData).length);
 
             // 使用NPC数据库的提取方法
             if (!this.npcDB) {
                 throw new Error('NPC数据库管理器不可用');
             }
 
-            const extractedNpcs = this.npcDB.extractNpcsFromPanels(interactionData);
-            console.log('[NPCPanel] 🎯 提取到', extractedNpcs.length, '个NPC');
+            // 🔧 修复：传递数据源面板ID，让提取方法知道使用哪个面板的字段映射
+            const extractedNpcs = this.npcDB.extractNpcsFromPanels(panelData, sourcePanelId);
+            console.log('[NPCPanel] 🎯 从面板', sourcePanelId, '提取到', extractedNpcs.length, '个NPC');
 
             if (extractedNpcs.length === 0) {
                 throw new Error('没有提取到任何NPC数据');
@@ -1427,13 +1471,41 @@ export class NPCManagementPanel {
 
             console.log(`[NPCPanel] 🌍 找到 ${npcs.length} 个NPC，开始处理...`);
 
-            // 获取或创建目标世界书
-            const worldBookResult = await worldBookManager.getOrCreateTargetWorldBook(true);
-            if (!worldBookResult.success) {
-                throw new Error(`获取目标世界书失败: ${worldBookResult.error}`);
+            // 🔧 修复：获取或创建目标世界书（使用用户选择的世界书）
+            const targetWorldBook = this.targetWorldBook || 'auto';
+            console.log('[NPCPanel] 🌍 目标世界书设置:', targetWorldBook);
+
+            let worldBookName, worldBookData, isNewWorldBook;
+
+            if (targetWorldBook === 'auto') {
+                // 使用角色链接的主要世界书
+                const worldBookResult = await worldBookManager.getOrCreateTargetWorldBook(true);
+                if (!worldBookResult.success) {
+                    throw new Error(`获取目标世界书失败: ${worldBookResult.error}`);
+                }
+                worldBookName = worldBookResult.worldBookName;
+                worldBookData = worldBookResult.worldBookData;
+                isNewWorldBook = worldBookResult.isNewWorldBook;
+            } else {
+                // 🔧 修复：直接使用用户指定的世界书名称
+                worldBookName = targetWorldBook;
+                
+                // 获取SillyTavern上下文
+                const context = window.SillyTavern?.getContext?.();
+                if (!context) {
+                    throw new Error('无法获取SillyTavern上下文');
+                }
+                
+                // 尝试加载指定的世界书
+                if (typeof context.loadWorldInfo === 'function') {
+                    worldBookData = await context.loadWorldInfo(worldBookName);
+                    isNewWorldBook = false;
+                    console.log('[NPCPanel] ✅ 成功加载指定世界书:', worldBookName);
+                } else {
+                    throw new Error('loadWorldInfo方法不可用');
+                }
             }
 
-            const { worldBookName, worldBookData, isNewWorldBook } = worldBookResult;
             console.log(`[NPCPanel] 🌍 使用世界书: ${worldBookName} (${isNewWorldBook ? '新创建' : '现有'})`);
 
             let syncedCount = 0;

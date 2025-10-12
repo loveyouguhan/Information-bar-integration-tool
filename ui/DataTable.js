@@ -9865,7 +9865,14 @@ export class DataTable {
                     const text = await file.text();
                     const importData = JSON.parse(text);
 
-                    // 验证导入数据格式
+                    // 🆕 检测是否为表格预设（LSR、Cabbage等）
+                    if (importData.tableStructure && Array.isArray(importData.tableStructure)) {
+                        console.log('[DataTable] 📊 检测到兼容预设格式，表格数量:', importData.tableStructure.length);
+                        await this.importTablePreset(importData, file.name);
+                        return;
+                    }
+
+                    // 验证导入数据格式（原版预设格式）
                     if (!importData.version || !importData.panels) {
                         throw new Error('无效的预设配置文件格式');
                     }
@@ -10115,6 +10122,279 @@ export class DataTable {
         if (Array.isArray(value)) return 'array';
         if (typeof value === 'object') return 'object';
         return 'unknown';
+    }
+
+    /**
+     * 🆕 导入表格预设为自定义面板（兼容LSR、Cabbage等预设）
+     */
+    async importTablePreset(presetData, fileName) {
+        try {
+            console.log('[DataTable] 📥 开始导入兼容预设...');
+            
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            
+            // 确保扩展设置对象存在
+            if (!extensionSettings['Information bar integration tool']) {
+                extensionSettings['Information bar integration tool'] = {};
+            }
+            
+            // 确保自定义面板对象存在
+            if (!extensionSettings['Information bar integration tool'].customPanels) {
+                extensionSettings['Information bar integration tool'].customPanels = {};
+            }
+            
+            const customPanels = extensionSettings['Information bar integration tool'].customPanels;
+            
+            // 🔧 修复：计算下一个可用的custom序号
+            const existingCustomNumbers = Object.keys(customPanels)
+                .filter(key => key.match(/^custom\d+$/))
+                .map(key => parseInt(key.replace('custom', '')))
+                .filter(num => !isNaN(num));
+            
+            let nextCustomNumber = 1;
+            if (existingCustomNumbers.length > 0) {
+                nextCustomNumber = Math.max(...existingCustomNumbers) + 1;
+            }
+            
+            console.log('[DataTable] 🔢 下一个可用的custom序号:', nextCustomNumber);
+            
+            let importedCount = 0;
+            
+            // 转换每个表格为自定义面板
+            for (const table of presetData.tableStructure) {
+                try {
+                    // 🔧 修复：使用简单的customX格式ID
+                    const panelId = `custom${nextCustomNumber}`;
+                    nextCustomNumber++;
+                    
+                    const panel = this.convertTableToPanel(table, panelId);
+                    
+                    // 检查是否已存在同名面板
+                    const existingPanel = Object.values(customPanels).find(p => p.name === panel.name);
+                    if (existingPanel) {
+                        console.log(`[DataTable] ⚠️ 面板 "${panel.name}" 已存在，跳过`);
+                        continue;
+                    }
+                    
+                    // 添加到自定义面板
+                    customPanels[panelId] = panel;
+                    importedCount++;
+                    
+                    console.log(`[DataTable] ✅ 成功转换面板: ${panel.name} (ID: ${panelId}, ${panel.subItems.length} 个子项)`);
+                    
+                } catch (error) {
+                    console.error(`[DataTable] ❌ 转换表格 "${table.tableName}" 失败:`, error);
+                }
+            }
+            
+            // 保存到全局变量
+            window.InfoBarCustomPanels = customPanels;
+            
+            // 🔧 修复：同时保存面板规则到 PanelRuleManager
+            const panelRuleManager = window.SillyTavernInfobar?.modules?.panelRuleManager;
+            if (panelRuleManager) {
+                console.log('[DataTable] 📝 开始保存面板规则到 PanelRuleManager...');
+                
+                for (const [panelId, panel] of Object.entries(customPanels)) {
+                    if (panel.rules && panel.source === '兼容预设') {
+                        // 构建规则对象
+                        const rule = {
+                            description: panel.rules.description || '',
+                            updateRule: panel.rules.updateRule || '',
+                            addRule: panel.rules.addRule || '',
+                            deleteRule: panel.rules.deleteRule || '',
+                            updatedAt: new Date().toISOString()
+                        };
+                        
+                        // 保存到规则管理器
+                        const success = await panelRuleManager.setPanelRule(panelId, rule);
+                        if (success) {
+                            console.log(`[DataTable] ✅ 面板 ${panelId} 的规则已保存到 PanelRuleManager`);
+                            console.log(`[DataTable] 📝 规则内容:`, {
+                                updateRule: rule.updateRule ? `${rule.updateRule.substring(0, 30)}...` : '空',
+                                addRule: rule.addRule ? `${rule.addRule.substring(0, 30)}...` : '空',
+                                deleteRule: rule.deleteRule ? `${rule.deleteRule.substring(0, 30)}...` : '空'
+                            });
+                        } else {
+                            console.error(`[DataTable] ❌ 面板 ${panelId} 的规则保存失败`);
+                        }
+                    }
+                }
+            } else {
+                console.warn('[DataTable] ⚠️ PanelRuleManager 不可用，规则未保存到管理器');
+            }
+            
+            // 保存到 SillyTavern
+            await context.saveSettingsDebounced();
+            
+            console.log(`[DataTable] ✅ 兼容预设导入完成，共导入 ${importedCount} 个面板`);
+            this.showSuccessMessage(`成功导入兼容预设，共 ${importedCount} 个面板`);
+            
+            // 刷新表格显示
+            setTimeout(() => {
+                this.clearPanelsCache();
+                this.refreshTableStructure();
+            }, 500);
+            
+        } catch (error) {
+            console.error('[DataTable] ❌ 导入兼容预设失败:', error);
+            this.showErrorMessage('导入兼容预设失败: ' + error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * 🆕 将表格转换为自定义面板
+     */
+    convertTableToPanel(table, panelId) {
+        try {
+            console.log(`[DataTable] 🔄 转换表格: ${table.tableName} -> ${panelId}`);
+            
+            // 转换子项（列）
+            const subItems = [];
+            if (table.columns && Array.isArray(table.columns)) {
+                table.columns.forEach((column, index) => {
+                    const subItemKey = this.generateSubItemKey(column, index);
+                    subItems.push({
+                        key: subItemKey,
+                        name: column,
+                        displayName: column,
+                        enabled: true,
+                        required: table.Required || false,
+                        description: `${column}字段`,
+                        rules: [],
+                        constraints: [],
+                        dataType: 'string',
+                        columnIndex: index
+                    });
+                });
+            }
+            
+            // 🔧 修复：正确解析增加/删除/更新规则，直接从表格提取
+            // 注意：table.note 是面板的总体说明，不应该作为规则描述
+            const rules = {
+                description: '', // 规则描述留空，让用户自己填写或使用默认的面板说明
+                updateRule: table.updateNode || '',
+                addRule: table.insertNode || '',
+                deleteRule: table.deleteNode || '',
+                initRule: table.initNode || ''
+            };
+            
+            // 创建面板对象
+            const panel = {
+                id: panelId,
+                key: panelId,
+                name: table.tableName,
+                type: 'custom',
+                enabled: table.enable !== false,
+                description: table.note || `${table.tableName}数据面板`, // 这是面板说明，显示在信息栏设置的面板属性中
+                icon: '📊', // 🔧 修复：不自动选择图标，统一使用默认图标
+                subItems: subItems,
+                source: '兼容预设',
+                importedAt: new Date().toISOString(),
+                originalTableIndex: table.tableIndex,
+                // 🆕 添加规则字段，便于智能提示词系统和面板规则对话框使用
+                rules: rules // 这些规则显示在数据表格的"面板规则编辑"对话框中
+            };
+            
+            console.log(`[DataTable] 📝 规则提取结果:`, {
+                updateRule: rules.updateRule ? `${rules.updateRule.substring(0, 30)}...` : '空',
+                addRule: rules.addRule ? `${rules.addRule.substring(0, 30)}...` : '空',
+                deleteRule: rules.deleteRule ? `${rules.deleteRule.substring(0, 30)}...` : '空',
+                initRule: rules.initRule ? `${rules.initRule.substring(0, 30)}...` : '空'
+            });
+            
+            console.log(`[DataTable] ✅ 面板转换完成: ${panel.name} (ID: ${panelId})`);
+            
+            return panel;
+            
+        } catch (error) {
+            console.error(`[DataTable] ❌ 转换表格失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🆕 生成子项键名
+     */
+    generateSubItemKey(columnName, index) {
+        const keyMap = {
+            '时间': 'time',
+            '地点': 'location',
+            '日期': 'date',
+            '时段': 'period',
+            '此地角色': 'characters_here',
+            '角色名': 'name',
+            '离场轮数': 'absence_turns',
+            '即时目标': 'immediate_goal',
+            '位置': 'position',
+            '姿势': 'pose',
+            '身体状态': 'body_status',
+            '服装': 'clothing',
+            '特殊状态': 'special_status',
+            '外貌': 'appearance',
+            '身体': 'body',
+            '衣着': 'attire',
+            '性别': 'gender',
+            '年龄': 'age',
+            '身份': 'identity',
+            '职业': 'occupation',
+            '与<user>关系': 'relation_with_user',
+            '关系（是<user>的——）': 'relation',
+            '对<user>态度': 'attitude_to_user',
+            '身体特征': 'body_features',
+            '服装偏好风格': 'clothing_style',
+            '性格': 'personality',
+            '喜好': 'preferences',
+            '长期目标': 'long_term_goal',
+            '角色间重要关系': 'inter_character_relations',
+            '重要背景设定': 'background',
+            '重要备注': 'notes',
+            '爱好': 'hobbies',
+            '住所': 'residence',
+            '其他重要信息': 'other_info',
+            '类型': 'type',
+            '详情': 'details',
+            '状态': 'status',
+            '执行者': 'executor',
+            '拥有者': 'owner',
+            '拥有人': 'owner',
+            '重要原因': 'importance',
+            '具体描述': 'description',
+            '开始时间': 'start_time',
+            '结束时间': 'end_time',
+            '整体内容': 'content',
+            '当前进度': 'progress',
+            '完成奖励': 'reward',
+            '委托人': 'client',
+            '作用': 'effect',
+            '限制': 'limitation',
+            '所在位置': 'location',
+            '数量': 'quantity',
+            '形态': 'form',
+            '已知成员架构': 'member_structure',
+            '成员特征': 'member_features',
+            '宗旨': 'purpose',
+            '空间结构': 'spatial_structure',
+            '时间范围': 'time_range',
+            '内容': 'content',
+            '概要': 'summary',
+            '结果': 'result',
+            '相对敏感身体部位': 'sensitive_parts',
+            '初体验': 'first_experience',
+            '擅长性爱技巧': 'sexual_skills',
+            '隐私部位细节': 'private_details',
+            '近期性爱对象': 'recent_partners'
+        };
+        
+        // 精确匹配
+        if (keyMap[columnName]) {
+            return keyMap[columnName];
+        }
+        
+        // 使用列索引作为备选方案
+        return `col_${index + 1}`;
     }
 
     /**

@@ -1424,7 +1424,7 @@ export class InfoBarSettings {
 
             // 🧠 提示词设置事件
             this.modal.addEventListener('change', (e) => {
-                if (e.target.name === 'promptSettings.mode') {
+                if (e.target.name === 'promptSettings.mode' || e.target.id === 'prompt-mode-select') {
                     this.handlePromptModeChange(e.target.value);
                 }
             });
@@ -5389,6 +5389,13 @@ export class InfoBarSettings {
                         </div>
                         <small>启用后在智能提示词顶部显示破甲提示词，用于突破AI限制</small>
                     </div>
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="api-request-confirmation" name="apiConfig.requestConfirmation" />
+                            <label for="api-request-confirmation" class="checkbox-label">请求询问</label>
+                        </div>
+                        <small>启用后，在调用自定义API生成数据前会弹出确认对话框，询问是否继续生成</small>
+                    </div>
                 </div>
 
                 <!-- 🆕 破甲提示词配置区域 -->
@@ -6175,27 +6182,13 @@ export class InfoBarSettings {
                 <!-- 提示词模式选择 -->
                 <div class="settings-group">
                     <h4>📋 提示词模式</h4>
-                    <div class="prompt-mode-selector">
-                        <div class="mode-option">
-                            <input type="radio" id="smart-prompt-mode" name="promptSettings.mode" value="smart" checked />
-                            <label for="smart-prompt-mode" class="mode-label">
-                                <div class="mode-icon">🧠</div>
-                                <div class="mode-content">
-                                    <h5>智能提示词</h5>
-                                    <p>使用智能提示词系统自动生成优化的提示词内容</p>
-                                </div>
-                            </label>
-                        </div>
-                        <div class="mode-option">
-                            <input type="radio" id="custom-prompt-mode" name="promptSettings.mode" value="custom" />
-                            <label for="custom-prompt-mode" class="mode-label">
-                                <div class="mode-icon">✏️</div>
-                                <div class="mode-content">
-                                    <h5>自定义提示词</h5>
-                                    <p>使用您自定义的提示词内容，关闭智能提示词系统</p>
-                                </div>
-                            </label>
-                        </div>
+                    <div class="form-group">
+                        <label>选择提示词模式</label>
+                        <select id="prompt-mode-select" name="promptSettings.mode" style="width: 100%; padding: 8px; border-radius: 4px;">
+                            <option value="smart">🧠 智能提示词 - 使用智能提示词系统自动生成优化的提示词内容</option>
+                            <option value="custom">✏️ 自定义提示词 - 使用您自定义的提示词内容，关闭智能提示词系统</option>
+                        </select>
+                        <small>选择提示词的生成方式</small>
                     </div>
                 </div>
 
@@ -6572,6 +6565,42 @@ export class InfoBarSettings {
                         </div>
 
 
+
+                        <!-- 🆕 新增：自定义提示词选项 -->
+                        <div class="setting-row">
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-use-custom-prompt" />
+                                    <span class="checkbox-text">使用自定义提示词</span>
+                                </label>
+                                <div class="setting-hint">启用后，使用您自定义的提示词内容进行总结生成</div>
+                            </div>
+                        </div>
+
+                        <!-- 🆕 新增：自定义提示词配置区域 -->
+                        <div class="setting-row custom-prompt-section" id="content-custom-prompt-row" style="display: none;">
+                            <div class="setting-group">
+                                <label class="setting-label">自定义总结提示词</label>
+                                <textarea id="content-custom-prompt" rows="8" placeholder="请输入自定义总结提示词...
+
+示例：
+请根据以下对话内容生成简洁的剧情总结，包括：
+1. 主要事件和情节发展
+2. 角色行为和情感变化
+3. 重要对话和决定
+4. 场景和时间变化
+
+要求：
+- 总结长度约200-300字
+- 保持客观中性的叙述
+- 突出关键剧情转折点" style="width: 100%; resize: vertical; font-family: monospace; font-size: 13px; min-height: 200px;"></textarea>
+                                <div class="setting-hint">自定义的提示词将完全替代系统默认的总结生成提示词</div>
+                                <div class="custom-prompt-stats" style="margin-top: 8px; display: flex; gap: 20px; font-size: 12px; color: var(--theme-text-secondary, #aaa);">
+                                    <span>字符数: <span id="content-custom-prompt-char-count">0</span></span>
+                                    <span>行数: <span id="content-custom-prompt-line-count">0</span></span>
+                                </div>
+                            </div>
+                        </div>
 
                         <!-- 🔧 新增：自动隐藏楼层设置 -->
                         <div class="setting-row">
@@ -7748,6 +7777,15 @@ export class InfoBarSettings {
 
             if (element.type === 'checkbox') {
                 element.checked = Boolean(value);
+                
+                // 🆕 特殊处理破甲提示词开关 - 加载设置时同步显示/隐藏配置区域
+                if (name === 'apiConfig.enableArmorBreaking') {
+                    const armorBreakingSection = this.modal.querySelector('.armor-breaking-config-section');
+                    if (armorBreakingSection) {
+                        armorBreakingSection.style.display = element.checked ? 'block' : 'none';
+                        console.log(`[InfoBarSettings] 🛡️ 加载设置时：破甲提示词配置区域${element.checked ? '显示' : '隐藏'}`);
+                    }
+                }
             } else if (element.type === 'radio') {
                 // 🔧 修复：单选框特殊处理，只设置checked状态，不修改value属性
                 if (element.value === value) {
@@ -10374,7 +10412,19 @@ export class InfoBarSettings {
             </div>
 
             <div class="settings-group">
-                <h4>2. 世界书同步</h4>
+                <h4>2. NPC数据获取面板</h4>
+                <div class="form-group">
+                    <label>选择NPC数据来源面板</label>
+                    <select id="npc-source-panel-select" class="setting-select" style="width: 100%; padding: 8px; border-radius: 4px;">
+                        <option value="interaction">交互对象面板（默认）</option>
+                        <!-- 动态面板选项将在初始化时添加 -->
+                    </select>
+                    <small>选择从哪个面板获取NPC数据。默认从交互对象面板获取，也可以选择自定义面板</small>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h4>3. 世界书同步</h4>
                 <div class="form-group">
                     <div class="checkbox-wrapper">
                         <input type="checkbox" id="npc-worldbook-sync-enabled" ${this.getNPCWorldBookSyncEnabled() ? 'checked' : ''}>
@@ -10382,10 +10432,19 @@ export class InfoBarSettings {
                     </div>
                     <small>自动将NPC数据同步到世界书中，便于AI记忆和引用</small>
                 </div>
+                
+                <div class="form-group">
+                    <label>NPC数据世界书</label>
+                    <select id="npc-target-worldbook-select" class="setting-select" style="width: 100%; padding: 8px; border-radius: 4px;">
+                        <option value="auto">角色链接的主要世界书（默认）</option>
+                        <!-- 动态世界书选项将在初始化时添加 -->
+                    </select>
+                    <small>选择同步NPC数据的目标世界书。默认使用角色链接的主要世界书</small>
+                </div>
             </div>
 
             <div class="settings-group">
-                <h4>3. 手动操作</h4>
+                <h4>4. 手动操作</h4>
                 <div class="form-group">
                     <div class="button-group">
                         <button type="button" id="npc-sync-now-btn" class="btn btn-sm btn-outline-primary">
@@ -10400,7 +10459,7 @@ export class InfoBarSettings {
             </div>
 
             <div class="settings-group">
-                <h4>4. NPC列表</h4>
+                <h4>5. NPC列表</h4>
                 <div class="npc-list-container">
                     <div class="npc-search-bar">
                         <input type="text" id="npc-search-input" placeholder="搜索NPC..." class="form-control">
@@ -18009,11 +18068,11 @@ export class InfoBarSettings {
 
         // 🔧 优化：如果有任务队列，使用任务队列处理
         if (this.customAPITaskQueue) {
-            console.log('[InfoBarSettings] 📋 使用任务队列处理自定义API调用');
+            console.log('[InfoBarSettings] 📋 使用任务队列处理自定义API调用（手动触发）');
             this.customAPITaskQueue.addTask({
                 type: 'INFOBAR_DATA',
                 data: { content: plotContent },
-                source: 'direct_call'
+                source: 'manual_refill'  // 🔧 修复：标记为手动重新填表
             });
             return;
         }
@@ -20770,6 +20829,19 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 useTagsEl.checked = settings.worldBookUseContentTags !== false;
             }
 
+            // 🆕 新增：加载自定义提示词设置
+            const useCustomPrompt = this.modal.querySelector('#content-use-custom-prompt');
+            if (useCustomPrompt) {
+                useCustomPrompt.checked = settings.useCustomPrompt || false;
+                this.handleUseCustomPromptChange(useCustomPrompt.checked);
+            }
+
+            const customPrompt = this.modal.querySelector('#content-custom-prompt');
+            if (customPrompt) {
+                customPrompt.value = settings.customPrompt || '';
+                this.updateSummaryCustomPromptStats();
+            }
+
             console.log('[InfoBarSettings] ✅ 总结设置加载完成');
 
         } catch (error) {
@@ -21309,6 +21381,25 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 });
             }
 
+            // 🆕 新增：自定义提示词复选框事件
+            const useCustomPromptCheckbox = this.modal.querySelector('#content-use-custom-prompt');
+            if (useCustomPromptCheckbox) {
+                useCustomPromptCheckbox.addEventListener('change', (e) => {
+                    this.handleUseCustomPromptChange(e.target.checked);
+                });
+            }
+
+            // 🆕 新增：自定义提示词输入事件（统计字数）
+            const customPromptTextarea = this.modal.querySelector('#content-custom-prompt');
+            if (customPromptTextarea) {
+                customPromptTextarea.addEventListener('input', () => {
+                    this.updateSummaryCustomPromptStats();
+                });
+                customPromptTextarea.addEventListener('keyup', () => {
+                    this.updateSummaryCustomPromptStats();
+                });
+            }
+
             // 🔧 新增：自动隐藏楼层复选框事件
             const autoHideEnabledCheckbox = this.modal.querySelector('#content-auto-hide-enabled');
             if (autoHideEnabledCheckbox) {
@@ -21366,6 +21457,62 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理总结范围模式变化失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理使用自定义提示词变化
+     */
+    handleUseCustomPromptChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🔄 使用自定义提示词状态变化:', enabled);
+
+            // 显示/隐藏自定义提示词配置区域
+            const customPromptRow = this.modal.querySelector('#content-custom-prompt-row');
+            if (customPromptRow) {
+                customPromptRow.style.display = enabled ? 'block' : 'none';
+                console.log(`[InfoBarSettings] 📝 自定义提示词配置区域${enabled ? '显示' : '隐藏'}`);
+            }
+
+            // 如果启用，更新统计信息
+            if (enabled) {
+                this.updateSummaryCustomPromptStats();
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理使用自定义提示词变化失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 更新总结自定义提示词统计信息
+     */
+    updateSummaryCustomPromptStats() {
+        try {
+            const textarea = this.modal.querySelector('#content-custom-prompt');
+            const charCountSpan = this.modal.querySelector('#content-custom-prompt-char-count');
+            const lineCountSpan = this.modal.querySelector('#content-custom-prompt-line-count');
+
+            if (!textarea || !charCountSpan || !lineCountSpan) return;
+
+            const text = textarea.value || '';
+            const charCount = text.length;
+            const lineCount = text.split('\n').length;
+
+            charCountSpan.textContent = charCount;
+            lineCountSpan.textContent = lineCount;
+
+            // 根据字符数量设置颜色提示
+            if (charCount > 2000) {
+                charCountSpan.style.color = '#ff6b6b'; // 红色警告
+            } else if (charCount > 1000) {
+                charCountSpan.style.color = '#ffa726'; // 橙色提醒
+            } else {
+                charCountSpan.style.color = ''; // 默认颜色
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新自定义提示词统计失败:', error);
         }
     }
 
@@ -21927,6 +22074,17 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             const autoHideEnabled = this.modal.querySelector('#content-auto-hide-enabled');
             if (autoHideEnabled) {
                 settings.autoHideEnabled = autoHideEnabled.checked;
+            }
+
+            // 🆕 新增：获取自定义提示词设置
+            const useCustomPrompt = this.modal.querySelector('#content-use-custom-prompt');
+            if (useCustomPrompt) {
+                settings.useCustomPrompt = useCustomPrompt.checked;
+            }
+
+            const customPrompt = this.modal.querySelector('#content-custom-prompt');
+            if (customPrompt) {
+                settings.customPrompt = customPrompt.value || '';
             }
 
             const autoHideThreshold = this.modal.querySelector('#content-auto-hide-threshold');
@@ -33443,6 +33601,12 @@ ${dataExamples}
         try {
             console.log('[InfoBarSettings] 🎭 初始化NPC管理面板内容...');
 
+            // 🆕 填充NPC数据源面板选项
+            this.populateNPCSourcePanelOptions();
+
+            // 🆕 填充世界书选项
+            this.populateNPCWorldBookOptions();
+
             // 刷新NPC列表
             this.refreshNPCList();
 
@@ -33454,9 +33618,214 @@ ${dataExamples}
                 });
             }
 
+            // 🆕 绑定数据源面板选择事件
+            const sourcePanelSelect = this.modal.querySelector('#npc-source-panel-select');
+            if (sourcePanelSelect) {
+                sourcePanelSelect.addEventListener('change', (e) => {
+                    this.handleNPCSourcePanelChange(e.target.value);
+                });
+            }
+
+            // 🆕 绑定世界书选择事件
+            const worldBookSelect = this.modal.querySelector('#npc-target-worldbook-select');
+            if (worldBookSelect) {
+                worldBookSelect.addEventListener('change', (e) => {
+                    this.handleNPCWorldBookChange(e.target.value);
+                });
+            }
+
             console.log('[InfoBarSettings] ✅ NPC管理面板内容初始化完成');
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 初始化NPC管理面板内容失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 填充NPC数据源面板选项
+     */
+    populateNPCSourcePanelOptions() {
+        try {
+            const select = this.modal.querySelector('#npc-source-panel-select');
+            if (!select) return;
+
+            // 获取所有启用的面板
+            const context = SillyTavern.getContext();
+            const settings = context.extensionSettings['Information bar integration tool'] || {};
+
+            // 🔧 修复：获取保存的数据源面板
+            const savedSourcePanel = localStorage.getItem('npcPanel_sourcePanel') || 'interaction';
+
+            // 清空现有选项
+            select.innerHTML = '';
+            
+            // 添加默认选项
+            const defaultOption = document.createElement('option');
+            defaultOption.value = 'interaction';
+            defaultOption.textContent = '交互对象面板（默认）';
+            select.appendChild(defaultOption);
+
+            // 添加基础面板选项
+            const basicPanels = ['personal', 'world', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot'];
+            const panelNames = {
+                'personal': '个人信息',
+                'world': '世界信息',
+                'tasks': '任务系统',
+                'organization': '组织架构',
+                'news': '新闻资讯',
+                'inventory': '物品清单',
+                'abilities': '能力技能',
+                'plot': '剧情发展'
+            };
+
+            basicPanels.forEach(panelId => {
+                if (settings[panelId] && settings[panelId].enabled !== false) {
+                    const option = document.createElement('option');
+                    option.value = panelId;
+                    option.textContent = `${panelNames[panelId]}面板`;
+                    select.appendChild(option);
+                }
+            });
+
+            // 添加自定义面板选项
+            if (settings.customPanels) {
+                Object.entries(settings.customPanels).forEach(([panelId, panelConfig]) => {
+                    if (panelConfig.enabled !== false) {
+                        const option = document.createElement('option');
+                        option.value = panelId;
+                        option.textContent = `${panelConfig.name}（自定义面板）`;
+                        select.appendChild(option);
+                    }
+                });
+            }
+
+            // 🔧 修复：恢复之前保存的选择
+            select.value = savedSourcePanel;
+            console.log('[InfoBarSettings] ✅ NPC数据源面板选项已填充，当前选择:', savedSourcePanel);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 填充NPC数据源面板选项失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 填充世界书选项
+     */
+    async populateNPCWorldBookOptions() {
+        try {
+            const select = this.modal.querySelector('#npc-target-worldbook-select');
+            if (!select) return;
+
+            // 获取保存的世界书选择
+            const savedWorldBook = localStorage.getItem('npcPanel_targetWorldBook') || 'auto';
+
+            // 清空现有选项
+            select.innerHTML = '';
+
+            // 添加默认选项
+            const autoOption = document.createElement('option');
+            autoOption.value = 'auto';
+            autoOption.textContent = '角色链接的主要世界书（默认）';
+            select.appendChild(autoOption);
+
+            // 获取所有可用的世界书
+            const worldBooks = await this.getAllWorldBooks();
+            
+            if (worldBooks && worldBooks.length > 0) {
+                worldBooks.forEach(worldBook => {
+                    const option = document.createElement('option');
+                    option.value = worldBook.name;
+                    option.textContent = worldBook.name;
+                    select.appendChild(option);
+                });
+            }
+
+            // 恢复之前保存的选择
+            select.value = savedWorldBook;
+            console.log('[InfoBarSettings] ✅ 世界书选项已填充，当前选择:', savedWorldBook);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 填充世界书选项失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 获取所有世界书列表
+     */
+    async getAllWorldBooks() {
+        try {
+            // 🔧 修复：从DOM选择器获取世界书列表
+            const worldInfoSelect = document.querySelector('#world_info');
+            
+            if (!worldInfoSelect || !worldInfoSelect.options) {
+                console.warn('[InfoBarSettings] ⚠️ 世界书选择器不可用');
+                return [];
+            }
+
+            const worldBooks = [];
+            for (let i = 0; i < worldInfoSelect.options.length; i++) {
+                const option = worldInfoSelect.options[i];
+                if (option.value && option.text) {
+                    worldBooks.push({
+                        name: option.text,
+                        value: option.value,
+                        selected: option.selected
+                    });
+                }
+            }
+
+            console.log('[InfoBarSettings] 📚 找到', worldBooks.length, '个世界书');
+            return worldBooks;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取世界书列表失败:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 🆕 处理世界书选择变更
+     */
+    handleNPCWorldBookChange(worldBookName) {
+        try {
+            console.log('[InfoBarSettings] 🔄 NPC目标世界书变更:', worldBookName);
+
+            // 保存设置
+            localStorage.setItem('npcPanel_targetWorldBook', worldBookName);
+
+            // 通知NPC管理面板更新目标世界书
+            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
+            if (npcPanel && typeof npcPanel.setTargetWorldBook === 'function') {
+                npcPanel.setTargetWorldBook(worldBookName);
+                console.log('[InfoBarSettings] ✅ NPC管理面板目标世界书已更新');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理世界书选择变更失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理NPC数据源面板变更
+     */
+    handleNPCSourcePanelChange(panelId) {
+        try {
+            console.log('[InfoBarSettings] 🔄 NPC数据源面板变更:', panelId);
+
+            // 保存设置
+            localStorage.setItem('npcPanel_sourcePanel', panelId);
+
+            // 通知NPC管理面板更新数据源
+            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
+            if (npcPanel && typeof npcPanel.setDataSourcePanel === 'function') {
+                npcPanel.setDataSourcePanel(panelId);
+                console.log('[InfoBarSettings] ✅ NPC管理面板数据源已更新');
+            }
+
+            // 刷新NPC列表
+            this.refreshNPCList();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理NPC数据源面板变更失败:', error);
         }
     }
 

@@ -4495,14 +4495,27 @@ export class MessageInfoBarRenderer {
             ];
             const isStandardPanel = standardPanels.includes((panelKey || '').toLowerCase());
 
-            if (!isStandardPanel && panelConfig && panelConfig.subItems && fieldName.match(/^col_(\d+)$/)) {
+            // 🔧 修复：自定义面板支持多种字段名格式（col_X、纯数字、字段key）
+            if (!isStandardPanel && panelConfig && panelConfig.subItems) {
+                let colIndex = -1;
+                
+                // 尝试1: col_X 格式
                 const colMatch = fieldName.match(/^col_(\d+)$/);
                 if (colMatch) {
-                    const colIndex = parseInt(colMatch[1]) - 1; // col_1对应索引0
+                    colIndex = parseInt(colMatch[1]) - 1; // col_1对应索引0
+                }
+                
+                // 尝试2: 纯数字格式（兼容预设常用格式）
+                if (colIndex === -1 && fieldName.match(/^\d+$/)) {
+                    colIndex = parseInt(fieldName) - 1; // "1"对应索引0
+                }
+                
+                // 如果成功解析出列索引，从 subItems 获取显示名称
+                if (colIndex >= 0 && colIndex < panelConfig.subItems.length) {
                     const subItem = panelConfig.subItems[colIndex];
                     if (subItem && (subItem.displayName || subItem.name)) {
                         const displayName = subItem.displayName || subItem.name;
-                        console.log(`[MessageInfoBarRenderer] 🎯 自定义面板col_映射: ${fieldName} -> ${displayName} (面板: ${panelKey})`);
+                        console.log(`[MessageInfoBarRenderer] 🎯 自定义面板字段映射: ${fieldName} -> ${displayName} (索引: ${colIndex}, 面板: ${panelKey})`);
                         return displayName;
                     }
                 }
