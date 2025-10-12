@@ -370,9 +370,12 @@ export class NPCDatabaseManager {
             'name', '姓名', 'npc_name', 'npcName',
             '名字', '名称', '角色名', '角色名称',
             'character_name', 'characterName',
-            'person_name', 'personName'
+            'person_name', 'personName',
+            '对象名称', 'object_name', 'objectName'
         ];
-        return nameFields.includes(field.toLowerCase()) || nameFields.includes(field);
+        // 不区分大小写匹配
+        const fieldLower = String(field).toLowerCase();
+        return nameFields.some(nf => nf.toLowerCase() === fieldLower || field === nf);
     }
 
     // 🎯 新增：根据索引获取现有NPC名称（用于增量更新）
@@ -492,15 +495,19 @@ export class NPCDatabaseManager {
         }
     }
 
-    // 从 interaction 面板数据中提取 NPCs
-    extractNpcsFromPanels(interactionPanel = {}) {
-        console.log('[NPCDB] 🔍 开始提取NPC数据，数据类型:', Array.isArray(interactionPanel) ? '数组' : '对象');
-        console.log('[NPCDB] 🔍 数据内容:', interactionPanel);
+    // 从面板数据中提取 NPCs
+    extractNpcsFromPanels(panelData = {}, sourcePanelId = 'interaction') {
+        console.log('[NPCDB] 🔍 开始提取NPC数据，数据源面板:', sourcePanelId);
+        console.log('[NPCDB] 🔍 数据类型:', Array.isArray(panelData) ? '数组' : '对象');
+        console.log('[NPCDB] 🔍 数据内容:', panelData);
+
+        // 🆕 保存当前数据源面板ID，供字段映射使用
+        this.currentSourcePanelId = sourcePanelId;
 
         // 🚀 新增：首先检测是否是数组格式（真实的多行数据格式）
-        if (Array.isArray(interactionPanel)) {
+        if (Array.isArray(panelData)) {
             console.log('[NPCDB] ✅ 检测到数组格式的多行数据，开始解析...');
-            return this.parseArrayFormat(interactionPanel);
+            return this.parseArrayFormat(panelData);
         }
 
         const groups = new Map(); // npc0 -> { name, fields }
@@ -607,28 +614,47 @@ export class NPCDatabaseManager {
                     const keys = Object.keys(npcData);
                     console.log(`[NPCDB] 🔍 处理NPC ${index}，字段:`, keys);
 
-                    // 查找名称字段（通常是col_1或第一个字段）
+                    // 🔧 修复：智能查找名称字段
                     let npcName = '';
 
-                    // 🔧 修复：优先查找col_1字段（根据真实数据格式）
-                    if (npcData.col_1) {
-                        npcName = String(npcData.col_1).trim();
-                    } else if (npcData['1']) {
-                        // 回退到数字键格式
-                        npcName = String(npcData['1']).trim();
-                    } else if (keys.length > 0) {
-                        // 🔧 修复：如果没有col_1，使用第一个非索引字段
-                        // 跳过col_0索引列
-                        const firstDataKey = keys.find(key => key !== 'col_0' && key !== '0');
-                        if (firstDataKey) {
-                            npcName = String(npcData[firstDataKey]).trim();
-                            console.log(`[NPCDB] 📝 使用字段 ${firstDataKey} 作为NPC名称: ${npcName}`);
+                    // 策略1：查找明确的名称字段
+                    for (const key of keys) {
+                        if (this.isNameField(key)) {
+                            npcName = String(npcData[key]).trim();
+                            console.log(`[NPCDB] ✅ 找到名称字段 ${key}: ${npcName}`);
+                            break;
                         }
                     }
 
-                    // 如果没有找到有效名称，使用索引
+                    // 策略2：按列号顺序查找（col_1 或 "1"）
+                    if (!npcName) {
+                        if (npcData.col_1) {
+                            npcName = String(npcData.col_1).trim();
+                            console.log(`[NPCDB] 📝 使用 col_1 作为名称: ${npcName}`);
+                        } else if (npcData['1']) {
+                            npcName = String(npcData['1']).trim();
+                            console.log(`[NPCDB] 📝 使用 "1" 作为名称: ${npcName}`);
+                        }
+                    }
+
+                    // 策略3：使用第一个有效的字段值
                     if (!npcName || npcName === '') {
-                        npcName = `NPC${index}`;
+                        const firstDataKey = keys.find(key => 
+                            key !== 'col_0' && 
+                            key !== '0' && 
+                            npcData[key] && 
+                            String(npcData[key]).trim() !== ''
+                        );
+                        if (firstDataKey) {
+                            npcName = String(npcData[firstDataKey]).trim();
+                            console.log(`[NPCDB] 📝 使用第一个有效字段 ${firstDataKey} 作为NPC名称: ${npcName}`);
+                        }
+                    }
+
+                    // 策略4：使用默认名称
+                    if (!npcName || npcName === '') {
+                        npcName = `NPC${index + 1}`;
+                        console.log(`[NPCDB] ⚠️ 未找到有效名称，使用默认: ${npcName}`);
                     }
 
                     // 创建NPC对象，使用清理后的字段映射
@@ -788,7 +814,9 @@ export class NPCDatabaseManager {
      */
     getFieldDisplayNameMapping() {
         try {
-            console.log('[NPCDB] 🔍 开始构建动态字段映射...');
+            // 🔧 修复：使用当前数据源面板ID
+            const sourcePanelId = this.currentSourcePanelId || 'interaction';
+            console.log('[NPCDB] 🔍 开始构建动态字段映射，数据源面板:', sourcePanelId);
 
             // 🔧 关键修复：使用DataTable的getAllEnabledPanels()获取正确的面板配置
             const dataTable = window.SillyTavernInfobar?.modules?.dataTable;
@@ -799,24 +827,24 @@ export class NPCDatabaseManager {
 
             // 获取所有启用的面板配置
             const enabledPanels = dataTable.getAllEnabledPanels();
-            const interactionPanel = enabledPanels.find(panel =>
-                panel.key === 'interaction' || panel.id === 'interaction'
+            const sourcePanel = enabledPanels.find(panel =>
+                panel.key === sourcePanelId || panel.id === sourcePanelId
             );
 
-            if (!interactionPanel) {
-                console.warn('[NPCDB] ⚠️ 未找到interaction面板配置');
+            if (!sourcePanel) {
+                console.warn('[NPCDB] ⚠️ 未找到数据源面板配置:', sourcePanelId);
                 return this.getFallbackFieldMapping();
             }
 
-            console.log('[NPCDB] ✅ 找到interaction面板配置:', interactionPanel);
+            console.log('[NPCDB] ✅ 找到数据源面板配置:', sourcePanel);
 
             const fieldMapping = {};
 
             // 🎯 关键修复：直接使用subItems的顺序，这是用户界面的实际顺序
-            if (interactionPanel.subItems && Array.isArray(interactionPanel.subItems)) {
+            if (sourcePanel.subItems && Array.isArray(sourcePanel.subItems)) {
                 let validColumnIndex = 1; // 有效列号计数器
 
-                interactionPanel.subItems.forEach((subItem, index) => {
+                sourcePanel.subItems.forEach((subItem, index) => {
                     if (subItem.enabled !== false) {
                         const displayName = subItem.displayName || subItem.name || subItem.key;
                         const fieldKey = subItem.key || displayName;

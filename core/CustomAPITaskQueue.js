@@ -40,28 +40,28 @@ export class CustomAPITaskQueue {
                 priority: this.priorities.HIGH,
                 debounceDelay: 2000,
                 maxRetries: 3,
-                timeout: 30000
+                timeout: 120000  // 🔧 修复：增加到2分钟，适应慢速自定义API
             },
             SUMMARY: {
                 name: 'summary',
                 priority: this.priorities.MEDIUM,
                 debounceDelay: 5000,
                 maxRetries: 2,
-                timeout: 45000
+                timeout: 60000   // 🔧 修复：增加到1分钟
             },
             MEMORY: {
                 name: 'memory',
                 priority: this.priorities.LOW,
                 debounceDelay: 3000,
                 maxRetries: 2,
-                timeout: 30000
+                timeout: 45000   // 🔧 修复：增加到45秒
             },
             MANUAL: {
                 name: 'manual',
                 priority: this.priorities.CRITICAL,
                 debounceDelay: 0,
                 maxRetries: 5,
-                timeout: 60000
+                timeout: 180000  // 🔧 修复：增加到3分钟，手动任务允许更长时间
             }
         };
 
@@ -151,6 +151,19 @@ export class CustomAPITaskQueue {
 
             console.log('[CustomAPITaskQueue] 📨 检测到主API返回，准备排队处理任务');
 
+            // 🔧 新增：检查是否启用表格记录
+            const context = SillyTavern?.getContext?.();
+            const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const basicSettings = extensionSettings.basic || {};
+            const tableRecordsEnabled = basicSettings.tableRecords?.enabled !== false;
+            
+            console.log('[CustomAPITaskQueue] 🔧 表格记录启用状态:', tableRecordsEnabled);
+            
+            if (!tableRecordsEnabled) {
+                console.log('[CustomAPITaskQueue] ℹ️ 表格记录已禁用，跳过信息栏数据生成任务');
+                return;
+            }
+
             // 获取消息内容
             const messageContent = data.mes || '';
 
@@ -168,11 +181,25 @@ export class CustomAPITaskQueue {
 
             console.log(`[CustomAPITaskQueue] ✅ 消息字数达到阈值，继续处理`);
 
+            // 🔧 修复：检查是否已有相同内容的任务在队列中或正在处理
+            const contentHash = this.hashString(messageContent);
+            const hasDuplicateTask = this.taskQueue.some(t => 
+                t.type === 'INFOBAR_DATA' && 
+                t.contentHash === contentHash &&
+                (t.status === 'pending' || t.status === 'processing')
+            );
+
+            if (hasDuplicateTask) {
+                console.log('[CustomAPITaskQueue] ⏸️ 检测到重复任务，跳过添加');
+                return;
+            }
+
             // 添加信息栏数据生成任务（高优先级）
             this.addTask({
                 type: 'INFOBAR_DATA',
                 data: { content: messageContent },
-                source: 'main_api_response'
+                source: 'main_api_response',
+                contentHash: contentHash // 添加内容哈希用于去重
             });
 
             // 检查是否需要生成总结（遵循楼层阈值 + 冷却时间 + 去重）
@@ -321,9 +348,35 @@ export class CustomAPITaskQueue {
             task.status = 'processing';
             task.startTime = Date.now();
 
-            // 设置超时处理
+            // 🔧 修复：设置超时处理，但跳过等待用户确认的时间
             const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('任务超时')), task.timeout);
+                let executionStartTime = Date.now();
+                let pausedTime = 0;
+                
+                const checkTimeout = () => {
+                    // 如果任务正在等待用户确认，记录暂停时间
+                    if (task.waitingForConfirmation) {
+                        pausedTime += 1000;
+                        setTimeout(checkTimeout, 1000); // 每秒检查一次
+                        return;
+                    }
+                    
+                    // 计算实际执行时间（排除暂停时间）
+                    const elapsed = Date.now() - executionStartTime - pausedTime;
+                    
+                    // 🔧 修复：对于自定义API任务，显示进度信息
+                    if (task.type === 'INFOBAR_DATA' && elapsed > 30000) {
+                        const remainingTime = Math.round((task.timeout - elapsed) / 1000);
+                        console.log(`[CustomAPITaskQueue] ⏳ 任务 ${task.id} 执行中... (已用时: ${Math.round(elapsed/1000)}秒, 剩余: ${remainingTime}秒)`);
+                    }
+                    
+                    if (elapsed >= task.timeout) {
+                        reject(new Error(`任务超时 (执行时间: ${Math.round(elapsed/1000)}秒)`));
+                    } else {
+                        setTimeout(checkTimeout, 5000); // 每5秒检查一次，减少性能影响
+                    }
+                };
+                checkTimeout();
             });
 
             // 执行任务
@@ -347,6 +400,9 @@ export class CustomAPITaskQueue {
 
             // 🔧 修复：检查是否是用户主动中止的错误
             const isUserAbort = error.name === 'AbortError' || error.isUserAbort === true;
+            
+            // 🔧 修复：检查是否是超时错误
+            const isTimeout = error.message?.includes('任务超时');
 
             if (isUserAbort) {
                 // 用户主动中止，不重试，直接标记为取消
@@ -354,8 +410,29 @@ export class CustomAPITaskQueue {
                 task.error = '用户已中止';
                 this.stats.failedTasks++;
                 console.log(`[CustomAPITaskQueue] 🛑 任务已被用户中止: ${task.id}`);
+            } else if (isTimeout && task.type === 'INFOBAR_DATA') {
+                // 🔧 修复：自定义API超时，根据情况决定是否重试
+                console.warn(`[CustomAPITaskQueue] ⏱️ 自定义API任务超时: ${task.id}`);
+                
+                // 如果是第一次超时，可以尝试重试一次
+                if (task.retries === 0) {
+                    task.retries++;
+                    task.status = 'pending';
+                    task.timeout = 180000; // 重试时给予更长时间（3分钟）
+                    
+                    setTimeout(() => {
+                        this.taskQueue.unshift(task);
+                        console.log(`[CustomAPITaskQueue] 🔄 超时任务重试: ${task.id} (延长超时时间至3分钟)`);
+                    }, 5000); // 5秒后重试
+                } else {
+                    // 已经重试过，标记为失败
+                    task.status = 'failed';
+                    task.error = '自定义API响应超时';
+                    this.stats.failedTasks++;
+                    console.error(`[CustomAPITaskQueue] 💀 任务因超时最终失败: ${task.id}`);
+                }
             } else {
-                // 其他错误，执行重试逻辑
+                // 其他错误，执行正常重试逻辑
                 if (task.retries < task.maxRetries) {
                     task.retries++;
                     task.status = 'pending';
@@ -407,6 +484,41 @@ export class CustomAPITaskQueue {
     async executeInfobarDataTask(task) {
         if (!this.infoBarSettings || typeof this.infoBarSettings.processWithCustomAPIDirectly !== 'function') {
             throw new Error('InfoBarSettings模块不可用');
+        }
+
+        // 🆕 检查是否启用了请求询问，且任务未被确认过
+        const requestConfirmation = await this.checkRequestConfirmation();
+        
+        // 🔧 修复：只有主API自动触发的任务才需要确认
+        const needsConfirmation = requestConfirmation && 
+                                 !task.userConfirmed && 
+                                 task.source === 'main_api_response';
+        
+        if (needsConfirmation) {
+            console.log('[CustomAPITaskQueue] 🔔 主API触发的任务需要确认...');
+            
+            // 🔧 修复：标记任务正在等待用户确认，防止超时
+            task.waitingForConfirmation = true;
+            
+            // 显示确认对话框
+            const userConfirmed = await this.showConfirmationDialog();
+            
+            // 清除等待标记
+            task.waitingForConfirmation = false;
+            
+            if (!userConfirmed) {
+                console.log('[CustomAPITaskQueue] ⏸️ 用户取消了数据生成，任务中止');
+                // 🔧 修复：创建用户中止错误，设置特殊标记
+                const abortError = new Error('用户取消了数据生成');
+                abortError.isUserAbort = true;
+                throw abortError;
+            }
+            
+            // 🔧 修复：标记任务已被用户确认，重试时不再显示确认框
+            task.userConfirmed = true;
+            console.log('[CustomAPITaskQueue] ✅ 用户确认继续生成数据');
+        } else if (!requestConfirmation || task.source !== 'main_api_response') {
+            console.log('[CustomAPITaskQueue] 📊 跳过确认（来源: ' + task.source + '）');
         }
 
         console.log('[CustomAPITaskQueue] 📊 执行信息栏数据生成任务');
@@ -602,6 +714,19 @@ export class CustomAPITaskQueue {
     }
 
     /**
+     * 🆕 生成字符串哈希（用于去重）
+     */
+    hashString(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // 转换为32位整数
+        }
+        return hash.toString();
+    }
+
+    /**
      * 错误处理
      */
     handleError(error) {
@@ -627,6 +752,176 @@ export class CustomAPITaskQueue {
             errorCount: this.errorCount,
             queueStatus: this.getQueueStatus()
         };
+    }
+
+    /**
+     * 🆕 检查是否启用了请求询问
+     */
+    async checkRequestConfirmation() {
+        try {
+            const context = SillyTavern?.getContext?.();
+            const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const apiConfig = extensionSettings.apiConfig || {};
+            
+            return apiConfig.requestConfirmation === true;
+        } catch (error) {
+            console.error('[CustomAPITaskQueue] ❌ 检查请求询问配置失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 🆕 显示确认对话框（右上角小弹窗样式）
+     */
+    async showConfirmationDialog() {
+        return new Promise((resolve) => {
+            try {
+                console.log('[CustomAPITaskQueue] 💬 显示数据生成确认对话框');
+                
+                // 创建确认对话框（右上角小弹窗）
+                const dialog = document.createElement('div');
+                dialog.className = 'custom-api-confirmation-toast';
+                dialog.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    border: 2px solid var(--theme-primary-color, #4CAF50);
+                    border-radius: 8px;
+                    padding: 16px 20px;
+                    min-width: 300px;
+                    max-width: 400px;
+                    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+                    z-index: 10000;
+                    animation: slideInRight 0.3s ease-out;
+                `;
+                
+                dialog.innerHTML = `
+                    <div class="toast-header" style="
+                        margin-bottom: 12px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    ">
+                        <span style="font-size: 20px;">🤔</span>
+                        <span style="
+                            color: var(--theme-text-primary, #fff);
+                            font-size: 16px;
+                            font-weight: 600;
+                        ">是否进行数据生成？</span>
+                    </div>
+                    
+                    <div class="toast-body" style="
+                        margin-bottom: 16px;
+                        color: var(--theme-text-secondary, #ccc);
+                        font-size: 13px;
+                        line-height: 1.5;
+                    ">
+                        系统检测到AI消息，即将调用自定义API生成信息栏数据。
+                    </div>
+                    
+                    <div class="toast-footer" style="
+                        display: flex;
+                        gap: 8px;
+                        justify-content: flex-end;
+                    ">
+                        <button class="btn-cancel" style="
+                            padding: 6px 16px;
+                            background: var(--theme-bg-secondary, #555);
+                            color: var(--theme-text-primary, #fff);
+                            border: 1px solid var(--theme-border-color, #666);
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 13px;
+                            transition: all 0.2s;
+                        ">
+                            取消
+                        </button>
+                        <button class="btn-confirm" style="
+                            padding: 6px 16px;
+                            background: var(--theme-primary-color, #4CAF50);
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 13px;
+                            font-weight: 500;
+                            transition: all 0.2s;
+                        ">
+                            确认
+                        </button>
+                    </div>
+                    
+                    <style>
+                        @keyframes slideInRight {
+                            from {
+                                opacity: 0;
+                                transform: translateX(100px);
+                            }
+                            to {
+                                opacity: 1;
+                                transform: translateX(0);
+                            }
+                        }
+                        
+                        @keyframes slideOutRight {
+                            from {
+                                opacity: 1;
+                                transform: translateX(0);
+                            }
+                            to {
+                                opacity: 0;
+                                transform: translateX(100px);
+                            }
+                        }
+                        
+                        .custom-api-confirmation-toast .btn-cancel:hover {
+                            background: var(--theme-bg-hover, #666) !important;
+                        }
+                        
+                        .custom-api-confirmation-toast .btn-confirm:hover {
+                            background: #45a049 !important;
+                        }
+                    </style>
+                `;
+                
+                // 添加到页面
+                document.body.appendChild(dialog);
+                
+                // 按钮事件
+                const btnCancel = dialog.querySelector('.btn-cancel');
+                const btnConfirm = dialog.querySelector('.btn-confirm');
+                
+                const closeDialog = (confirmed) => {
+                    dialog.style.animation = 'slideOutRight 0.2s ease-in';
+                    setTimeout(() => {
+                        if (dialog.parentNode) {
+                            dialog.remove();
+                        }
+                    }, 200);
+                    resolve(confirmed);
+                };
+                
+                btnCancel.addEventListener('click', () => closeDialog(false));
+                btnConfirm.addEventListener('click', () => closeDialog(true));
+                
+                // ESC键取消
+                const handleKeyDown = (e) => {
+                    if (e.key === 'Escape') {
+                        closeDialog(false);
+                        document.removeEventListener('keydown', handleKeyDown);
+                    }
+                };
+                document.addEventListener('keydown', handleKeyDown);
+                
+                console.log('[CustomAPITaskQueue] ✅ 确认对话框已显示（右上角）');
+                
+            } catch (error) {
+                console.error('[CustomAPITaskQueue] ❌ 显示确认对话框失败:', error);
+                // 出错时默认允许继续
+                resolve(true);
+            }
+        });
     }
 
     /**

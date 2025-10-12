@@ -735,21 +735,22 @@ ${panelRulesSection}
 
 请在每次回复的最后输出AI记忆总结：
 
-<AI_MEMORY_SUMMARY>
+<ai_memory_summary>
 <!--
-{
-  "type": "ai_memory",
-  "content": "简洁的剧情总结内容（100-200字）",
-  "importance": 0.8,
-  "tags": ["关键词1", "关键词2"],
-  "category": "剧情发展",
-  "timestamp": ${Date.now()},
-  "messageId": "msg_xxx"
-}
+"type": "ai_memory",
+"content": "简洁的剧情总结内容（100-200字）",
+"importance": 0.8,
+"tags": ["关键词1", "关键词2"],
+"category": "剧情发展",
+"timestamp": ${Date.now()},
+"messageId": "msg_xxx"
 -->
-</AI_MEMORY_SUMMARY>
+</ai_memory_summary>
 
 **要求：**
+- 使用小写标签 <ai_memory_summary>
+- 注释内容不使用花括号包裹
+- 每个字段独立一行
 - 提取核心剧情要点和重要对话
 - 突出角色行为和情感变化
 - 保持客观中性的叙述
@@ -1281,6 +1282,12 @@ ${panelRulesSection}
                     customPanelsMissing.map(p => p.panelName));
             }
 
+            // 🆕 获取破甲提示词
+            const armorBreakingPrompt = await this.getArmorBreakingPrompt();
+            if (armorBreakingPrompt) {
+                console.log('[SmartPromptSystem] 🛡️ 已获取破甲提示词，将添加到提示词顶部');
+            }
+
             // 🔧 新增：根据更新策略智能选择对应的模板
             let prompt = '';
             const templateSelectionReason = this.getTemplateSelectionReason(updateStrategy, missingDataFields);
@@ -1291,6 +1298,12 @@ ${panelRulesSection}
             } else {
                 prompt = await this.buildFullUpdatePrompt(enabledPanels, memoryEnhancedData, updateStrategy);
                 console.log('[SmartPromptSystem] 📊 使用全量更新模板 -', templateSelectionReason);
+            }
+
+            // 🆕 如果有破甲提示词，添加到提示词最顶部
+            if (armorBreakingPrompt) {
+                prompt = armorBreakingPrompt + '\n\n' + prompt;
+                console.log('[SmartPromptSystem] 🛡️ 破甲提示词已添加到提示词最顶部');
             }
 
             // 检测输出模式
@@ -1410,7 +1423,7 @@ ${aiMemoryInstruction}
     }
 
     /**
-     * 🔧 新增：创建AI记忆总结指令
+     * 🔧 新增：创建AI记忆总结指令（新格式：小写标签）
      */
     createAIMemorySummaryInstruction() {
         // 获取当前消息ID
@@ -1418,33 +1431,30 @@ ${aiMemoryInstruction}
 
         return `### AI记忆总结输出
 
-请在回复后输出AI记忆总结，使用以下多行格式：
+请在回复后输出AI记忆总结，使用以下格式：
 
-<AI_MEMORY_SUMMARY>
+<ai_memory_summary>
 <!--
-{
-  "type": "ai_memory",
-  "content": "简洁的记忆总结内容（20-200字）",
-  "importance": 0.8,
-  "tags": ["关键词1", "关键词2"],
-  "category": "剧情发展|角色互动|情感变化|场景描述|决定转折",
-  "timestamp": ${Date.now()},
-  "messageId": "${currentMessageId}"
-}
+"type": "ai_memory",
+"content": "简洁的记忆总结内容",
+"importance": 0.8,
+"tags": ["基因解锁", "归途之旅"],
+"category": "剧情发展",
+"timestamp": ${Date.now()},
+"messageId": "${currentMessageId}"
 -->
-</AI_MEMORY_SUMMARY>
+</ai_memory_summary>
 
-**严格要求**：
-- 必须使用<AI_MEMORY_SUMMARY>标签包裹
-- 开始标签<AI_MEMORY_SUMMARY>单独一行
-- HTML注释开始符<!--单独一行
-- JSON内容多行格式
-- HTML注释结束符-->单独一行
-- 结束标签</AI_MEMORY_SUMMARY>单独一行
-- 提取当前对话的核心要点
-- 重点关注角色行为、情感变化、剧情发展
-- 保持客观中性的叙述风格
-- 总结长度控制在20-200字之间`;
+**格式要求**：
+- 使用小写标签 <ai_memory_summary>
+- 注释内的内容不使用花括号包裹
+- 每个字段独立一行
+- content: 总结核心剧情（20-200字）
+- importance: 重要性评分（0.0-1.0）
+- tags: 关键词标签数组
+- category: 分类（剧情发展/角色互动/情感变化/场景描述/决定转折）
+- timestamp: 时间戳
+- messageId: 消息ID`;
     }
 
     /**
@@ -3079,6 +3089,18 @@ ${aiMemoryInstruction}
 
             console.log('[SmartPromptSystem] ✅ 智能提示词系统已启用，继续智能提示词注入流程');
 
+            // 🔧 检查是否启用表格记录（使用之前的 basicSettings 变量）
+            const tableRecordsEnabled = basicSettings.tableRecords?.enabled !== false;
+            
+            // 检查是否启用AI记忆总结
+            const memoryEnhancementSettings = extensionSettings?.memoryEnhancement?.ai || {};
+            const aiMemorySummaryEnabled = memoryEnhancementSettings.enabled === true;
+            
+            console.log('[SmartPromptSystem] 🔧 功能启用状态:', {
+                tableRecordsEnabled,
+                aiMemorySummaryEnabled
+            });
+
             // 🔧 新增：执行面板记忆注入（独立于API模式，始终执行）
             await this.injectPanelDataToMemory();
 
@@ -3087,17 +3109,30 @@ ${aiMemoryInstruction}
             const isCustomAPIEnabled = apiConfig.enabled && apiConfig.apiKey && apiConfig.model;
 
             if (isCustomAPIEnabled) {
-                console.log('[SmartPromptSystem] 🚫 检测到自定义API模式已启用，注入主API技术性禁止规则');
+                console.log('[SmartPromptSystem] 🔧 检测到自定义API模式已启用');
                 console.log('[SmartPromptSystem] 📊 自定义API提供商:', apiConfig.provider);
                 console.log('[SmartPromptSystem] 📊 自定义API模型:', apiConfig.model);
-
-                // 注入主API技术性禁止规则
-                await this.injectMainAPIProhibitionRules();
-                return;
+                console.log('[SmartPromptSystem] ℹ️ 自定义API模式下不注入主API技术性限制提示词');
+                
+                // 🔧 修复：清除可能存在的禁止规则，避免影响主API
+                await this.clearMainAPIProhibitionRules();
+                
+                // 不再注入禁止规则，跳过主API提示词注入，继续生成智能提示词
             } else {
                 // 🆕 自定义API未启用时，向主API注入必须输出标签的规则
                 await this.injectMainAPIRequiredRules();
                 console.log('[SmartPromptSystem] ✅ 自定义API未启用，已注入主API必须输出规则');
+            }
+
+            // 🔧 修复：如果表格记录和AI记忆总结都未启用，不生成智能提示词
+            if (!tableRecordsEnabled && !aiMemorySummaryEnabled) {
+                console.log('[SmartPromptSystem] ℹ️ 表格记录和AI记忆总结都未启用，跳过智能提示词生成');
+                // 清除可能存在的提示词
+                if (typeof this.context.setExtensionPrompt === 'function') {
+                    this.context.setExtensionPrompt('Information bar integration tool', '', 1, 0);
+                    console.log('[SmartPromptSystem] 🧹 已清除智能提示词');
+                }
+                return;
             }
 
             // 生成智能提示词
@@ -5324,22 +5359,23 @@ infobar_data标签（独立输出，必须后输出）`;
 
 请在每次回复的最后输出AI记忆总结：
 
-**格式要求（必须严格遵守多行格式）：**
-<AI_MEMORY_SUMMARY>
+**格式要求：**
+<ai_memory_summary>
 <!--
-{
-  "type": "ai_memory",
-  "content": "简洁的剧情总结内容（100-200字）",
-  "importance": 0.8,
-  "tags": ["关键词1", "关键词2"],
-  "category": "剧情发展",
-  "timestamp": ${Date.now()},
-  "messageId": "msg_xxx"
-}
+"type": "ai_memory",
+"content": "简洁的剧情总结内容（100-200字）",
+"importance": 0.8,
+"tags": ["关键词1", "关键词2"],
+"category": "剧情发展",
+"timestamp": ${Date.now()},
+"messageId": "msg_xxx"
 -->
-</AI_MEMORY_SUMMARY>
+</ai_memory_summary>
 
 **总结要求：**
+- 使用小写标签 <ai_memory_summary>
+- 注释内容不使用花括号包裹
+- 每个字段独立一行
 - 提取核心剧情要点和重要对话
 - 突出角色行为和情感变化
 - 保持客观中性的叙述
@@ -5677,12 +5713,16 @@ infobar_data标签（独立输出，必须后输出）`;
                 let messageContent = messageTextElement.innerHTML;
                 let hasChanges = false;
 
-                // 1. 过滤AI记忆总结标签（支持多种格式）
-                // 新格式（多行和单行）：<AI_MEMORY_SUMMARY><!--...--></AI_MEMORY_SUMMARY>
-                if (messageContent.includes('<AI_MEMORY_SUMMARY>')) {
-                    // 多行格式：<AI_MEMORY_SUMMARY>\n<!--\n{...}\n-->\n</AI_MEMORY_SUMMARY>
+                // 1. 过滤AI记忆总结标签（支持新旧格式）
+                // 新格式（小写标签）：<ai_memory_summary><!--...--></ai_memory_summary>
+                if (messageContent.includes('<ai_memory_summary>') || messageContent.includes('<AI_MEMORY_SUMMARY>')) {
                     messageContent = messageContent.replace(
-                        /<AI_MEMORY_SUMMARY>\s*<!--[\s\S]*?-->\s*<\/AI_MEMORY_SUMMARY>/g,
+                        /<ai_memory_summary>\s*<!--[\s\S]*?-->\s*<\/ai_memory_summary>/gi,
+                        ''
+                    );
+                    // 兼容大写标签
+                    messageContent = messageContent.replace(
+                        /<AI_MEMORY_SUMMARY>\s*<!--[\s\S]*?-->\s*<\/AI_MEMORY_SUMMARY>/gi,
                         ''
                     );
                     hasChanges = true;
@@ -5782,8 +5822,10 @@ infobar_data标签（独立输出，必须后输出）`;
                 return;
             }
 
-            // 检查消息是否包含AI记忆总结标签（支持新旧两种格式）
-            if (!messageContent.includes('<AI_MEMORY_SUMMARY>') && !messageContent.includes('[AI_MEMORY_SUMMARY]')) {
+            // 检查消息是否包含AI记忆总结标签（支持新旧格式）
+            if (!messageContent.includes('<ai_memory_summary>') && 
+                !messageContent.includes('<AI_MEMORY_SUMMARY>') && 
+                !messageContent.includes('[AI_MEMORY_SUMMARY]')) {
                 return;
             }
 
@@ -5799,37 +5841,42 @@ infobar_data标签（独立输出，必须后输出）`;
     }
 
     /**
-     * 🔧 新增：提取AI记忆总结（支持多种格式）
+     * 🔧 新增：提取AI记忆总结（支持新旧格式）
      */
     extractAIMemorySummary(messageContent) {
         try {
-            // 🔧 优先尝试新格式（多行）：<AI_MEMORY_SUMMARY>\n<!--\n{...}\n-->\n</AI_MEMORY_SUMMARY>
-            const newFormatMultilineRegex = /<AI_MEMORY_SUMMARY>\s*<!--\s*([\s\S]*?)\s*-->\s*<\/AI_MEMORY_SUMMARY>/;
-            const newMultilineMatch = messageContent.match(newFormatMultilineRegex);
+            // 🔧 优先尝试新格式（小写标签，无花括号）：<ai_memory_summary><!--...--></ai_memory_summary>
+            const newFormatLowercaseRegex = /<ai_memory_summary>\s*<!--\s*([\s\S]*?)\s*-->\s*<\/ai_memory_summary>/i;
+            const newLowercaseMatch = messageContent.match(newFormatLowercaseRegex);
 
-            if (newMultilineMatch && newMultilineMatch[1]) {
-                const jsonContent = newMultilineMatch[1].trim();
-                console.log('[SmartPromptSystem] ✅ 检测到新格式AI记忆总结（多行）');
-                return JSON.parse(jsonContent);
+            if (newLowercaseMatch && newLowercaseMatch[1]) {
+                const content = newLowercaseMatch[1].trim();
+                console.log('[SmartPromptSystem] ✅ 检测到新格式AI记忆总结（小写标签）');
+                
+                // 解析新格式（无花括号的键值对）
+                const summary = this.parseNewFormatSummary(content);
+                if (summary) {
+                    return summary;
+                }
             }
 
-            // 🔧 兼容新格式（单行）：<AI_MEMORY_SUMMARY><!--{...}--></AI_MEMORY_SUMMARY>
-            const newFormatSinglelineRegex = /<AI_MEMORY_SUMMARY><!--([\s\S]*?)--><\/AI_MEMORY_SUMMARY>/;
-            const newSinglelineMatch = messageContent.match(newFormatSinglelineRegex);
+            // 🔧 兼容旧格式（大写标签，有花括号）：<AI_MEMORY_SUMMARY><!--{...}--></AI_MEMORY_SUMMARY>
+            const oldFormatUppercaseRegex = /<AI_MEMORY_SUMMARY>\s*<!--\s*([\s\S]*?)\s*-->\s*<\/AI_MEMORY_SUMMARY>/i;
+            const oldUppercaseMatch = messageContent.match(oldFormatUppercaseRegex);
 
-            if (newSinglelineMatch && newSinglelineMatch[1]) {
-                const jsonContent = newSinglelineMatch[1].trim();
-                console.log('[SmartPromptSystem] ✅ 检测到新格式AI记忆总结（单行）');
+            if (oldUppercaseMatch && oldUppercaseMatch[1]) {
+                const jsonContent = oldUppercaseMatch[1].trim();
+                console.log('[SmartPromptSystem] ⚠️ 检测到旧格式AI记忆总结（大写标签）');
                 return JSON.parse(jsonContent);
             }
 
             // 🔧 向后兼容：尝试旧格式 [AI_MEMORY_SUMMARY]...[/AI_MEMORY_SUMMARY]
-            const oldFormatRegex = /\[AI_MEMORY_SUMMARY\]([\s\S]*?)\[\/AI_MEMORY_SUMMARY\]/;
-            const oldMatch = messageContent.match(oldFormatRegex);
+            const oldBracketFormatRegex = /\[AI_MEMORY_SUMMARY\]([\s\S]*?)\[\/AI_MEMORY_SUMMARY\]/;
+            const oldBracketMatch = messageContent.match(oldBracketFormatRegex);
 
-            if (oldMatch && oldMatch[1]) {
-                const jsonContent = oldMatch[1].trim();
-                console.log('[SmartPromptSystem] ⚠️ 检测到旧格式AI记忆总结（建议升级到新格式）');
+            if (oldBracketMatch && oldBracketMatch[1]) {
+                const jsonContent = oldBracketMatch[1].trim();
+                console.log('[SmartPromptSystem] ⚠️ 检测到旧方括号格式AI记忆总结');
                 return JSON.parse(jsonContent);
             }
 
@@ -5837,6 +5884,44 @@ infobar_data标签（独立输出，必须后输出）`;
         } catch (error) {
             console.error('[SmartPromptSystem] ❌ 提取AI记忆总结失败:', error);
             console.error('[SmartPromptSystem] 错误详情:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * 🆕 解析新格式总结（无花括号的键值对）
+     */
+    parseNewFormatSummary(content) {
+        try {
+            const summary = {};
+            const lines = content.split('\n').map(line => line.trim()).filter(line => line);
+
+            for (const line of lines) {
+                // 匹配格式："key": "value" 或 "key": [...] 或 "key": 数字
+                const match = line.match(/"([^"]+)":\s*(.+?)(?:,\s*)?$/);
+                if (match) {
+                    const [, key, value] = match;
+                    
+                    // 处理不同类型的值
+                    if (value.startsWith('[') && value.endsWith(']')) {
+                        // 数组
+                        summary[key] = JSON.parse(value.replace(/,\s*$/, ''));
+                    } else if (value.startsWith('"') && value.endsWith('"')) {
+                        // 字符串
+                        summary[key] = value.slice(1, -1).replace(/,\s*$/, '');
+                    } else {
+                        // 数字或其他
+                        const cleaned = value.replace(/,\s*$/, '');
+                        summary[key] = isNaN(cleaned) ? cleaned : parseFloat(cleaned);
+                    }
+                }
+            }
+
+            console.log('[SmartPromptSystem] ✅ 新格式总结解析完成:', summary);
+            return Object.keys(summary).length > 0 ? summary : null;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 解析新格式总结失败:', error);
             return null;
         }
     }

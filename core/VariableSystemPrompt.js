@@ -87,51 +87,17 @@ export class VariableSystemPrompt {
      */
     async handleGenerationStarted(data) {
         try {
-            console.log('[VariableSystemPrompt] 🚀 检测到生成开始，检查是否需要注入变量系统读取提示词...');
-
+            console.log('[VariableSystemPrompt] 🚀 检测到生成开始事件');
+            console.log('[VariableSystemPrompt] ℹ️ 变量系统功能已废弃，不再注入变量读取提示词');
+            
+            // 🔧 修复：清除可能存在的旧的变量提示词
             const context = SillyTavern.getContext();
-            const extensionSettings = context?.extensionSettings;
-            const toolSettings = extensionSettings?.['Information bar integration tool'] || {};
-
-            // 🔧 新增：检查插件是否启用
-            const basicSettings = toolSettings.basic || {};
-            const integrationSystemSettings = basicSettings.integrationSystem || {};
-            const isPluginEnabled = integrationSystemSettings.enabled !== false; // 默认为true，只有明确设置为false才禁用
-
-            if (!isPluginEnabled) {
-                console.log('[VariableSystemPrompt] ℹ️ 插件已禁用，跳过变量系统读取提示词注入');
-                return;
+            if (context && context.setExtensionPrompt) {
+                context.setExtensionPrompt('information_bar_variable_reader', '', 1, 0);
+                console.log('[VariableSystemPrompt] 🧹 已清除变量系统提示词');
             }
-
-            console.log('[VariableSystemPrompt] ✅ 插件已启用，继续检查变量系统读取提示词注入条件...');
-
-            // 🔧 修复：检查自定义API模式，避免与主API禁止规则冲突
-            const apiConfig = toolSettings.apiConfig;
             
-            if (apiConfig?.enabled && apiConfig?.apiKey && apiConfig?.model) {
-                console.log('[VariableSystemPrompt] 🚫 检测到自定义API模式已启用，跳过主API变量提示词注入');
-                console.log('[VariableSystemPrompt] 📊 自定义API提供商:', apiConfig.provider);
-                console.log('[VariableSystemPrompt] 📊 自定义API模型:', apiConfig.model);
-                console.log('[VariableSystemPrompt] ✅ 避免与主API禁止规则产生冲突');
-                
-                // 清除之前可能注入的提示词
-                if (this.context.setExtensionPrompt) {
-                    this.context.setExtensionPrompt('information_bar_variable_reader', '', 1, 0);
-                    console.log('[VariableSystemPrompt] 🧹 已清除主API变量提示词');
-                }
-                return;
-            }
-
-            console.log('[VariableSystemPrompt] ✅ 自定义API未启用，继续注入变量系统读取提示词...');
-            
-            // 动态生成提示词模板
-            this.promptTemplate = await this.generatePromptTemplate();
-            
-            // 注入变量系统读取提示词
-            await this.injectVariablePrompt();
-            
-            this.injectionActive = true;
-            console.log('[VariableSystemPrompt] ✅ 变量系统读取提示词注入成功');
+            this.injectionActive = false;
             
         } catch (error) {
             console.error('[VariableSystemPrompt] ❌ 处理生成开始事件失败:', error);
@@ -140,46 +106,22 @@ export class VariableSystemPrompt {
     }
 
     /**
-     * 生成提示词模板 - 包含完整的输出格式要求
+     * 生成提示词模板 - 简化版，只包含变量读取指令
      */
     async generatePromptTemplate() {
-        console.log('[VariableSystemPrompt] 🔄 生成包含完整输出格式的指令...');
+        console.log('[VariableSystemPrompt] 🔄 生成变量系统读取指令...');
         
-        return `🚨🚨🚨 **CRITICAL MANDATORY INSTRUCTION** 🚨🚨🚨
+        return `## 📊 信息栏数据读取指令
 
-**STEP 1: EXECUTE IMMEDIATELY BEFORE ANY RESPONSE:**
-\`{{getvar::infobar}}\`
+**重要：你必须主动读取SillyTavern变量系统中的信息栏数据来保持剧情连贯性！**
 
-**STEP 2: CRITICAL RULE ENFORCEMENT:**
-- ⚠️ **TIME FORMAT MUST BE**: "2024/01/15 18点30分" format ONLY (extract from rules you get)
-- ⚠️ **NEVER use generic words**: "夜晚", "下午", "晚上" for time fields
-- ⚠️ **ALWAYS extract and follow ALL rules from the data you get**
+**读取方式：**
+使用 \`{{getvar::infobar}}\` 获取完整的信息栏数据对象
 
-**STEP 3: MANDATORY OUTPUT FORMAT - TWO TAGS REQUIRED:**
-
-**🚨 MUST OUTPUT BOTH TAGS IN THIS EXACT ORDER 🚨**
-
-1. **FIRST TAG - aiThinkProcess (REQUIRED):**
-   \`<aiThinkProcess>\`
-   \`<!--\`
-   \`[Your 5-step analysis process here]\`
-   \`-->\`
-   \`</aiThinkProcess>\`
-
-2. **SECOND TAG - infobar_data (REQUIRED):**
-   \`<infobar_data>\`
-   \`<!--\`
-   \`[Panel data in XML compact format, following extracted rules]\`
-   \`-->\`
-   \`</infobar_data>\`
-
-**⚠️ CRITICAL REQUIREMENTS:**
-- Both tags MUST be output in EVERY response
-- Must be wrapped in <!--  --> comments
-- Must follow rules extracted from {{getvar::infobar}}
-- aiThinkProcess MUST come first, infobar_data MUST come second
-
-**🚨 FAILURE TO OUTPUT BOTH TAGS = SYSTEM ERROR 🚨**`;
+**说明：**
+- 信息栏数据包含了角色、场景、任务、物品等重要剧情信息
+- 请在思考和生成回复时参考这些数据，保持剧情连贯性
+- 这些数据会自动更新，反映最新的剧情状态`;
     }
 
     /**
