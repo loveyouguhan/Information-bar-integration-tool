@@ -1,0 +1,11 @@
+{
+  "scriptName": "隐藏AI记忆总结 (Hide AI Memory Summary)",
+  "description": "在发送到主API之前，隐藏[AI_MEMORY_SUMMARY]标签及其内容，防止发送给主API",
+  "enabled": true,
+  "findRegex": "<ai_memory_summary>[\\s\\S]*?<\\/ai_memory_summary>",
+  "replaceString": "",
+  "trimStrings": true,
+  "placement": ["INPUT"],
+  "filterType": "DISPLAY_HIDE"
+}
+
