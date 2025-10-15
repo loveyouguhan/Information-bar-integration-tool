@@ -27,6 +27,10 @@ export class NPCManagementPanel {
         this.syncInProgress = false;
         this.lastSyncTime = null;
 
+        // 🆕 新增：批量操作状态
+        this.selectedNpcIds = new Set();
+        this.batchDeleteInProgress = false;
+
         // 🌍 新增：世界书同步功能状态
         this.worldBookSyncEnabled = false;
         this.worldBookSyncInProgress = false;
@@ -55,6 +59,12 @@ export class NPCManagementPanel {
         this.syncToWorldBook = this.syncToWorldBook.bind(this);
         this.toggleWorldBookSync = this.toggleWorldBookSync.bind(this);
         this.updateWorldBookSyncUI = this.updateWorldBookSyncUI.bind(this);
+        
+        // 🆕 新增：批量操作方法绑定
+        this.toggleNpcSelection = this.toggleNpcSelection.bind(this);
+        this.toggleSelectAll = this.toggleSelectAll.bind(this);
+        this.batchDeleteNpcs = this.batchDeleteNpcs.bind(this);
+        this.updateBatchOperationUI = this.updateBatchOperationUI.bind(this);
         
         try { this.init(); } catch (e) { console.error('[NPCPanel] 初始化失败', e); }
         
@@ -107,6 +117,26 @@ export class NPCManagementPanel {
             if (deleteBtn) {
                 const npcId = deleteBtn.dataset.npcId;
                 this.deleteNpc(npcId);
+                return;
+            }
+            // 🆕 批量操作：全选/取消全选
+            const selectAllBtn = e.target.closest('[data-action="select-all"]');
+            if (selectAllBtn) {
+                this.toggleSelectAll();
+                return;
+            }
+            // 🆕 批量操作：批量删除
+            const batchDeleteBtn = e.target.closest('[data-action="batch-delete"]');
+            if (batchDeleteBtn) {
+                this.batchDeleteNpcs();
+                return;
+            }
+            // 🆕 批量操作：复选框点击
+            const checkbox = e.target.closest('.npc-checkbox');
+            if (checkbox) {
+                const npcId = checkbox.dataset.npcId;
+                this.toggleNpcSelection(npcId);
+                e.stopPropagation(); // 阻止触发行点击
                 return;
             }
             const row = e.target.closest('.npc-row');
@@ -186,6 +216,61 @@ export class NPCManagementPanel {
                             <option value="desc">降序</option>
                             <option value="asc">升序</option>
                         </select>
+                    </div>
+
+                    <!-- 🆕 批量操作工具栏 -->
+                    <div class="batch-toolbar" style="
+                        display: flex;
+                        gap: 8px;
+                        align-items: center;
+                        padding: 6px 8px;
+                        background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #111));
+                        border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
+                        border-radius: 4px;
+                    ">
+                        <button 
+                            data-action="select-all" 
+                            class="select-all-btn"
+                            style="
+                                padding: 4px 8px;
+                                font-size: 11px;
+                                background: var(--theme-bg-primary, #333);
+                                color: var(--theme-text-primary, #ddd);
+                                border: 1px solid var(--theme-border-color, #555);
+                                border-radius: 4px;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                            "
+                            onmouseover="this.style.background='var(--theme-bg-hover, #444)'"
+                            onmouseout="this.style.background='var(--theme-bg-primary, #333)'"
+                        >
+                            <span class="select-all-icon">☐</span> 全选
+                        </button>
+                        <div class="selected-count" style="
+                            flex: 1;
+                            font-size: 12px;
+                            color: var(--theme-text-secondary, #999);
+                        ">
+                            已选中 <span class="count-number">0</span> 个
+                        </div>
+                        <button 
+                            data-action="batch-delete" 
+                            class="batch-delete-btn"
+                            disabled
+                            style="
+                                padding: 4px 8px;
+                                font-size: 11px;
+                                background: var(--theme-bg-danger, #dc3545);
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                                opacity: 0.5;
+                            "
+                        >
+                            🗑️ 批量删除
+                        </button>
                     </div>
 
                     <!-- 🚀 新增：同步数据滑动块 -->
@@ -505,23 +590,26 @@ export class NPCManagementPanel {
                         return;
                     }
 
-                    // 🔧 修复：更全面的数据检查
+                    // 🔧 修复：更全面的数据检查，使用用户选择的面板
                     const panelsData = payload?.dataEntry?.data || payload?.panelFields || payload?.data || {};
-                    const interactionData = panelsData.interaction;
+                    const sourcePanelId = this.sourcePanelId || 'interaction';
+                    const panelData = panelsData[sourcePanelId];
 
-                    console.log('[NPCPanel] 🔍 检查interaction数据:', {
+                    console.log('[NPCPanel] 🔍 检查用户选择的面板数据:', {
+                        sourcePanelId: sourcePanelId,
                         hasDataEntry: !!payload?.dataEntry,
                         hasData: !!panelsData,
-                        hasInteraction: !!interactionData,
-                        interactionKeys: interactionData ? Object.keys(interactionData).length : 0
+                        hasPanelData: !!panelData,
+                        panelKeys: panelData ? Object.keys(panelData).length : 0,
+                        availablePanels: Object.keys(panelsData)
                     });
 
-                    if (!interactionData || Object.keys(interactionData).length === 0) {
-                        console.log('[NPCPanel] ℹ️ 没有interaction数据更新，跳过自动同步');
+                    if (!panelData || Object.keys(panelData).length === 0) {
+                        console.log(`[NPCPanel] ℹ️ 没有${sourcePanelId}面板数据更新，跳过自动同步`);
                         return;
                     }
 
-                    console.log('[NPCPanel] 🔄 检测到interaction数据更新，触发自动同步');
+                    console.log(`[NPCPanel] 🔄 检测到${sourcePanelId}面板数据更新，触发自动同步`);
 
                     // 🔧 修复：延迟执行同步，避免与NPCDatabaseManager冲突
                     setTimeout(async () => {
@@ -1107,17 +1195,40 @@ export class NPCManagementPanel {
             this.renderDetails(null);
             return;
         }
-        list.innerHTML = npcs.map(n => `
-            <div class="npc-row" data-id="${n.id}">
-                <div>
-                    <div class="npc-name">${this.escape(n.name || '')}</div>
-                    <div class="npc-meta">ID: ${n.id} · 出现次数: ${n.appearCount || 0} · 最近: ${this.formatTime(n.lastSeen)}</div>
+        list.innerHTML = npcs.map(n => {
+            const isSelected = this.selectedNpcIds.has(n.id);
+            return `
+            <div class="npc-row ${isSelected ? 'selected' : ''}" data-id="${n.id}">
+                <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                    <div class="npc-checkbox" data-npc-id="${n.id}" style="
+                        width: 18px;
+                        height: 18px;
+                        border: 2px solid var(--theme-border-color, #555);
+                        border-radius: 3px;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        background: ${isSelected ? 'var(--theme-accent-color, #007bff)' : 'transparent'};
+                        transition: all 0.2s ease;
+                        flex-shrink: 0;
+                    " title="选择此NPC">
+                        ${isSelected ? '<span style="color: white; font-size: 12px; font-weight: bold;">✓</span>' : ''}
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="npc-name">${this.escape(n.name || '')}</div>
+                        <div class="npc-meta">ID: ${n.id} · 出现次数: ${n.appearCount || 0} · 最近: ${this.formatTime(n.lastSeen)}</div>
+                    </div>
                 </div>
                 <div>
                     <span class="badge">${(n.fields?.type || n.fields?.类型 || n.fields?.npc_type || '未知类型')}</span>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
+        
+        // 🆕 更新批量操作UI
+        this.updateBatchOperationUI();
     }
 
     renderDetails(id) {
@@ -1814,8 +1925,289 @@ export class NPCManagementPanel {
                 transform: translateY(-1px);
                 box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             }
+            
+            .npc-row.selected {
+                background: var(--theme-bg-selected, rgba(0,123,255,0.1)) !important;
+            }
+            
+            .npc-checkbox:hover {
+                border-color: var(--theme-accent-color, #007bff) !important;
+            }
         `;
         document.head.appendChild(style);
+    }
+
+    /**
+     * 🆕 切换单个NPC的选中状态
+     */
+    toggleNpcSelection(npcId) {
+        if (this.selectedNpcIds.has(npcId)) {
+            this.selectedNpcIds.delete(npcId);
+            console.log('[NPCPanel] ☑️ 取消选中NPC:', npcId);
+        } else {
+            this.selectedNpcIds.add(npcId);
+            console.log('[NPCPanel] ✅ 选中NPC:', npcId);
+        }
+        
+        // 更新UI
+        this.renderList();
+    }
+
+    /**
+     * 🆕 全选/取消全选
+     */
+    toggleSelectAll() {
+        const npcs = this.npcDB.search({ q: this.searchText, sortBy: this.sortBy, order: this.order });
+        
+        // 检查当前是否全选
+        const allSelected = npcs.length > 0 && npcs.every(npc => this.selectedNpcIds.has(npc.id));
+        
+        if (allSelected) {
+            // 取消全选
+            npcs.forEach(npc => this.selectedNpcIds.delete(npc.id));
+            console.log('[NPCPanel] ☐ 取消全选');
+        } else {
+            // 全选
+            npcs.forEach(npc => this.selectedNpcIds.add(npc.id));
+            console.log('[NPCPanel] ☑️ 已全选', npcs.length, '个NPC');
+        }
+        
+        // 更新UI
+        this.renderList();
+    }
+
+    /**
+     * 🆕 批量删除NPC
+     */
+    async batchDeleteNpcs() {
+        try {
+            if (this.selectedNpcIds.size === 0) {
+                this.toast('请先选择要删除的NPC');
+                return;
+            }
+
+            if (this.batchDeleteInProgress) {
+                this.toast('批量删除正在进行中...');
+                return;
+            }
+
+            // 获取选中的NPC信息
+            const selectedNpcs = Array.from(this.selectedNpcIds).map(id => {
+                return {
+                    id,
+                    npc: this.npcDB.db.npcs[id]
+                };
+            }).filter(item => item.npc);
+
+            if (selectedNpcs.length === 0) {
+                this.toast('未找到有效的NPC');
+                this.selectedNpcIds.clear();
+                this.renderList();
+                return;
+            }
+
+            // 显示确认对话框
+            const confirmed = await this.showBatchDeleteConfirmDialog(selectedNpcs);
+            if (!confirmed) {
+                console.log('[NPCPanel] ℹ️ 用户取消批量删除操作');
+                return;
+            }
+
+            // 开始批量删除
+            this.batchDeleteInProgress = true;
+            this.updateBatchOperationUI();
+
+            console.log('[NPCPanel] 🗑️ 开始批量删除', selectedNpcs.length, '个NPC...');
+
+            let successCount = 0;
+            let failCount = 0;
+
+            // 逐个删除NPC
+            for (const { id, npc } of selectedNpcs) {
+                try {
+                    const success = await this.npcDB.deleteNPC(id);
+                    if (success) {
+                        successCount++;
+                        console.log(`[NPCPanel] ✅ 删除成功: ${npc.name} (${id})`);
+                    } else {
+                        failCount++;
+                        console.warn(`[NPCPanel] ⚠️ 删除失败: ${npc.name} (${id})`);
+                    }
+                } catch (error) {
+                    failCount++;
+                    console.error(`[NPCPanel] ❌ 删除出错: ${npc.name} (${id})`, error);
+                }
+            }
+
+            // 清空选中状态
+            this.selectedNpcIds.clear();
+
+            // 刷新列表
+            this.renderList();
+            this.renderDetails(null);
+
+            // 显示结果
+            const message = `批量删除完成！成功: ${successCount} 个，失败: ${failCount} 个`;
+            console.log('[NPCPanel] ✅', message);
+            this.toast(message);
+
+        } catch (error) {
+            console.error('[NPCPanel] ❌ 批量删除失败:', error);
+            this.toast('批量删除失败: ' + error.message);
+        } finally {
+            this.batchDeleteInProgress = false;
+            this.updateBatchOperationUI();
+        }
+    }
+
+    /**
+     * 🆕 显示批量删除确认对话框
+     */
+    async showBatchDeleteConfirmDialog(selectedNpcs) {
+        return new Promise((resolve) => {
+            const dialog = document.createElement('div');
+            dialog.className = 'batch-delete-confirm-dialog';
+            dialog.style.cssText = `
+                position: fixed;
+                inset: 0;
+                z-index: 1000000;
+                background: rgba(0,0,0,0.5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+
+            const npcNames = selectedNpcs.slice(0, 5).map(item => this.escape(item.npc.name)).join('、');
+            const moreText = selectedNpcs.length > 5 ? ` 等 ${selectedNpcs.length} 个` : '';
+
+            dialog.innerHTML = `
+                <div style="
+                    background: var(--theme-bg-primary, var(--SmartThemeBodyColor, #1e1e1e));
+                    border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
+                    border-radius: 8px;
+                    padding: 20px;
+                    max-width: 500px;
+                    width: 90%;
+                    color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                ">
+                    <h3 style="margin: 0 0 16px 0; color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));">
+                        批量删除确认
+                    </h3>
+                    <p style="margin: 0 0 20px 0; line-height: 1.5;">
+                        您确定要删除以下 <strong>${selectedNpcs.length}</strong> 个NPC吗？
+                        <br><br>
+                        <span style="color: var(--theme-text-secondary, #999);">
+                            ${npcNames}${moreText}
+                        </span>
+                        <br><br>
+                        <span style="color: var(--theme-text-warning, #ffc107); font-size: 14px;">
+                            ⚠️ 此操作不可撤销，将永久删除这些NPC及其在世界书中的相关条目。
+                        </span>
+                    </p>
+                    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                        <button class="cancel-btn" style="
+                            background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #111));
+                            color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                            border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
+                            padding: 8px 16px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                        ">取消</button>
+                        <button class="confirm-btn" style="
+                            background: var(--theme-bg-danger, #dc3545);
+                            color: white;
+                            border: none;
+                            padding: 8px 16px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                        ">确认删除</button>
+                    </div>
+                </div>
+            `;
+
+            const cleanup = () => {
+                document.body.removeChild(dialog);
+            };
+
+            dialog.querySelector('.cancel-btn').addEventListener('click', () => {
+                cleanup();
+                resolve(false);
+            });
+
+            dialog.querySelector('.confirm-btn').addEventListener('click', () => {
+                cleanup();
+                resolve(true);
+            });
+
+            dialog.addEventListener('click', (e) => {
+                if (e.target === dialog) {
+                    cleanup();
+                    resolve(false);
+                }
+            });
+
+            const handleKeyDown = (e) => {
+                if (e.key === 'Escape') {
+                    cleanup();
+                    document.removeEventListener('keydown', handleKeyDown);
+                    resolve(false);
+                }
+            };
+            document.addEventListener('keydown', handleKeyDown);
+
+            document.body.appendChild(dialog);
+        });
+    }
+
+    /**
+     * 🆕 更新批量操作UI状态
+     */
+    updateBatchOperationUI() {
+        if (!this.container) return;
+
+        const selectedCount = this.selectedNpcIds.size;
+        const countElement = this.container.querySelector('.count-number');
+        const batchDeleteBtn = this.container.querySelector('.batch-delete-btn');
+        const selectAllBtn = this.container.querySelector('.select-all-btn');
+        const selectAllIcon = this.container.querySelector('.select-all-icon');
+
+        // 更新选中数量
+        if (countElement) {
+            countElement.textContent = selectedCount;
+        }
+
+        // 更新批量删除按钮状态
+        if (batchDeleteBtn) {
+            if (selectedCount > 0 && !this.batchDeleteInProgress) {
+                batchDeleteBtn.disabled = false;
+                batchDeleteBtn.style.opacity = '1';
+                batchDeleteBtn.style.cursor = 'pointer';
+            } else {
+                batchDeleteBtn.disabled = true;
+                batchDeleteBtn.style.opacity = '0.5';
+                batchDeleteBtn.style.cursor = 'not-allowed';
+            }
+
+            if (this.batchDeleteInProgress) {
+                batchDeleteBtn.innerHTML = '⏳ 删除中...';
+            } else {
+                batchDeleteBtn.innerHTML = '🗑️ 批量删除';
+            }
+        }
+
+        // 更新全选按钮状态
+        if (selectAllBtn && selectAllIcon) {
+            const npcs = this.npcDB?.search({ q: this.searchText, sortBy: this.sortBy, order: this.order }) || [];
+            const allSelected = npcs.length > 0 && npcs.every(npc => this.selectedNpcIds.has(npc.id));
+            
+            if (allSelected) {
+                selectAllIcon.textContent = '☑';
+                selectAllBtn.innerHTML = '<span class="select-all-icon">☑</span> 取消全选';
+            } else {
+                selectAllIcon.textContent = '☐';
+                selectAllBtn.innerHTML = '<span class="select-all-icon">☐</span> 全选';
+            }
+        }
     }
 }
 

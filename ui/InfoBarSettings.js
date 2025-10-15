@@ -62,6 +62,10 @@ export class InfoBarSettings {
 
         // 表单数据
         this.formData = {};
+        
+        // 🆕 NPC批量操作状态
+        this.selectedNpcIds = new Set();
+        this.batchDeleteInProgress = false;
 
         // 初始化状态
         this.initialized = false;
@@ -139,6 +143,21 @@ export class InfoBarSettings {
                         this.hideSummaryContent();
                         this.refreshSummaryHistoryOnChatSwitch();
                     }
+                });
+
+                // 🔧 新增：监听聊天切换事件，刷新NPC列表
+                this.eventSystem.on('chat:changed', async () => {
+                    console.log('[InfoBarSettings] 🔄 收到聊天切换事件，刷新NPC列表');
+                    // 延迟刷新，确保NPC数据库已切换完成
+                    setTimeout(async () => {
+                        await this.refreshNPCList();
+                    }, 500);
+                });
+
+                // 🔧 新增：同时监听NPC数据库重新加载事件
+                this.eventSystem.on('npc:db:reloaded', async () => {
+                    console.log('[InfoBarSettings] 🔄 收到NPC数据库重新加载事件，刷新NPC列表');
+                    await this.refreshNPCList();
                 });
 
                 console.log('[InfoBarSettings] ✅ 聊天切换事件监听器已绑定');
@@ -523,7 +542,7 @@ export class InfoBarSettings {
                     <!-- 顶部标题栏 -->
                     <div class="modal-header">
                         <div class="header-left">
-                            <h2>信息栏设置</h2>
+                            <h2>信息助手</h2>
                         </div>
                         <div class="header-right">
                             <div class="success-notification" style="display: block;">
@@ -842,15 +861,11 @@ export class InfoBarSettings {
                             <i class="fa fa-code"></i>
                             变量管理器
                         </button>
-                        <button class="btn btn-secondary" id="npc-management-btn" data-action="open-npc-management" style="margin-left:8px;">
-                            <i class="fa fa-users"></i>
-                            NPC管理
-                        </button>
                         <button class="btn btn-danger" id="clear-memory-database-btn" data-action="clear-memory-database" style="margin-left:8px;">
                             <i class="fa fa-trash"></i>
                             清空AI记忆数据库
                         </button>
-                        <div class="tool-desc">管理全局变量、宏定义和自定义函数；打开NPC数据库管理界面；清空AI记忆数据库（用于解决记忆混乱问题）</div>
+                        <div class="tool-desc">管理全局变量、宏定义和自定义函数；清空AI记忆数据库（用于解决记忆混乱问题）</div>
                     </div>
                 </div>
             </div>
@@ -1102,14 +1117,14 @@ export class InfoBarSettings {
                     max-height: 400px;
                     overflow-y: auto;
                     padding: 10px;
-                    border: 1px solid var(--theme-border-color, #ddd);
+                    border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
                     border-radius: 6px;
-                    background: var(--theme-bg-secondary, #f9f9f9);
+                    background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #111));
                 }
 
                 .npc-card {
-                    background: var(--theme-bg-primary, #fff);
-                    border: 1px solid var(--theme-border-color, #ddd);
+                    background: var(--theme-bg-primary, var(--SmartThemeBodyColor, #1e1e1e));
+                    border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
                     border-radius: 8px;
                     padding: 12px;
                     transition: all 0.2s ease;
@@ -1117,9 +1132,19 @@ export class InfoBarSettings {
                 }
 
                 .npc-card:hover {
-                    border-color: var(--theme-primary-color, #007bff);
+                    border-color: var(--theme-accent-color, var(--SmartThemeQuoteColor, #007bff));
                     box-shadow: 0 2px 8px rgba(0, 123, 255, 0.15);
                     transform: translateY(-1px);
+                }
+
+                .npc-card.selected {
+                    background: var(--theme-bg-selected, rgba(0, 123, 255, 0.08)) !important;
+                    border-color: var(--theme-accent-color, var(--SmartThemeQuoteColor, #007bff)) !important;
+                }
+
+                .npc-checkbox:hover {
+                    border-color: var(--theme-accent-color, var(--SmartThemeQuoteColor, #007bff)) !important;
+                    transform: scale(1.1);
                 }
 
                 .npc-card-header {
@@ -5076,19 +5101,6 @@ export class InfoBarSettings {
                     console.log('[InfoBarSettings] 📊 显示数据信息...');
                     this.showDataInfoPanel();
                     break;
-                case 'open-npc-management':
-                    console.log('[InfoBarSettings] 🧑‍🤝‍🧑 打开NPC管理面板...');
-                    try {
-                        const panel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
-                        if (panel && typeof panel.show === 'function') {
-                            panel.show();
-                        } else {
-                            console.warn('[InfoBarSettings] ⚠️ 未找到NPC管理面板实例');
-                        }
-                    } catch (e) {
-                        console.error('[InfoBarSettings] ❌ 打开NPC管理面板失败:', e);
-                    }
-                    break;
                 case 'clear-memory-database':
                     console.log('[InfoBarSettings] 🧹 清空AI记忆数据库...');
                     this.clearMemoryDatabaseUI();
@@ -5855,8 +5867,15 @@ export class InfoBarSettings {
                 <div class="setting-row vectorized-memory-options custom-vector-api-options" id="custom-vector-api-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
                     <div class="setting-group">
                         <label class="setting-label" for="memory-custom-vector-api-url">自定义API地址</label>
-                        <input type="text" id="memory-custom-vector-api-url" class="setting-input" placeholder="https://api.example.com/embeddings" />
-                        <div class="setting-hint">外部向量化API的完整URL地址</div>
+                         <input type="text" id="memory-custom-vector-api-url" class="setting-input" placeholder="https://api.example.com" />
+                         <div class="setting-hint">
+                             <strong>支持的API格式：</strong><br>
+                             • <strong>OpenAI</strong>: https://api.openai.com (自动添加/v1/embeddings)<br>
+                             • <strong>Gemini</strong>: https://api.example.com/v1 (自动检测)<br>
+                             • <strong>Ollama</strong>: http://localhost:11434 (自动添加/api/embeddings)<br>
+                             • <strong>自定义</strong>: 输入基础URL即可，系统会自动检测格式<br>
+                             <span style="color: #FFA726;">⚠️ 如果遇到400错误，请检查模型名称是否正确</span>
+                         </div>
                     </div>
                 </div>
 
@@ -5870,9 +5889,20 @@ export class InfoBarSettings {
 
                 <div class="setting-row vectorized-memory-options custom-vector-api-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
                     <div class="setting-group">
-                        <label class="setting-label" for="memory-custom-vector-model">模型名称</label>
-                        <input type="text" id="memory-custom-vector-model" class="setting-input" placeholder="text-embedding-ada-002" />
-                        <div class="setting-hint">使用的嵌入模型名称</div>
+                        <label class="setting-label" for="memory-custom-vector-model">Embedding模型</label>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="memory-custom-vector-model" class="setting-select" style="flex: 1;">
+                                <option value="">-- 请先获取模型列表 --</option>
+                            </select>
+                            <button type="button" id="refresh-custom-vector-models" class="inline-button" title="获取模型列表">
+                                🔄 刷新
+                            </button>
+                            <button type="button" id="test-custom-vector-connection" class="inline-button" title="测试连接">
+                                🔍 测试
+                            </button>
+                        </div>
+                        <div class="setting-hint">从API获取可用的embedding模型列表</div>
+                        <div id="custom-vector-model-status" style="margin-top: 8px; font-size: 12px;"></div>
                     </div>
                 </div>
 
@@ -7583,6 +7613,15 @@ export class InfoBarSettings {
             this.currentTab = tabName;
 
             console.log(`[InfoBarSettings] 📑 切换到标签页: ${tabName}`);
+
+            // 🔧 新增：切换到NPC管理标签时，刷新NPC列表
+            if (tabName === 'npc') {
+                console.log('[InfoBarSettings] 🔄 切换到NPC管理标签，刷新NPC列表');
+                // 延迟刷新，确保DOM已更新
+                setTimeout(() => {
+                    this.refreshNPCList();
+                }, 100);
+            }
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 切换标签页失败:', error);
@@ -10447,10 +10486,27 @@ export class InfoBarSettings {
                 <h4>4. 手动操作</h4>
                 <div class="form-group">
                     <div class="button-group">
-                        <button type="button" id="npc-sync-now-btn" class="btn btn-sm btn-outline-primary">
+                        <button type="button" id="npc-sync-now-btn" class="btn btn-sm" style="
+                            background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a));
+                            color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                            border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #444));
+                            padding: 6px 12px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            transition: all 0.2s ease;
+                        " onmouseover="this.style.background='var(--theme-accent-color, var(--SmartThemeQuoteColor, #007bff))'" onmouseout="this.style.background='var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a))'">
                             🔄 立即同步NPC数据
                         </button>
-                        <button type="button" id="npc-worldbook-sync-now-btn" class="btn btn-sm btn-outline-secondary">
+                        <button type="button" id="npc-worldbook-sync-now-btn" class="btn btn-sm" style="
+                            background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a));
+                            color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                            border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #444));
+                            padding: 6px 12px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            transition: all 0.2s ease;
+                            margin-left: 8px;
+                        " onmouseover="this.style.background='var(--theme-success-color, var(--SmartThemeQuoteColor, #28a745))'" onmouseout="this.style.background='var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a))'">
                             🌍 同步到世界书
                         </button>
                     </div>
@@ -10463,8 +10519,77 @@ export class InfoBarSettings {
                 <div class="npc-list-container">
                     <div class="npc-search-bar">
                         <input type="text" id="npc-search-input" placeholder="搜索NPC..." class="form-control">
-                        <button type="button" id="npc-refresh-btn" class="btn btn-outline-primary">🔄 刷新</button>
+                        <button type="button" id="npc-refresh-btn" class="btn" style="
+                            background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a));
+                            color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                            border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #444));
+                            padding: 6px 12px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            transition: all 0.2s ease;
+                        " onmouseover="this.style.background='var(--theme-bg-hover, var(--SmartThemeQuoteColor, #333))'" onmouseout="this.style.background='var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a))'">
+                            🔄 刷新
+                        </button>
                     </div>
+                    
+                    <!-- 🆕 批量操作工具栏 -->
+                    <div class="npc-batch-toolbar" style="
+                        display: flex;
+                        gap: 8px;
+                        align-items: center;
+                        padding: 8px;
+                        margin-top: 8px;
+                        background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #1a1a1a));
+                        border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
+                        border-radius: 4px;
+                    ">
+                        <button 
+                            type="button"
+                            id="npc-select-all-btn" 
+                            class="btn btn-sm"
+                            style="
+                                padding: 4px 8px;
+                                font-size: 12px;
+                                background: var(--theme-bg-primary, var(--SmartThemeBodyColor, #2a2a2a));
+                                color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                                border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #444));
+                                border-radius: 4px;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                            "
+                            onmouseover="this.style.background='var(--theme-bg-hover, var(--SmartThemeQuoteColor, #333))'"
+                            onmouseout="this.style.background='var(--theme-bg-primary, var(--SmartThemeBodyColor, #2a2a2a))'"
+                        >
+                            <span class="select-all-icon">☐</span> 全选
+                        </button>
+                        <div class="npc-selected-count" style="
+                            flex: 1;
+                            font-size: 12px;
+                            color: var(--theme-text-secondary, var(--SmartThemeTextColor, #999));
+                        ">
+                            已选中 <span class="npc-count-number">0</span> 个
+                        </div>
+                        <button 
+                            type="button"
+                            id="npc-batch-delete-btn" 
+                            class="btn btn-sm"
+                            disabled
+                            style="
+                                padding: 4px 8px;
+                                font-size: 12px;
+                                background: var(--theme-bg-danger, #dc3545);
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                                opacity: 0.5;
+                            "
+                        >
+                            🗑️ 批量删除
+                        </button>
+                    </div>
+                    
                     <div id="npc-cards-container" class="npc-cards-grid">
                         <!-- NPC卡片将在这里动态生成 -->
                         <div class="npc-loading">正在加载NPC数据...</div>
@@ -18086,6 +18211,26 @@ export class InfoBarSettings {
      */
     async processWithCustomAPIInternal(plotContent) {
         try {
+            // 🔧 新增：检查是否启用了请求询问功能
+            const stContext = SillyTavern.getContext();
+            const extensionSettings = stContext.extensionSettings['Information bar integration tool'];
+            const requestConfirmation = extensionSettings?.apiConfig?.requestConfirmation === true;
+
+            if (requestConfirmation) {
+                console.log('[InfoBarSettings] 🔔 请求询问功能已启用，显示确认对话框...');
+                
+                // 🔧 使用右上角弹窗样式的确认对话框
+                const userConfirmed = await this.showAPIRequestConfirmation();
+
+                if (!userConfirmed) {
+                    console.log('[InfoBarSettings] 🚫 用户取消了API调用');
+                    this.showNotification('✅ 已取消自定义API调用', 'info');
+                    return;
+                }
+
+                console.log('[InfoBarSettings] ✅ 用户确认继续API调用');
+            }
+
             // 🔧 修复：在开始处理前检查中止标志
             if (this._customAPIAborted) {
                 console.log('[InfoBarSettings] 🛑 检测到中止标志，拒绝新的API请求');
@@ -18145,8 +18290,7 @@ export class InfoBarSettings {
 
             // 🔧 新增：获取世界书内容
             let worldBookContent = '';
-            const context = SillyTavern.getContext();
-            const apiConfig = context.extensionSettings['Information bar integration tool']?.apiConfig || {};
+            const apiConfig = stContext.extensionSettings['Information bar integration tool']?.apiConfig || {};
             if (apiConfig.includeWorldBook) {
                 try {
                     worldBookContent = await this.getWorldBookContent();
@@ -18240,20 +18384,27 @@ export class InfoBarSettings {
                     await this.processAPIResult(result.text);
                     // 🔧 新增：显示自定义API生成完成提示
                     this.showCustomAPIStatus('success');
-                    break;
+                    console.log('[InfoBarSettings] 🎉 自定义API处理流程完成，准备返回');
+                    return; // 🆕 关键修复：明确返回，让Promise正确resolve
                 } else {
                     lastError = result?.error || '空响应或格式无效';
                     console.warn(`[InfoBarSettings] ⚠️ API结果为空或无效，准备重试 (${attempt}/${maxRetry}) ...`);
                     if (attempt > maxRetry) {
                         console.error('[InfoBarSettings] ❌ 重试达上限，放弃。本次错误:', lastError);
                         this.showCustomAPIStatus('error', '重试失败: ' + lastError);
-                        break;
+                        // 🆕 关键修复：重试失败后也要抛出错误，让任务队列知道失败
+                        throw new Error('自定义API重试失败: ' + lastError);
                     }
                     // 🔧 指数退避重试策略：每次重试延迟时间递增
                     const retryDelayMs = baseRetryDelayMs * Math.pow(1.5, attempt - 1);
                     console.log(`[InfoBarSettings] ⏳ 等待 ${retryDelayMs}ms 后重试...`);
                     await new Promise(r=>setTimeout(r, retryDelayMs));
                 }
+            }
+
+            // 🆕 关键修复：如果while循环正常结束但没有成功（所有重试都失败），抛出错误
+            if (lastError) {
+                throw new Error('自定义API所有重试均失败: ' + lastError);
             }
 
         } catch (error) {
@@ -20404,10 +20555,16 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             }
 
             // 直接使用数据解析器解析API返回的数据
-            const parsedData = smartPromptSystem.dataParser.parseAIResponse(resultText);
+            const parsedData = await smartPromptSystem.dataParser.parseAIResponse(resultText);
 
             if (parsedData) {
-                console.log('[InfoBarSettings] ✅ 直接解析成功，数据项数量:', Object.keys(parsedData).length);
+                // 🆕 修复：正确计算数据项数量
+                const dataCount = parsedData.__operations?.length || 
+                                 parsedData.operations?.length || 
+                                 Object.keys(parsedData.panels || {}).length || 
+                                 0;
+                console.log('[InfoBarSettings] ✅ 直接解析成功，数据项数量:', dataCount);
+                console.log('[InfoBarSettings] 📊 解析数据格式:', parsedData.__format || parsedData.format || 'unknown');
 
                 // 更新数据到数据核心
                 await smartPromptSystem.updateDataCore(parsedData);
@@ -32096,6 +32253,215 @@ ${dataExamples}
     }
 
     /**
+     * 🆕 处理自定义向量模型变化
+     */
+    handleCustomVectorModelChange(modelId) {
+        try {
+            console.log('[InfoBarSettings] 🔄 自定义向量模型变化:', modelId);
+
+            const apiUrl = this.modal.querySelector('#memory-custom-vector-api-url')?.value || '';
+            const apiKey = this.modal.querySelector('#memory-custom-vector-api-key')?.value || '';
+
+            // 更新向量化记忆检索系统设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedMemoryRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+            if (vectorizedMemoryRetrieval && vectorizedMemoryRetrieval.customVectorAPI) {
+                vectorizedMemoryRetrieval.customVectorAPI.updateConfig({
+                    url: apiUrl,
+                    apiKey: apiKey,
+                    model: modelId
+                });
+
+                vectorizedMemoryRetrieval.updateSettings({
+                    customVectorAPI: {
+                        url: apiUrl,
+                        apiKey: apiKey,
+                        model: modelId
+                    }
+                });
+
+                this.showNotification(`✅ 已选择模型: ${modelId}`, 'success');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理自定义向量模型变化失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 刷新自定义向量API模型列表
+     */
+    async refreshCustomVectorModels() {
+        try {
+            const statusDiv = this.modal.querySelector('#custom-vector-model-status');
+            const modelSelect = this.modal.querySelector('#memory-custom-vector-model');
+            const refreshBtn = this.modal.querySelector('#refresh-custom-vector-models');
+
+            if (!modelSelect) return;
+
+            // 获取配置
+            const apiUrl = this.modal.querySelector('#memory-custom-vector-api-url')?.value || '';
+            const apiKey = this.modal.querySelector('#memory-custom-vector-api-key')?.value || '';
+
+            if (!apiUrl || !apiKey) {
+                if (statusDiv) {
+                    statusDiv.innerHTML = '<span style="color: #F44336;">⚠️ 请先配置API地址和密钥</span>';
+                }
+                this.showNotification('请先配置API地址和密钥', 'warning');
+                return;
+            }
+
+            // 显示加载状态
+            if (refreshBtn) refreshBtn.disabled = true;
+            if (statusDiv) {
+                statusDiv.innerHTML = '<span style="color: #2196F3;">🔄 正在获取模型列表...</span>';
+            }
+
+            // 获取向量化记忆检索系统
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedMemoryRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+
+            if (!vectorizedMemoryRetrieval || !vectorizedMemoryRetrieval.customVectorAPI) {
+                throw new Error('自定义向量API适配器未初始化');
+            }
+
+            // 更新配置并获取模型
+            vectorizedMemoryRetrieval.customVectorAPI.updateConfig({
+                url: apiUrl,
+                apiKey: apiKey
+            });
+
+            const embeddingModels = await vectorizedMemoryRetrieval.customVectorAPI.getEmbeddingModels(true);
+
+            // 更新下拉框
+            modelSelect.innerHTML = '';
+
+            if (embeddingModels.length === 0) {
+                modelSelect.innerHTML = '<option value="">-- 未找到embedding模型 --</option>';
+                if (statusDiv) {
+                    statusDiv.innerHTML = '<span style="color: #FF9800;">⚠️ 未找到embedding模型</span>';
+                }
+            } else {
+                embeddingModels.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.id;
+                    option.textContent = model.id;
+                    modelSelect.appendChild(option);
+                });
+
+                // 选择第一个模型
+                if (embeddingModels.length > 0) {
+                    modelSelect.value = embeddingModels[0].id;
+                    this.handleCustomVectorModelChange(embeddingModels[0].id);
+                }
+
+                if (statusDiv) {
+                    statusDiv.innerHTML = `<span style="color: #4CAF50;">✅ 成功获取 ${embeddingModels.length} 个模型</span>`;
+                }
+                this.showNotification(`✅ 成功获取 ${embeddingModels.length} 个embedding模型`, 'success');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 刷新自定义向量模型列表失败:', error);
+            
+            const statusDiv = this.modal.querySelector('#custom-vector-model-status');
+            if (statusDiv) {
+                statusDiv.innerHTML = `<span style="color: #F44336;">❌ 获取失败: ${error.message}</span>`;
+            }
+            
+            this.showNotification(`❌ 获取模型列表失败: ${error.message}`, 'error');
+        } finally {
+            const refreshBtn = this.modal.querySelector('#refresh-custom-vector-models');
+            if (refreshBtn) refreshBtn.disabled = false;
+        }
+    }
+
+    /**
+     * 🆕 测试自定义向量API连接
+     */
+    async testCustomVectorConnection() {
+        try {
+            const statusDiv = this.modal.querySelector('#custom-vector-model-status');
+            const testBtn = this.modal.querySelector('#test-custom-vector-connection');
+
+            // 获取配置
+            const apiUrl = this.modal.querySelector('#memory-custom-vector-api-url')?.value || '';
+            const apiKey = this.modal.querySelector('#memory-custom-vector-api-key')?.value || '';
+            const model = this.modal.querySelector('#memory-custom-vector-model')?.value || '';
+
+            if (!apiUrl || !apiKey) {
+                if (statusDiv) {
+                    statusDiv.innerHTML = '<span style="color: #F44336;">⚠️ 请先配置API地址和密钥</span>';
+                }
+                this.showNotification('请先配置API地址和密钥', 'warning');
+                return;
+            }
+
+            // 显示测试状态
+            if (testBtn) testBtn.disabled = true;
+            if (statusDiv) {
+                statusDiv.innerHTML = '<span style="color: #2196F3;">🔍 正在测试连接...</span>';
+            }
+
+            // 获取向量化记忆检索系统
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedMemoryRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+
+            if (!vectorizedMemoryRetrieval || !vectorizedMemoryRetrieval.customVectorAPI) {
+                throw new Error('自定义向量API适配器未初始化');
+            }
+
+            // 更新配置并测试
+            vectorizedMemoryRetrieval.customVectorAPI.updateConfig({
+                url: apiUrl,
+                apiKey: apiKey,
+                model: model
+            });
+
+            const result = await vectorizedMemoryRetrieval.customVectorAPI.testConnectionAndGetModels();
+
+            if (result.success) {
+                if (statusDiv) {
+                    statusDiv.innerHTML = `<span style="color: #4CAF50;">✅ 连接成功！向量维度: ${result.vectorDimensions}, 可用模型: ${result.modelCount}个</span>`;
+                }
+                this.showNotification(`✅ ${result.message}`, 'success');
+
+                // 自动刷新模型列表
+                if (result.embeddingModels && result.embeddingModels.length > 0) {
+                    const modelSelect = this.modal.querySelector('#memory-custom-vector-model');
+                    if (modelSelect) {
+                        modelSelect.innerHTML = '';
+                        result.embeddingModels.forEach(m => {
+                            const option = document.createElement('option');
+                            option.value = m.id;
+                            option.textContent = m.id;
+                            if (m.id === result.currentModel) {
+                                option.selected = true;
+                            }
+                            modelSelect.appendChild(option);
+                        });
+                    }
+                }
+            } else {
+                throw new Error(result.error || '连接失败');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 测试自定义向量API连接失败:', error);
+            
+            const statusDiv = this.modal.querySelector('#custom-vector-model-status');
+            if (statusDiv) {
+                statusDiv.innerHTML = `<span style="color: #F44336;">❌ 连接失败: ${error.message}</span>`;
+            }
+            
+            this.showNotification(`❌ 连接测试失败: ${error.message}`, 'error');
+        } finally {
+            const testBtn = this.modal.querySelector('#test-custom-vector-connection');
+            if (testBtn) testBtn.disabled = false;
+        }
+    }
+
+    /**
      * 🔍 处理相似度阈值变化
      */
     handleSimilarityThresholdChange(value) {
@@ -32631,8 +32997,24 @@ ${dataExamples}
 
             const customVectorModel = this.modal.querySelector('#memory-custom-vector-model');
             if (customVectorModel) {
-                customVectorModel.addEventListener('input', (e) => {
-                    this.handleCustomVectorApiConfigChange();
+                customVectorModel.addEventListener('change', (e) => {
+                    this.handleCustomVectorModelChange(e.target.value);
+                });
+            }
+
+            // 🆕 新增：刷新自定义向量API模型列表按钮
+            const refreshCustomVectorModelsBtn = this.modal.querySelector('#refresh-custom-vector-models');
+            if (refreshCustomVectorModelsBtn) {
+                refreshCustomVectorModelsBtn.addEventListener('click', async () => {
+                    await this.refreshCustomVectorModels();
+                });
+            }
+
+            // 🆕 新增：测试自定义向量API连接按钮
+            const testCustomVectorConnectionBtn = this.modal.querySelector('#test-custom-vector-connection');
+            if (testCustomVectorConnectionBtn) {
+                testCustomVectorConnectionBtn.addEventListener('click', async () => {
+                    await this.testCustomVectorConnection();
                 });
             }
 
@@ -32845,29 +33227,60 @@ ${dataExamples}
 
             // 🚀 新增：加载向量存储模式
             if (vecStorageModeEl) {
-                let storageMode = 'local'; // 默认值
-                if (vectorSettings.useNativeVectorAPI) {
-                    storageMode = 'native';
-                } else if (vectorSettings.useCustomVectorAPI) {
-                    storageMode = 'custom';
+                // 🔧 修复：优先从storageMode字段读取，然后从布尔值推断
+                let storageMode = vectorSettings.storageMode || savedMem.vector?.storageMode || 'local';
+                
+                // 如果storageMode未设置，从布尔值推断
+                if (!vectorSettings.storageMode && !savedMem.vector?.storageMode) {
+                    if (vectorSettings.useNativeVectorAPI) {
+                        storageMode = 'native';
+                    } else if (vectorSettings.useCustomVectorAPI) {
+                        storageMode = 'custom';
+                    } else {
+                        storageMode = 'local';
+                    }
                 }
+                
                 vecStorageModeEl.value = storageMode;
+                console.log('[InfoBarSettings] 📦 加载向量存储模式:', storageMode);
 
                 // 🔧 修复：使用静默模式触发，避免显示不必要的提示
                 this.handleVectorStorageModeChange(storageMode, true);
             }
 
             // 🚀 新增：加载自定义API配置
-            if (vectorSettings.customVectorAPI) {
-                if (vecCustomApiUrlEl) vecCustomApiUrlEl.value = vectorSettings.customVectorAPI.url || '';
-                if (vecCustomApiKeyEl) vecCustomApiKeyEl.value = vectorSettings.customVectorAPI.apiKey || '';
-                if (vecCustomModelEl) vecCustomModelEl.value = vectorSettings.customVectorAPI.model || '';
+            const customAPIConfig = vectorSettings.customVectorAPI || vectorSettings.customAPI || savedMem.vector?.customAPI || {};
+            if (vecCustomApiUrlEl) {
+                vecCustomApiUrlEl.value = customAPIConfig.url || '';
+                console.log('[InfoBarSettings] 🔗 加载自定义API地址:', customAPIConfig.url);
+            }
+            if (vecCustomApiKeyEl) {
+                vecCustomApiKeyEl.value = customAPIConfig.apiKey || '';
+                console.log('[InfoBarSettings] 🔑 加载自定义API密钥:', customAPIConfig.apiKey ? '***' : '(空)');
+            }
+            if (vecCustomModelEl) {
+                // 🔧 修复：如果是下拉框且没有选项，先添加当前模型作为选项
+                const modelValue = customAPIConfig.model || '';
+                if (modelValue && vecCustomModelEl.options.length <= 1) {
+                    // 清空并添加当前模型
+                    vecCustomModelEl.innerHTML = '';
+                    const option = document.createElement('option');
+                    option.value = modelValue;
+                    option.textContent = modelValue;
+                    vecCustomModelEl.appendChild(option);
+                }
+                vecCustomModelEl.value = modelValue;
+                console.log('[InfoBarSettings] 🤖 加载自定义API模型:', modelValue);
             }
 
             // 🚀 新增：加载存储大小限制
             if (vecStorageSizeLimitEl) {
-                const sizeLimit = typeof vectorSettings.storageSizeLimit === 'number' ? vectorSettings.storageSizeLimit : 10;
+                const sizeLimit = typeof vectorSettings.storageSizeLimit === 'number' ? 
+                    vectorSettings.storageSizeLimit : 
+                    (typeof savedMem.vector?.storageSizeLimit === 'number' ? 
+                        savedMem.vector.storageSizeLimit : 10);
                 vecStorageSizeLimitEl.value = sizeLimit;
+                console.log('[InfoBarSettings] 📏 加载存储大小限制:', sizeLimit, 'MB');
             }
 
             this.modal.querySelectorAll('.vectorized-memory-options').forEach(opt => {
@@ -33936,7 +34349,10 @@ ${dataExamples}
     async refreshNPCList() {
         try {
             const container = this.modal.querySelector('#npc-cards-container');
-            if (!container) return;
+            if (!container) {
+                console.log('[InfoBarSettings] ⚠️ NPC容器不存在，跳过刷新');
+                return;
+            }
 
             // 显示加载状态
             container.innerHTML = '<div class="npc-loading">正在加载NPC数据...</div>';
@@ -33947,7 +34363,14 @@ ${dataExamples}
                 return;
             }
 
+            // 🔧 修复：强制重新加载NPC数据库，确保获取当前聊天的数据
+            console.log('[InfoBarSettings] 🔄 强制重新加载NPC数据库...');
+            await npcDB.load(); // 强制重新加载
+
             // 获取当前聊天的NPC数据
+            const currentChatId = npcDB.getCurrentChatId();
+            console.log('[InfoBarSettings] 📍 当前聊天ID:', currentChatId);
+            
             const npcs = await npcDB.getAllNpcsForCurrentChat();
 
             if (!npcs || npcs.length === 0) {
@@ -33978,11 +34401,29 @@ ${dataExamples}
     createNPCCard(npc) {
         const lastSeenTime = npc.lastSeen ? new Date(npc.lastSeen).toLocaleString() : '未知';
         const fieldCount = Object.keys(npc.fields || {}).length;
+        const isSelected = this.selectedNpcIds?.has(npc.id) || false;
 
         return `
-            <div class="npc-card" data-npc-id="${npc.id}">
+            <div class="npc-card ${isSelected ? 'selected' : ''}" data-npc-id="${npc.id}">
                 <div class="npc-card-header">
-                    <h4 class="npc-name">${this.escapeHtml(npc.name)}</h4>
+                    <div class="npc-checkbox-wrapper" style="display: flex; align-items: center; gap: 8px;">
+                        <div class="npc-checkbox" data-npc-id="${npc.id}" style="
+                            width: 18px;
+                            height: 18px;
+                            border: 2px solid var(--theme-border-color, var(--SmartThemeBorderColor, #555));
+                            border-radius: 3px;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            background: ${isSelected ? 'var(--theme-accent-color, var(--SmartThemeQuoteColor, #007bff))' : 'transparent'};
+                            transition: all 0.2s ease;
+                            flex-shrink: 0;
+                        " title="选择此NPC" onmouseover="if(!this.querySelector('span')){this.style.borderColor='var(--theme-accent-color, var(--SmartThemeQuoteColor, #007bff))'}" onmouseout="if(!this.querySelector('span')){this.style.borderColor='var(--theme-border-color, var(--SmartThemeBorderColor, #555))'}">
+                            ${isSelected ? '<span style="color: white; font-size: 12px; font-weight: bold;">✓</span>' : ''}
+                        </div>
+                        <h4 class="npc-name" style="margin: 0; flex: 1;">${this.escapeHtml(npc.name)}</h4>
+                    </div>
                     <span class="npc-appear-count">${npc.appearCount || 0}次</span>
                 </div>
                 <div class="npc-card-body">
@@ -33993,10 +34434,28 @@ ${dataExamples}
                 </div>
                 <div class="npc-card-footer">
                     <div class="npc-card-actions">
-                        <button class="btn btn-sm btn-outline-primary npc-view-btn" data-npc-id="${npc.id}">
+                        <button class="btn btn-sm npc-view-btn" data-npc-id="${npc.id}" style="
+                            background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a));
+                            color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                            border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #444));
+                            padding: 4px 10px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 12px;
+                            transition: all 0.2s ease;
+                        " onmouseover="this.style.background='var(--theme-accent-color, var(--SmartThemeQuoteColor, #007bff))'" onmouseout="this.style.background='var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a))'">
                             查看详情
                         </button>
-                        <button class="btn btn-sm btn-outline-danger npc-delete-btn" data-npc-id="${npc.id}" title="删除此NPC">
+                        <button class="btn btn-sm npc-delete-btn" data-npc-id="${npc.id}" title="删除此NPC" style="
+                            background: var(--theme-bg-danger, #dc3545);
+                            color: white;
+                            border: none;
+                            padding: 4px 10px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 12px;
+                            transition: all 0.2s ease;
+                        " onmouseover="this.style.background='var(--theme-bg-danger-hover, #c82333)'" onmouseout="this.style.background='var(--theme-bg-danger, #dc3545)'">
                             🗑️ 删除
                         </button>
                     </div>
@@ -34012,6 +34471,15 @@ ${dataExamples}
         const cards = this.modal.querySelectorAll('.npc-card');
         cards.forEach(card => {
             card.addEventListener('click', (e) => {
+                // 🆕 复选框点击事件
+                if (e.target.closest('.npc-checkbox')) {
+                    e.stopPropagation();
+                    const checkbox = e.target.closest('.npc-checkbox');
+                    const npcId = checkbox.dataset.npcId;
+                    this.toggleNpcSelection(npcId);
+                    return;
+                }
+                
                 if (e.target.classList.contains('npc-view-btn')) {
                     const npcId = e.target.dataset.npcId;
                     this.showNPCDetails(npcId);
@@ -34022,6 +34490,23 @@ ${dataExamples}
                 }
             });
         });
+        
+        // 🔧 修复：批量操作按钮只在第一次绑定，避免重复绑定
+        if (!this._batchOperationEventsBound) {
+            const selectAllBtn = this.modal.querySelector('#npc-select-all-btn');
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', () => this.toggleSelectAllNpcs());
+                console.log('[InfoBarSettings] 🔗 已绑定全选按钮事件');
+            }
+            
+            const batchDeleteBtn = this.modal.querySelector('#npc-batch-delete-btn');
+            if (batchDeleteBtn) {
+                batchDeleteBtn.addEventListener('click', () => this.batchDeleteNpcs());
+                console.log('[InfoBarSettings] 🔗 已绑定批量删除按钮事件');
+            }
+            
+            this._batchOperationEventsBound = true;
+        }
     }
 
     /**
@@ -34068,6 +34553,219 @@ ${dataExamples}
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 删除NPC时发生错误:', error);
             this.showToast('删除NPC时发生错误', 'error');
+        }
+    }
+
+    /**
+     * 🆕 切换单个NPC的选中状态
+     */
+    toggleNpcSelection(npcId) {
+        if (this.selectedNpcIds.has(npcId)) {
+            this.selectedNpcIds.delete(npcId);
+            console.log('[InfoBarSettings] ☑️ 取消选中NPC:', npcId);
+        } else {
+            this.selectedNpcIds.add(npcId);
+            console.log('[InfoBarSettings] ✅ 选中NPC:', npcId);
+        }
+        
+        // 刷新列表显示
+        this.refreshNPCList();
+        this.updateBatchOperationUI();
+    }
+
+    /**
+     * 🆕 全选/取消全选NPC
+     */
+    async toggleSelectAllNpcs() {
+        try {
+            const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+            if (!npcDB) return;
+
+            const npcs = await npcDB.getAllNpcsForCurrentChat();
+            
+            // 检查是否全选
+            const allSelected = npcs.length > 0 && npcs.every(npc => this.selectedNpcIds.has(npc.id));
+            
+            if (allSelected) {
+                // 取消全选
+                npcs.forEach(npc => this.selectedNpcIds.delete(npc.id));
+                console.log('[InfoBarSettings] ☐ 取消全选');
+            } else {
+                // 全选
+                npcs.forEach(npc => this.selectedNpcIds.add(npc.id));
+                console.log('[InfoBarSettings] ☑️ 已全选', npcs.length, '个NPC');
+            }
+            
+            // 刷新列表
+            await this.refreshNPCList();
+            this.updateBatchOperationUI();
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 全选操作失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 批量删除NPC
+     */
+    async batchDeleteNpcs() {
+        try {
+            if (this.selectedNpcIds.size === 0) {
+                this.showToast('请先选择要删除的NPC', 'warning');
+                return;
+            }
+
+            if (this.batchDeleteInProgress) {
+                this.showToast('批量删除正在进行中...', 'info');
+                return;
+            }
+
+            const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+            if (!npcDB) {
+                this.showToast('NPC数据库模块未找到', 'error');
+                return;
+            }
+
+            // 获取选中的NPC信息
+            const selectedNpcs = [];
+            for (const npcId of this.selectedNpcIds) {
+                const npc = npcDB.getNPCById(npcId);
+                if (npc) {
+                    selectedNpcs.push({ id: npcId, npc });
+                }
+            }
+
+            if (selectedNpcs.length === 0) {
+                this.showToast('未找到有效的NPC', 'warning');
+                this.selectedNpcIds.clear();
+                await this.refreshNPCList();
+                return;
+            }
+
+            // 显示确认对话框
+            const npcNames = selectedNpcs.slice(0, 5).map(item => item.npc.name).join('、');
+            const moreText = selectedNpcs.length > 5 ? ` 等 ${selectedNpcs.length} 个` : '';
+            const confirmMessage = `确定要删除以下 ${selectedNpcs.length} 个NPC吗？\n\n${npcNames}${moreText}\n\n⚠️ 此操作不可撤销，将永久删除这些NPC及其在世界书中的相关条目。`;
+            
+            const confirmed = confirm(confirmMessage);
+            if (!confirmed) {
+                console.log('[InfoBarSettings] ℹ️ 用户取消批量删除操作');
+                return;
+            }
+
+            // 开始批量删除
+            this.batchDeleteInProgress = true;
+            this.updateBatchOperationUI();
+
+            console.log('[InfoBarSettings] 🗑️ 开始批量删除', selectedNpcs.length, '个NPC...');
+
+            let successCount = 0;
+            let failCount = 0;
+
+            // 逐个删除NPC
+            for (const { id, npc } of selectedNpcs) {
+                try {
+                    const success = await npcDB.deleteNPC(id);
+                    if (success) {
+                        successCount++;
+                        console.log(`[InfoBarSettings] ✅ 删除成功: ${npc.name} (${id})`);
+                    } else {
+                        failCount++;
+                        console.warn(`[InfoBarSettings] ⚠️ 删除失败: ${npc.name} (${id})`);
+                    }
+                } catch (error) {
+                    failCount++;
+                    console.error(`[InfoBarSettings] ❌ 删除出错: ${npc.name} (${id})`, error);
+                }
+            }
+
+            // 清空选中状态
+            this.selectedNpcIds.clear();
+
+            // 刷新列表
+            await this.refreshNPCList();
+
+            // 显示结果
+            const message = `批量删除完成！成功: ${successCount} 个，失败: ${failCount} 个`;
+            console.log('[InfoBarSettings] ✅', message);
+            this.showToast(message, successCount > 0 ? 'success' : 'error');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 批量删除失败:', error);
+            this.showToast('批量删除失败: ' + error.message, 'error');
+        } finally {
+            this.batchDeleteInProgress = false;
+            this.updateBatchOperationUI();
+        }
+    }
+
+    /**
+     * 🆕 更新批量操作UI状态
+     */
+    updateBatchOperationUI() {
+        if (!this.modal) return;
+
+        const selectedCount = this.selectedNpcIds.size;
+        const countElement = this.modal.querySelector('.npc-count-number');
+        const batchDeleteBtn = this.modal.querySelector('#npc-batch-delete-btn');
+        const selectAllBtn = this.modal.querySelector('#npc-select-all-btn');
+        const selectAllIcon = this.modal.querySelector('.select-all-icon');
+
+        // 更新选中数量
+        if (countElement) {
+            countElement.textContent = selectedCount;
+        }
+
+        // 更新批量删除按钮状态
+        if (batchDeleteBtn) {
+            if (selectedCount > 0 && !this.batchDeleteInProgress) {
+                batchDeleteBtn.disabled = false;
+                batchDeleteBtn.style.opacity = '1';
+                batchDeleteBtn.style.cursor = 'pointer';
+                // 🔧 添加悬停效果（使用信息栏主题变量）
+                batchDeleteBtn.onmouseover = () => { 
+                    batchDeleteBtn.style.background = 'var(--theme-bg-danger-hover, #c82333)'; 
+                };
+                batchDeleteBtn.onmouseout = () => { 
+                    batchDeleteBtn.style.background = 'var(--theme-bg-danger, #dc3545)'; 
+                };
+            } else {
+                batchDeleteBtn.disabled = true;
+                batchDeleteBtn.style.opacity = '0.5';
+                batchDeleteBtn.style.cursor = 'not-allowed';
+                // 🔧 移除悬停效果
+                batchDeleteBtn.onmouseover = null;
+                batchDeleteBtn.onmouseout = null;
+            }
+
+            if (this.batchDeleteInProgress) {
+                batchDeleteBtn.innerHTML = '⏳ 删除中...';
+            } else {
+                batchDeleteBtn.innerHTML = '🗑️ 批量删除';
+            }
+        }
+
+        // 更新全选按钮状态
+        if (selectAllBtn && selectAllIcon) {
+            // 异步检查是否全选
+            (async () => {
+                try {
+                    const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+                    if (!npcDB) return;
+                    
+                    const npcs = await npcDB.getAllNpcsForCurrentChat();
+                    const allSelected = npcs.length > 0 && npcs.every(npc => this.selectedNpcIds.has(npc.id));
+                    
+                    if (allSelected) {
+                        selectAllIcon.textContent = '☑';
+                        selectAllBtn.innerHTML = '<span class="select-all-icon">☑</span> 取消全选';
+                    } else {
+                        selectAllIcon.textContent = '☐';
+                        selectAllBtn.innerHTML = '<span class="select-all-icon">☐</span> 全选';
+                    }
+                } catch (error) {
+                    console.error('[InfoBarSettings] ❌ 更新全选按钮状态失败:', error);
+                }
+            })();
         }
     }
 
@@ -34126,17 +34824,33 @@ ${dataExamples}
             infoEl.innerHTML = this.createNPCDetailHTML(npc);
 
             modal.style.display = 'flex';
+            modal.style.zIndex = '1000000'; // 🔧 修复：确保在NPC管理面板（999999）之上
 
-            // 绑定关闭事件
-            const closeBtn = modal.querySelector('.npc-detail-close');
-            closeBtn.onclick = () => {
+            console.log('[InfoBarSettings] 📱 显示NPC详情模态框:', npc.name);
+
+            // 🔧 修复：使用简单的onclick，每次都会覆盖旧的事件
+            const closeModal = () => {
+                console.log('[InfoBarSettings] 🔒 关闭NPC详情模态框');
                 modal.style.display = 'none';
             };
 
-            // 点击背景关闭
+            // 🔧 修复：直接使用onclick覆盖，简单可靠
+            const closeBtn = modal.querySelector('.npc-detail-close');
+            if (closeBtn) {
+                closeBtn.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('[InfoBarSettings] 🖱️ 关闭按钮被点击');
+                    closeModal();
+                };
+                console.log('[InfoBarSettings] 🔗 已绑定关闭按钮事件');
+            }
+
+            // 🔧 修复：点击背景关闭，使用onclick
             modal.onclick = (e) => {
                 if (e.target === modal) {
-                    modal.style.display = 'none';
+                    console.log('[InfoBarSettings] 🖱️ 背景被点击');
+                    closeModal();
                 }
             };
 
@@ -34621,5 +35335,161 @@ ${dataExamples}
             console.error('[InfoBarSettings] ❌ 清空所有记忆数据失败:', error);
             this.showNotification('❌ 清空所有记忆数据失败: ' + error.message, 'error');
         }
+    }
+
+    /**
+     * 🔔 显示API请求确认对话框（右上角弹窗样式）
+     */
+    showAPIRequestConfirmation() {
+        return new Promise((resolve) => {
+            try {
+                console.log('[InfoBarSettings] 📋 显示API请求确认对话框（右上角样式）');
+
+                // 创建确认弹窗
+                const toast = document.createElement('div');
+                toast.className = 'custom-api-status-toast confirm';
+                toast.style.opacity = '0'; // 初始透明
+                toast.style.transition = 'opacity 0.3s ease';
+                toast.innerHTML = `
+                    <div class="toast-content">
+                        <div class="toast-header">
+                            <span class="toast-icon">🤖</span>
+                            <span class="toast-title">自定义API调用确认</span>
+                        </div>
+                        <div class="toast-body">
+                            <p>即将调用自定义API生成信息栏数据。</p>
+                            <p class="toast-hint">这将消耗API配额，是否继续？</p>
+                        </div>
+                        <div class="toast-actions">
+                            <button class="btn-cancel">取消</button>
+                            <button class="btn-confirm">确认调用</button>
+                        </div>
+                    </div>
+                `;
+
+                // 添加确认对话框专属样式
+                if (!document.getElementById('api-confirm-toast-styles')) {
+                    const style = document.createElement('style');
+                    style.id = 'api-confirm-toast-styles';
+                    style.textContent = `
+                        .custom-api-status-toast.confirm {
+                            position: fixed;
+                            top: 20px;
+                            right: 20px;
+                            z-index: 1000001;
+                            background: linear-gradient(135deg, #667eea, #764ba2);
+                            color: white;
+                            min-width: 320px;
+                            max-width: 400px;
+                            border-radius: 8px;
+                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+                            animation: slideInRight 0.3s ease-out;
+                        }
+                        @keyframes slideInRight {
+                            from {
+                                transform: translateX(100%);
+                                opacity: 0;
+                            }
+                            to {
+                                transform: translateX(0);
+                                opacity: 1;
+                            }
+                        }
+                        .custom-api-status-toast.confirm .toast-header {
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                            padding: 12px 16px;
+                            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+                        }
+                        .custom-api-status-toast.confirm .toast-icon {
+                            font-size: 20px;
+                        }
+                        .custom-api-status-toast.confirm .toast-title {
+                            font-size: 15px;
+                            font-weight: 600;
+                        }
+                        .custom-api-status-toast.confirm .toast-body {
+                            padding: 12px 16px;
+                        }
+                        .custom-api-status-toast.confirm .toast-body p {
+                            margin: 0 0 8px 0;
+                            font-size: 14px;
+                            line-height: 1.5;
+                        }
+                        .custom-api-status-toast.confirm .toast-body p:last-child {
+                            margin-bottom: 0;
+                        }
+                        .custom-api-status-toast.confirm .toast-hint {
+                            font-size: 13px;
+                            opacity: 0.9;
+                        }
+                        .custom-api-status-toast.confirm .toast-actions {
+                            display: flex;
+                            gap: 8px;
+                            padding: 12px 16px;
+                            border-top: 1px solid rgba(255, 255, 255, 0.2);
+                            justify-content: flex-end;
+                        }
+                        .custom-api-status-toast.confirm .btn-cancel,
+                        .custom-api-status-toast.confirm .btn-confirm {
+                            padding: 6px 16px;
+                            border: none;
+                            border-radius: 4px;
+                            font-size: 13px;
+                            cursor: pointer;
+                            transition: all 0.2s ease;
+                            font-weight: 500;
+                        }
+                        .custom-api-status-toast.confirm .btn-cancel {
+                            background: rgba(255, 255, 255, 0.2);
+                            color: white;
+                        }
+                        .custom-api-status-toast.confirm .btn-cancel:hover {
+                            background: rgba(255, 255, 255, 0.3);
+                        }
+                        .custom-api-status-toast.confirm .btn-confirm {
+                            background: white;
+                            color: #667eea;
+                        }
+                        .custom-api-status-toast.confirm .btn-confirm:hover {
+                            background: #f0f0f0;
+                            transform: translateY(-1px);
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+
+                document.body.appendChild(toast);
+
+                // 绑定按钮事件
+                const cancelBtn = toast.querySelector('.btn-cancel');
+                const confirmBtn = toast.querySelector('.btn-confirm');
+
+                const cleanup = () => {
+                    toast.remove();
+                };
+
+                cancelBtn.onclick = () => {
+                    cleanup();
+                    resolve(false);
+                };
+
+                confirmBtn.onclick = () => {
+                    cleanup();
+                    resolve(true);
+                };
+
+                // 淡入动画
+                setTimeout(() => {
+                    toast.style.opacity = '1';
+                }, 10);
+
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 显示API请求确认对话框失败:', error);
+                // 降级：返回true继续执行
+                resolve(true);
+            }
+        });
     }
 }

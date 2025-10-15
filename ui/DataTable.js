@@ -182,10 +182,6 @@ export class DataTable {
                                 <i class="fa-solid fa-rotate-right"></i>
                                 重新填表
                             </button>
-                            <button id="generate-variables-btn" class="generate-variables-btn">
-                                <i class="fa-solid fa-code"></i>
-                                生成变量
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -1986,8 +1982,8 @@ export class DataTable {
             const strValue = String(value);
 
             // 🔧 控制文本长度，避免单元格过高
-            const maxLength = 120; // 增加最大显示字符数以适应多行内容
-            const maxLines = 4;    // 增加最大显示行数
+            const maxLength = 400; // 合理的字符限制
+            const maxLines = 6;    // 适配100px高度（line-height 1.4 * 6 ≈ 84px + padding）
 
             // 处理换行符，限制行数
             const lines = strValue.split('\n');
@@ -2010,9 +2006,10 @@ export class DataTable {
                 result = result.substring(0, maxLength - 3) + '...';
             }
 
-            // 🔧 应用CSS样式，确保横向显示为主
+            // 🔧 应用CSS样式，限制高度为100px，超出截断
             return `<div class="cell-content" style="
-                max-width: 350px;
+                width: 100%;
+                max-width: 100%;
                 max-height: 100px;
                 overflow: hidden;
                 white-space: pre-wrap;
@@ -2021,8 +2018,9 @@ export class DataTable {
                 line-height: 1.4;
                 text-overflow: ellipsis;
                 display: -webkit-box;
-                -webkit-line-clamp: 4;
+                -webkit-line-clamp: 6;
                 -webkit-box-orient: vertical;
+                box-sizing: border-box;
             ">${this.escapeHtml(result)}</div>`;
 
         } catch (error) {
@@ -2522,12 +2520,45 @@ export class DataTable {
                         throw new Error('InfoBarSettings模块未就绪，请稍后重试');
                     }
 
+                    // 🔧 修复：监听任务完成事件，而不是立即显示成功
+                    const waitForTaskCompletion = new Promise((resolve, reject) => {
+                        const timeout = setTimeout(() => {
+                            reject(new Error('API调用超时（60秒）'));
+                        }, 60000); // 60秒超时
+
+                        // 监听任务完成事件
+                        const taskCompletedHandler = (payload) => {
+                            console.log('[DataTable] 📡 收到任务完成事件:', payload);
+                            if (payload.type === 'INFOBAR_DATA') {
+                                clearTimeout(timeout);
+                                if (this.eventSystem) {
+                                    this.eventSystem.off('custom-api-queue:task_completed', taskCompletedHandler);
+                                }
+                                resolve(true);
+                            }
+                        };
+
+                        if (this.eventSystem) {
+                            this.eventSystem.on('custom-api-queue:task_completed', taskCompletedHandler);
+                        } else {
+                            // 如果没有事件系统，等待5秒后resolve（降级方案）
+                            setTimeout(() => {
+                                clearTimeout(timeout);
+                                resolve(false);
+                            }, 5000);
+                        }
+                    });
+
                     // 调用自定义API重新生成数据
                     await infoBarSettings.processWithCustomAPI(latestAIMessage);
 
-                    // 显示成功状态
+                    // 🔧 修复：等待API实际完成
+                    console.log('[DataTable] ⏳ 等待API调用完成...');
+                    await waitForTaskCompletion;
+
+                    // API真正完成后才显示成功
                     button.innerHTML = '<i class="fa-solid fa-check"></i> 重新填表完成';
-                    this.showNotification('✅ 数据重新生成完成', 'success');
+                    console.log('[DataTable] ✅ API调用完成，数据已更新');
 
                     // 2秒后恢复按钮状态
                     setTimeout(() => {
@@ -2540,7 +2571,7 @@ export class DataTable {
                     // 🔧 刷新数据表格显示
                     setTimeout(() => {
                         this.updateGroupedTablesData();
-                    }, 1000);
+                    }, 500); // 缩短延迟，因为已经等待了API完成
 
                 } catch (error) {
                     console.error('[DataTable] ❌ 重新填表失败:', error);
@@ -2599,127 +2630,6 @@ export class DataTable {
         } catch (error) {
             console.error('[DataTable] ❌ 获取最新AI消息失败:', error);
             return null;
-        }
-    }
-
-    /**
-     * 🆕 处理生成变量按钮点击事件
-     */
-    async handleGenerateVariables(event) {
-        try {
-            console.log('[DataTable] 🔧 开始生成STScript变量结构');
-
-            // 显示加载状态
-            const button = event.target.closest('#generate-variables-btn');
-            if (button) {
-                const originalText = button.innerHTML;
-                button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 生成中...';
-                button.disabled = true;
-
-                try {
-                    await this.generateSTScriptVariables();
-                    
-                    // 显示成功状态
-                    button.innerHTML = '<i class="fa-solid fa-check"></i> 生成完成';
-                    setTimeout(() => {
-                        button.innerHTML = originalText;
-                        button.disabled = false;
-                    }, 2000);
-
-                } catch (error) {
-                    // 显示错误状态
-                    button.innerHTML = '<i class="fa-solid fa-exclamation-triangle"></i> 生成失败';
-                    setTimeout(() => {
-                        button.innerHTML = originalText;
-                        button.disabled = false;
-                    }, 2000);
-                    throw error;
-                }
-            }
-
-        } catch (error) {
-            console.error('[DataTable] ❌ 生成变量失败:', error);
-            this.showNotification('生成变量失败: ' + error.message, 'error');
-        }
-    }
-
-    /**
-     * 🆕 生成STScript变量结构的核心逻辑
-     */
-    async generateSTScriptVariables() {
-        try {
-            // 1. 获取启用的面板信息
-            const smartPromptSystem = window.SillyTavernInfobar?.modules?.smartPromptSystem;
-            if (!smartPromptSystem) {
-                throw new Error('无法获取智能提示系统');
-            }
-
-            const enabledPanels = await smartPromptSystem.getEnabledPanels();
-            console.log('[DataTable] 📋 获取到启用面板:', enabledPanels);
-
-            if (!enabledPanels || enabledPanels.length === 0) {
-                throw new Error('没有找到启用的面板');
-            }
-
-            // 🔧 已移除：STScript数据同步功能已删除
-            // 不再需要STScript同步模块
-            // const stScriptSync = window.SillyTavernInfobar?.modules?.stScriptDataSync;
-            // if (!stScriptSync) {
-            //     throw new Error('无法获取STScript同步模块');
-            // }
-
-            // 3. 为每个启用的面板生成变量结构
-            const generatedStructures = {};
-            
-            for (const panel of enabledPanels) {
-                console.log('[DataTable] 🔧 处理面板:', panel.id);
-                
-                // 构建面板的变量结构
-                const panelStructure = {};
-                
-                // 添加启用的子项，如果没有数据则为空
-                if (panel.subItems && panel.subItems.length > 0) {
-                    for (const subItem of panel.subItems) {
-                        if (subItem.enabled !== false) {
-                            // 根据子项键创建变量，数值为空字符串（用户可以后续填充）
-                            panelStructure[subItem.key] = [''];
-                        }
-                    }
-                }
-
-                // 如果面板有规则，也添加到结构中
-                const panelRules = stScriptSync.getPanelRules?.(panel.id);
-                if (panelRules) {
-                    panelStructure['Panel Rules'] = panelRules;
-                }
-
-                generatedStructures[panel.id] = panelStructure;
-            }
-
-            console.log('[DataTable] 🎯 生成的变量结构:', generatedStructures);
-
-            // 4. 同步到STScript变量系统 - 每个面板分别同步到根级别
-            for (const [panelName, panelStructure] of Object.entries(generatedStructures)) {
-                await stScriptSync.updateInfobarStructure(panelName, panelStructure);
-                console.log(`[DataTable] ✅ 面板 ${panelName} 已同步到STScript根级别`);
-            }
-
-            // 5. 无需额外的全量同步，各面板已直接更新
-
-            console.log('[DataTable] ✅ STScript变量结构生成完成');
-            this.showNotification('STScript变量结构已成功生成', 'success');
-
-            // 6. 触发数据刷新事件
-            if (this.eventSystem) {
-                this.eventSystem.emit('variables:generated', {
-                    structures: generatedStructures,
-                    timestamp: Date.now()
-                });
-            }
-
-        } catch (error) {
-            console.error('[DataTable] ❌ 生成STScript变量结构失败:', error);
-            throw error;
         }
     }
 
@@ -2793,17 +2703,30 @@ export class DataTable {
     }
 
     /**
-     * 🆕 解析在数据存储中的实际键名（优先 col_X，其次英文，再次原名）
+     * 🆕 解析在数据存储中的实际键名（转换为纯数字格式）
      */
     resolveDataKeyForPanel(panelId, property) {
         try {
             // 1) 动态字段映射（col_X）
             const fieldMapping = this.getFieldMapping(panelId) || {};
-            if (fieldMapping[property]) return fieldMapping[property];
+            let mappedKey = fieldMapping[property];
+            
+            if (mappedKey) {
+                // 🔧 修复：将 col_X 格式转换为纯数字格式（数据存储使用纯数字）
+                if (mappedKey.startsWith('col_')) {
+                    const colNumber = mappedKey.replace('col_', '');
+                    console.log(`[DataTable] 🔄 col_X转数字: ${mappedKey} -> ${colNumber}`);
+                    return colNumber;
+                }
+                return mappedKey;
+            }
 
-            // 2) 英文字段名
-            const english = this.dataCore?.getEnglishFieldName?.(property, panelId);
-            if (english) return english;
+            // 2) 如果property本身就是col_X格式，转换为纯数字
+            if (property && property.startsWith('col_')) {
+                const colNumber = property.replace('col_', '');
+                console.log(`[DataTable] 🔄 col_X转数字: ${property} -> ${colNumber}`);
+                return colNumber;
+            }
 
             // 3) 原字段名
             return property;
@@ -2837,18 +2760,14 @@ export class DataTable {
                         <span class="menu-info">${menuInfo}</span>
                     </div>
                     <div class="menu-actions">
-                        <button class="menu-btn edit-btn" data-action="edit-cell">
-                            <span class="btn-text">表格编辑</span>
-                        </button>
+                        ${isHeaderClick ? `
+                        <!-- 字段操作：不包含表格编辑/记录，仅规则/重命名/结构 -->
                         <button class="menu-btn rule-btn" data-action="edit-field-rule">
                             <span class="btn-text">字段规则</span>
                         </button>
-                        <button class="menu-btn history-btn" data-action="view-history">
-                            <span class="btn-text">表格记录</span>
+                        <button class="menu-btn rename-field-btn" data-action="rename-field">
+                            <span class="btn-text">名称修改</span>
                         </button>
-
-                        ${isHeaderClick ? `
-                        <!-- 🆕 字段结构操作 -->
                         <div class="menu-separator"></div>
                         <div class="menu-section-title">字段结构</div>
                         <button class="menu-btn add-field-before-btn" data-action="add-field-before">
@@ -2861,7 +2780,16 @@ export class DataTable {
                             <span class="btn-text">删除字段</span>
                         </button>
                         ` : `
-                        <!-- 🔧 数据操作 -->
+                        <!-- 单元格数据操作：包含表格编辑/记录/规则 -->
+                        <button class="menu-btn edit-btn" data-action="edit-cell">
+                            <span class="btn-text">表格编辑</span>
+                        </button>
+                        <button class="menu-btn rule-btn" data-action="edit-field-rule">
+                            <span class="btn-text">字段规则</span>
+                        </button>
+                        <button class="menu-btn history-btn" data-action="view-history">
+                            <span class="btn-text">表格记录</span>
+                        </button>
                         <div class="menu-separator"></div>
                         <button class="menu-btn delete-data-btn" data-action="delete-data">
                             <span class="btn-text">删除数据</span>
@@ -2944,7 +2872,10 @@ export class DataTable {
         menu.addEventListener('click', (e) => {
             const action = e.target.closest('[data-action]')?.getAttribute('data-action');
 
-            if (action === 'edit-cell') {
+            if (action === 'rename-field') {
+                this.hideCellActionMenu();
+                this.showRenameFieldDialog(cellInfo);
+            } else if (action === 'edit-cell') {
                 this.hideCellActionMenu();
                 this.showEditCellDialog(cellInfo);
             } else if (action === 'edit-field-rule') {
@@ -3960,6 +3891,7 @@ export class DataTable {
                                 timestamp: rowData.lastUpdated || Date.now(),
                                 category: 'panel',
                                 panel: panelName,
+                                panelId: panelName,  // 🆕 添加panelId
                                 title: `${panelName} - 行${rowIndex + 1}`,
                                 field: `row_${rowIndex + 1}`,
                                 content: rowContent,
@@ -3990,6 +3922,7 @@ export class DataTable {
                                     timestamp: panelData.lastUpdated || Date.now(),
                                     category: 'panel',
                                     panel: panelName,
+                                    panelId: panelName,  // 🆕 添加panelId
                                     title: `${panelName} - 行${rowIndex + 1}`,
                                     field: `row_${rowIndex + 1}`,
                                     content: rowContent,
@@ -4028,6 +3961,7 @@ export class DataTable {
                             timestamp: panelData.lastUpdated || Date.now(),
                             category: 'panel',
                             panel: panelName,
+                            panelId: panelName,  // 🆕 添加panelId
                             title: `${panelName} - 第1行`,
                             field: 'row_1',
                             content: rowContent,
@@ -5620,6 +5554,25 @@ export class DataTable {
                 td.className = 'table-cell';
                 td.dataset.column = column.key;
                 
+                // 🆕 设置单元格的必要属性
+                td.dataset.property = column.key;
+                td.dataset.panelId = row.panelId || this.currentPanelId || 'unknown';
+                
+                // 检查是否为NPC数据
+                if (row.npcId) {
+                    td.dataset.npcId = row.npcId;
+                }
+                
+                // 检查是否为组织数据
+                if (row.orgId) {
+                    td.dataset.orgId = row.orgId;
+                }
+                
+                // 设置行索引
+                if (row.rowIndex !== undefined) {
+                    td.dataset.rowIndex = row.rowIndex;
+                }
+                
                 let cellContent = row[column.key];
                 
                 // 应用格式化器
@@ -5914,8 +5867,9 @@ export class DataTable {
             if (modalBody) {
                 modalBody.innerHTML = this.createGroupedTables();
 
-                // 重新绑定事件
-                this.bindNewEvents();
+                // 🔧 修复：重新绑定事件 - 注意不要重复绑定全局事件
+                // bindNewEvents 已被清空，事件通过 modal 的 click 委托处理
+                // 不需要额外的事件绑定
 
                 // 重新应用当前主题
                 const currentTheme = this.getCurrentTheme();
@@ -6187,15 +6141,6 @@ export class DataTable {
             e.preventDefault();
             e.stopPropagation();
             this.handleRefillData(e);
-            return;
-        }
-
-        // 🔧 修复：处理生成变量按钮点击事件
-        const generateVarsBtn = e.target.closest('#generate-variables-btn');
-        if (generateVarsBtn) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.handleGenerateVariables(e);
             return;
         }
 
@@ -6519,6 +6464,12 @@ export class DataTable {
                 await this.init();
             }
 
+            // 🔧 修复：自动修复旧配置（只在首次显示时执行）
+            if (!this._legacyConfigFixed) {
+                await this.fixLegacyEnglishKeys();
+                this._legacyConfigFixed = true;
+            }
+
             // 确保UI已创建
             if (!this.modal) {
                 this.createUI();
@@ -6650,10 +6601,12 @@ export class DataTable {
 
             // 获取当前值
             const currentValue = await this.getCurrentCellValue(cellInfo);
+            console.log('[DataTable] 📊 编辑对话框 - 获取到的当前值:', currentValue);
 
             // 创建编辑对话框
             const dialog = document.createElement('div');
             dialog.className = 'cell-edit-dialog';
+            dialog.style.cssText = 'z-index: 1000000; position: fixed;'; // 🔧 修复：确保显示在数据表格（z-index: 9999）之上
             dialog.innerHTML = `
                 <div class="dialog-overlay"></div>
                 <div class="dialog-content">
@@ -6816,11 +6769,13 @@ export class DataTable {
 
             // 获取历史记录
             const history = await this.getCellHistory(cellInfo);
-            console.log('[DataTable] 📋 获取到历史记录:', history);
+            console.log('[DataTable] 📋 获取到历史记录数量:', history.length);
+            console.log('[DataTable] 📋 历史记录详情:', history);
 
             // 创建历史记录对话框
             const dialog = document.createElement('div');
             dialog.className = 'cell-history-dialog';
+            dialog.style.cssText = 'z-index: 1000000; position: fixed;'; // 🔧 修复：确保显示在数据表格（z-index: 9999）之上
             dialog.innerHTML = `
                 <div class="dialog-overlay"></div>
                 <div class="dialog-content">
@@ -6981,7 +6936,14 @@ export class DataTable {
      */
     async getCurrentCellValue(cellInfo) {
         try {
-            console.log('[DataTable] 🔍 获取单元格当前值:', cellInfo);
+            console.log('[DataTable] 🔍 获取单元格当前值:', {
+                panelId: cellInfo.panelId,
+                property: cellInfo.property,
+                npcId: cellInfo.npcId,
+                orgId: cellInfo.orgId,
+                rowIndex: cellInfo.rowIndex,
+                hasCellElement: !!cellInfo.cellElement
+            });
 
             if (cellInfo.npcId && cellInfo.npcId !== 'null' && cellInfo.npcId !== null) {
                 // NPC数据 - 从交互面板数据中获取
@@ -7087,6 +7049,17 @@ export class DataTable {
      */
     getDisplayedCellValue(cellInfo) {
         try {
+            // 🆕 优先使用直接传入的单元格元素引用
+            if (cellInfo.cellElement) {
+                const cellElement = cellInfo.cellElement;
+                // 获取单元格的实际文本内容（去除HTML标签）
+                const cellContent = cellElement.querySelector('.cell-content');
+                if (cellContent) {
+                    return cellContent.textContent.trim();
+                }
+                return cellElement.textContent.trim();
+            }
+
             // 查找当前显示的单元格
             const cellElements = document.querySelectorAll(`.cell-value[data-property="${cellInfo.property}"]`);
 
@@ -7101,6 +7074,11 @@ export class DataTable {
                         const row = cell.closest('tr');
                         const rowNpcId = row?.getAttribute('data-npc-id');
                         if (rowNpcId === cellInfo.npcId) {
+                            // 🆕 优先从 .cell-content 获取内容
+                            const cellContent = cell.querySelector('.cell-content');
+                            if (cellContent) {
+                                return cellContent.textContent.trim();
+                            }
                             return cell.textContent.trim();
                         }
                     } else if (cellInfo.rowIndex !== undefined) {
@@ -7110,11 +7088,21 @@ export class DataTable {
                         if (rowIndexAttr !== null && rowIndexAttr !== undefined) {
                             const rowIndex = parseInt(rowIndexAttr);
                             if (!isNaN(rowIndex) && rowIndex === cellInfo.rowIndex) {
+                                // 🆕 优先从 .cell-content 获取内容
+                                const cellContent = cell.querySelector('.cell-content');
+                                if (cellContent) {
+                                    return cellContent.textContent.trim();
+                                }
                                 return cell.textContent.trim();
                             }
                         }
                     } else {
                         // 单行数据或无法确定行：返回第一个匹配值
+                        // 🆕 优先从 .cell-content 获取内容
+                        const cellContent = cell.querySelector('.cell-content');
+                        if (cellContent) {
+                            return cellContent.textContent.trim();
+                        }
                         return cell.textContent.trim();
                     }
                 }
@@ -7146,10 +7134,14 @@ export class DataTable {
         try {
             // 从数据核心获取历史记录
             const historyKey = this.buildHistoryKey(cellInfo);
+            console.log('[DataTable] 🔑 getCellHistory - 历史记录键:', historyKey);
+            
             const history = await this.dataCore.getFieldHistory?.(historyKey);
+            console.log('[DataTable] 📚 getCellHistory - 原始历史记录:', history);
 
             // 确保返回数组
             if (Array.isArray(history)) {
+                console.log('[DataTable] ✅ 返回历史记录数组，长度:', history.length);
                 return history;
             } else {
                 console.warn('[DataTable] ⚠️ 历史记录不是数组格式:', history);
@@ -7315,7 +7307,7 @@ export class DataTable {
     /**
      * 🆕 记录字段修改历史
      */
-    recordFieldChange(cellInfo, oldValue, newValue) {
+    async recordFieldChange(cellInfo, oldValue, newValue) {
         try {
             const historyKey = this.buildHistoryKey(cellInfo);
             const record = {
@@ -7324,18 +7316,25 @@ export class DataTable {
                 newValue,
                 property: cellInfo.property,
                 panelId: cellInfo.panelId,
-                npcId: cellInfo.npcId
+                npcId: cellInfo.npcId,
+                source: 'USER_EDIT',  // 🆕 添加source字段
+                note: '用户手动编辑'
             };
+
+            console.log('[DataTable] 🔑 历史记录键:', historyKey);
+            console.log('[DataTable] 📝 准备记录修改历史:', record);
 
             // 添加到数据核心的历史记录
             if (this.dataCore.addFieldHistory) {
-                this.dataCore.addFieldHistory(historyKey, record);
+                await this.dataCore.addFieldHistory(historyKey, record);  // 🆕 await异步调用
+                console.log('[DataTable] ✅ 修改历史已记录到数据核心');
+            } else {
+                console.warn('[DataTable] ⚠️ addFieldHistory方法不可用');
             }
-
-            console.log('[DataTable] 📝 修改历史已记录:', record);
 
         } catch (error) {
             console.error('[DataTable] ❌ 记录修改历史失败:', error);
+            console.error('[DataTable] 错误详情:', error.stack);
         }
     }
 
@@ -7344,7 +7343,10 @@ export class DataTable {
      */
     async refreshTableData() {
         try {
-            // 重新加载当前聊天数据并重建 this.data / filteredData
+            // 🔧 修复：删除数据后需要重建整个表格结构，因为字段可能已变化
+            console.log('[DataTable] 🔄 刷新表格数据 - 将重建表格结构以确保UI正确更新');
+            
+            // 重新加载当前聊天数据
             const currentChatId = this.dataCore.getCurrentChatId();
             if (currentChatId) {
                 const chatData = await this.dataCore.getChatData(currentChatId);
@@ -7353,9 +7355,10 @@ export class DataTable {
                 console.log('[DataTable] 🔄 数据已重新加载，条目数:', this.data.length);
             }
 
-            // 更新分组表格数据
-            await this.updateGroupedTablesData();
-            console.log('[DataTable] 🔄 表格数据已刷新');
+            // 🔧 修复：重建表格结构以更新DOM
+            this.refreshTableStructure();
+            
+            console.log('[DataTable] 🔄 表格数据和结构已刷新');
         } catch (error) {
             console.error('[DataTable] ❌ 刷新表格数据失败:', error);
         }
@@ -7486,12 +7489,31 @@ export class DataTable {
             // 获取现有规则
             const existingRule = fieldRuleManager.getFieldRule(cellInfo.panelId, cellInfo.property);
 
+            // 🆕 异步获取当前值
+            let currentValue = cellInfo.value || '';
+            try {
+                const liveValue = await this.getCurrentCellValue({
+                    panelId: cellInfo.panelId,
+                    property: cellInfo.property,
+                    npcId: cellInfo.npcId,
+                    orgId: cellInfo.orgId,
+                    rowIndex: cellInfo.rowIndex
+                });
+                if (liveValue !== undefined && liveValue !== null) {
+                    currentValue = liveValue;
+                }
+                console.log('[DataTable] 📊 获取到当前值:', currentValue);
+            } catch (error) {
+                console.warn('[DataTable] ⚠️ 获取当前值失败，使用默认值:', error);
+            }
+
             // 获取规则模板
             const templates = fieldRuleManager.getAllRuleTemplates();
 
             // 创建对话框
             const dialog = document.createElement('div');
             dialog.className = 'field-rule-dialog';
+            dialog.style.cssText = 'z-index: 1000000; position: fixed;'; // 🔧 修复：确保显示在数据表格（z-index: 9999）之上
             dialog.innerHTML = `
                 <div class="dialog-overlay"></div>
                 <div class="dialog-content">
@@ -7511,7 +7533,7 @@ export class DataTable {
                             </div>
                             <div class="info-row">
                                 <span class="info-label">当前值:</span>
-                                <span class="info-value">${cellInfo.value || '(空)'}</span>
+                                <span class="info-value">${this.escapeHtml(currentValue) || '(空)'}</span>
                             </div>
                         </div>
 
@@ -8047,24 +8069,16 @@ export class DataTable {
                             </div>
                         </div>
 
-                        <div class="confirmation-input" style="margin-bottom: 20px;">
-                            <label style="
-                                display: block;
-                                color: var(--theme-text-primary, #fff);
-                                margin-bottom: 8px;
-                                font-weight: 500;
-                            ">请输入 "DELETE" 确认删除：</label>
-                            <input type="text" id="delete-confirmation" placeholder="输入 DELETE 确认" style="
-                                width: 100%;
-                                padding: 8px 12px;
-                                background: var(--theme-bg-secondary, #333);
-                                color: var(--theme-text-primary, #fff);
-                                border: 1px solid var(--theme-border-color, #555);
-                                border-radius: 4px;
-                                font-size: 14px;
-                                box-sizing: border-box;
-                            " />
-                        </div>
+                        <div class="warning-note" style="
+                            margin-bottom: 16px;
+                            padding: 12px;
+                            background: var(--theme-danger-bg, rgba(220, 53, 69, 0.1));
+                            border: 1px solid var(--theme-danger-border, rgba(220, 53, 69, 0.3));
+                            border-radius: 6px;
+                            color: var(--theme-danger-text, #dc3545);
+                            font-size: 13px;
+                            line-height: 1.5;
+                        ">⚠️ 删除字段将无法恢复，请确认操作！</div>
                     </div>
                     <div class="dialog-footer" style="
                         padding: 16px 24px 20px;
@@ -8091,8 +8105,6 @@ export class DataTable {
                             cursor: pointer;
                             font-size: 14px;
                             font-weight: 500;
-                            opacity: 0.5;
-                            pointer-events: none;
                         ">确认删除</button>
                     </div>
                 </div>
@@ -8115,6 +8127,280 @@ export class DataTable {
             console.error('[DataTable] ❌ 显示删除字段确认对话框失败:', error);
         }
     }
+
+    /**
+     * 🆕 显示字段名称修改对话框
+     */
+    async showRenameFieldDialog(cellInfo) {
+        try {
+            console.log('[DataTable] 📝 显示字段名称修改对话框:', cellInfo);
+
+            // 创建对话框
+            const dialog = document.createElement('div');
+            dialog.className = 'rename-field-dialog';
+            dialog.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000000;
+                opacity: 0;
+                visibility: visible;
+                transition: opacity 0.3s ease;
+            `;
+
+            dialog.innerHTML = `
+                <div class="dialog-content" style="
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    border-radius: 12px;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                    max-width: 500px;
+                    width: 90%;
+                    max-height: 80vh;
+                    overflow: hidden;
+                    border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                ">
+                    <div class="dialog-header" style="
+                        padding: 20px 24px 16px;
+                        border-bottom: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <h3 style="margin: 0; color: var(--theme-text-primary, #ffffff); font-size: 18px;">📝 字段名称修改</h3>
+                        <button class="dialog-close" data-action="close" style="
+                            background: none;
+                            border: none;
+                            color: var(--theme-text-secondary, #aaa);
+                            font-size: 24px;
+                            cursor: pointer;
+                            padding: 0;
+                            width: 32px;
+                            height: 32px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            border-radius: 4px;
+                            transition: background-color 0.2s;
+                        ">×</button>
+                    </div>
+                    <div class="dialog-body" style="padding: 24px;">
+                        <div class="field-info" style="
+                            background: var(--theme-bg-secondary, rgba(255,255,255,0.05));
+                            border-radius: 8px;
+                            padding: 16px;
+                            margin-bottom: 20px;
+                        ">
+                            <div style="color: var(--theme-text-primary, #fff); margin-bottom: 12px;">
+                                <strong>字段信息：</strong>
+                            </div>
+                            <div style="color: var(--theme-text-secondary, #aaa); font-size: 14px; line-height: 1.8;">
+                                <div>面板：${this.getPanelDisplayName(cellInfo.panelId)}</div>
+                                <div>当前名称：${cellInfo.fieldName || cellInfo.property}</div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label style="
+                                display: block;
+                                color: var(--theme-text-primary, #fff);
+                                margin-bottom: 8px;
+                                font-weight: 500;
+                            ">新字段名称：</label>
+                            <input type="text" class="field-name-input" 
+                                value="${this.escapeHtml(cellInfo.fieldName || cellInfo.property)}"
+                                placeholder="请输入新的字段名称" 
+                                style="
+                                width: 100%;
+                                    padding: 10px 12px;
+                                background: var(--theme-bg-secondary, #333);
+                                color: var(--theme-text-primary, #fff);
+                                border: 1px solid var(--theme-border-color, #555);
+                                border-radius: 4px;
+                                font-size: 14px;
+                                box-sizing: border-box;
+                            " />
+                        </div>
+
+                        <div class="form-note" style="
+                            margin-top: 12px;
+                            padding: 12px;
+                            background: var(--theme-info-bg, rgba(52, 152, 219, 0.1));
+                            border: 1px solid var(--theme-info-border, rgba(52, 152, 219, 0.3));
+                            border-radius: 6px;
+                            color: var(--theme-info-text, #3498db);
+                            font-size: 13px;
+                            line-height: 1.5;
+                        ">
+                            💡 提示：自定义字段默认使用名称作为键名，修改名称将同步键名。
+                        </div>
+                    </div>
+                    <div class="dialog-footer" style="
+                        padding: 16px 24px 20px;
+                        border-top: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                        display: flex;
+                        justify-content: flex-end;
+                        gap: 12px;
+                    ">
+                        <button class="btn-cancel" data-action="cancel" style="
+                            padding: 8px 16px;
+                            background: var(--theme-bg-secondary, #555);
+                            color: var(--theme-text-primary, #fff);
+                            border: 1px solid var(--theme-border-color, #666);
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        ">取消</button>
+                        <button class="btn-save" data-action="save-rename" style="
+                            padding: 8px 16px;
+                            background: var(--theme-primary-color, #007bff);
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                            font-weight: 500;
+                        ">确认修改</button>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            document.body.appendChild(dialog);
+
+            // 绑定事件
+            this.bindRenameFieldDialogEvents(dialog, cellInfo);
+
+            // 显示对话框
+            setTimeout(() => {
+                dialog.style.opacity = '1';
+                const input = dialog.querySelector('.field-name-input');
+                if (input) { input.focus(); input.select(); }
+            }, 10);
+
+            console.log('[DataTable] ✅ 字段名称修改对话框已显示');
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 显示字段名称修改对话框失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 绑定字段名称修改对话框事件
+     */
+    bindRenameFieldDialogEvents(dialog, cellInfo) {
+        const closeDialog = () => {
+            dialog.style.opacity = '0';
+            setTimeout(() => dialog.remove(), 300);
+        };
+
+        // 关闭事件
+        dialog.addEventListener('click', (e) => {
+            if (e.target === dialog) closeDialog();
+        });
+        dialog.querySelector('[data-action="close"]').addEventListener('click', closeDialog);
+        dialog.querySelector('[data-action="cancel"]').addEventListener('click', closeDialog);
+
+        // 保存按钮
+        dialog.querySelector('[data-action="save-rename"]').addEventListener('click', async () => {
+            await this.executeRenameField(dialog, cellInfo);
+            closeDialog();
+        });
+
+        // ESC键关闭
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                closeDialog();
+                document.removeEventListener('keydown', handleKeyDown);
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+
+        // Enter键保存
+        dialog.querySelector('.field-name-input').addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                await this.executeRenameField(dialog, cellInfo);
+                closeDialog();
+            }
+        });
+    }
+
+    /**
+     * 🆕 执行字段名称修改（同步键名）
+     */
+    async executeRenameField(dialog, cellInfo) {
+        try {
+            const input = dialog.querySelector('.field-name-input');
+            const newName = input.value.trim();
+            const oldName = cellInfo.fieldName || cellInfo.property;
+
+            if (!newName) {
+                this.showErrorMessage('字段名称不能为空');
+                return;
+            }
+            if (newName === oldName) {
+                console.log('[DataTable] ℹ️ 名称未变化，跳过');
+                return;
+            }
+
+            // 获取 InfoBarSettings 模块
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+            if (!infoBarSettings) {
+                throw new Error('InfoBarSettings模块未找到');
+            }
+
+            // 在当前面板配置中同步键名：subItems 中 name/displayName/key
+            const panelId = cellInfo.panelId;
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings['Information bar integration tool'] || {};
+            
+            // 🔧 修复：优先从customPanels获取配置
+            let panelConfig = null;
+            if (configs.customPanels && configs.customPanels[panelId]) {
+                panelConfig = configs.customPanels[panelId];
+            } else {
+                panelConfig = configs[panelId] || {};
+            }
+
+            let renamed = false;
+            if (panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
+                const subItem = panelConfig.subItems.find(item =>
+                    item.name === oldName || item.displayName === oldName || item.key === oldName
+                );
+                if (subItem) {
+                    subItem.name = newName;
+                    subItem.displayName = newName;
+                    // 🔧 修复：保持原有的 key 不变（col_X 格式），只修改 name 和 displayName
+                    // subItem.key 保持不变
+                    renamed = true;
+                }
+            }
+
+            if (!renamed) {
+                console.warn('[DataTable] ⚠️ 未在subItems中找到可重命名的自定义字段，尝试基础字段映射');
+            }
+
+            // 持久化保存设置
+            await context.saveSettingsDebounced?.();
+
+            // 刷新表格结构
+            await this.refreshTableStructure?.();
+            this.showSuccessMessage(`字段 "${oldName}" 已重命名为 "${newName}"`);
+            console.log('[DataTable] ✅ 字段名称修改成功');
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 执行字段名称修改失败:', error);
+            this.showErrorMessage('修改失败: ' + error.message);
+        }
+    }
     /**
      * 🆕 绑定删除字段对话框事件
      */
@@ -8131,26 +8417,13 @@ export class DataTable {
         dialog.querySelector('[data-action="close"]').addEventListener('click', closeDialog);
         dialog.querySelector('[data-action="cancel"]').addEventListener('click', closeDialog);
 
-        // 确认输入监听
-        const confirmationInput = dialog.querySelector('#delete-confirmation');
+        // 单次确认删除
         const deleteButton = dialog.querySelector('[data-action="confirm-delete"]');
-
-        confirmationInput.addEventListener('input', (e) => {
-            if (e.target.value.trim().toUpperCase() === 'DELETE') {
                 deleteButton.style.opacity = '1';
                 deleteButton.style.pointerEvents = 'auto';
-            } else {
-                deleteButton.style.opacity = '0.5';
-                deleteButton.style.pointerEvents = 'none';
-            }
-        });
-
-        // 确认删除
         deleteButton.addEventListener('click', async () => {
-            if (confirmationInput.value.trim().toUpperCase() === 'DELETE') {
                 await this.executeDeleteField(cellInfo);
                 closeDialog();
-            }
         });
 
         // ESC键关闭
@@ -8185,41 +8458,75 @@ export class DataTable {
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings['Information bar integration tool'] || {};
 
-            let panelConfig = configs[cellInfo.panelId];
+            // 🔧 修复：优先从customPanels中获取配置
+            let panelConfig = null;
+            if (configs.customPanels && configs.customPanels[cellInfo.panelId]) {
+                panelConfig = configs.customPanels[cellInfo.panelId];
+                console.log('[DataTable] 📋 从customPanels获取配置:', cellInfo.panelId);
+            } else {
+                panelConfig = configs[cellInfo.panelId];
+                console.log('[DataTable] 📋 从直接配置获取:', cellInfo.panelId);
+            }
+            
             if (!panelConfig) {
-                panelConfig = { enabled: true };
+                panelConfig = { enabled: true, subItems: [] };
+                // 自定义面板应该存储在customPanels中
+                if (cellInfo.panelId.startsWith('custom')) {
+                    if (!configs.customPanels) configs.customPanels = {};
+                    configs.customPanels[cellInfo.panelId] = panelConfig;
+                } else {
                 configs[cellInfo.panelId] = panelConfig;
-            }
-
-            // 查找字段的键名（支持基础字段和自定义字段）
-            let fieldKey = null;
-            let isCustomField = false;
-
-            // 方法1：在subItems中查找自定义字段
-            if (panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
-                const subItem = panelConfig.subItems.find(item =>
-                    item.name === fieldName ||
-                    item.displayName === fieldName
-                );
-
-                if (subItem) {
-                    fieldKey = subItem.key || subItem.name;
-                    isCustomField = true;
-                    console.log('[DataTable] 🔍 找到自定义字段:', fieldKey);
                 }
+                console.log('[DataTable] 🆕 创建新面板配置:', cellInfo.panelId);
             }
 
-            // 方法2：在映射表中查找基础字段
-            if (!fieldKey) {
+            // 🔧 修复：优先判断面板类型
+            const isCustomPanel = cellInfo.panelId.startsWith('custom') || 
+                                 !['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'].includes(cellInfo.panelId);
+
+            let fieldKey = null;
+            let subItemFound = null;
+
+            // 确保subItems数组存在
+            if (!panelConfig.subItems || !Array.isArray(panelConfig.subItems)) {
+                panelConfig.subItems = [];
+            }
+
+            // 🔧 增强调试：显示所有可用字段
+            console.log('[DataTable] 🔍 面板配置:', {
+                panelId: cellInfo.panelId,
+                isCustomPanel,
+                hasSubItems: !!panelConfig.subItems,
+                subItemsCount: panelConfig.subItems?.length || 0
+            });
+            
+            if (panelConfig.subItems && panelConfig.subItems.length > 0) {
+                console.log('[DataTable] 📋 可用的subItems字段:');
+                panelConfig.subItems.forEach((item, i) => {
+                    console.log(`  [${i}] name:"${item.name}", displayName:"${item.displayName || ''}", key:"${item.key}", enabled:${item.enabled !== false}`);
+                });
+            }
+
+            // 在subItems中查找字段（包括已禁用的）
+            subItemFound = panelConfig.subItems.find(item =>
+                item.name === fieldName ||
+                item.displayName === fieldName ||
+                item.key === fieldName
+            );
+
+            if (subItemFound) {
+                fieldKey = subItemFound.key;
+                console.log('[DataTable] 🔍 在subItems中找到字段:', {name: fieldName, key: fieldKey, found: subItemFound});
+            } else if (!isCustomPanel) {
+                // 只有基础面板才尝试在基础配置中查找
+                console.log('[DataTable] 🔍 在基础映射表中查找字段:', fieldName);
                 const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
                 const panelMapping = completeMapping[cellInfo.panelId];
 
                 if (panelMapping) {
-                    // 直接查找中文字段名
                     if (panelMapping[fieldName]) {
                         fieldKey = fieldName;
                     } else {
-                        // 查找映射到该中文名的英文键
                         for (const [englishKey, chineseName] of Object.entries(panelMapping)) {
                             if (chineseName === fieldName) {
                                 fieldKey = englishKey;
@@ -8227,7 +8534,6 @@ export class DataTable {
                             }
                         }
                     }
-
                     if (fieldKey) {
                         console.log('[DataTable] 🔍 找到基础字段:', fieldKey);
                     }
@@ -8235,31 +8541,41 @@ export class DataTable {
             }
 
             if (!fieldKey) {
-                throw new Error(`字段 "${fieldName}" 未找到（既不在自定义字段中，也不在基础字段映射表中）`);
+                console.error('[DataTable] ❌ 字段查找失败，目标字段:', fieldName);
+                console.error('[DataTable] ❌ 查找范围:', {
+                    isCustomPanel,
+                    subItemsExists: !!panelConfig.subItems,
+                    subItemsCount: panelConfig.subItems?.length
+                });
+                throw new Error(`字段 "${fieldName}" 未找到`);
             }
 
-            // 禁用字段而不是删除（通过设置enabled=false）
-            if (isCustomField) {
-                // 处理自定义字段：在subItems中禁用
-                if (panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
-                    const subItem = panelConfig.subItems.find(item =>
-                        item.name === fieldName ||
-                        item.displayName === fieldName ||
-                        item.key === fieldKey
-                    );
-
-                    if (subItem) {
-                        subItem.enabled = false;
-                        console.log('[DataTable] 🚫 已禁用自定义字段:', subItem);
+            // 禁用字段（通过设置enabled=false）
+            if (subItemFound) {
+                // 直接禁用在subItems中找到的字段
+                subItemFound.enabled = false;
+                console.log('[DataTable] 🚫 已在subItems中禁用字段:', {name: subItemFound.name, key: subItemFound.key});
+                
+                // 🔧 关键修复：禁用字段后重新编号所有字段的key
+                // 这样enabled字段的key会保持连续（col_1, col_2, col_3...）
+                let enabledIndex = 0;
+                panelConfig.subItems.forEach((item) => {
+                    if (item.enabled !== false) {
+                        enabledIndex++;
+                        const newKey = `col_${enabledIndex}`;
+                        if (item.key !== newKey) {
+                            console.log(`[DataTable] 🔄 重新编号字段: ${item.name} ${item.key} → ${newKey}`);
+                            item.key = newKey;
+                        }
                     }
-                }
+                });
+                console.log('[DataTable] 🔄 所有启用字段已重新编号');
             } else {
-                // 处理基础字段：在面板配置中禁用
+                // 基础面板的基础字段：在面板配置中禁用
                 if (panelConfig[fieldKey] && typeof panelConfig[fieldKey] === 'object') {
                     panelConfig[fieldKey].enabled = false;
-                    console.log('[DataTable] 🚫 已禁用基础字段:', fieldKey);
+                    console.log('[DataTable] 🚫 已禁用基础字段配置:', fieldKey);
                 } else {
-                    // 如果基础字段配置不存在，创建一个禁用的配置
                     panelConfig[fieldKey] = { enabled: false };
                     console.log('[DataTable] 🚫 已创建禁用的基础字段配置:', fieldKey);
                 }
@@ -8307,7 +8623,7 @@ export class DataTable {
     }
 
     /**
-     * 🆕 清理字段数据
+     * 🆕 清理字段数据并重新编号
      */
     async cleanupFieldData(panelId, fieldKey) {
         try {
@@ -8315,117 +8631,72 @@ export class DataTable {
 
             const dataCore = window.InfoBarData;
             if (!dataCore) {
-                console.warn('[DataTable] ⚠️ 数据核心未找到，跳过数据清理');
+                console.warn('[DataTable] ⚠️ 数据核心未找到');
                 return;
             }
 
-            // 获取面板数据
-            const panelData = dataCore.getPanelData(panelId);
-            if (!panelData || !Array.isArray(panelData)) {
-                console.log('[DataTable] 📊 面板数据为空，无需清理');
+            // 🔧 修复：直接使用 UnifiedDataCore 的方法获取数据（像删除数据那样）
+            const panelData = await dataCore.getPanelData(panelId);
+            if (!panelData) {
+                console.log('[DataTable] ℹ️ 面板无数据');
                 return;
             }
 
-            let cleanedCount = 0;
+            console.log('[DataTable] 📊 获取到面板数据:', {
+                type: Array.isArray(panelData) ? '数组' : '对象',
+                dataKeys: Object.keys(Array.isArray(panelData) ? (panelData[0] || {}) : panelData)
+            });
 
-            // 清理所有数据项中的该字段
-            panelData.forEach((dataItem, index) => {
-                if (dataItem && dataItem.rowData && typeof dataItem.rowData === 'object') {
-                    // 查找所有可能的字段键名
-                    const keysToDelete = [];
+            // 转换col_X为纯数字
+            let dataKey = fieldKey.startsWith('col_') ? fieldKey.replace('col_', '') : fieldKey;
+            console.log(`[DataTable] 🔑 要删除的数据key: ${dataKey}`);
 
-                    // 直接匹配字段键
-                    if (dataItem.rowData[fieldKey] !== undefined) {
-                        keysToDelete.push(fieldKey);
+            // 删除字段数据并重新编号
+            if (Array.isArray(panelData)) {
+                // 多行数据
+                panelData.forEach((row, rowIndex) => {
+                    if (row && typeof row === 'object') {
+                        // 删除字段
+                        if (row[dataKey] !== undefined) {
+                            delete row[dataKey];
+                            console.log(`[DataTable] 🗑️ 第${rowIndex}行删除字段${dataKey}`);
+                        }
+                        
+                        // 重新编号
+                        const keys = Object.keys(row).filter(k => !isNaN(k)).map(k => parseInt(k)).sort((a, b) => a - b);
+                        const newRow = {};
+                        keys.forEach((oldKey, i) => {
+                            newRow[`${i + 1}`] = row[oldKey];
+                        });
+                        Object.keys(row).forEach(k => delete row[k]);
+                        Object.assign(row, newRow);
+                        console.log(`[DataTable] 🔄 第${rowIndex}行: ${keys.join(',')} → ${Object.keys(newRow).join(',')}`);
                     }
-
-                    // 查找列索引形式的键（col_1, col_2等）
-                    Object.keys(dataItem.rowData).forEach(key => {
-                        if (key.startsWith('col_') && dataItem.rowData[key] !== undefined) {
-                            // 检查这个列是否对应被删除的字段
-                            // 这里可以通过字段映射来确定
-                            const fieldMapping = this.getFieldMapping(panelId);
-                            if (fieldMapping && fieldMapping[fieldKey] === key) {
-                                keysToDelete.push(key);
-                            }
-                        }
-                    });
-
-                    // 删除找到的键
-                    keysToDelete.forEach(key => {
-                        delete dataItem.rowData[key];
-                        cleanedCount++;
-                        console.log(`[DataTable] 🗑️ 已清理数据项 ${index} 的字段 ${key}`);
-                    });
+                });
+            } else if (typeof panelData === 'object') {
+                // 单行数据
+                if (panelData[dataKey] !== undefined) {
+                    delete panelData[dataKey];
+                    console.log(`[DataTable] 🗑️ 删除字段${dataKey}`);
                 }
-            });
-
-            // 如果有数据被清理，保存数据
-            if (cleanedCount > 0) {
-                try {
-                    await dataCore.savePanelData(panelId, panelData);
-                    console.log(`[DataTable] 💾 已保存清理后的数据，共清理 ${cleanedCount} 个字段值`);
-                } catch (saveError) {
-                    console.warn('[DataTable] ⚠️ 保存清理后的数据失败:', saveError.message);
-                }
-            } else {
-                console.log('[DataTable] 📊 没有找到需要清理的数据');
+                
+                // 重新编号
+                const keys = Object.keys(panelData).filter(k => !isNaN(k)).map(k => parseInt(k)).sort((a, b) => a - b);
+                const newData = {};
+                keys.forEach((oldKey, i) => {
+                    newData[`${i + 1}`] = panelData[oldKey];
+                });
+                Object.keys(panelData).forEach(k => delete panelData[k]);
+                Object.assign(panelData, newData);
+                console.log(`[DataTable] 🔄 重新编号: ${keys.join(',')} → ${Object.keys(newData).join(',')}`);
             }
 
-        } catch (error) {
-            console.error('[DataTable] ❌ 清理字段数据失败:', error);
-        }
-    }
-
-    /**
-     * 🆕 清理字段数据
-     */
-    async cleanupFieldData(panelId, fieldIndex) {
-        try {
-            console.log('[DataTable] 🧹 清理字段数据:', { panelId, fieldIndex });
-
-            // 获取数据管理器
-            const unifiedDataCore = window.InfoBarData;
-            if (!unifiedDataCore) {
-                console.warn('[DataTable] ⚠️ 统一数据核心未找到，跳过数据清理');
-                return;
+            // 保存数据（使用 UnifiedDataCore 的方法）
+            const chatId = dataCore.getCurrentChatId();
+            if (chatId) {
+                await dataCore.writePanelDataWithoutMerge(chatId, panelId, panelData);
+                console.log('[DataTable] 💾 已保存数据');
             }
-
-            // 获取面板数据
-            const panelData = unifiedDataCore.getAllPanelData()[panelId];
-            if (!panelData || !Array.isArray(panelData)) {
-                console.log('[DataTable] ℹ️ 面板无数据，无需清理');
-                return;
-            }
-
-            // 清理每行数据中对应的字段
-            const fieldKey = `col_${fieldIndex + 1}`;
-            let cleanedCount = 0;
-
-            panelData.forEach((rowData, rowIndex) => {
-                if (rowData && typeof rowData === 'object' && rowData[fieldKey] !== undefined) {
-                    delete rowData[fieldKey];
-                    cleanedCount++;
-                    console.log(`[DataTable] 🧹 清理第${rowIndex + 1}行的${fieldKey}字段`);
-                }
-            });
-
-            // 重新整理字段索引（将后续字段前移）
-            panelData.forEach(rowData => {
-                if (rowData && typeof rowData === 'object') {
-                    const keys = Object.keys(rowData).filter(key => key.startsWith('col_'));
-                    keys.forEach(key => {
-                        const colIndex = parseInt(key.replace('col_', ''));
-                        if (colIndex > fieldIndex + 1) {
-                            const newKey = `col_${colIndex - 1}`;
-                            rowData[newKey] = rowData[key];
-                            delete rowData[key];
-                        }
-                    });
-                }
-            });
-
-            console.log(`[DataTable] ✅ 字段数据清理完成，共清理${cleanedCount}条记录`);
 
         } catch (error) {
             console.error('[DataTable] ❌ 清理字段数据失败:', error);
@@ -8695,27 +8966,34 @@ export class DataTable {
         try {
             console.log('[DataTable] ➕ 执行添加字段操作:', { cellInfo, position, fieldConfig });
 
-            // 生成新字段的英文键名
-            const fieldKey = fieldConfig.name.toLowerCase()
-                .replace(/[\u4e00-\u9fff]/g, '') // 移除中文字符
-                .replace(/\s+/g, '_') // 空格替换为下划线
-                .replace(/[^a-z0-9_]/g, '') // 移除特殊字符
-                || `custom_field_${Date.now()}`; // 如果为空则使用时间戳
-
             // 添加字段到面板配置
             const context = SillyTavern.getContext();
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings['Information bar integration tool'] || {};
 
-            // 获取面板配置
-            let panelConfig = configs[cellInfo.panelId];
+            // 🔧 修复：优先从customPanels获取配置
+            let panelConfig = null;
+            if (configs.customPanels && configs.customPanels[cellInfo.panelId]) {
+                panelConfig = configs.customPanels[cellInfo.panelId];
+                console.log('[DataTable] 📋 从customPanels获取配置:', cellInfo.panelId);
+            } else {
+                panelConfig = configs[cellInfo.panelId];
+                console.log('[DataTable] 📋 从直接配置获取:', cellInfo.panelId);
+            }
+            
             if (!panelConfig) {
                 // 如果面板配置不存在，创建一个基础配置
                 panelConfig = {
                     enabled: true,
                     subItems: []
                 };
-                configs[cellInfo.panelId] = panelConfig;
+                // 自定义面板应该存储在customPanels中
+                if (cellInfo.panelId.startsWith('custom')) {
+                    if (!configs.customPanels) configs.customPanels = {};
+                    configs.customPanels[cellInfo.panelId] = panelConfig;
+                } else {
+                    configs[cellInfo.panelId] = panelConfig;
+                }
             }
 
             // 确保subItems数组存在
@@ -8723,19 +9001,40 @@ export class DataTable {
                 panelConfig.subItems = [];
             }
 
-            // 确保键名唯一
-            let uniqueKey = fieldKey;
-            let counter = 1;
-            while (panelConfig.subItems.some(item => item.key === uniqueKey)) {
-                uniqueKey = `${fieldKey}_${counter}`;
-                counter++;
+            // 🔧 修复：计算插入位置（需要考虑enabled=false的字段）
+            let insertIndex = panelConfig.subItems.length; // 默认添加到末尾
+
+            if (cellInfo.columnIndex !== undefined) {
+                // columnIndex是UI显示的索引，需要转换为subItems数组的实际索引
+                // 遍历subItems，找到第N个enabled=true的字段
+                let enabledCount = 0;
+                let targetIndex = -1;
+                
+                for (let i = 0; i < panelConfig.subItems.length; i++) {
+                    if (panelConfig.subItems[i].enabled !== false) {
+                        if (enabledCount === cellInfo.columnIndex) {
+                            targetIndex = i;
+                            break;
+                        }
+                        enabledCount++;
+                    }
+                }
+                
+                if (targetIndex >= 0) {
+                    if (position === 'before') {
+                        insertIndex = targetIndex;
+                    } else {
+                        insertIndex = targetIndex + 1;
+                    }
+                    console.log(`[DataTable] 📍 UI索引${cellInfo.columnIndex} → subItems索引${targetIndex} → 插入位置${insertIndex}`);
+                }
             }
 
-            // 创建新字段配置
+            // 创建新字段配置（暂时使用临时key）
             const newFieldConfig = {
                 name: fieldConfig.name,
                 displayName: fieldConfig.name,
-                key: uniqueKey,
+                key: 'temp_key', // 临时key，稍后重新编号
                 enabled: true,
                 description: fieldConfig.description || '',
                 type: fieldConfig.type || 'text',
@@ -8744,20 +9043,15 @@ export class DataTable {
                 createdAt: new Date().toISOString()
             };
 
-            // 计算插入位置
-            let insertIndex = panelConfig.subItems.length; // 默认添加到末尾
-
-            if (cellInfo.columnIndex !== undefined) {
-                if (position === 'before') {
-                    insertIndex = cellInfo.columnIndex;
-                } else {
-                    insertIndex = cellInfo.columnIndex + 1;
-                }
-            }
-
             // 插入新字段配置
             panelConfig.subItems.splice(insertIndex, 0, newFieldConfig);
             console.log('[DataTable] ➕ 已添加字段配置到位置:', insertIndex, newFieldConfig);
+            
+            // 🔧 关键修复：重新编号所有字段的key为col_1, col_2, col_3...
+            panelConfig.subItems.forEach((item, index) => {
+                item.key = `col_${index + 1}`;
+            });
+            console.log('[DataTable] 🔄 已重新编号所有字段key:', panelConfig.subItems.map(item => `${item.name}:${item.key}`));
 
             // 保存配置
             extensionSettings['Information bar integration tool'] = configs;
@@ -9333,6 +9627,7 @@ export class DataTable {
             // 创建确认对话框
             const dialog = document.createElement('div');
             dialog.className = 'delete-confirmation-dialog';
+            dialog.style.cssText = 'z-index: 1000000; position: fixed;'; // 🔧 修复：确保显示在数据表格（z-index: 9999）之上
             dialog.innerHTML = `
                 <div class="dialog-overlay"></div>
                 <div class="dialog-content">
@@ -9409,6 +9704,7 @@ export class DataTable {
             // 创建确认对话框
             const dialog = document.createElement('div');
             dialog.className = 'delete-confirmation-dialog';
+            dialog.style.cssText = 'z-index: 1000000; position: fixed;'; // 🔧 修复：确保显示在数据表格（z-index: 9999）之上
             dialog.innerHTML = `
                 <div class="dialog-overlay"></div>
                 <div class="dialog-content">
@@ -9735,94 +10031,141 @@ export class DataTable {
     }
 
     /**
-     * 🆕 导出预设配置
+     * 🆕 导出预设配置（完整JSON格式，包含所有规则）
      */
     async exportPreset() {
         try {
-            console.log('[DataTable] 📤 开始导出预设配置...');
+            console.log('[DataTable] 📤 开始导出完整预设配置（JSON格式）...');
 
-            // 获取当前所有配置数据
             const context = SillyTavern.getContext();
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings['Information bar integration tool'] || {};
 
-            // 构建导出数据结构
+            // 🔧 修复：导出完整配置，包含所有规则信息
             const exportData = {
-                version: '2.0.0', // 🔧 升级版本号
+                version: '3.0', // 更新版本号以区分新格式
+                exportType: 'complete', // 完整导出
                 timestamp: new Date().toISOString(),
-                description: '信息栏数据表格预设配置（包含完整表格结构）',
-                panels: {},
+                description: '信息栏集成工具完整配置（包含面板、字段、规则）',
+                
+                // 1. 面板配置
                 customPanels: {},
-                fieldRules: {},
+                basePanels: {},
+                
+                // 2. 规则配置
                 panelRules: {},
-                tableStructure: {}, // 🆕 添加表格结构信息
-                fieldMappings: {}, // 🆕 添加字段映射信息
-                dataLayout: {} // 🆕 添加数据布局信息
+                fieldRules: {},
+                
+                // 3. 其他配置
+                metadata: {
+                    exportedBy: 'Information Bar Integration Tool',
+                    exportedFrom: 'DataTable',
+                    panelCount: 0,
+                    fieldCount: 0,
+                    ruleCount: 0
+                }
             };
 
-            // 🆕 获取当前数据表格的实际结构
-            const currentTableStructure = await this.getCurrentTableStructure();
-
-            // 导出基础面板配置
-            const standardPanels = [
-                'personal', 'world', 'interaction', 'inventory', 'abilities',
-                'tasks', 'organization', 'news', 'plot', 'cultivation',
-                'fantasy', 'modern', 'historical', 'magic', 'training'
-            ];
-
-            standardPanels.forEach(panelId => {
-                if (configs[panelId]) {
-                    exportData.panels[panelId] = {
-                        enabled: configs[panelId].enabled || false,
-                        name: configs[panelId].name || panelId,
-                        icon: configs[panelId].icon || 'fa-solid fa-info',
-                        defaultCollapsed: configs[panelId].defaultCollapsed || false,
-                        subItems: configs[panelId].subItems || [],
-                        // 🆕 添加表格结构信息
-                        tableStructure: currentTableStructure[panelId] || null
-                    };
-                }
-            });
-
-            // 导出自定义面板配置
+            // 📊 导出自定义面板配置
             if (configs.customPanels) {
                 Object.entries(configs.customPanels).forEach(([panelId, panelConfig]) => {
-                    exportData.customPanels[panelId] = {
-                        enabled: panelConfig.enabled || false,
-                        name: panelConfig.name || panelId,
-                        icon: panelConfig.icon || 'fa-solid fa-info',
-                        defaultCollapsed: panelConfig.defaultCollapsed || false,
-                        subItems: panelConfig.subItems || [],
-                        // 🆕 添加表格结构信息
-                        tableStructure: currentTableStructure[panelId] || null
-                    };
+                    if (panelConfig.enabled !== false) {
+                        // 导出完整面板配置（包括所有字段，无论是否启用）
+                        exportData.customPanels[panelId] = {
+                            id: panelId,
+                            name: panelConfig.name || panelId,
+                            enabled: panelConfig.enabled !== false,
+                            icon: panelConfig.icon || '',
+                            description: panelConfig.description || '',
+                            subItems: (panelConfig.subItems || []).map(item => ({
+                                key: item.key,
+                                name: item.name,
+                                displayName: item.displayName || item.name,
+                                type: item.type || 'text',
+                                enabled: item.enabled !== false,
+                                placeholder: item.placeholder || '',
+                                description: item.description || ''
+                            }))
+                        };
+                        
+                        exportData.metadata.panelCount++;
+                        exportData.metadata.fieldCount += exportData.customPanels[panelId].subItems.length;
+                        
+                        console.log(`[DataTable] 📦 导出自定义面板: ${panelConfig.name} (${exportData.customPanels[panelId].subItems.length}个字段)`);
+                    }
                 });
             }
 
-            // 导出字段规则
-            if (configs.fieldRules) {
-                exportData.fieldRules = JSON.parse(JSON.stringify(configs.fieldRules));
+            // 📊 导出基础面板配置（只导出启用的子项）
+            const basePanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+            basePanelIds.forEach(panelId => {
+                const basePanelConfig = configs.basePanels?.[panelId];
+                if (basePanelConfig) {
+                    const enabledSubItems = Object.entries(basePanelConfig)
+                        .filter(([key, value]) => value === true)
+                        .map(([key]) => ({ key, enabled: true }));
+                    
+                    if (enabledSubItems.length > 0) {
+                        exportData.basePanels[panelId] = {
+                            id: panelId,
+                            enabledSubItems: enabledSubItems
+                        };
+                        console.log(`[DataTable] 📦 导出基础面板: ${panelId} (${enabledSubItems.length}个启用字段)`);
+                    }
+                }
+            });
+
+            // 🔧 导出面板规则
+            const panelRuleManager = window.SillyTavernInfobar?.modules?.panelRuleManager;
+            if (panelRuleManager && typeof panelRuleManager.getAllPanelRules === 'function') {
+                const allPanelRules = panelRuleManager.getAllPanelRules();
+                console.log('[DataTable] 📋 开始导出面板规则，共', allPanelRules.size, '条');
+                
+                allPanelRules.forEach((rule, panelId) => {
+                    exportData.panelRules[panelId] = {
+                        panelId: panelId,
+                        description: rule.description || '',
+                        updateRule: rule.updateRule || '',
+                        addRule: rule.addRule || '',
+                        deleteRule: rule.deleteRule || '',
+                        conditions: rule.conditions || [],
+                        actions: rule.actions || [],
+                        enabled: rule.enabled !== false
+                    };
+                    exportData.metadata.ruleCount++;
+                    console.log(`[DataTable] 📝 导出面板规则: ${panelId}`);
+                });
+            } else {
+                console.warn('[DataTable] ⚠️ PanelRuleManager不可用，跳过面板规则导出');
             }
 
-            // 导出面板规则
-            if (configs.panelRules) {
-                exportData.panelRules = JSON.parse(JSON.stringify(configs.panelRules));
+            // 🔧 导出字段规则
+            const fieldRuleManager = window.SillyTavernInfobar?.modules?.fieldRuleManager;
+            if (fieldRuleManager && typeof fieldRuleManager.getAllFieldRules === 'function') {
+                const allFieldRules = fieldRuleManager.getAllFieldRules();
+                console.log('[DataTable] 📋 开始导出字段规则，共', allFieldRules.size, '条');
+                
+                allFieldRules.forEach((rule, ruleKey) => {
+                    exportData.fieldRules[ruleKey] = {
+                        ruleKey: ruleKey,
+                        description: rule.description || '',
+                        content: rule.content || '',
+                        template: rule.template || '',
+                        variables: rule.variables || {},
+                        enabled: rule.enabled !== false
+                    };
+                    exportData.metadata.ruleCount++;
+                    console.log(`[DataTable] 📝 导出字段规则: ${ruleKey}`);
+                });
+            } else {
+                console.warn('[DataTable] ⚠️ FieldRuleManager不可用，跳过字段规则导出');
             }
-
-            // 🆕 导出表格结构信息
-            exportData.tableStructure = currentTableStructure;
-
-            // 🆕 导出字段映射信息
-            exportData.fieldMappings = await this.getFieldMappings();
-
-            // 🆕 导出数据布局信息
-            exportData.dataLayout = await this.getDataLayout();
 
             // 生成文件名
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const filename = `infobar-preset-${timestamp}.json`;
+            const filename = `infobar-preset-complete-${timestamp}.json`;
 
-            // 创建下载链接
+            // 🔧 使用格式化的JSON（带缩进，便于阅读和编辑）
             const jsonString = JSON.stringify(exportData, null, 2);
             const blob = new Blob([jsonString], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -9836,8 +10179,15 @@ export class DataTable {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            console.log('[DataTable] ✅ 预设配置导出完成:', filename);
-            this.showSuccessMessage(`预设配置已导出: ${filename}`);
+            console.log('[DataTable] ✅ 完整预设配置导出成功:', filename);
+            console.log('[DataTable] 📊 导出统计:', {
+                panels: exportData.metadata.panelCount,
+                fields: exportData.metadata.fieldCount,
+                rules: exportData.metadata.ruleCount,
+                fileSize: `${(jsonString.length / 1024).toFixed(2)} KB`
+            });
+            
+            this.showSuccessMessage(`完整配置已导出: ${filename}\n面板: ${exportData.metadata.panelCount} | 字段: ${exportData.metadata.fieldCount} | 规则: ${exportData.metadata.ruleCount}`);
 
         } catch (error) {
             console.error('[DataTable] ❌ 导出预设配置失败:', error);
@@ -9872,9 +10222,16 @@ export class DataTable {
                         return;
                     }
 
-                    // 验证导入数据格式（原版预设格式）
-                    if (!importData.version || !importData.panels) {
-                        throw new Error('无效的预设配置文件格式');
+                    // 🆕 检测新版本完整格式（v3.0）
+                    if (importData.version === '3.0' && importData.exportType === 'complete') {
+                        console.log('[DataTable] 📊 检测到完整配置格式 v3.0');
+                        await this.importCompletePreset(importData, file.name);
+                        return;
+                    }
+
+                    // 验证导入数据格式（原版预设格式 v2.0）
+                    if (!importData.version) {
+                        throw new Error('无效的预设配置文件格式：缺少版本号');
                     }
 
                     console.log('[DataTable] 📋 导入数据验证通过，版本:', importData.version);
@@ -9885,7 +10242,8 @@ export class DataTable {
                     const extensionSettings = context.extensionSettings;
                     let configs = extensionSettings['Information bar integration tool'] || {};
 
-                    // 应用基础面板配置
+                    // 应用基础面板配置（v2.0格式兼容）
+                    if (importData.panels) {
                     Object.entries(importData.panels).forEach(([panelId, panelConfig]) => {
                         if (!configs[panelId]) {
                             configs[panelId] = {};
@@ -9901,6 +10259,7 @@ export class DataTable {
 
                         Object.assign(configs[panelId], cleanConfig);
                     });
+                    }
 
                     // 应用自定义面板配置
                     if (importData.customPanels) {
@@ -9920,12 +10279,12 @@ export class DataTable {
                         });
                     }
 
-                    // 应用字段规则
+                    // 应用字段规则（保存到extensionSettings，稍后同步到FieldRuleManager）
                     if (importData.fieldRules) {
                         configs.fieldRules = importData.fieldRules;
                     }
 
-                    // 应用面板规则
+                    // 应用面板规则（保存到extensionSettings，稍后同步到PanelRuleManager）
                     if (importData.panelRules) {
                         configs.panelRules = importData.panelRules;
                     }
@@ -9973,6 +10332,158 @@ export class DataTable {
         } catch (error) {
             console.error('[DataTable] ❌ 导入预设配置失败:', error);
             this.showErrorMessage('导入预设配置失败: ' + error.message);
+        }
+    }
+
+    /**
+     * 🆕 导入完整预设配置（v3.0格式）
+     */
+    async importCompletePreset(importData, fileName) {
+        try {
+            console.log('[DataTable] 📥 开始导入完整预设配置 v3.0...');
+            console.log('[DataTable] 📊 导入统计:', importData.metadata);
+
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            
+            // 确保扩展设置对象存在
+            if (!extensionSettings['Information bar integration tool']) {
+                extensionSettings['Information bar integration tool'] = {};
+            }
+            
+            let configs = extensionSettings['Information bar integration tool'];
+
+            // 1️⃣ 导入自定义面板配置
+            if (importData.customPanels && Object.keys(importData.customPanels).length > 0) {
+                if (!configs.customPanels) {
+                    configs.customPanels = {};
+                }
+                
+                let importedPanelCount = 0;
+                Object.entries(importData.customPanels).forEach(([panelId, panelConfig]) => {
+                    configs.customPanels[panelId] = {
+                        id: panelConfig.id || panelId,
+                        name: panelConfig.name,
+                        enabled: panelConfig.enabled !== false,
+                        icon: panelConfig.icon || '',
+                        description: panelConfig.description || '',
+                        subItems: panelConfig.subItems || []
+                    };
+                    importedPanelCount++;
+                    console.log(`[DataTable] ✅ 导入自定义面板: ${panelConfig.name} (${panelConfig.subItems.length}个字段)`);
+                });
+                
+                console.log(`[DataTable] 📦 自定义面板导入完成，共 ${importedPanelCount} 个面板`);
+            }
+
+            // 2️⃣ 导入基础面板配置
+            if (importData.basePanels && Object.keys(importData.basePanels).length > 0) {
+                if (!configs.basePanels) {
+                    configs.basePanels = {};
+                }
+                
+                Object.entries(importData.basePanels).forEach(([panelId, panelConfig]) => {
+                    if (!configs.basePanels[panelId]) {
+                        configs.basePanels[panelId] = {};
+                    }
+                    
+                    // 应用启用的子项
+                    panelConfig.enabledSubItems?.forEach(item => {
+                        configs.basePanels[panelId][item.key] = item.enabled !== false;
+                    });
+                    
+                    console.log(`[DataTable] ✅ 导入基础面板配置: ${panelId} (${panelConfig.enabledSubItems?.length || 0}个启用字段)`);
+                });
+            }
+
+            // 3️⃣ 导入面板规则到 PanelRuleManager
+            if (importData.panelRules && Object.keys(importData.panelRules).length > 0) {
+                const panelRuleManager = window.SillyTavernInfobar?.modules?.panelRuleManager;
+                if (panelRuleManager) {
+                    let importedRuleCount = 0;
+                    
+                    for (const [panelId, rule] of Object.entries(importData.panelRules)) {
+                        try {
+                            // 使用PanelRuleManager的setRule方法
+                            const success = await panelRuleManager.setRule(panelId, {
+                                description: rule.description || '',
+                                updateRule: rule.updateRule || '',
+                                addRule: rule.addRule || '',
+                                deleteRule: rule.deleteRule || '',
+                                conditions: rule.conditions || [],
+                                actions: rule.actions || [],
+                                enabled: rule.enabled !== false
+                            });
+                            
+                            if (success) {
+                                importedRuleCount++;
+                                console.log(`[DataTable] ✅ 导入面板规则: ${panelId}`);
+                            }
+                        } catch (error) {
+                            console.error(`[DataTable] ❌ 导入面板规则失败 ${panelId}:`, error);
+                        }
+                    }
+                    
+                    console.log(`[DataTable] 📋 面板规则导入完成，共 ${importedRuleCount} 条`);
+                } else {
+                    console.warn('[DataTable] ⚠️ PanelRuleManager不可用，跳过面板规则导入');
+                }
+            }
+
+            // 4️⃣ 导入字段规则到 FieldRuleManager
+            if (importData.fieldRules && Object.keys(importData.fieldRules).length > 0) {
+                const fieldRuleManager = window.SillyTavernInfobar?.modules?.fieldRuleManager;
+                if (fieldRuleManager) {
+                    let importedRuleCount = 0;
+                    
+                    for (const [ruleKey, rule] of Object.entries(importData.fieldRules)) {
+                        try {
+                            // 解析规则键（格式：panelName.fieldName）
+                            const [panelName, fieldName] = ruleKey.split('.');
+                            if (!panelName || !fieldName) {
+                                console.warn(`[DataTable] ⚠️ 无效的规则键格式: ${ruleKey}`);
+                                continue;
+                            }
+                            
+                            // 使用FieldRuleManager的setRule方法
+                            const success = await fieldRuleManager.setRule(panelName, fieldName, {
+                                description: rule.description || '',
+                                content: rule.content || '',
+                                template: rule.template || '',
+                                variables: rule.variables || {},
+                                enabled: rule.enabled !== false
+                            });
+                            
+                            if (success) {
+                                importedRuleCount++;
+                                console.log(`[DataTable] ✅ 导入字段规则: ${ruleKey}`);
+                            }
+                        } catch (error) {
+                            console.error(`[DataTable] ❌ 导入字段规则失败 ${ruleKey}:`, error);
+                        }
+                    }
+                    
+                    console.log(`[DataTable] 📋 字段规则导入完成，共 ${importedRuleCount} 条`);
+                } else {
+                    console.warn('[DataTable] ⚠️ FieldRuleManager不可用，跳过字段规则导入');
+                }
+            }
+
+            // 5️⃣ 保存配置到 SillyTavern
+            extensionSettings['Information bar integration tool'] = configs;
+            await context.saveSettingsDebounced();
+
+            console.log('[DataTable] ✅ 完整预设配置导入成功');
+            this.showSuccessMessage(`完整配置导入成功！\n面板: ${importData.metadata?.panelCount || 0} | 字段: ${importData.metadata?.fieldCount || 0} | 规则: ${importData.metadata?.ruleCount || 0}\n\n正在刷新界面...`);
+
+            // 刷新界面
+            setTimeout(() => {
+                this.refreshTableStructure();
+            }, 1500);
+
+        } catch (error) {
+            console.error('[DataTable] ❌ 导入完整预设配置失败:', error);
+            this.showErrorMessage('导入完整预设配置失败: ' + error.message);
         }
     }
 
@@ -10316,85 +10827,59 @@ export class DataTable {
     }
 
     /**
-     * 🆕 生成子项键名
+     * 🆕 生成子项键名 - 直接使用 col_X 格式，保持纯粹性
      */
     generateSubItemKey(columnName, index) {
-        const keyMap = {
-            '时间': 'time',
-            '地点': 'location',
-            '日期': 'date',
-            '时段': 'period',
-            '此地角色': 'characters_here',
-            '角色名': 'name',
-            '离场轮数': 'absence_turns',
-            '即时目标': 'immediate_goal',
-            '位置': 'position',
-            '姿势': 'pose',
-            '身体状态': 'body_status',
-            '服装': 'clothing',
-            '特殊状态': 'special_status',
-            '外貌': 'appearance',
-            '身体': 'body',
-            '衣着': 'attire',
-            '性别': 'gender',
-            '年龄': 'age',
-            '身份': 'identity',
-            '职业': 'occupation',
-            '与<user>关系': 'relation_with_user',
-            '关系（是<user>的——）': 'relation',
-            '对<user>态度': 'attitude_to_user',
-            '身体特征': 'body_features',
-            '服装偏好风格': 'clothing_style',
-            '性格': 'personality',
-            '喜好': 'preferences',
-            '长期目标': 'long_term_goal',
-            '角色间重要关系': 'inter_character_relations',
-            '重要背景设定': 'background',
-            '重要备注': 'notes',
-            '爱好': 'hobbies',
-            '住所': 'residence',
-            '其他重要信息': 'other_info',
-            '类型': 'type',
-            '详情': 'details',
-            '状态': 'status',
-            '执行者': 'executor',
-            '拥有者': 'owner',
-            '拥有人': 'owner',
-            '重要原因': 'importance',
-            '具体描述': 'description',
-            '开始时间': 'start_time',
-            '结束时间': 'end_time',
-            '整体内容': 'content',
-            '当前进度': 'progress',
-            '完成奖励': 'reward',
-            '委托人': 'client',
-            '作用': 'effect',
-            '限制': 'limitation',
-            '所在位置': 'location',
-            '数量': 'quantity',
-            '形态': 'form',
-            '已知成员架构': 'member_structure',
-            '成员特征': 'member_features',
-            '宗旨': 'purpose',
-            '空间结构': 'spatial_structure',
-            '时间范围': 'time_range',
-            '内容': 'content',
-            '概要': 'summary',
-            '结果': 'result',
-            '相对敏感身体部位': 'sensitive_parts',
-            '初体验': 'first_experience',
-            '擅长性爱技巧': 'sexual_skills',
-            '隐私部位细节': 'private_details',
-            '近期性爱对象': 'recent_partners'
-        };
-        
-        // 精确匹配
-        if (keyMap[columnName]) {
-            return keyMap[columnName];
-        }
-        
-        // 使用列索引作为备选方案
+        // 🔧 修复：不进行任何中英文转换，直接使用 col_X 格式作为键名
+        // name 和 displayName 保持中文，key 使用统一的 col_X 格式
         return `col_${index + 1}`;
+    }
+
+    /**
+     * 🔧 修复旧配置：将所有非col_X格式的key统一转换为col_X
+     */
+    async fixLegacyEnglishKeys() {
+        try {
+            console.log('[DataTable] 🔧 开始修复旧配置key格式...');
+            
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings['Information bar integration tool'] || {};
+            
+            let fixedCount = 0;
+            
+            // 遍历所有面板配置
+            for (const [panelId, panelConfig] of Object.entries(configs)) {
+                if (panelConfig && Array.isArray(panelConfig.subItems)) {
+                    panelConfig.subItems.forEach((subItem, index) => {
+                        const expectedKey = `col_${index + 1}`;
+                        
+                        // 🔧 修复：任何不是标准col_X格式的key都需要修复
+                        if (subItem.key !== expectedKey) {
+                            const oldKey = subItem.key;
+                            subItem.key = expectedKey;
+                            console.log(`[DataTable] 🔄 修复字段key: ${panelId}[${index}] "${subItem.name}" - ${oldKey} -> ${expectedKey}`);
+                            fixedCount++;
+                        }
+                    });
+                }
+            }
+            
+            if (fixedCount > 0) {
+                // 保存配置
+                await context.saveSettingsDebounced?.();
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                console.log(`[DataTable] ✅ 已修复 ${fixedCount} 个字段的key格式`);
+                this.showSuccessMessage(`已自动修复 ${fixedCount} 个配置字段，表格将自动刷新`);
+            } else {
+                console.log('[DataTable] ℹ️ 配置格式正确，无需修复');
+            }
+            
+        } catch (error) {
+            console.error('[DataTable] ❌ 修复旧配置失败:', error);
+            // 不显示错误消息，避免干扰用户
+        }
     }
 
     /**
