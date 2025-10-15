@@ -1054,6 +1054,7 @@ export class AIMemoryDatabaseInjector {
 
     /**
      * 格式化记忆内容用于注入
+     * 🎯 RAG优化：采用SillyTavern最佳实践的注入模板
      */
     formatMemoryForInjection(memoryData) {
         try {
@@ -1085,10 +1086,16 @@ export class AIMemoryDatabaseInjector {
                 }
             }
             
-            const header = "【AI记忆数据库】\n以下是重要的记忆信息，请在回复中自然地体现这些内容：";
-            const footer = "\n---\n请根据以上记忆信息进行回复，保持角色一致性和情节连贯性。";
+            // 🎯 RAG优化：使用SillyTavern最佳实践的注入模板
+            // 参考：SillyTavern Data Bank推荐的注入模板格式
+            const header = `以下是可能相关的先前事件的记忆：
+<回忆>`;
+            const footer = `</回忆>
+
+这些记忆以第三人称视角、过去时态记录。{{char}}能够回忆起这些记忆，并在适当时自然地提及它们。
+记忆可能与当前对话相关，也可能不相关，请根据上下文判断是否使用。`;
             
-            return header + formattedSections.join('\n') + footer;
+            return header + formattedSections.join('\n') + '\n' + footer;
             
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 格式化记忆内容失败:', error);

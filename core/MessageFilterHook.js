@@ -49,6 +49,7 @@ export class MessageFilterHook {
     
     /**
      * 使用事件监听方式Hook
+     * 🔧 修复：Hook提示词生成事件，在发送前过滤
      */
     hookWithEvents() {
         try {
@@ -59,18 +60,28 @@ export class MessageFilterHook {
             }
             
             const { eventSource, event_types } = context;
+            const filterManager = this.contentFilterManager;
             
-            // 监听生成开始事件 - 条件过滤
-            eventSource.on(event_types.GENERATION_STARTED, () => {
-                this.applyConditionalFilter();
+            // 🔧 修复：Hook CHAT_COMPLETION_PROMPT_READY 事件，过滤发送给AI的提示词
+            eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, (data) => {
+                if (data && Array.isArray(data.messages)) {
+                    console.log('[MessageFilterHook] 🔍 过滤提示词消息...');
+                    
+                    data.messages.forEach((msg, index) => {
+                        if (msg && msg.content && typeof msg.content === 'string') {
+                            const originalContent = msg.content;
+                            const filteredContent = filterManager.filterForMainAPI(originalContent);
+                            
+                            if (filteredContent !== originalContent) {
+                                msg.content = filteredContent;
+                                console.log(`[MessageFilterHook] 🔒 已过滤消息#${index}，长度: ${originalContent.length} → ${filteredContent.length}`);
+                            }
+                        }
+                    });
+                }
             });
             
-            // 监听生成结束事件
-            eventSource.on(event_types.GENERATION_ENDED, () => {
-                this.restoreOriginal();
-            });
-            
-            console.log('[MessageFilterHook] ✅ 事件监听Hook安装成功（条件过滤）');
+            console.log('[MessageFilterHook] ✅ 事件监听Hook安装成功（提示词过滤）');
             
         } catch (error) {
             console.error('[MessageFilterHook] ❌ Hook事件监听失败:', error);
@@ -79,6 +90,7 @@ export class MessageFilterHook {
     
     /**
      * Hook扩展提示词系统
+     * 🔧 修复：在提示词发送时过滤，不修改原始消息
      */
     hookExtensionPrompts() {
         try {
@@ -94,14 +106,13 @@ export class MessageFilterHook {
                 const filterManager = this.contentFilterManager;
                 
                 context.setExtensionPrompt = function(identifier, prompt, priority, position, depth, role) {
-                    // 检查是否需要过滤
-                    const shouldFilter = window.MessageFilterHook_ShouldFilter?.();
-                    
+                    // 🔧 修复：始终过滤提示词中的标签（不管是主API还是自定义API）
+                    // 因为这些标签只用于自定义API生成数据，不应该发送给主API
                     let filteredPrompt = prompt;
-                    if (shouldFilter && filterManager && typeof prompt === 'string') {
+                    if (filterManager && typeof prompt === 'string') {
                         filteredPrompt = filterManager.filterForMainAPI(prompt);
                         if (filteredPrompt !== prompt) {
-                            console.log('[MessageFilterHook] 🔒 已过滤扩展提示词内容');
+                            console.log('[MessageFilterHook] 🔒 已过滤扩展提示词中的标签内容');
                         }
                     }
                     
@@ -119,53 +130,15 @@ export class MessageFilterHook {
     
     /**
      * 条件过滤 - 只在使用自定义API时过滤
+     * 🔧 修复：不修改原始消息，只在发送时过滤
      */
     applyConditionalFilter() {
         try {
-            if (this.isFiltering) {
-                console.log('[MessageFilterHook] ⚠️ 已经在过滤状态中');
-                return;
-            }
-            
-            // 🔧 关键修复：检查是否使用自定义API
-            const shouldFilter = this.shouldFilterForCurrentAPI();
-            
-            if (!shouldFilter) {
-                console.log('[MessageFilterHook] ℹ️ 使用主API模式，不过滤标签（主API需要这些标签生成信息栏内容）');
-                return;
-            }
-            
-            console.log('[MessageFilterHook] 🔍 使用自定义API模式，开始过滤标签...');
-            
-            const context = window.SillyTavern?.getContext?.();
-            if (!context || !context.chat) {
-                console.warn('[MessageFilterHook] ⚠️ 无法获取聊天上下文');
-                return;
-            }
-            
-            this.isFiltering = true;
-            this.originalMessages.clear();
-            
-            // 遍历所有消息，保存原始内容并应用过滤
-            context.chat.forEach((message, index) => {
-                if (message && message.mes && typeof message.mes === 'string') {
-                    // 保存原始内容
-                    this.originalMessages.set(index, message.mes);
-                    
-                    // 应用过滤
-                    const filteredMes = this.contentFilterManager.filterForMainAPI(message.mes);
-                    if (filteredMes !== message.mes) {
-                        console.log(`[MessageFilterHook] 🔒 过滤消息 #${index}，原始长度: ${message.mes.length}，过滤后长度: ${filteredMes.length}`);
-                        message.mes = filteredMes;
-                    }
-                }
-            });
-            
-            console.log(`[MessageFilterHook] ✅ 消息过滤完成，共过滤 ${this.originalMessages.size} 条消息`);
+            // 🔧 修复：不再修改消息内容，过滤逻辑移到 hookExtensionPrompts 中处理
+            console.log('[MessageFilterHook] ℹ️ 过滤逻辑已移至提示词Hook，不修改原始消息');
             
         } catch (error) {
             console.error('[MessageFilterHook] ❌ 应用过滤失败:', error);
-            this.isFiltering = false;
         }
     }
     
@@ -199,36 +172,15 @@ export class MessageFilterHook {
     
     /**
      * 恢复原始内容
+     * 🔧 修复：不再需要恢复，因为不再修改原始消息
      */
     restoreOriginal() {
         try {
-            if (!this.isFiltering) {
-                return;
-            }
-            
-            console.log('[MessageFilterHook] 🔄 恢复原始消息内容...');
-            
-            const context = window.SillyTavern?.getContext?.();
-            if (!context || !context.chat) {
-                console.warn('[MessageFilterHook] ⚠️ 无法获取聊天上下文');
-                return;
-            }
-            
-            // 恢复所有消息的原始内容
-            this.originalMessages.forEach((originalMes, index) => {
-                if (context.chat[index]) {
-                    context.chat[index].mes = originalMes;
-                }
-            });
-            
-            console.log(`[MessageFilterHook] ✅ 已恢复 ${this.originalMessages.size} 条消息的原始内容`);
-            
-            this.originalMessages.clear();
-            this.isFiltering = false;
+            // 🔧 修复：不再修改原始消息，所以不需要恢复
+            console.log('[MessageFilterHook] ℹ️ 不需要恢复（未修改原始消息）');
             
         } catch (error) {
             console.error('[MessageFilterHook] ❌ 恢复原始内容失败:', error);
-            this.isFiltering = false;
         }
     }
     

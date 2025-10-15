@@ -1737,12 +1737,19 @@ export class UnifiedDataCore {
     }
 
     /**
-     * 🔒 获取持久化记忆数据（跨对话）
+     * 🔒 获取持久化记忆数据（聊天隔离）
      * @returns {Object} 持久化记忆数据
      */
     async getPersistentMemory() {
         try {
-            const persistentData = await this.getData('persistent_memory', 'global');
+            // 🔧 修复：改为聊天范围，实现聊天隔离
+            const persistentData = await this.getData('persistent_memory', 'chat');
+            
+            if (persistentData) {
+                const currentChatId = this.getCurrentChatId();
+                console.log('[UnifiedDataCore] 📍 获取聊天持久化记忆数据:', currentChatId, Object.keys(persistentData).length, '个条目');
+            }
+            
             return persistentData || {};
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 获取持久化记忆失败:', error);
@@ -1751,13 +1758,15 @@ export class UnifiedDataCore {
     }
 
     /**
-     * 🔒 设置持久化记忆数据（跨对话）
+     * 🔒 设置持久化记忆数据（聊天隔离）
      * @param {Object} memoryData - 记忆数据
      */
     async setPersistentMemory(memoryData) {
         try {
-            await this.setData('persistent_memory', memoryData, 'global');
-            console.log('[UnifiedDataCore] 🔒 持久化记忆数据已保存');
+            // 🔧 修复：改为聊天范围，实现聊天隔离
+            await this.setData('persistent_memory', memoryData, 'chat');
+            const currentChatId = this.getCurrentChatId();
+            console.log('[UnifiedDataCore] 🔒 持久化记忆数据已保存到聊天:', currentChatId);
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 保存持久化记忆失败:', error);
         }
@@ -3148,16 +3157,15 @@ export class UnifiedDataCore {
                 throw new Error('当前聊天ID未找到');
             }
 
-            // 🔧 修复：处理字段名转换
+            // 🔧 修复：不进行英文转换，直接使用传入的字段名
             let actualFieldKey = fieldKey;
             
-            // 如果fieldKey包含前缀（如npc0.中文字段名），需要分别处理
+            // 如果fieldKey包含前缀（如npc0.字段名），保持原样
             const prefixMatch = fieldKey.match(/^((?:npc|org)\d+)\.(.+)$/);
             if (prefixMatch) {
                 const [, prefix, fieldName] = prefixMatch;
-                // 将中文字段名转换为英文字段名
-                const englishFieldName = this.getEnglishFieldName(fieldName, panelId);
-                actualFieldKey = englishFieldName ? `${prefix}.${englishFieldName}` : fieldKey;
+                // 🔧 修复：不转换，直接使用
+                actualFieldKey = fieldKey;
                 
                 console.log('[UnifiedDataCore] 🔄 前缀字段名映射:', {
                     original: fieldKey,
@@ -3310,18 +3318,24 @@ export class UnifiedDataCore {
             const chatId = this.getCurrentChatId();
             if (!chatId) throw new Error('当前聊天ID未找到');
 
-            const englishFieldName = this.getEnglishFieldName(fieldName, panelId);
-            const actualFieldName = englishFieldName || fieldName;
+            // 🔧 修复：不进行英文转换，直接使用传入的字段名（已经是纯数字或col_X格式）
+            const actualFieldName = fieldName;
+            console.log(`[UnifiedDataCore] 🔑 删除字段: ${panelId}[${rowIndex}].${actualFieldName}`);
 
             let panelData = await this.getPanelData(panelId);
             if (!Array.isArray(panelData)) return true; // 非多行，交由 deletePanelField 处理
 
             if (!panelData[rowIndex]) return true;
             const oldValue = panelData[rowIndex][actualFieldName];
-            if (oldValue === undefined) return true;
+            if (oldValue === undefined) {
+                console.log(`[UnifiedDataCore] ℹ️ 字段不存在: ${actualFieldName}`);
+                return true;
+            }
 
             delete panelData[rowIndex][actualFieldName];
             await this.writePanelDataWithoutMerge(chatId, panelId, panelData);
+
+            console.log(`[UnifiedDataCore] ✅ 已删除字段: ${panelId}[${rowIndex}].${actualFieldName}`);
 
             if (this.eventSystem) {
                 this.eventSystem.emit('panel_row_field_deleted', {

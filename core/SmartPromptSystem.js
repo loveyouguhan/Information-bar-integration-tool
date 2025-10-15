@@ -1649,7 +1649,10 @@ ${aiMemoryInstruction}
     formatPanelRowsForPrompt(panelConfig, panelData) {
         try {
             const rows = [];
-            const subItems = Array.isArray(panelConfig?.subItems) ? panelConfig.subItems : [];
+            // 🔧 修复：只显示enabled=true的字段
+            const subItems = Array.isArray(panelConfig?.subItems) 
+                ? panelConfig.subItems.filter(item => item.enabled !== false)
+                : [];
             const panelId = panelConfig?.id || panelConfig?.key || '';
 
             // 建立 子项key -> 列号 映射（1-based）
@@ -1852,21 +1855,33 @@ ${aiMemoryInstruction}
     }
 
     /**
-     * 🔒 获取持久化记忆数据（跨对话）
+     * 🔒 获取持久化记忆数据（聊天隔离）
      */
     async getPersistentMemoryData(enabledPanels) {
         try {
             const persistentData = {};
 
-            // 获取全局持久化数据
-            const globalData = await this.dataCore.getData('persistent_memory', 'global');
-            if (globalData) {
+            // 🔧 修复：改为聊天范围，实现聊天隔离
+            const currentChatId = this.dataCore.getCurrentChatId?.();
+            if (!currentChatId) {
+                console.warn('[SmartPromptSystem] ⚠️ 无法获取当前聊天ID，跳过持久化数据');
+                return {};
+            }
+
+            console.log('[SmartPromptSystem] 📍 获取聊天持久化记忆数据:', currentChatId);
+
+            // 从聊天范围获取持久化数据（而非全局）
+            const chatData = await this.dataCore.getData('persistent_memory', 'chat');
+            if (chatData) {
                 for (const panel of enabledPanels) {
                     const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
-                    if (globalData[panelKey]) {
-                        persistentData[panelKey] = globalData[panelKey];
+                    if (chatData[panelKey]) {
+                        persistentData[panelKey] = chatData[panelKey];
                     }
                 }
+                console.log('[SmartPromptSystem] 📊 聊天持久化记忆数据:', Object.keys(persistentData).length, '个面板');
+            } else {
+                console.log('[SmartPromptSystem] ℹ️ 当前聊天没有持久化记忆数据');
             }
 
             return persistentData;
@@ -4089,9 +4104,9 @@ ${aiMemoryInstruction}
                 return;
             }
 
-            // 更新元数据
+            // 更新元数据（改为聊天范围）
             if (parsedData.metadata) {
-                await this.dataCore.setData('metadata.lastUpdate', parsedData.metadata, 'global');
+                await this.dataCore.setData('metadata.lastUpdate', parsedData.metadata, 'chat');
             }
 
             console.log('[SmartPromptSystem] ✅ 数据核心更新完成');

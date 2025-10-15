@@ -26,11 +26,27 @@ export class VectorizedMemoryRetrieval {
         this.settings = {
             enabled: false,                    // 🔧 修复：默认禁用向量化检索
             vectorEngine: 'transformers',      // 向量化引擎类型
-            embeddingModel: 'Supabase/gte-small', // 嵌入模型
+            embeddingModel: 'Supabase/gte-small', // 嵌入模型（建议：mixedbread-ai/mxbai-embed-large-v1）
             vectorDimensions: 384,             // 向量维度
             maxCacheSize: 1000,                // 最大缓存大小
-            similarityThreshold: 0.6,          // 🔧 降低相似度阈值，提高搜索覆盖率
-            maxResults: 15,                    // 🔧 增加最大返回结果数
+            
+            // 🚀 RAG优化：基于SillyTavern最佳实践
+            similarityThreshold: 0.3,          // 🎯 RAG优化：降低到0.3，提高检索覆盖率
+            maxResults: 15,                    // 最大返回结果数
+            retrieveChunks: 2,                 // 🎯 RAG优化：检索块数（默认2，可根据需要调整）
+            
+            // 🎯 RAG优化：块大小配置（基于512 token嵌入模型）
+            chunkSize: 2000,                   // 块大小（字符）- 对应约500 tokens
+            chunkOverlap: 0,                   // 块重叠比例（0%）- 避免重复检索
+            minChunkSize: 1024,                // 最小块大小 (>50%最大块)
+            maxChunkSize: 2048,                // 最大块大小 (<嵌入模型上下文)
+            
+            // 🎯 RAG优化：注入配置
+            injectionPosition: 'chat_depth_2', // 注入位置：聊天中@深度2
+            injectionTemplate: 'rag_memory',   // 使用RAG优化的注入模板
+            includeTimeContext: true,          // 包含时间上下文
+            includeLocationContext: true,      // 包含位置上下文
+            
             batchSize: 50,                     // 批量处理大小
             autoVectorize: true,               // 自动向量化新记忆
             useLocalStorage: true,             // 使用本地存储（旧方案）
@@ -43,7 +59,13 @@ export class VectorizedMemoryRetrieval {
             },
             storageSizeLimit: 10,              // 🚀 新增：存储大小限制（MB），0表示不限制
             fallbackMode: true,                // 🔧 启用fallback模式
-            enableBasicSearch: true            // 🔧 启用基础搜索作为备选
+            enableBasicSearch: true,           // 🔧 启用基础搜索作为备选
+            
+            // 🎯 RAG优化：查询增强
+            queryExpansion: true,              // 查询扩展
+            queryMessages: 2,                  // 查询消息数（用户+AI最近2条）
+            semanticBoost: true,               // 语义增强
+            hybridSearch: false                // 混合搜索（向量+关键词）
         };
         
         // 向量化引擎
@@ -90,6 +112,15 @@ export class VectorizedMemoryRetrieval {
     async init() {
         try {
             console.log('[VectorizedMemoryRetrieval] 📊 开始初始化向量化记忆检索系统...');
+
+            // 🔧 修复：设置customVectorAPI的context
+            if (this.customVectorAPI) {
+                const context = window.SillyTavern?.getContext?.();
+                if (context) {
+                    this.customVectorAPI.setContext(context);
+                    console.log('[VectorizedMemoryRetrieval] ✅ 已设置customVectorAPI的context');
+                }
+            }
 
             // 加载设置
             await this.loadSettings();

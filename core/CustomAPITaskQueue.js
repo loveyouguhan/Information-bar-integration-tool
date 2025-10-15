@@ -135,6 +135,15 @@ export class CustomAPITaskQueue {
                 this.handleGenerationEnded(data);
             });
 
+            // 🆕 监听自定义API内部完成事件（若上游触发此事件，则可提前结束可视倒计时）
+            if (typeof this.eventSystem.on === 'function') {
+                this.eventSystem.on('custom_api:done', () => {
+                    console.log('[CustomAPITaskQueue] 🏁 收到 custom_api:done 事件');
+                    // 标记当前任务已无须继续显示“进行中”提示
+                    // 实际状态结算仍由processNextTask中的完成逻辑统一处理
+                });
+            }
+
             console.log('[CustomAPITaskQueue] 🔗 事件监听器已绑定');
         }
     }
@@ -342,41 +351,52 @@ export class CustomAPITaskQueue {
         const task = this.taskQueue.shift();
         this.processingTask = task;
 
+        // 🆕 关键修复：将interval提升到外层作用域，以便finally能访问
+        let timeoutInterval = null;
+        let stopped = false;
+
         try {
             console.log(`[CustomAPITaskQueue] 🚀 开始处理任务: ${task.id} (${task.type})`);
 
             task.status = 'processing';
             task.startTime = Date.now();
 
-            // 🔧 修复：设置超时处理，但跳过等待用户确认的时间
+            // 🔧 修复：设置超时处理，且在任务结束时彻底停止倒计时与日志
             const timeoutPromise = new Promise((_, reject) => {
-                let executionStartTime = Date.now();
-                let pausedTime = 0;
-                
-                const checkTimeout = () => {
-                    // 如果任务正在等待用户确认，记录暂停时间
-                    if (task.waitingForConfirmation) {
-                        pausedTime += 1000;
-                        setTimeout(checkTimeout, 1000); // 每秒检查一次
+                const startAt = Date.now();
+                let adjustedStart = startAt; // 通过调整起始时间来"暂停"计时
+                let lastTick = startAt;
+
+                const tick = () => {
+                    if (stopped) {
+                        if (timeoutInterval) clearInterval(timeoutInterval);
                         return;
                     }
-                    
-                    // 计算实际执行时间（排除暂停时间）
-                    const elapsed = Date.now() - executionStartTime - pausedTime;
-                    
-                    // 🔧 修复：对于自定义API任务，显示进度信息
+
+                    const now = Date.now();
+                    // 若在等待确认，则把本段时间加到 adjustedStart 里，相当于暂停
+                    if (task.waitingForConfirmation) {
+                        adjustedStart += (now - lastTick);
+                        lastTick = now;
+                        return; // 本次不做其它处理
+                    }
+
+                    lastTick = now;
+                    const elapsed = now - adjustedStart;
+
+                    // 进度日志（仅信息栏任务且超过30秒后）
                     if (task.type === 'INFOBAR_DATA' && elapsed > 30000) {
-                        const remainingTime = Math.round((task.timeout - elapsed) / 1000);
+                        const remainingTime = Math.max(0, Math.round((task.timeout - elapsed) / 1000));
                         console.log(`[CustomAPITaskQueue] ⏳ 任务 ${task.id} 执行中... (已用时: ${Math.round(elapsed/1000)}秒, 剩余: ${remainingTime}秒)`);
                     }
-                    
+
                     if (elapsed >= task.timeout) {
+                        if (timeoutInterval) clearInterval(timeoutInterval);
                         reject(new Error(`任务超时 (执行时间: ${Math.round(elapsed/1000)}秒)`));
-                    } else {
-                        setTimeout(checkTimeout, 5000); // 每5秒检查一次，减少性能影响
                     }
                 };
-                checkTimeout();
+
+                timeoutInterval = setInterval(tick, 1000);
             });
 
             // 执行任务
@@ -384,6 +404,13 @@ export class CustomAPITaskQueue {
 
             // 等待任务完成或超时
             await Promise.race([taskPromise, timeoutPromise]);
+
+            // 🆕 关键修复：任务成功完成，立即停止倒计时
+            stopped = true;
+            if (timeoutInterval) {
+                clearInterval(timeoutInterval);
+                timeoutInterval = null;
+            }
 
             // 任务成功完成
             task.status = 'completed';
@@ -414,6 +441,13 @@ export class CustomAPITaskQueue {
                 // 🔧 修复：自定义API超时，根据情况决定是否重试
                 console.warn(`[CustomAPITaskQueue] ⏱️ 自定义API任务超时: ${task.id}`);
                 
+                // 🆕 关键修复：超时时也要停止倒计时
+                stopped = true;
+                if (timeoutInterval) {
+                    clearInterval(timeoutInterval);
+                    timeoutInterval = null;
+                }
+                
                 // 如果是第一次超时，可以尝试重试一次
                 if (task.retries === 0) {
                     task.retries++;
@@ -432,6 +466,13 @@ export class CustomAPITaskQueue {
                     console.error(`[CustomAPITaskQueue] 💀 任务因超时最终失败: ${task.id}`);
                 }
             } else {
+                // 🆕 关键修复：任何错误情况都要停止倒计时
+                stopped = true;
+                if (timeoutInterval) {
+                    clearInterval(timeoutInterval);
+                    timeoutInterval = null;
+                }
+                
                 // 其他错误，执行正常重试逻辑
                 if (task.retries < task.maxRetries) {
                     task.retries++;
@@ -455,6 +496,14 @@ export class CustomAPITaskQueue {
                 this.handleError(error);
             }
         } finally {
+            // 🆕 关键修复：停止并清理倒计时与日志输出
+            stopped = true;
+            if (timeoutInterval) {
+                clearInterval(timeoutInterval);
+                timeoutInterval = null;
+                console.log(`[CustomAPITaskQueue] 🛑 任务 ${task.id} 倒计时已停止`);
+            }
+
             this.isProcessing = false;
             this.processingTask = null;
         }
@@ -523,6 +572,19 @@ export class CustomAPITaskQueue {
 
         console.log('[CustomAPITaskQueue] 📊 执行信息栏数据生成任务');
         await this.infoBarSettings.processWithCustomAPIDirectly(task.data.content);
+
+        // 🆕 关键修复：当自定义API流程内部完成后，显式通知任务完成，便于外部倒计时结束
+        try {
+            if (this.eventSystem) {
+                this.eventSystem.emit('custom-api-queue:task_completed', {
+                    id: task.id,
+                    type: task.type,
+                    timestamp: Date.now()
+                });
+            }
+        } catch (e) {
+            console.warn('[CustomAPITaskQueue] ⚠️ 发送task_completed事件失败(可忽略):', e);
+        }
     }
 
     /**

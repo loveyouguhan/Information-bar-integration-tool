@@ -3235,6 +3235,129 @@ export class WorldBookManager {
     }
 
     /**
+     * 🗑️ 删除NPC相关的世界书条目
+     * @param {string} npcId - NPC ID
+     * @param {string} npcName - NPC名称
+     * @returns {Promise<Object>} 删除结果
+     */
+    async deleteNPCWorldBookEntries(npcId, npcName) {
+        try {
+            console.log('[WorldBookManager] 🗑️ 开始删除NPC相关的世界书条目:', { npcId, npcName });
+
+            // 获取当前角色的世界书
+            const worldBookResult = await this.getOrCreateTargetWorldBook(false);
+            if (!worldBookResult.success) {
+                throw new Error(`无法获取目标世界书: ${worldBookResult.error}`);
+            }
+
+            const { worldBookName, worldBookData } = worldBookResult;
+            console.log('[WorldBookManager] 📚 目标世界书:', worldBookName);
+
+            const entries = worldBookData.entries || {};
+            const toDelete = [];
+
+            // 🔍 查找所有与该NPC相关的条目
+            for (const [entryId, entry] of Object.entries(entries)) {
+                // 只处理本插件创建的条目
+                if (entry.createdBy !== 'information_bar_integration_tool') {
+                    continue;
+                }
+
+                // 匹配条件：
+                // 1. NPC ID匹配（最可靠）
+                // 2. NPC名称匹配（备用）
+                // 3. 条目类型是NPC类型
+                const isNPCEntry = entry.summaryType === 'npc';
+                const idMatches = entry.npcId && entry.npcId === npcId;
+                const nameMatches = entry.npcName && entry.npcName === npcName;
+                const commentMatches = (entry.comment || '').toLowerCase().trim() === (npcName || '').toLowerCase().trim();
+
+                if (isNPCEntry && (idMatches || nameMatches || commentMatches)) {
+                    toDelete.push({
+                        entryId,
+                        entry,
+                        matchReason: idMatches ? 'npcId' : (nameMatches ? 'npcName' : 'comment')
+                    });
+                    console.log(`[WorldBookManager] 🔍 找到匹配条目: ${entryId} (匹配方式: ${idMatches ? 'npcId' : (nameMatches ? 'npcName' : 'comment')})`);
+                }
+            }
+
+            if (toDelete.length === 0) {
+                console.log('[WorldBookManager] ℹ️ 未找到与NPC相关的世界书条目');
+                return {
+                    success: true,
+                    deletedCount: 0,
+                    message: '未找到相关的世界书条目'
+                };
+            }
+
+            // 🗑️ 删除找到的条目
+            const deletedEntries = [];
+            for (const item of toDelete) {
+                delete worldBookData.entries[item.entryId];
+                deletedEntries.push({
+                    entryId: item.entryId,
+                    entryName: item.entry.comment || item.entry.npcName,
+                    npcId: item.entry.npcId,
+                    matchReason: item.matchReason
+                });
+                console.log(`[WorldBookManager] 🗑️ 已删除条目: ${item.entryId} - ${item.entry.comment || item.entry.npcName}`);
+            }
+
+            // 💾 保存更新后的世界书
+            // 🔧 重要：删除操作需要强制使用原生API保存
+            const worldInfoAPI = this.getSillyTavernWorldInfoAPI();
+            if (worldInfoAPI && worldInfoAPI.saveWorldInfo) {
+                try {
+                    await worldInfoAPI.saveWorldInfo(worldBookName, worldBookData, true);
+                    console.log('[WorldBookManager] 💾 使用原生API保存成功');
+                    
+                    // 刷新编辑器
+                    if (worldInfoAPI.reloadEditor) {
+                        try {
+                            await worldInfoAPI.reloadEditor(worldBookName);
+                            console.log('[WorldBookManager] 🔄 编辑器刷新成功');
+                        } catch (error) {
+                            console.warn('[WorldBookManager] ⚠️ 编辑器刷新失败:', error);
+                        }
+                    }
+                } catch (saveError) {
+                    console.error('[WorldBookManager] ❌ 使用原生API保存失败:', saveError);
+                    // 回退到普通保存方法
+                    await this.saveWorldBook(worldBookName, worldBookData);
+                }
+            } else {
+                // 回退到普通保存方法
+                await this.saveWorldBook(worldBookName, worldBookData);
+            }
+
+            console.log(`[WorldBookManager] ✅ 成功删除 ${deletedEntries.length} 个NPC相关的世界书条目`);
+
+            // 🔄 强制刷新缓存
+            this.worldBooksCache.clear();
+            this.entriesCache.clear();
+            this.forceRefreshFlag = true;
+            await this.refreshCache();
+
+            return {
+                success: true,
+                deletedCount: deletedEntries.length,
+                deletedEntries: deletedEntries,
+                worldBookName: worldBookName,
+                message: `成功删除 ${deletedEntries.length} 个世界书条目`
+            };
+
+        } catch (error) {
+            console.error('[WorldBookManager] ❌ 删除NPC世界书条目失败:', error);
+            return {
+                success: false,
+                deletedCount: 0,
+                error: error.message
+            };
+        }
+    }
+
+    /**
      * 🔗 绑定世界书到当前聊天
      */
     async bindWorldBookToChatLore(worldBookName) {

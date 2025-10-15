@@ -195,9 +195,12 @@ export class NPCDatabaseManager {
             if (newChatId && newChatId !== this.currentChatId) {
                 console.log('[NPCDB] 🔄 检测到聊天切换:', this.currentChatId, '->', newChatId);
 
-                // 保存当前聊天的数据
-                if (this.currentChatId) {
-                    await this.save();
+                // 🔧 关键修复：保存旧聊天数据时，使用明确的旧chatId
+                const oldChatId = this.currentChatId;
+                if (oldChatId) {
+                    const oldDbKey = `${this.DB_KEY_PREFIX}_${oldChatId}`;
+                    console.log('[NPCDB] 💾 保存旧聊天数据:', oldDbKey, Object.keys(this.db.npcs).length, '个NPC');
+                    await this.dataCore.setData(oldDbKey, this.db, 'chat');
                 }
 
                 // 切换到新聊天的数据
@@ -450,7 +453,7 @@ export class NPCDatabaseManager {
         return merged;
     }
 
-    // 处理 data:updated 事件，从 interaction 面板提取NPC并更新数据库
+    // 处理 data:updated 事件，从指定面板提取NPC并更新数据库
     async handleDataUpdated(payload) {
         try {
             // 🔧 修复：始终使用当前聊天ID，不信任payload中的chatId
@@ -464,10 +467,20 @@ export class NPCDatabaseManager {
                 return;
             }
 
-            const npcs = this.extractNpcsFromPanels(panelsData.interaction || {});
-            if (npcs.length === 0) return;
+            // 🔧 修复：从NPCManagementPanel获取用户选择的数据源面板
+            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
+            const sourcePanelId = npcPanel?.sourcePanelId || 'interaction';
+            const panelData = panelsData[sourcePanelId] || {};
 
-            console.log('[NPCDB] 📝 处理NPC数据更新，当前聊天:', currentChatId);
+            console.log('[NPCDB] 🔍 使用数据源面板:', sourcePanelId, '可用面板:', Object.keys(panelsData));
+
+            const npcs = this.extractNpcsFromPanels(panelData, sourcePanelId);
+            if (npcs.length === 0) {
+                console.log('[NPCDB] ℹ️ 未从面板提取到NPC数据，跳过更新');
+                return;
+            }
+
+            console.log('[NPCDB] 📝 处理NPC数据更新，当前聊天:', currentChatId, '数据源:', sourcePanelId);
 
             let updated = 0;
             npcs.forEach(n => {
@@ -514,14 +527,14 @@ export class NPCDatabaseManager {
         const globalFields = {}; // 存储没有前缀的字段
 
         // 🚀 检测是否是对象格式的新多行数据格式
-        const newFormatResult = this.parseNewMultiRowFormat(interactionPanel);
+        const newFormatResult = this.parseNewMultiRowFormat(panelData);
         if (newFormatResult && newFormatResult.length > 0) {
             console.log('[NPCDB] ✅ 检测到对象格式的多行数据，成功解析', newFormatResult.length, '个NPC');
             return newFormatResult;
         }
 
         // 第一遍：分离带前缀的字段和全局字段
-        Object.entries(interactionPanel).forEach(([key, value]) => {
+        Object.entries(panelData).forEach(([key, value]) => {
             const m = key.match(/^(npc\d+)\.(.+)$/);
             if (m) {
                 // 带前缀的字段：npc0.name, npc1.type 等
@@ -1230,6 +1243,30 @@ export class NPCDatabaseManager {
 
             const npc = this.db.npcs[npcId];
             const npcName = npc.name;
+
+            console.log('[NPCDB] 🗑️ 开始删除NPC:', { npcId, npcName });
+
+            // 🌍 新增：同步删除世界书中的相关条目
+            try {
+                const worldBookManager = window.SillyTavernInfobar?.modules?.worldBookManager;
+                if (worldBookManager && typeof worldBookManager.deleteNPCWorldBookEntries === 'function') {
+                    console.log('[NPCDB] 🌍 尝试删除世界书中的NPC条目...');
+                    const deleteResult = await worldBookManager.deleteNPCWorldBookEntries(npcId, npcName);
+                    
+                    if (deleteResult.success && deleteResult.deletedCount > 0) {
+                        console.log(`[NPCDB] ✅ 成功删除世界书中的 ${deleteResult.deletedCount} 个相关条目`);
+                    } else if (deleteResult.success && deleteResult.deletedCount === 0) {
+                        console.log('[NPCDB] ℹ️ 世界书中没有该NPC的相关条目');
+                    } else {
+                        console.warn('[NPCDB] ⚠️ 删除世界书条目时出错:', deleteResult.error);
+                    }
+                } else {
+                    console.log('[NPCDB] ℹ️ 世界书管理器不可用，跳过世界书条目删除');
+                }
+            } catch (worldBookError) {
+                // 世界书删除失败不应阻止NPC删除，只记录警告
+                console.warn('[NPCDB] ⚠️ 删除世界书条目时发生错误:', worldBookError);
+            }
 
             // 从数据库中删除NPC
             delete this.db.npcs[npcId];
