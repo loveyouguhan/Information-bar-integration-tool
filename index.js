@@ -48,6 +48,7 @@ import { MemoryMaintenanceSystem } from './core/MemoryMaintenanceSystem.js';
 import { ContextualRetrieval } from './core/ContextualRetrieval.js';
 import { UserProfileManager } from './core/UserProfileManager.js';
 import { KnowledgeGraphManager } from './core/KnowledgeGraphManager.js';
+import { RAGMemoryFormatter } from './core/RAGMemoryFormatter.js';
 import { TimeAwareMemoryManager } from './core/TimeAwareMemoryManager.js';
 import { SillyTavernIntegration } from './core/SillyTavernIntegration.js';
 import { FrontendDisplayManager } from './ui/FrontendDisplayManager.js';
@@ -396,6 +397,14 @@ class InformationBarIntegrationTool {
         );
         await this.deepMemoryManager.init();
 
+        // 🎨 RAG优化：初始化RAG记忆格式化器
+        this.ragMemoryFormatter = new RAGMemoryFormatter(
+            this.dataCore,
+            this.eventSystem
+        );
+        await this.ragMemoryFormatter.init();
+        console.log('[InfoBarTool] ✅ RAG记忆格式化器初始化完成');
+
         // 🤖 新增：初始化智能记忆分类器
         this.intelligentMemoryClassifier = new IntelligentMemoryClassifier(
             this.dataCore,
@@ -515,6 +524,7 @@ class InformationBarIntegrationTool {
             vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
             deepMemoryManager: this.deepMemoryManager,
             intelligentMemoryClassifier: this.intelligentMemoryClassifier,
+            ragMemoryFormatter: this.ragMemoryFormatter, // 🎨 RAG优化：记忆格式化器
             aiMemoryDatabaseInjector: this.aiMemoryDatabaseInjector,
             frontendDisplayManager: this.frontendDisplayManager,
             fieldRuleManager: this.fieldRuleManager,
@@ -723,12 +733,12 @@ class InformationBarIntegrationTool {
                 extensionContainer.parentElement.appendChild(extensionMenu);
             }
 
-            // 创建"信息栏设置"菜单项
+            // 创建"信息助手"菜单项
             const settingsMenuItem = document.createElement('a');
             settingsMenuItem.id = 'infobar-settings-menu-item';
             settingsMenuItem.className = 'dropdown-item';
             settingsMenuItem.href = '#';
-            settingsMenuItem.innerHTML = '<i class="fa-solid fa-cog"></i> 信息栏设置';
+            settingsMenuItem.innerHTML = '<i class="fa-solid fa-cog"></i> 信息助手';
 
             // 创建"数据表格"菜单项
             const tableMenuItem = document.createElement('a');
@@ -748,13 +758,7 @@ class InformationBarIntegrationTool {
                 this.dataTable.show();
             });
 
-            // 添加分隔线（如果菜单中已有其他项目）
-            if (extensionMenu.children.length > 0) {
-                const separator = document.createElement('div');
-                separator.className = 'dropdown-divider';
-                extensionMenu.appendChild(separator);
-            }
-
+            // 🔧 修复：统一添加菜单项，不添加额外分隔线（保持与其他扩展一致）
             // 添加菜单项到扩展菜单
             extensionMenu.appendChild(settingsMenuItem);
             extensionMenu.appendChild(tableMenuItem);
@@ -819,6 +823,7 @@ class InformationBarIntegrationTool {
             smartPromptSystem: this.smartPromptSystem,
             messageInfoBarRenderer: this.messageInfoBarRenderer,
             xmlDataParser: this.xmlDataParser,
+            ragMemoryFormatter: this.ragMemoryFormatter, // 🎨 RAG优化：记忆格式化器
             aiDataExposure: this.aiDataExposure, // 🔧 添加：AI数据暴露模块
                 dataSnapshotManager: this.dataSnapshotManager,
                 summaryManager: this.summaryManager,

@@ -1,5 +1,5 @@
 {
-    "display_name": "Information Bar Integration Tool",
+    "display_name": "信息助手",
     "loading_order": 10,
     "requires": [],
     "optional": [],
@@ -7,10 +7,10 @@
     "js": "index.js",
     "css": "style.css",
     "author": "Information Bar Integration Tool Developer",
-    "version": "1.2.7",
+    "version": "1.0.0",
     "homePage": "https://github.com/your/information-bar-integration-tool",
     "auto_update": true,
-    "description": "SillyTavern第三方扩展插件 - 提供强大的信息栏集成功能，包括信息栏设置界面、数据表格管理、自定义API配置等功能。",
+    "description": "SillyTavern第三方扩展插件 - 智能信息助手，提供信息栏数据管理、NPC数据库、自定义API配置、智能提示词等强大功能。",
     "i18n": {
         "zh-cn": "i18n/zh-cn.json",
         "en-us": "i18n/en-us.json"

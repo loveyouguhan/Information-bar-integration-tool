@@ -3716,9 +3716,33 @@ body .infobar-modal-new .nav-item[data-custom="true"],
         position: sticky;
         top: 0;
         z-index: 3;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 10px;
+        flex-direction: row !important; /* 🔧 修复：改为横向，一行显示 */
+        flex-wrap: wrap !important; /* 🔧 允许换行，但尽量一行 */
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 6px !important; /* 🔧 减小间距 */
+        padding: 8px 12px !important; /* 🔧 更紧凑的内边距 */
+    }
+
+    /* 🔧 移动端工具栏按钮组优化 - 紧凑一行显示 */
+    .data-table-modal .toolbar-left,
+    .data-table-modal .toolbar-right {
+        width: auto !important; /* 🔧 修复：改为auto，不占满整行 */
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important; /* 🔧 修复：不换行 */
+        gap: 6px !important;
+        justify-content: flex-start !important;
+    }
+
+    /* 🔧 移动端按钮样式优化 - 紧凑尺寸 */
+    .data-table-modal .btn-toolbar {
+        flex: 0 0 auto !important; /* 🔧 修复：不拉伸，自适应内容宽度 */
+        min-width: 0 !important;
+        padding: 6px 10px !important; /* 🔧 更紧凑的内边距 */
+        font-size: 12px !important; /* 🔧 更小的字体 */
+        white-space: nowrap !important;
+        overflow: visible !important; /* 🔧 允许完整显示文字 */
     }
 
     /* 确保关闭按钮在移动端可见 */
@@ -8491,7 +8515,10 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 /* 响应式设计 */
 @media (max-width: 768px) {
     /* 🔧 字段规则对话框移动端优化 - 参考表格编辑对话框 */
-    .field-rule-dialog {
+    .field-rule-dialog,
+    .rename-field-dialog,
+    .add-field-dialog,
+    .delete-field-dialog {
         align-items: flex-start !important;
         padding-top: 10vh !important; /* 向下移动10%，为顶部留出空间 */
         justify-content: center !important;
@@ -8499,7 +8526,10 @@ body .infobar-modal-new .nav-item[data-custom="true"],
         padding-right: 10px !important;
     }
 
-    .field-rule-dialog .dialog-content {
+    .field-rule-dialog .dialog-content,
+    .rename-field-dialog .dialog-content,
+    .add-field-dialog .dialog-content,
+    .delete-field-dialog .dialog-content {
         width: 100% !important;
         max-width: none !important;
         max-height: 85vh !important; /* 限制最大高度，确保不超出屏幕 */
@@ -8524,8 +8554,11 @@ body .infobar-modal-new .nav-item[data-custom="true"],
         gap: 12px;
     }
 
-    /* 🔧 移动端字段规则对话框内容优化 */
-    .field-rule-dialog .dialog-header {
+    /* 🔧 移动端对话框内容优化（通用） */
+    .field-rule-dialog .dialog-header,
+    .rename-field-dialog .dialog-header,
+    .add-field-dialog .dialog-header,
+    .delete-field-dialog .dialog-header {
         padding: 16px !important;
         position: sticky !important;
         top: 0 !important;
@@ -8534,47 +8567,71 @@ body .infobar-modal-new .nav-item[data-custom="true"],
         border-bottom: 1px solid var(--theme-border-color, #333) !important;
     }
 
-    .field-rule-dialog .dialog-body {
+    .field-rule-dialog .dialog-body,
+    .rename-field-dialog .dialog-body,
+    .add-field-dialog .dialog-body,
+    .delete-field-dialog .dialog-body {
         padding: 16px !important;
         overflow-y: auto !important;
-        max-height: calc(85vh - 120px) !important; /* 减去头部和底部的高度 */
+        max-height: calc(85vh - 140px) !important; /* 减去头部和底部的高度 */
     }
 
-    .field-rule-dialog .dialog-footer {
-        padding: 16px !important;
+    .field-rule-dialog .dialog-footer,
+    .rename-field-dialog .dialog-footer,
+    .add-field-dialog .dialog-footer,
+    .delete-field-dialog .dialog-footer {
+        padding: 12px 16px !important;
         position: sticky !important;
         bottom: 0 !important;
         z-index: 10 !important;
         background: var(--theme-bg-secondary, #1a1a1a) !important;
         border-top: 1px solid var(--theme-border-color, #333) !important;
-        flex-direction: column !important;
+        flex-direction: row !important; /* 横向排列 */
+        flex-wrap: wrap !important;
         gap: 8px !important;
+        justify-content: flex-end !important;
     }
 
-    .field-rule-dialog .dialog-footer button {
-        width: 100% !important;
+    .field-rule-dialog .dialog-footer button,
+    .field-rule-dialog .dialog-footer .btn,
+    .rename-field-dialog .dialog-footer button,
+    .rename-field-dialog .dialog-footer .btn,
+    .add-field-dialog .dialog-footer button,
+    .add-field-dialog .dialog-footer .btn,
+    .delete-field-dialog .dialog-footer button,
+    .delete-field-dialog .dialog-footer .btn {
+        flex: 1 1 calc(50% - 4px) !important; /* 两列布局 */
+        max-width: 150px !important;
+        min-width: 80px !important;
+        padding: 10px 12px !important;
+        font-size: 14px !important;
         margin: 0 !important;
     }
 
-    /* 🔧 字段规则表单元素移动端优化 */
+    /* 🔧 移动端表单元素优化 */
     .field-rule-dialog input,
     .field-rule-dialog textarea,
-    .field-rule-dialog select {
+    .field-rule-dialog select,
+    .rename-field-dialog input,
+    .rename-field-dialog textarea,
+    .add-field-dialog input,
+    .add-field-dialog textarea,
+    .delete-field-dialog input {
         font-size: 16px !important; /* 防止iOS缩放 */
         padding: 12px !important;
         border-radius: 8px !important;
     }
 
-    .field-rule-dialog textarea {
-        min-height: 100px !important;
-        resize: vertical !important;
-    }
 }
 
-/* 追加：字段规则对话框移动端更强适配（覆盖前面的基础适配） */
+/* 追加：对话框移动端更强适配（覆盖前面的基础适配） */
 @media (max-width: 768px) {
-    /* 让内容容器改为正常流布局，避免50%居中导致“只显示一半” */
-    .field-rule-dialog .dialog-content {
+    /* 让内容容器改为正常流布局，避免50%居中导致"只显示一半" */
+    .field-rule-dialog .dialog-content,
+    .rename-field-dialog .dialog-content,
+    .add-field-dialog .dialog-content,
+    .delete-field-dialog .dialog-content,
+    .delete-confirmation-dialog .dialog-content {
         position: relative !important;
         top: auto !important;
         left: auto !important;
@@ -8589,7 +8646,11 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     }
 
     /* 主体滚动区域：按flex分配剩余空间 */
-    .field-rule-dialog .dialog-body {
+    .field-rule-dialog .dialog-body,
+    .rename-field-dialog .dialog-body,
+    .add-field-dialog .dialog-body,
+    .delete-field-dialog .dialog-body,
+    .delete-confirmation-dialog .dialog-body {
         flex: 1 1 auto !important;
         min-height: 0 !important; /* 修复子元素overflow在flex容器内不收缩的问题 */
         overflow-y: auto !important;
@@ -8597,7 +8658,11 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     }
 
     /* 页脚按钮行：横排、可换行，更紧凑 */
-    .field-rule-dialog .dialog-footer {
+    .field-rule-dialog .dialog-footer,
+    .rename-field-dialog .dialog-footer,
+    .add-field-dialog .dialog-footer,
+    .delete-field-dialog .dialog-footer,
+    .delete-confirmation-dialog .dialog-footer {
         position: sticky !important;
         bottom: 0 !important;
         display: flex !important;
@@ -8609,10 +8674,19 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     }
 
     .field-rule-dialog .dialog-footer button,
-    .field-rule-dialog .dialog-footer .btn {
+    .field-rule-dialog .dialog-footer .btn,
+    .rename-field-dialog .dialog-footer button,
+    .rename-field-dialog .dialog-footer .btn,
+    .add-field-dialog .dialog-footer button,
+    .add-field-dialog .dialog-footer .btn,
+    .delete-field-dialog .dialog-footer button,
+    .delete-field-dialog .dialog-footer .btn,
+    .delete-confirmation-dialog .dialog-footer button,
+    .delete-confirmation-dialog .dialog-footer .btn {
         width: auto !important;
-        flex: 1 1 calc(50% - 8px) !important; /* 两列并排 */
-        max-width: none !important;
+        flex: 1 1 calc(50% - 4px) !important; /* 两列并排 */
+        max-width: 150px !important;
+        min-width: 80px !important;
         padding: 10px 12px !important; /* 更紧凑 */
         font-size: 14px !important;
     }
@@ -11333,5 +11407,254 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     .summary-preview-dialog .dialog-body::-webkit-scrollbar-thumb {
         background: rgba(255, 255, 255, 0.3) !important;
         border-radius: 2px !important;
+    }
+}
+
+/* ========== NPC管理面板移动端适配 ========== */
+@media (max-width: 768px) {
+    /* NPC管理模态框：全屏显示 */
+    .npc-management-modal .modal-container {
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+    }
+
+    /* NPC列表和详情区域：垂直布局 */
+    .npc-management-modal .modal-body {
+        flex-direction: column !important;
+        padding: 8px !important;
+        gap: 8px !important;
+    }
+
+    /* 左侧列表区域：占据上半部分 */
+    .npc-management-modal .left {
+        flex: 0 0 40vh !important; /* 固定高度40vh */
+        width: 100% !important;
+        min-height: 200px !important;
+    }
+
+    /* 右侧详情区域：占据下半部分，可滚动 */
+    .npc-management-modal .right {
+        flex: 1 !important;
+        width: 100% !important;
+        min-height: 200px !important;
+        max-height: none !important; /* 移除最大高度限制 */
+        overflow-y: auto !important; /* 🔧 确保详情区域可滚动 */
+        -webkit-overflow-scrolling: touch !important;
+        display: flex !important; /* 🔧 关键修复：保持flex布局 */
+        flex-direction: column !important;
+    }
+
+    /* 详情面板内容：确保正常显示，不强制display */
+    .npc-management-modal .details {
+        /* 🔧 修复：不强制display: block，让JS控制显示/隐藏 */
+        overflow-y: auto !important;
+        padding: 8px !important;
+        font-size: 13px !important;
+        flex: 1 !important;
+    }
+
+    /* 🔧 修复：当details显示时，确保可见 */
+    .npc-management-modal .details[style*="display: block"],
+    .npc-management-modal .details[style=""] {
+        display: block !important;
+    }
+
+    /* 详情占位符：确保可见 */
+    .npc-management-modal .detail-placeholder {
+        /* 🔧 修复：不强制display，让JS控制 */
+        font-size: 13px !important;
+        padding: 16px !important;
+        flex: 1 !important;
+    }
+
+    /* 搜索和排序工具栏：紧凑布局 */
+    .npc-management-modal .toolbar {
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+    }
+
+    .npc-management-modal .toolbar input,
+    .npc-management-modal .toolbar select {
+        font-size: 14px !important;
+        padding: 6px 8px !important;
+        min-width: 0 !important;
+    }
+
+    /* 同步面板：紧凑显示 */
+    .npc-management-modal .sync-panel {
+        padding: 8px !important;
+        gap: 6px !important;
+    }
+
+    .npc-management-modal .sync-panel > div {
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+    }
+
+    .npc-management-modal .sync-panel button {
+        font-size: 11px !important;
+        padding: 4px 8px !important;
+    }
+
+    /* 批量操作工具栏：紧凑显示 */
+    .npc-management-modal .batch-toolbar {
+        padding: 6px 8px !important;
+        gap: 6px !important;
+    }
+
+    .npc-management-modal .batch-toolbar button {
+        padding: 4px 8px !important;
+        font-size: 11px !important;
+    }
+
+    /* NPC列表项：减小间距 */
+    .npc-management-modal .list .npc-row {
+        padding: 6px 8px !important;
+    }
+
+    .npc-management-modal .list .npc-name {
+        font-size: 14px !important;
+    }
+
+    .npc-management-modal .list .npc-meta {
+        font-size: 10px !important;
+    }
+
+    /* 详情键值对：紧凑布局 */
+    .npc-management-modal .kv {
+        grid-template-columns: 90px 1fr !important; /* 缩小标签列宽度 */
+        gap: 4px 8px !important;
+        font-size: 12px !important;
+    }
+
+    /* Badge标签：减小尺寸 */
+    .npc-management-modal .badge {
+        font-size: 10px !important;
+        padding: 2px 6px !important;
+    }
+
+    /* 页脚按钮：横向排列 */
+    .npc-management-modal .modal-footer {
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        padding: 10px 12px !important;
+    }
+
+    .npc-management-modal .modal-footer button,
+    .npc-management-modal .modal-footer .btn {
+        flex: 1 1 calc(50% - 4px) !important;
+        font-size: 13px !important;
+        padding: 8px 12px !important;
+    }
+
+    .npc-management-modal .import-area {
+        min-height: 60px !important;
+        font-size: 13px !important;
+    }
+}
+
+/* ========== NPC详情模态框移动端适配 ========== */
+@media (max-width: 768px) {
+    /* 🔧 修复：只有当JS设置display: flex时才应用移动端布局 */
+    .npc-detail-modal[style*="display: flex"],
+    .npc-detail-modal[style*="display:flex"] {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        z-index: 1000000 !important; /* 🔧 确保在NPC管理面板之上 */
+        display: flex !important;
+        align-items: flex-start !important; /* 🔧 从顶部开始 */
+        justify-content: center !important;
+        padding: 10vh 10px 10px 10px !important; /* 🔧 顶部留出空间 */
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    /* NPC详情内容容器 */
+    .npc-detail-content {
+        width: 100% !important;
+        max-width: none !important;
+        max-height: 85vh !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        background: var(--theme-bg-primary, #1a1a1a) !important;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+    }
+
+    /* NPC详情头部 */
+    .npc-detail-header {
+        padding: 12px 16px !important;
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 10 !important;
+        flex-shrink: 0 !important;
+        background: var(--theme-bg-secondary, #2a2a2a) !important;
+        border-bottom: 1px solid var(--theme-border-color, #444) !important;
+    }
+
+    .npc-detail-header h3 {
+        font-size: 16px !important;
+        color: var(--theme-text-primary, #fff) !important;
+    }
+
+    /* 🔧 修复：关闭按钮在移动端可点击 */
+    .npc-detail-close {
+        width: 36px !important;
+        height: 36px !important;
+        font-size: 28px !important;
+        background: var(--theme-bg-primary, #1a1a1a) !important;
+        border-radius: 6px !important;
+        color: var(--theme-text-primary, #fff) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        border: 1px solid var(--theme-border-color, #555) !important;
+        transition: all 0.2s ease !important;
+        z-index: 100 !important; /* 确保在最上层 */
+        position: relative !important;
+    }
+
+    .npc-detail-close:active {
+        background: var(--theme-bg-danger, #dc3545) !important;
+        transform: scale(0.95) !important;
+    }
+
+    /* NPC详情主体：可滚动 */
+    .npc-detail-body {
+        flex: 1 !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        padding: 12px 16px !important;
+    }
+
+    /* NPC信息项：紧凑布局 */
+    .npc-info-item {
+        margin-bottom: 12px !important;
+        font-size: 13px !important;
+        line-height: 1.5 !important;
+    }
+
+    .npc-info-item strong {
+        display: block !important;
+        margin-bottom: 4px !important;
+        color: var(--theme-text-secondary, #999) !important;
+        font-size: 12px !important;
+    }
+
+    .npc-info-item span,
+    .npc-info-item div {
+        display: block !important;
+        color: var(--theme-text-primary, #fff) !important;
+        word-wrap: break-word !important;
+        word-break: break-word !important;
     }
 }
