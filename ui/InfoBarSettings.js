@@ -15553,7 +15553,7 @@ export class InfoBarSettings {
                 id: 'cherry-blossom',
                 name: '樱花粉',
                 description: '浪漫樱花风格，温柔甜美',
-                colors: { bg: '#fdf2f8', text: '#831843', primary: '#ec4899', border: '#f9a8d4' }
+                colors: { bg: '#1a1014', text: '#ffe6f0', primary: '#ff69b4', border: '#d1477a' }
             },
             {
                 id: 'golden-sand',
@@ -17697,6 +17697,13 @@ export class InfoBarSettings {
         try {
             console.log('[InfoBarSettings] 🏁 收到生成结束事件...');
 
+            // 🔧 关键修复：新的生成开始时，重置中止标志
+            // 这样用户在上一次中止后，新消息可以正常调用自定义API
+            if (this._customAPIAborted) {
+                console.log('[InfoBarSettings] 🔄 检测到中止标志，新消息生成时自动重置');
+                this._customAPIAborted = false;
+            }
+
             // 检查API是否启用
             const context = SillyTavern.getContext();
             const extensionSettings = context.extensionSettings;
@@ -18311,8 +18318,8 @@ export class InfoBarSettings {
             if (variablePrompt) {
                 try {
                     // 手动调用SillyTavern的变量替换功能
-                    if (typeof context.substituteParams === 'function') {
-                        variablePrompt = context.substituteParams(variablePrompt);
+                    if (typeof stContext.substituteParams === 'function') {
+                        variablePrompt = stContext.substituteParams(variablePrompt);
                         console.log('[InfoBarSettings] ✅ 变量替换完成，处理后长度:', variablePrompt.length);
                     } else {
                         console.warn('[InfoBarSettings] ⚠️ SillyTavern变量替换功能不可用，跳过变量处理');
@@ -18354,7 +18361,7 @@ export class InfoBarSettings {
             });
 
             // 发送自定义API请求（增强重试逻辑）
-            const cfg = context.extensionSettings['Information bar integration tool']?.apiConfig || {};
+            const cfg = stContext.extensionSettings['Information bar integration tool']?.apiConfig || {};
             const maxRetry = Number(cfg.retryCount ?? 5); // 增加默认重试次数
             const baseRetryDelayMs = 2000; // 增加基础延迟时间
 
