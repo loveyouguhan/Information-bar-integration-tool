@@ -555,54 +555,45 @@ export class DataTable {
     }
 
     /**
-     * 🔧 计算数据哈希值 - 用于检测数据变化（宽松策略）
+     * 🔧 计算数据哈希值 - 只基于表格结构，不包含数据内容
+     * 用于检测表格结构变化（面板、字段的增删），而非数据内容变化
      */
     calculateDataHash(data) {
         try {
-            // 🔧 修复：采用更宽松的策略，包含数据内容
-            // 这样数据内容变化时，哈希值也会变化，表格会正确更新
-            const dataRepresentation = data.map(item => {
+            // 🎨 新策略：只计算表格结构（面板和字段），不包含数据值
+            // 这样数据内容变化时不会触发表格重建，只会触发单元格更新和高亮
+            const structureRepresentation = data.map(item => {
                 const representation = {
                     panel: item.panel,
                     field: item.field,
                     hasRowData: !!item.rowData
                 };
 
-                // 🔧 修复：包含所有数据字段的值，不过滤任何字段
+                // 🎨 关键修改：只记录字段名称，不包含字段值
                 if (item.rowData) {
-                    // 获取所有字段并排序，确保顺序一致
+                    // 只记录字段名称列表，不记录值
                     const keys = Object.keys(item.rowData).sort();
-
-                    // 🔧 关键修复：包含字段的实际值，而不仅仅是类型
-                    representation.fields = {};
-                    keys.forEach(key => {
-                        const value = item.rowData[key];
-                        // 将值转换为字符串以便比较
-                        if (value !== null && value !== undefined) {
-                            representation.fields[key] = String(value);
-                        } else {
-                            representation.fields[key] = '';
-                        }
-                    });
+                    representation.fieldNames = keys; // 只存字段名，不存值
                 } else {
-                    representation.fields = {};
+                    representation.fieldNames = [];
                 }
 
                 return representation;
             });
 
-            // 🔧 修复：生成包含数据内容的哈希值
-            const dataString = JSON.stringify(dataRepresentation);
+            // 🎨 生成基于结构的哈希值（不包含数据内容）
+            const structureString = JSON.stringify(structureRepresentation);
             let hash = 0;
-            for (let i = 0; i < dataString.length; i++) {
-                const char = dataString.charCodeAt(i);
+            for (let i = 0; i < structureString.length; i++) {
+                const char = structureString.charCodeAt(i);
                 hash = ((hash << 5) - hash) + char;
                 hash = hash & hash; // 转换为32位整数
             }
 
             const finalHash = Math.abs(hash).toString();
-            console.log('[DataTable] 🔍 数据哈希计算完成（宽松策略）:', finalHash);
+            console.log('[DataTable] 🔍 表格结构哈希计算完成（只基于结构）:', finalHash);
             console.log('[DataTable] 📊 数据项数量:', data.length);
+            console.log('[DataTable] 💡 哈希策略：只检测结构变化，数据值变化不触发重建');
             return finalHash;
         } catch (error) {
             console.error('[DataTable] ❌ 计算数据哈希失败:', error);
@@ -4431,7 +4422,9 @@ export class DataTable {
             const groupedTables = this.modal.querySelector('.grouped-tables');
             const hasExistingStructure = !!groupedTables;
 
-            // 🔧 智能决策：是否需要重建表格结构
+            // 🎨 智能决策：是否需要重建表格结构
+            // 注意：哈希值只基于表格结构（面板、字段名称），不包含数据值
+            // 因此只有结构变化时才会重建，数据内容变化只会触发单元格更新和高亮
             let shouldRebuildStructure = false;
 
             if (!groupedTables) {
@@ -4439,13 +4432,13 @@ export class DataTable {
                 console.log('[DataTable] 🔄 没有表格结构，需要重新生成');
                 shouldRebuildStructure = true;
             } else if (this.tableState.lastDataHash !== currentDataHash) {
-                // 情况2：数据结构发生变化
-                console.log('[DataTable] 🔄 数据结构变化，需要重新生成表格');
-                console.log(`[DataTable] 📊 旧哈希: ${this.tableState.lastDataHash}, 新哈希: ${currentDataHash}`);
+                // 情况2：表格结构发生变化（面板或字段增删）
+                console.log('[DataTable] 🔄 表格结构变化（面板/字段变化），需要重新生成表格');
+                console.log(`[DataTable] 📊 旧结构哈希: ${this.tableState.lastDataHash}, 新结构哈希: ${currentDataHash}`);
                 shouldRebuildStructure = true;
             } else {
-                // 情况3：数据结构未变化，只需更新数据内容
-                console.log('[DataTable] 🔄 数据结构未变化，只更新数据内容');
+                // 情况3：表格结构未变化，只有数据内容变化
+                console.log('[DataTable] ✅ 表格结构未变化，只更新数据内容（会触发单元格高亮）');
                 shouldRebuildStructure = false;
             }
 
@@ -4639,18 +4632,39 @@ export class DataTable {
                         }
                     }
 
+                    // 🎨 如果还没找到，尝试直接使用列索引（兼容数字键格式）
+                    if (!updated) {
+                        const numericKey = cellIndex + 1;
+                        if (dataItem.rowData?.[numericKey] !== undefined) {
+                            value = dataItem.rowData[numericKey];
+                            colKey = String(numericKey);
+                            updated = true;
+                        }
+                    }
+
                     // 如果没有找到对应的新值，保持现有显示，跳过
                     if (!updated) {
                         console.log(`[DataTable] ↪ 跳过无更新字段: ${panelId}.${property || `col_${cellIndex + 1}`}`);
                         return;
                     }
 
-                    // 执行更新
+                    // 执行更新并触发高亮
                     const currentValue = cell.textContent?.trim() || '';
-                    if (String(currentValue) !== String(value)) {
+                    const newValue = String(value);
+                    
+                    if (currentValue !== newValue) {
+                        // 值发生变化，更新并高亮
                         cell.textContent = value;
                         cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
-                        console.log(`[DataTable] 🔍 ${panelId}字段更新: ${property} -> ${colKey} = "${value}"`);
+
+                        // 🎨 添加高亮动画效果
+                        this.highlightCell(cell, panelId, property, value);
+
+                        console.log(`[DataTable] 🔍 ${panelId}字段更新并高亮: ${property} -> ${colKey} = "${value}"`);
+                    } else {
+                        // 值未变化，只更新title
+                        cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
+                        console.log(`[DataTable] ✓ ${panelId}值未变化: ${property} = "${value}"`);
                     }
                 });
             });
@@ -4775,15 +4789,18 @@ export class DataTable {
                     let value;
                     let updated = false;
 
-                    // 🔧 修复：增强字段匹配，支持旧架构字段名（仅当新值存在时才更新）
+                    // 🎨 增强字段匹配：支持多种数据格式
                     if (property) {
+                        // 构建可能的字段名列表
                         const possibleFieldNames = [
-                            property,
-                            fieldMapping[property],
-                            `col_${cellIndex + 1}`,
-                            this.mapDisplayNameToLegacyField(property, panelId)
+                            property,                                          // 显示名称，如 "姓名123"
+                            fieldMapping[property],                           // 映射后的col_X，如 "col_1"
+                            String(cellIndex + 1),                            // 纯数字字符串，如 "1"
+                            `col_${cellIndex + 1}`,                           // col_X 格式
+                            this.mapDisplayNameToLegacyField(property, panelId) // 旧字段名
                         ].filter(name => name);
 
+                        // 尝试每个可能的字段名
                         for (const fieldName of possibleFieldNames) {
                             if (dataItem.rowData?.[fieldName] !== undefined) {
                                 value = dataItem.rowData[fieldName];
@@ -4794,25 +4811,87 @@ export class DataTable {
                         }
                     }
 
+                    // 🎨 如果没有找到，尝试直接使用列索引（兼容数字键格式）
+                    if (!updated) {
+                        const numericKey = cellIndex + 1;
+                        if (dataItem.rowData?.[numericKey] !== undefined) {
+                            value = dataItem.rowData[numericKey];
+                            colKey = String(numericKey);
+                            updated = true;
+                        }
+                    }
+
                     // 如果没有找到对应的新值，保持现有显示，跳过
                     if (!updated) {
                         console.log(`[DataTable] ↪ 跳过无更新字段: ${panelId}.${property || `col_${cellIndex + 1}`}`);
                         return;
                     }
 
-                    // 只在值发生变化时更新DOM
+                    // 只在值发生变化时更新DOM并触发高亮
                     const currentValue = cell.textContent?.trim() || '';
-                    if (String(currentValue) !== String(value)) {
+                    const newValue = String(value);
+                    
+                    if (currentValue !== newValue) {
+                        // 值发生变化，更新并高亮
                         cell.textContent = value;
                         cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
 
-                        console.log(`[DataTable] 🔍 ${panelId}精确更新: ${property} -> ${colKey} = "${value}" (单元格ID: ${cellId})`);
+                        // 🎨 添加高亮动画效果
+                        this.highlightCell(cell, panelId, property, value);
+
+                        console.log(`[DataTable] 🔍 ${panelId}精确更新并高亮: ${property} -> ${colKey} = "${value}" (单元格ID: ${cellId})`);
+                    } else {
+                        // 值未变化，只更新title
+                        cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
+                        console.log(`[DataTable] ✓ ${panelId}值未变化: ${property} = "${value}"`);
                     }
                 });
             });
 
         } catch (error) {
             console.error(`[DataTable] ❌ 精确数据更新失败 (${panelId}):`, error);
+        }
+    }
+
+    /**
+     * 🎨 单元格高亮动画效果
+     * @param {HTMLElement} cell - 单元格元素
+     * @param {string} panelId - 面板ID
+     * @param {string} property - 属性名称
+     * @param {*} newValue - 新值
+     */
+    highlightCell(cell, panelId, property, newValue) {
+        try {
+            // 移除已存在的高亮类（如果有），准备重新高亮
+            cell.classList.remove('cell-updated', 'cell-highlight-animation');
+            
+            // 强制重绘，确保动画可以重新触发
+            void cell.offsetWidth;
+            
+            // 添加高亮类
+            cell.classList.add('cell-updated', 'cell-highlight-animation');
+            
+            // 记录更新时间
+            cell.setAttribute('data-updated-at', Date.now());
+            cell.setAttribute('data-updated-value', String(newValue));
+            
+            // 动画结束后移除动画类（保留基础高亮类一段时间）
+            const handleAnimationEnd = () => {
+                cell.classList.remove('cell-highlight-animation');
+                cell.removeEventListener('animationend', handleAnimationEnd);
+                
+                // 3秒后完全移除高亮，准备下次更新
+                setTimeout(() => {
+                    cell.classList.remove('cell-updated');
+                }, 3000);
+            };
+            
+            cell.addEventListener('animationend', handleAnimationEnd);
+            
+            console.log(`[DataTable] 🎨 单元格高亮: ${panelId}.${property} = "${newValue}"`);
+            
+        } catch (error) {
+            console.error('[DataTable] ❌ 单元格高亮失败:', error);
         }
     }
 
@@ -5967,6 +6046,31 @@ export class DataTable {
                 id: 'slate-gray',
                 name: '石板灰',
                 colors: { bg: '#1a1a1a', text: '#e6e6e6', primary: '#708090', border: '#556b7d' }
+            },
+            'coral-white': {
+                id: 'coral-white',
+                name: '珊瑚橙·雅韵',
+                colors: { bg: '#fffaf7', text: '#2d1810', primary: '#ff7f50', border: '#ffcab0' }
+            },
+            'sky-white': {
+                id: 'sky-white',
+                name: '天空蓝·清韵',
+                colors: { bg: '#f8fbff', text: '#0c2340', primary: '#4a90e2', border: '#b8d9f7' }
+            },
+            'jade-white': {
+                id: 'jade-white',
+                name: '翡翠绿·雅致',
+                colors: { bg: '#f6fcfa', text: '#0f3a2e', primary: '#00a67e', border: '#99e6d4' }
+            },
+            'violet-white': {
+                id: 'violet-white',
+                name: '紫罗兰·优雅',
+                colors: { bg: '#fcf8ff', text: '#3d1a5f', primary: '#8b5cf6', border: '#d8b4fe' }
+            },
+            'rose-white': {
+                id: 'rose-white',
+                name: '樱粉·柔美',
+                colors: { bg: '#fff9fb', text: '#5c1a33', primary: '#e91e63', border: '#f8bbd0' }
             },
             'custom': {
                 id: 'custom',

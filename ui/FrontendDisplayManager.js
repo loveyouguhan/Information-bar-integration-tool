@@ -2644,7 +2644,8 @@ export class FrontendDisplayManager {
 
         } catch (error) {
             console.error('[FrontendDisplayManager] ❌ 渲染面板数据失败:', error);
-            return '<div class="data-row"><span class="data-value">渲染失败</span></div>';
+            // 🔧 修复：不显示错误UI，返回空字符串
+            return '';
         }
     }
 
@@ -2704,7 +2705,8 @@ export class FrontendDisplayManager {
             
         } catch (error) {
             console.error('[FrontendDisplayManager] ❌ 渲染多NPC交互面板失败:', error);
-            return '<div class="data-row"><span class="data-value">多NPC渲染失败</span></div>';
+            // 🔧 修复：不显示错误UI，返回空字符串
+            return '';
         }
     }
 
@@ -2764,7 +2766,8 @@ export class FrontendDisplayManager {
 
         } catch (error) {
             console.error('[FrontendDisplayManager] ❌ 渲染多组织面板失败:', error);
-            return '<div class="data-row"><span class="data-value">多组织渲染失败</span></div>';
+            // 🔧 修复：不显示错误UI，返回空字符串
+            return '';
         }
     }
 

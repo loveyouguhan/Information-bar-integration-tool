@@ -62,6 +62,9 @@ export class InfoBarSettings {
         this.settingsLoaded = false;
         this.needsSettingsRefresh = false;
 
+        // 🔧 新增：防抖定时器
+        this._memoryStatusRefreshTimeout = null;
+
         // 绑定方法
         this.init = this.init.bind(this);
         this.show = this.show.bind(this);
@@ -1734,14 +1737,6 @@ ${'='.repeat(80)}
                 // 接口类型变更
                 if (e.target.id === 'interface-type') {
                     this.handleInterfaceTypeChange(e.target.value);
-                }
-
-                // 字体大小和信息栏高度关联
-                if (e.target.name === 'theme.fontSize') {
-                    this.handleFontSizeChange(e.target.value);
-                }
-                if (e.target.name === 'infobar.height') {
-                    this.handleInfobarHeightChange(e.target.value);
                 }
             });
 
@@ -6745,6 +6740,52 @@ ${'='.repeat(80)}
                             </div>
                         </div>
 
+                        <!-- 🗄️ AI记忆数据库状态卡片 -->
+                        <div class="module-status-card ai-memory-database-card" data-module="aiMemoryDatabase">
+                            <div class="module-header">
+                                <span class="module-icon">🗄️</span>
+                                <span class="module-name">AI记忆数据库</span>
+                                <span class="module-status" id="ai-memory-database-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">记忆数:</span>
+                                    <span class="stat-value" id="ai-memory-database-count">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">关键词:</span>
+                                    <span class="stat-value" id="ai-memory-database-keywords">-</span>
+                                </div>
+                            </div>
+                            <!-- 🎯 可视化进度条 -->
+                            <div class="ai-db-visualization">
+                                <div class="visualization-row">
+                                    <span class="viz-label">索引完整度:</span>
+                                    <div class="progress-bar-container">
+                                        <div class="progress-bar" id="ai-db-index-progress">
+                                            <div class="progress-fill" style="width: 0%;"></div>
+                                        </div>
+                                        <span class="progress-text" id="ai-db-index-text">0%</span>
+                                    </div>
+                                </div>
+                                <div class="visualization-row">
+                                    <span class="viz-label">平均重要性:</span>
+                                    <div class="importance-indicator">
+                                        <div class="importance-bar" id="ai-db-importance-bar">
+                                            <div class="importance-fill" style="width: 0%;"></div>
+                                        </div>
+                                        <span class="importance-value" id="ai-db-importance-value">0.00</span>
+                                    </div>
+                                </div>
+                                <div class="visualization-row">
+                                    <span class="viz-label">分类分布:</span>
+                                    <div class="category-distribution" id="ai-db-categories">
+                                        <span class="no-data">暂无数据</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- 🆕 新增六大核心功能模块状态 -->
                         <div class="module-status-card" data-module="memoryMaintenance">
                             <div class="module-header">
@@ -7547,39 +7588,6 @@ ${'='.repeat(80)}
                         <div class="preview-content">示例内容文字</div>
                         <div class="preview-button">示例按钮</div>
                     </div>
-                </div>
-            </div>
-
-            <div class="settings-group">
-                <h3>字体设置</h3>
-                <div class="form-group">
-                    <label>字体大小</label>
-                    <select name="theme.fontSize" data-linked="infobar.height">
-                        <option value="small">小 (12px)</option>
-                        <option value="medium" selected>中 (14px)</option>
-                        <option value="large">大 (16px)</option>
-                        <option value="xlarge">特大 (18px)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>信息栏高度</label>
-                    <select name="infobar.height" data-linked="theme.fontSize">
-                        <option value="auto">自动 (根据字体)</option>
-                        <option value="compact">紧凑 (24px)</option>
-                        <option value="normal" selected>标准 (32px)</option>
-                        <option value="comfortable">舒适 (40px)</option>
-                        <option value="spacious">宽松 (48px)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>字体族</label>
-                    <select name="theme.fontFamily">
-                        <option value="system" selected>系统默认</option>
-                        <option value="serif">衬线字体</option>
-                        <option value="sans-serif">无衬线字体</option>
-                        <option value="monospace">等宽字体</option>
-                        <option value="custom">自定义字体</option>
-                    </select>
                 </div>
             </div>
         `;
@@ -17183,6 +17191,36 @@ ${'='.repeat(80)}
                 colors: { bg: '#0f172a', text: '#f1f5f9', primary: '#64748b', border: '#475569' }
             },
             {
+                id: 'coral-white',
+                name: '珊瑚橙·雅韵',
+                description: '温暖珊瑚橙+白底，优雅温馨',
+                colors: { bg: '#fffaf7', text: '#2d1810', primary: '#ff7f50', border: '#ffcab0' }
+            },
+            {
+                id: 'sky-white',
+                name: '天空蓝·清韵',
+                description: '清爽天空蓝+白底，清新专注',
+                colors: { bg: '#f8fbff', text: '#0c2340', primary: '#4a90e2', border: '#b8d9f7' }
+            },
+            {
+                id: 'jade-white',
+                name: '翡翠绿·雅致',
+                description: '自然翡翠绿+白底，清新雅致',
+                colors: { bg: '#f6fcfa', text: '#0f3a2e', primary: '#00a67e', border: '#99e6d4' }
+            },
+            {
+                id: 'violet-white',
+                name: '紫罗兰·优雅',
+                description: '高贵紫罗兰+白底，优雅大气',
+                colors: { bg: '#fcf8ff', text: '#3d1a5f', primary: '#8b5cf6', border: '#d8b4fe' }
+            },
+            {
+                id: 'rose-white',
+                name: '樱粉·柔美',
+                description: '浪漫樱花粉+白底，柔美温馨',
+                colors: { bg: '#fff9fb', text: '#5c1a33', primary: '#e91e63', border: '#f8bbd0' }
+            },
+            {
                 id: 'custom',
                 name: '自定义',
                 description: '创建您的专属主题',
@@ -17242,28 +17280,6 @@ ${'='.repeat(80)}
                 }
             },
             {
-                id: 'conversation-wrapped',
-                name: '对话包裹式',
-                description: '将整个对话内容包裹在信息栏框架中',
-                icon: '🎁',
-                preview: {
-                    layout: 'wrapped',
-                    position: 'around',
-                    integration: 'integrated'
-                }
-            },
-            {
-                id: 'sidebar',
-                name: '侧边栏式',
-                description: '在对话侧边显示固定的信息栏',
-                icon: '📋',
-                preview: {
-                    layout: 'sidebar',
-                    position: 'side',
-                    integration: 'parallel'
-                }
-            },
-            {
                 id: 'floating',
                 name: '浮动式',
                 description: '悬浮显示的可拖拽信息栏',
@@ -17272,28 +17288,6 @@ ${'='.repeat(80)}
                     layout: 'floating',
                     position: 'overlay',
                     integration: 'independent'
-                }
-            },
-            {
-                id: 'embedded',
-                name: '内嵌式',
-                description: '嵌入到对话内容中的信息栏',
-                icon: '🔗',
-                preview: {
-                    layout: 'embedded',
-                    position: 'inline',
-                    integration: 'merged'
-                }
-            },
-            {
-                id: 'interactive',
-                name: '前端交互式',
-                description: '功能丰富的交互式信息栏界面，包含按钮、输入框、标签页等',
-                icon: '🎛️',
-                preview: {
-                    layout: 'interactive',
-                    position: 'overlay',
-                    integration: 'advanced'
                 }
             },
             {
@@ -17348,30 +17342,10 @@ ${'='.repeat(80)}
                     <div class="demo-chat">💬</div>
                     <div class="demo-infobar">—📊—</div>
                 `;
-            case 'wrapped':
-                return `
-                    <div class="demo-wrapper">
-                        <div class="demo-chat">💬</div>
-                        <div class="demo-frame">📊</div>
-                    </div>
-                `;
-            case 'sidebar':
-                return `
-                    <div class="demo-layout">
-                        <div class="demo-chat">💬</div>
-                        <div class="demo-sidebar">📊</div>
-                    </div>
-                `;
             case 'floating':
                 return `
                     <div class="demo-base">💬</div>
                     <div class="demo-float">📊</div>
-                `;
-            case 'embedded':
-                return `
-                    <div class="demo-merged">
-                        💬📊
-                    </div>
                 `;
             case 'custom':
                 return `
@@ -17510,32 +17484,6 @@ ${'='.repeat(80)}
                 }
             },
             {
-                id: 'conversation-wrapped',
-                name: '对话包裹式',
-                description: '将整个对话内容包裹在信息栏框架中',
-                config: {
-                    position: 'wrapper',
-                    layout: 'frame',
-                    integration: 'integrated',
-                    animation: 'fadeIn',
-                    autoHide: false,
-                    collapsible: false
-                }
-            },
-            {
-                id: 'sidebar',
-                name: '侧边栏式',
-                description: '在对话侧边显示固定的信息栏',
-                config: {
-                    position: 'side',
-                    layout: 'vertical',
-                    integration: 'parallel',
-                    animation: 'slideLeft',
-                    autoHide: false,
-                    collapsible: true
-                }
-            },
-            {
                 id: 'floating',
                 name: '浮动式',
                 description: '悬浮显示的可拖拽信息栏',
@@ -17547,36 +17495,6 @@ ${'='.repeat(80)}
                     autoHide: true,
                     collapsible: true,
                     draggable: true
-                }
-            },
-            {
-                id: 'embedded',
-                name: '内嵌式',
-                description: '嵌入到对话内容中的信息栏',
-                config: {
-                    position: 'inline',
-                    layout: 'embedded',
-                    integration: 'merged',
-                    animation: 'expand',
-                    autoHide: false,
-                    collapsible: false
-                }
-            },
-            {
-                id: 'interactive',
-                name: '前端交互式',
-                description: '功能丰富的交互式信息栏界面，包含按钮、输入框、标签页等',
-                config: {
-                    position: 'overlay',
-                    layout: 'interactive',
-                    integration: 'advanced',
-                    animation: 'slideIn',
-                    autoHide: false,
-                    collapsible: true,
-                    draggable: true,
-                    resizable: true,
-                    tabbed: true,
-                    interactive: true
                 }
             },
             {
@@ -17799,6 +17717,36 @@ ${'='.repeat(80)}
                 name: '石板灰',
                 description: '现代石板风格，简约专业',
                 colors: { bg: '#1a1a1a', text: '#e6e6e6', primary: '#708090', border: '#556b7d' }
+            },
+            {
+                id: 'coral-white',
+                name: '珊瑚橙·雅韵',
+                description: '温暖珊瑚橙+白底，优雅温馨',
+                colors: { bg: '#fffaf7', text: '#2d1810', primary: '#ff7f50', border: '#ffcab0' }
+            },
+            {
+                id: 'sky-white',
+                name: '天空蓝·清韵',
+                description: '清爽天空蓝+白底，清新专注',
+                colors: { bg: '#f8fbff', text: '#0c2340', primary: '#4a90e2', border: '#b8d9f7' }
+            },
+            {
+                id: 'jade-white',
+                name: '翡翠绿·雅致',
+                description: '自然翡翠绿+白底，清新雅致',
+                colors: { bg: '#f6fcfa', text: '#0f3a2e', primary: '#00a67e', border: '#99e6d4' }
+            },
+            {
+                id: 'violet-white',
+                name: '紫罗兰·优雅',
+                description: '高贵紫罗兰+白底，优雅大气',
+                colors: { bg: '#fcf8ff', text: '#3d1a5f', primary: '#8b5cf6', border: '#d8b4fe' }
+            },
+            {
+                id: 'rose-white',
+                name: '樱粉·柔美',
+                description: '浪漫樱花粉+白底，柔美温馨',
+                colors: { bg: '#fff9fb', text: '#5c1a33', primary: '#e91e63', border: '#f8bbd0' }
             },
             {
                 id: 'custom',
@@ -23891,31 +23839,6 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
     }
 
     /**
-     * 处理字体大小变更
-     */
-    handleFontSizeChange(fontSize) {
-        const heightSelect = this.modal.querySelector('select[name="infobar.height"]');
-        if (!heightSelect) return;
-
-        // 字体大小与高度的推荐关联
-        const fontHeightMap = {
-            'small': 'compact',     // 12px -> 24px
-            'medium': 'normal',     // 14px -> 32px
-            'large': 'comfortable', // 16px -> 40px
-            'xlarge': 'spacious'    // 18px -> 48px
-        };
-
-        const recommendedHeight = fontHeightMap[fontSize];
-        if (recommendedHeight && heightSelect.value === 'auto') {
-            heightSelect.value = recommendedHeight;
-            console.log(`[InfoBarSettings] 🔗 字体大小 ${fontSize} 自动关联高度 ${recommendedHeight}`);
-        }
-
-        // 触发高度变更事件
-        this.handleInfobarHeightChange(heightSelect.value);
-    }
-
-    /**
      * 处理信息栏高度变更
      */
     handleInfobarHeightChange(height) {
@@ -23951,8 +23874,6 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
     saveThemeSettings() {
         try {
             const settings = {
-                fontSize: this.modal.querySelector('select[name="theme.fontSize"]')?.value || 'medium',
-                fontFamily: this.modal.querySelector('select[name="theme.fontFamily"]')?.value || 'system',
                 infobarHeight: this.modal.querySelector('select[name="infobar.height"]')?.value || 'normal'
             };
 
@@ -34995,11 +34916,88 @@ ${dataExamples}
                 });
             }
 
+            // 🔧 新增：监听AI记忆数据库的状态更新事件
+            if (this.eventSystem) {
+                // 监听数据加载事件
+                this.eventSystem.on('aiMemoryDatabase:dataLoaded', (data) => {
+                    this.handleAIMemoryDatabaseDataChanged(data);
+                });
+
+                // 监听数据保存事件
+                this.eventSystem.on('aiMemoryDatabase:dataSaved', (data) => {
+                    this.handleAIMemoryDatabaseDataChanged(data);
+                });
+
+                // 监听状态变化事件
+                this.eventSystem.on('aiMemoryDatabase:statusChanged', (data) => {
+                    this.handleAIMemoryDatabaseStatusChanged(data);
+                });
+
+                console.log('[InfoBarSettings] 🔗 已绑定AI记忆数据库自动更新事件');
+            }
+
             console.log('[InfoBarSettings] ✅ 记忆增强面板事件绑定完成');
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 绑定记忆增强面板事件失败:', error);
         }
+    }
+
+    /**
+     * 🔧 新增：处理AI记忆数据库数据变化事件
+     */
+    handleAIMemoryDatabaseDataChanged(data) {
+        try {
+            console.log('[InfoBarSettings] 🔄 AI记忆数据库数据已变化，自动刷新UI...', data);
+            
+            // 如果记忆增强面板可见，自动刷新状态
+            if (this.visible && this.modal) {
+                const memoryEnhancementPanel = this.modal.querySelector('[data-content="memoryEnhancement"]');
+                if (memoryEnhancementPanel && memoryEnhancementPanel.classList.contains('active')) {
+                    // 使用防抖刷新，避免频繁更新
+                    this.debouncedRefreshMemoryStatus();
+                }
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理AI记忆数据库数据变化失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理AI记忆数据库状态变化事件
+     */
+    handleAIMemoryDatabaseStatusChanged(data) {
+        try {
+            console.log('[InfoBarSettings] 🔄 AI记忆数据库状态已变化，自动刷新UI...', data);
+            
+            // 如果记忆增强面板可见，自动刷新状态
+            if (this.visible && this.modal) {
+                const memoryEnhancementPanel = this.modal.querySelector('[data-content="memoryEnhancement"]');
+                if (memoryEnhancementPanel && memoryEnhancementPanel.classList.contains('active')) {
+                    // 直接更新AI记忆数据库状态（不刷新全部）
+                    const aiMemoryDatabase = window.SillyTavernInfobar?.modules?.aiMemoryDatabase || window.__TEST_AIMemoryDatabase;
+                    if (aiMemoryDatabase) {
+                        const status = aiMemoryDatabase.getStatus();
+                        this.updateAIMemoryDatabaseStatus(status);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理AI记忆数据库状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：防抖刷新记忆状态（避免频繁刷新）
+     */
+    debouncedRefreshMemoryStatus() {
+        if (this._memoryStatusRefreshTimeout) {
+            clearTimeout(this._memoryStatusRefreshTimeout);
+        }
+        
+        this._memoryStatusRefreshTimeout = setTimeout(() => {
+            this.refreshMemoryStatus();
+        }, 1000); // 1秒防抖
     }
 
     /**
@@ -35359,6 +35357,13 @@ ${dataExamples}
                 this.updateEnhancementModuleStatus('stIntegration', status);
             }
 
+            // 🗄️ 更新AI记忆数据库状态
+            const aiMemoryDatabase = infoBarTool.modules?.aiMemoryDatabase || window.__TEST_AIMemoryDatabase;
+            if (aiMemoryDatabase) {
+                const status = aiMemoryDatabase.getStatus();
+                this.updateAIMemoryDatabaseStatus(status);
+            }
+
             console.log('[InfoBarSettings] ✅ 记忆系统状态刷新完成');
 
         } catch (error) {
@@ -35510,6 +35515,127 @@ ${dataExamples}
         } catch (error) {
             console.error(`[InfoBarSettings] ❌ 更新增强模块状态失败 (${moduleName}):`, error);
         }
+    }
+
+    /**
+     * 🗄️ 更新AI记忆数据库状态（带可视化）
+     */
+    updateAIMemoryDatabaseStatus(status) {
+        try {
+            console.log('[InfoBarSettings] 🗄️ 更新AI记忆数据库状态:', status);
+
+            // 更新状态指示器
+            const statusElement = this.modal.querySelector('#ai-memory-database-status');
+            if (statusElement) {
+                const isActive = status.initialized && status.enabled;
+                statusElement.className = `module-status ${isActive ? 'active' : status.errorCount > 0 ? 'error' : 'inactive'}`;
+            }
+
+            // 更新基础统计
+            this.updateElement('#ai-memory-database-count', status.memoryCount || 0);
+            this.updateElement('#ai-memory-database-keywords', status.keywordCount || 0);
+
+            // 🎯 更新可视化数据
+            const stats = status.stats || {};
+            const totalMemories = status.memoryCount || 0;
+            const indexedMemories = totalMemories; // 假设所有记忆都已索引
+            const totalPossibleMemories = 500; // 最大容量
+
+            // 1. 索引完整度进度条
+            const indexProgress = totalPossibleMemories > 0 ? (indexedMemories / totalPossibleMemories) * 100 : 0;
+            const progressFill = this.modal.querySelector('#ai-db-index-progress .progress-fill');
+            const progressText = this.modal.querySelector('#ai-db-index-text');
+            if (progressFill && progressText) {
+                progressFill.style.width = `${indexProgress}%`;
+                progressFill.style.background = this.getProgressColor(indexProgress);
+                progressText.textContent = `${indexProgress.toFixed(1)}%`;
+            }
+
+            // 2. 平均重要性条
+            const avgImportance = stats.averageImportance || 0;
+            const importanceFill = this.modal.querySelector('#ai-db-importance-bar .importance-fill');
+            const importanceValue = this.modal.querySelector('#ai-db-importance-value');
+            if (importanceFill && importanceValue) {
+                importanceFill.style.width = `${avgImportance * 100}%`;
+                importanceFill.style.background = this.getImportanceColor(avgImportance);
+                importanceValue.textContent = avgImportance.toFixed(2);
+            }
+
+            // 3. 分类分布标签云
+            this.updateCategoryDistribution(status);
+
+            console.log('[InfoBarSettings] ✅ AI记忆数据库状态更新完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新AI记忆数据库状态失败:', error);
+        }
+    }
+
+    /**
+     * 🎨 更新分类分布显示
+     */
+    updateCategoryDistribution(status) {
+        try {
+            const categoriesContainer = this.modal.querySelector('#ai-db-categories');
+            if (!categoriesContainer) return;
+
+            // 获取分类统计
+            const categoryStats = status.stats?.categoryStats || {};
+            const categories = Object.keys(categoryStats);
+
+            if (categories.length === 0) {
+                categoriesContainer.innerHTML = '<span class="no-data">暂无数据</span>';
+                return;
+            }
+
+            // 按数量排序
+            const sortedCategories = categories.sort((a, b) => categoryStats[b] - categoryStats[a]);
+            
+            // 生成分类标签（最多显示5个）
+            const topCategories = sortedCategories.slice(0, 5);
+            const maxCount = Math.max(...topCategories.map(cat => categoryStats[cat]));
+            
+            categoriesContainer.innerHTML = topCategories.map(category => {
+                const count = categoryStats[category];
+                const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                const opacity = 0.5 + (percentage / 200); // 0.5-1.0
+                
+                return `<span class="category-tag" style="opacity: ${opacity};" title="${category}: ${count}条记忆">
+                    ${category} (${count})
+                </span>`;
+            }).join('');
+
+            // 如果还有更多分类，显示省略提示
+            if (categories.length > 5) {
+                categoriesContainer.innerHTML += `<span class="category-tag more-categories" title="还有${categories.length - 5}个分类">
+                    +${categories.length - 5}
+                </span>`;
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新分类分布失败:', error);
+        }
+    }
+
+    /**
+     * 🎨 获取进度条颜色
+     */
+    getProgressColor(percentage) {
+        if (percentage >= 80) return 'linear-gradient(90deg, #51cf66 0%, #37b24d 100%)'; // 绿色
+        if (percentage >= 50) return 'linear-gradient(90deg, #ffd43b 0%, #fab005 100%)'; // 黄色
+        if (percentage >= 20) return 'linear-gradient(90deg, #ff922b 0%, #fd7e14 100%)'; // 橙色
+        return 'linear-gradient(90deg, #ff6b6b 0%, #fa5252 100%)'; // 红色
+    }
+
+    /**
+     * 🎨 获取重要性颜色
+     */
+    getImportanceColor(importance) {
+        if (importance >= 0.8) return 'linear-gradient(90deg, #d946ef 0%, #c026d3 100%)'; // 紫色
+        if (importance >= 0.6) return 'linear-gradient(90deg, #3b82f6 0%, #2563eb 100%)'; // 蓝色
+        if (importance >= 0.4) return 'linear-gradient(90deg, #22c55e 0%, #16a34a 100%)'; // 绿色
+        if (importance >= 0.2) return 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)'; // 橙色
+        return 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)'; // 红色
     }
 
     /**

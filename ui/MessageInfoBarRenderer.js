@@ -1668,10 +1668,11 @@ export class MessageInfoBarRenderer {
     }
 
     /**
-     * 初始化拖拽功能
+     * 初始化拖拽功能（支持桌面端和移动端）
      */
     initializeDragging() {
-        document.addEventListener('mousedown', (e) => {
+        // 🔧 统一处理函数：同时支持鼠标和触摸事件
+        const handleDragStart = (e) => {
             const dragHandle = e.target.closest('[data-drag-handle="true"]');
             if (!dragHandle) return;
 
@@ -1680,13 +1681,22 @@ export class MessageInfoBarRenderer {
 
             e.preventDefault();
 
-            const rect = draggableWindow.getBoundingClientRect();
-            const offsetX = e.clientX - rect.left;
-            const offsetY = e.clientY - rect.top;
+            // 🔧 获取初始坐标（兼容鼠标和触摸）
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
 
-            const handleMouseMove = (e) => {
-                const x = e.clientX - offsetX;
-                const y = e.clientY - offsetY;
+            const rect = draggableWindow.getBoundingClientRect();
+            const offsetX = clientX - rect.left;
+            const offsetY = clientY - rect.top;
+
+            // 🔧 移动处理函数
+            const handleMove = (e) => {
+                // 🔧 获取当前坐标（兼容鼠标和触摸）
+                const currentX = e.clientX || (e.touches && e.touches[0].clientX);
+                const currentY = e.clientY || (e.touches && e.touches[0].clientY);
+
+                const x = currentX - offsetX;
+                const y = currentY - offsetY;
 
                 // 限制在视窗内
                 const maxX = window.innerWidth - draggableWindow.offsetWidth;
@@ -1698,16 +1708,34 @@ export class MessageInfoBarRenderer {
                 draggableWindow.style.bottom = 'auto';
             };
 
-            const handleMouseUp = () => {
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
+            // 🔧 结束处理函数
+            const handleEnd = () => {
+                // 移除鼠标事件监听器
+                document.removeEventListener('mousemove', handleMove);
+                document.removeEventListener('mouseup', handleEnd);
+                // 移除触摸事件监听器
+                document.removeEventListener('touchmove', handleMove);
+                document.removeEventListener('touchend', handleEnd);
+                document.removeEventListener('touchcancel', handleEnd);
+                
                 draggableWindow.style.cursor = 'move';
             };
 
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
+            // 🔧 添加鼠标和触摸事件监听器
+            document.addEventListener('mousemove', handleMove);
+            document.addEventListener('mouseup', handleEnd);
+            document.addEventListener('touchmove', handleMove, { passive: false });
+            document.addEventListener('touchend', handleEnd);
+            document.addEventListener('touchcancel', handleEnd);
+            
             draggableWindow.style.cursor = 'grabbing';
-        });
+        };
+
+        // 🔧 同时监听鼠标和触摸事件
+        document.addEventListener('mousedown', handleDragStart);
+        document.addEventListener('touchstart', handleDragStart, { passive: false });
+        
+        console.log('[MessageInfoBarRenderer] ✅ 拖拽功能已初始化（支持桌面端和移动端）');
     }
 
     /**
@@ -5340,6 +5368,31 @@ export class MessageInfoBarRenderer {
                 id: 'coffee-brown',
                 name: '咖啡棕',
                 colors: { bg: '#1a140d', text: '#f5f0e6', primary: '#8b4513', border: '#a0522d' }
+            },
+            'coral-white': {
+                id: 'coral-white',
+                name: '珊瑚橙·雅韵',
+                colors: { bg: '#fffaf7', text: '#2d1810', primary: '#ff7f50', border: '#ffcab0' }
+            },
+            'sky-white': {
+                id: 'sky-white',
+                name: '天空蓝·清韵',
+                colors: { bg: '#f8fbff', text: '#0c2340', primary: '#4a90e2', border: '#b8d9f7' }
+            },
+            'jade-white': {
+                id: 'jade-white',
+                name: '翡翠绿·雅致',
+                colors: { bg: '#f6fcfa', text: '#0f3a2e', primary: '#00a67e', border: '#99e6d4' }
+            },
+            'violet-white': {
+                id: 'violet-white',
+                name: '紫罗兰·优雅',
+                colors: { bg: '#fcf8ff', text: '#3d1a5f', primary: '#8b5cf6', border: '#d8b4fe' }
+            },
+            'rose-white': {
+                id: 'rose-white',
+                name: '樱粉·柔美',
+                colors: { bg: '#fff9fb', text: '#5c1a33', primary: '#e91e63', border: '#f8bbd0' }
             }
         };
 
