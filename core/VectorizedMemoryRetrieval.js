@@ -700,6 +700,12 @@ export class VectorizedMemoryRetrieval {
             
             if (!this.eventSystem) return;
             
+            // 🔧 修复：如果未启用，不绑定事件监听器
+            if (!this.settings.enabled) {
+                console.log('[VectorizedMemoryRetrieval] ⏸️ 向量化检索已禁用，跳过事件监听器绑定');
+                return;
+            }
+            
             // 监听AI总结创建事件
             this.eventSystem.on('ai-summary:created', (data) => {
                 this.handleAISummaryCreated(data);
@@ -727,9 +733,13 @@ export class VectorizedMemoryRetrieval {
      */
     async vectorizeText(text) {
         try {
+            // 🔧 修复：如果未启用，直接返回null，避免无效调用
+            if (!this.settings.enabled) {
+                return null;
+            }
+            
             // 🔧 修复：更严格的输入验证和错误处理
             if (!text || typeof text !== 'string' || text.trim().length === 0) {
-                console.warn('[VectorizedMemoryRetrieval] ⚠️ 无效的文本内容，返回null');
                 return null;
             }
             
@@ -1645,9 +1655,12 @@ export class VectorizedMemoryRetrieval {
      */
     async handleAISummaryCreated(data) {
         try {
+            // 🔧 修复：双重检查 - enabled 和 autoVectorize 都必须开启
+            if (!this.settings.enabled || !this.settings.autoVectorize) {
+                return;
+            }
+            
             console.log('[VectorizedMemoryRetrieval] 🧠 处理AI总结创建事件');
-
-            if (!this.settings.autoVectorize) return;
 
             const summary = data.summary;
             if (!summary || !summary.content) return;
@@ -1686,6 +1699,11 @@ export class VectorizedMemoryRetrieval {
      */
     async handleChatChanged(data) {
         try {
+            // 🔧 修复：如果未启用，不处理聊天切换
+            if (!this.settings.enabled) {
+                return;
+            }
+            
             console.log('[VectorizedMemoryRetrieval] 🔄 处理聊天切换事件');
 
             // 清空当前索引
@@ -1705,9 +1723,12 @@ export class VectorizedMemoryRetrieval {
      */
     async handleMemoryUpdated(data) {
         try {
+            // 🔧 修复：双重检查 - enabled 和 autoVectorize 都必须开启
+            if (!this.settings.enabled || !this.settings.autoVectorize) {
+                return;
+            }
+            
             console.log('[VectorizedMemoryRetrieval] 📝 处理记忆更新事件:', data.action);
-
-            if (!this.settings.autoVectorize) return;
 
             // 如果是添加操作，进行增量索引
             if (data.action === 'add' && data.memory) {

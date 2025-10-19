@@ -194,12 +194,14 @@ export class DeepMemoryManager {
             }
 
             // 🔧 向后兼容：尝试从unifiedDataCore加载（如果extensionSettings没有数据）
+            // 🔧 修复：不再从unifiedDataCore加载enabled状态，避免旧数据污染
             if (this.unifiedDataCore) {
                 const savedSettings = await this.unifiedDataCore.getData('deep_memory_settings');
                 if (savedSettings) {
-                    // 只合并unifiedDataCore中有但extensionSettings中没有的设置
-                    this.settings = { ...savedSettings, ...this.settings };
-                    console.log('[DeepMemoryManager] 📥 从unifiedDataCore加载了额外设置');
+                    // 🔧 修复：只合并非enabled的设置
+                    const { enabled, ...otherSettings } = savedSettings;
+                    this.settings = { ...this.settings, ...otherSettings };
+                    console.log('[DeepMemoryManager] 📥 从unifiedDataCore加载了额外设置（跳过enabled）');
                 }
             }
 
@@ -1104,6 +1106,12 @@ export class DeepMemoryManager {
             console.log('[DeepMemoryManager] 🔗 绑定事件监听器...');
 
             if (!this.eventSystem) return;
+
+            // 🔧 修复：如果未启用，不绑定事件监听器
+            if (!this.settings.enabled) {
+                console.log('[DeepMemoryManager] ⏸️ 深度记忆管理器已禁用，跳过事件监听器绑定');
+                return;
+            }
 
             // 🔧 修复：先解绑旧的监听器（如果存在）
             if (this.boundHandlers) {

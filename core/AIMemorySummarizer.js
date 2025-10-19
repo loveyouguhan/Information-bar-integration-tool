@@ -74,6 +74,13 @@ export class AIMemorySummarizer {
             // 加载设置
             await this.loadSettings();
 
+            // 🔧 修复：如果禁用，跳过初始化
+            if (!this.settings.enabled) {
+                console.log('[AIMemorySummarizer] ⏸️ AI记忆总结器已禁用，跳过初始化');
+                this.initialized = true;
+                return;
+            }
+
             // 🔧 新增：与SummaryManager设置同步
             await this.syncWithSummaryManager();
 
@@ -127,11 +134,14 @@ export class AIMemorySummarizer {
             }
 
             // 2. 如果扩展设置没有加载成功，从UnifiedDataCore加载
+            // 🔧 修复：不再从unifiedDataCore加载enabled状态，避免旧数据污染
             if (!settingsLoaded) {
                 const savedSettings = await this.unifiedDataCore.getData('ai_memory_summarizer_settings');
                 if (savedSettings) {
-                    this.settings = { ...this.settings, ...savedSettings };
-                    console.log('[AIMemorySummarizer] ✅ 从UnifiedDataCore加载AI总结设置:', this.settings);
+                    // 🔧 修复：只合并非enabled的设置
+                    const { enabled, ...otherSettings } = savedSettings;
+                    this.settings = { ...this.settings, ...otherSettings };
+                    console.log('[AIMemorySummarizer] ✅ 从UnifiedDataCore加载AI总结设置（跳过enabled）:', this.settings);
                 }
             }
 
@@ -191,6 +201,12 @@ export class AIMemorySummarizer {
             console.log('[AIMemorySummarizer] 🔗 绑定事件监听器...');
 
             if (!this.eventSystem) return;
+
+            // 🔧 修复：如果未启用，不绑定事件监听器
+            if (!this.settings.enabled) {
+                console.log('[AIMemorySummarizer] ⏸️ AI记忆总结器已禁用，跳过事件监听器绑定');
+                return;
+            }
 
             // 🔧 修复：禁用自动触发的事件监听
             // AI记忆总结已由智能提示词内置生成，不需要监听消息事件

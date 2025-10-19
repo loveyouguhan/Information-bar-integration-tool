@@ -190,6 +190,12 @@ export class MemoryMaintenanceSystem {
                 console.warn('[MemoryMaintenanceSystem] ⚠️ 事件系统未提供，跳过事件绑定');
                 return;
             }
+
+            // 🔧 修复：如果未启用，不绑定事件监听器
+            if (!this.settings.enabled) {
+                console.log('[MemoryMaintenanceSystem] ⏸️ 记忆维护系统已禁用，跳过事件监听器绑定');
+                return;
+            }
             
             // 🔧 核心：监听聊天切换事件（确保记忆隔离）
             this.eventSystem.on('chat:changed', async (data) => {

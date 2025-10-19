@@ -1152,6 +1152,12 @@ export class IntelligentMemoryClassifier {
 
             if (!this.eventSystem) return;
 
+            // 🔧 修复：如果未启用，不绑定事件监听器
+            if (!this.settings.enabled) {
+                console.log('[IntelligentMemoryClassifier] ⏸️ 智能记忆分类器已禁用，跳过事件监听器绑定');
+                return;
+            }
+
             // 监听深度记忆管理器的记忆添加事件
             this.eventSystem.on('deep-memory-manager:memory-added', (data) => {
                 this.handleMemoryAdded(data);

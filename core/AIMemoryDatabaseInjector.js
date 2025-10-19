@@ -40,6 +40,9 @@ export class AIMemoryDatabaseInjector {
         // SillyTavern上下文
         this.context = null;
         
+        // 🔧 修复：当前聊天ID（用于记忆隔离）
+        this.currentChatId = null;
+        
         // 记忆数据库核心
         this.memoryDatabase = {
             // 感知记忆：实时输入数据
@@ -96,6 +99,11 @@ export class AIMemoryDatabaseInjector {
         // 性能统计
         this.stats = {
             totalMemoryEntries: 0,
+            totalMemories: 0,                   // 🔧 新增：总记忆数
+            sensoryMemories: 0,                 // 🔧 新增：感知层记忆数
+            shortTermMemories: 0,               // 🔧 新增：短期记忆数
+            longTermMemories: 0,                // 🔧 新增：长期记忆数
+            deepArchiveMemories: 0,             // 🔧 新增：深度归档记忆数
             compressedEntries: 0,
             successfulInjections: 0,
             failedInjections: 0,
@@ -286,6 +294,14 @@ export class AIMemoryDatabaseInjector {
             // 统计记忆数据
             this.updateMemoryStats();
             
+            console.log('[AIMemoryDatabaseInjector] 📊 初始记忆统计:', {
+                总计: this.stats.totalMemories,
+                感知层: this.stats.sensoryMemories,
+                短期: this.stats.shortTermMemories,
+                长期: this.stats.longTermMemories,
+                归档: this.stats.deepArchiveMemories
+            });
+            
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 加载现有记忆数据失败:', error);
             // 不抛出错误，允许继续初始化
@@ -316,6 +332,12 @@ export class AIMemoryDatabaseInjector {
      */
     bindEventListeners() {
         try {
+            // 🔧 修复：如果未启用，不绑定事件监听器
+            if (!this.injectorConfig.enabled) {
+                console.log('[AIMemoryDatabaseInjector] ⏸️ AI记忆数据库注入器已禁用，跳过事件监听器绑定');
+                return;
+            }
+
             // 🚀 优先绑定SillyTavern原生事件系统（用于主API事件）
             this.bindSillyTavernEvents();
 
@@ -1348,6 +1370,13 @@ export class AIMemoryDatabaseInjector {
             this.memoryDatabase.shortTermMemory.size +
             this.memoryDatabase.longTermMemory.size +
             this.memoryDatabase.deepArchive.size;
+        
+        // 🔧 修复：同时更新细分统计
+        this.stats.sensoryMemories = this.memoryDatabase.sensoryMemory.size;
+        this.stats.shortTermMemories = this.memoryDatabase.shortTermMemory.size;
+        this.stats.longTermMemories = this.memoryDatabase.longTermMemory.size;
+        this.stats.deepArchiveMemories = this.memoryDatabase.deepArchive.size;
+        this.stats.totalMemories = this.stats.totalMemoryEntries;
     }
 
     /**
@@ -2002,7 +2031,11 @@ export class AIMemoryDatabaseInjector {
         try {
             console.log('[AIMemoryDatabaseInjector] 🔄 处理聊天切换事件');
 
-            if (!this.initialized) return;
+            // 🔧 修复：检查是否启用
+            if (!this.initialized || !this.injectorConfig.enabled) {
+                console.log('[AIMemoryDatabaseInjector] ⏸️ 注入器未初始化或已禁用，跳过聊天切换处理');
+                return;
+            }
 
             // 获取新的聊天ID（多种方式）
             let newChatId = data?.chatId;
@@ -2029,9 +2062,23 @@ export class AIMemoryDatabaseInjector {
             console.log('[AIMemoryDatabaseInjector] 🔄 聊天切换:', oldChatId, '->', newChatId);
 
             // 🔧 步骤1：保存当前聊天的记忆数据
-            if (oldChatId && this.stats.totalMemories > 0) {
+            console.log('[AIMemoryDatabaseInjector] 📊 当前记忆统计 (保存前):', {
+                总计: this.stats.totalMemories,
+                感知层: this.memoryDatabase.sensoryMemory.size,
+                短期: this.memoryDatabase.shortTermMemory.size,
+                长期: this.memoryDatabase.longTermMemory.size,
+                归档: this.memoryDatabase.deepArchive.size
+            });
+
+            if (oldChatId && (this.stats.totalMemories > 0 || 
+                this.memoryDatabase.sensoryMemory.size > 0 ||
+                this.memoryDatabase.shortTermMemory.size > 0 ||
+                this.memoryDatabase.longTermMemory.size > 0 ||
+                this.memoryDatabase.deepArchive.size > 0)) {
                 console.log('[AIMemoryDatabaseInjector] 💾 保存当前聊天的记忆数据...');
                 await this.saveMemoryDataForChat(oldChatId);
+            } else {
+                console.log('[AIMemoryDatabaseInjector] ℹ️ 无需保存记忆数据（无数据或无聊天ID）');
             }
 
             // 🔧 步骤2：清理内存中的记忆数据
@@ -2041,22 +2088,40 @@ export class AIMemoryDatabaseInjector {
             this.memoryDatabase.longTermMemory.clear();
             this.memoryDatabase.deepArchive.clear();
 
-            // 🔧 步骤3：重置统计信息
+            // 🔧 步骤3：清理缓存
+            this.memoryCache.clear();
+            this.compressionCache.clear();
+
+            // 🔧 步骤4：重置统计信息
             this.stats.totalMemories = 0;
+            this.stats.totalMemoryEntries = 0;
             this.stats.sensoryMemories = 0;
             this.stats.shortTermMemories = 0;
             this.stats.longTermMemories = 0;
             this.stats.deepArchiveMemories = 0;
 
-            // 🔧 步骤4：更新当前聊天ID
-            this.currentChatId = newChatId;
+            console.log('[AIMemoryDatabaseInjector] 📊 统计已重置为0');
 
-            // 🔧 步骤5：加载新聊天的记忆数据
+            // 🔧 步骤5：更新当前聊天ID
+            this.currentChatId = newChatId;
+            console.log('[AIMemoryDatabaseInjector] 📍 已更新当前聊天ID:', newChatId);
+
+            // 🔧 步骤6：等待一小段时间确保清理完成
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 🔧 步骤7：加载新聊天的记忆数据
             console.log('[AIMemoryDatabaseInjector] 📥 加载新聊天的记忆数据...');
             await this.loadMemoryDataForChat(newChatId);
 
             console.log('[AIMemoryDatabaseInjector] ✅ 聊天切换处理完成');
-            console.log(`[AIMemoryDatabaseInjector] 📊 新聊天记忆统计: 总计 ${this.stats.totalMemories} 个记忆`);
+            console.log(`[AIMemoryDatabaseInjector] 📊 新聊天记忆统计:`, {
+                聊天ID: newChatId,
+                总计: this.stats.totalMemories,
+                感知层: this.stats.sensoryMemories,
+                短期: this.stats.shortTermMemories,
+                长期: this.stats.longTermMemories,
+                归档: this.stats.deepArchiveMemories
+            });
 
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 处理聊天切换事件失败:', error);
@@ -2068,19 +2133,29 @@ export class AIMemoryDatabaseInjector {
      */
     async saveMemoryDataForChat(chatId) {
         try {
-            if (!this.unifiedDataCore || !chatId) return;
+            if (!this.unifiedDataCore || !chatId) {
+                console.warn('[AIMemoryDatabaseInjector] ⚠️ 无法保存：UnifiedDataCore或chatId不可用');
+                return;
+            }
 
             console.log('[AIMemoryDatabaseInjector] 💾 保存聊天记忆数据:', chatId);
 
             // 保存各层记忆数据，使用聊天ID作为键的一部分
             const layers = ['sensoryMemory', 'shortTermMemory', 'longTermMemory', 'deepArchive'];
+            let totalSaved = 0;
+
             for (const layerName of layers) {
-                const layerData = Object.fromEntries(this.memoryDatabase[layerName]);
-                const storageKey = `ai_memory_${layerName}_${chatId}`;
-                await this.unifiedDataCore.setData(storageKey, layerData);
+                const layerMap = this.memoryDatabase[layerName];
+                if (layerMap && layerMap.size > 0) {
+                    const layerData = Object.fromEntries(layerMap);
+                    const storageKey = `ai_memory_${layerName}_${chatId}`;
+                    await this.unifiedDataCore.setData(storageKey, layerData);
+                    totalSaved += layerMap.size;
+                    console.log(`[AIMemoryDatabaseInjector] 💾 已保存 ${layerName}: ${layerMap.size} 个记忆`);
+                }
             }
 
-            console.log(`[AIMemoryDatabaseInjector] ✅ 聊天记忆数据保存完成 (聊天: ${chatId})`);
+            console.log(`[AIMemoryDatabaseInjector] ✅ 聊天记忆数据保存完成 (聊天: ${chatId}, 总计: ${totalSaved} 个记忆)`);
 
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 保存聊天记忆数据失败:', error);
@@ -2104,6 +2179,7 @@ export class AIMemoryDatabaseInjector {
                 { name: 'deepArchive', map: this.memoryDatabase.deepArchive }
             ];
 
+            let totalLoaded = 0;
             for (const layer of layers) {
                 const storageKey = `ai_memory_${layer.name}_${chatId}`;
                 const layerData = await this.unifiedDataCore.getData(storageKey);
@@ -2112,7 +2188,11 @@ export class AIMemoryDatabaseInjector {
                     for (const [id, memory] of Object.entries(layerData)) {
                         layer.map.set(id, memory);
                     }
-                    console.log(`[AIMemoryDatabaseInjector] ✅ 已加载 ${layer.name}: ${Object.keys(layerData).length} 个记忆`);
+                    const count = Object.keys(layerData).length;
+                    totalLoaded += count;
+                    console.log(`[AIMemoryDatabaseInjector] ✅ 已加载 ${layer.name}: ${count} 个记忆`);
+                } else {
+                    console.log(`[AIMemoryDatabaseInjector] 📭 ${layer.name} 无数据`);
                 }
             }
 
@@ -2120,6 +2200,13 @@ export class AIMemoryDatabaseInjector {
             this.updateMemoryStats();
 
             console.log(`[AIMemoryDatabaseInjector] ✅ 聊天记忆数据加载完成 (聊天: ${chatId}, 总计: ${this.stats.totalMemories})`);
+            console.log('[AIMemoryDatabaseInjector] 📊 加载后统计:', {
+                总计: this.stats.totalMemories,
+                感知层: this.stats.sensoryMemories,
+                短期: this.stats.shortTermMemories,
+                长期: this.stats.longTermMemories,
+                归档: this.stats.deepArchiveMemories
+            });
 
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 加载聊天记忆数据失败:', error);

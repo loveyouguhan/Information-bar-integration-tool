@@ -87,6 +87,10 @@ export class AIMemoryDatabase {
         this.initialized = false;
         this.isIndexing = false;
         this.errorCount = 0;
+
+        // 🔧 新增：防抖保存定时器
+        this._saveTimeout = null;
+        this._statusUpdateTimeout = null;
         
         console.log('[AIMemoryDatabase] 🏗️ 构造函数完成');
     }
@@ -101,14 +105,34 @@ export class AIMemoryDatabase {
             // 加载配置
             await this.loadConfig();
 
-            // 绑定事件监听
+            // 🔧 修复：即使禁用，也加载持久化索引用于UI显示
+            const indexLoaded = await this.loadDatabaseIndex();
+
+            // 🔧 修复：如果初始加载失败，设置延迟重试
+            if (!indexLoaded) {
+                console.log('[AIMemoryDatabase] 🔄 初始加载失败，设置延迟重试...');
+                this.setupDelayedLoad();
+            }
+
+            // 🔧 修复：如果禁用，跳过事件绑定和动态更新
+            if (!this.config.enabled) {
+                console.log('[AIMemoryDatabase] ⏸️ AI记忆数据库已禁用，仅加载数据用于显示');
+                this.initialized = true;
+                return;
+            }
+
+            // 绑定事件监听（仅在启用时）
             this.bindEventListeners();
 
-            // 从深度记忆管理器加载现有记忆
-            await this.loadExistingMemories();
-
-            // 构建初始索引
-            await this.buildInitialIndex();
+            // 如果没有持久化数据，从深度记忆管理器加载
+            if (!indexLoaded) {
+                console.log('[AIMemoryDatabase] 📥 未找到持久化索引，从深度记忆管理器重建...');
+                await this.loadExistingMemories();
+                await this.buildInitialIndex();
+                
+                // 保存新建的索引
+                await this.saveDatabaseIndex();
+            }
 
             this.initialized = true;
             console.log('[AIMemoryDatabase] ✅ AI记忆数据库初始化完成');
@@ -198,6 +222,12 @@ export class AIMemoryDatabase {
                 return;
             }
 
+            // 🔧 修复：如果未启用，不绑定事件监听器
+            if (!this.config.enabled) {
+                console.log('[AIMemoryDatabase] ⏸️ AI记忆数据库已禁用，跳过事件监听器绑定');
+                return;
+            }
+
             // 监听AI记忆总结创建事件
             this.eventSystem.on('ai-summary:created', (data) => this.handleAISummaryCreated(data));
 
@@ -273,6 +303,171 @@ export class AIMemoryDatabase {
     }
 
     /**
+     * 🔧 新增：保存数据库索引到持久化存储
+     */
+    async saveDatabaseIndex() {
+        try {
+            if (!this.unifiedDataCore) {
+                console.warn('[AIMemoryDatabase] ⚠️ UnifiedDataCore不可用，无法保存索引');
+                return false;
+            }
+
+            console.log('[AIMemoryDatabase] 💾 保存数据库索引...');
+
+            // 🔧 修复：获取当前聊天ID（带重试机制）
+            let chatId = await this.getCurrentChatIdWithRetry();
+            
+            if (!chatId) {
+                console.warn('[AIMemoryDatabase] ⚠️ 无法获取聊天ID，使用全局存储');
+            } else {
+                console.log('[AIMemoryDatabase] 📍 保存到聊天:', chatId);
+            }
+
+            const storageKey = chatId ? `ai_memory_database_${chatId}` : 'ai_memory_database_global';
+
+            // 准备要保存的数据
+            const databaseData = {
+                // 将Map转换为可序列化的对象
+                memories: Object.fromEntries(this.database.memories),
+                keywordIndex: Object.fromEntries(
+                    Array.from(this.database.keywordIndex.entries()).map(([k, v]) => [k, Array.from(v)])
+                ),
+                importanceIndex: {
+                    critical: Array.from(this.database.importanceIndex.critical),
+                    high: Array.from(this.database.importanceIndex.high),
+                    medium: Array.from(this.database.importanceIndex.medium),
+                    low: Array.from(this.database.importanceIndex.low)
+                },
+                categoryIndex: Object.fromEntries(
+                    Array.from(this.database.categoryIndex.entries()).map(([k, v]) => [k, Array.from(v)])
+                ),
+                timelineIndex: this.database.timelineIndex,
+                stats: this.stats,
+                timestamp: Date.now()
+            };
+
+            // 保存到UnifiedDataCore
+            await this.unifiedDataCore.setData(storageKey, databaseData);
+
+            console.log(`[AIMemoryDatabase] ✅ 数据库索引已保存 (键: ${storageKey}, 记忆数: ${this.database.memories.size}, 关键词数: ${this.database.keywordIndex.size})`);
+            
+            // 🔧 新增：触发数据保存事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('aiMemoryDatabase:dataSaved', {
+                    storageKey: storageKey,
+                    memoryCount: this.database.memories.size,
+                    keywordCount: this.database.keywordIndex.size,
+                    timestamp: Date.now()
+                });
+            }
+            
+            return true;
+
+        } catch (error) {
+            console.error('[AIMemoryDatabase] ❌ 保存数据库索引失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 🔧 新增：从持久化存储加载数据库索引
+     */
+    async loadDatabaseIndex() {
+        try {
+            if (!this.unifiedDataCore) {
+                console.warn('[AIMemoryDatabase] ⚠️ UnifiedDataCore不可用，无法加载索引');
+                return false;
+            }
+
+            console.log('[AIMemoryDatabase] 📥 加载数据库索引...');
+
+            // 🔧 修复：获取当前聊天ID（带重试机制）
+            let chatId = await this.getCurrentChatIdWithRetry();
+            
+            if (!chatId) {
+                console.warn('[AIMemoryDatabase] ⚠️ 无法获取聊天ID，尝试全局存储');
+            } else {
+                console.log('[AIMemoryDatabase] 📍 当前聊天ID:', chatId);
+            }
+
+            const storageKey = chatId ? `ai_memory_database_${chatId}` : 'ai_memory_database_global';
+
+            // 从UnifiedDataCore加载
+            const databaseData = await this.unifiedDataCore.getData(storageKey);
+
+            if (!databaseData || !databaseData.memories) {
+                console.log('[AIMemoryDatabase] 📭 未找到持久化的数据库索引');
+                return false;
+            }
+
+            // 🔧 修复：检查是否为空数据（即使找到了索引，但没有记忆）
+            const memoryCount = Object.keys(databaseData.memories).length;
+            if (memoryCount === 0 && chatId) {
+                // 如果是空数据但有聊天ID，可能是新聊天或已清空，这算成功加载
+                console.log('[AIMemoryDatabase] 📥 找到空索引（新聊天或已清空）');
+            } else if (memoryCount === 0 && !chatId) {
+                // 如果是空数据且没有聊天ID，可能是fallback到global键但实际数据在聊天键
+                console.log('[AIMemoryDatabase] ⚠️ global键数据为空，可能需要延迟加载');
+                return false; // 返回false触发延迟加载
+            }
+
+            console.log('[AIMemoryDatabase] 📥 找到持久化索引，开始恢复...', `(${memoryCount}条记忆)`);
+
+            // 恢复数据结构
+            this.database.memories = new Map(Object.entries(databaseData.memories));
+            
+            this.database.keywordIndex = new Map(
+                Object.entries(databaseData.keywordIndex).map(([k, v]) => [k, new Set(v)])
+            );
+            
+            this.database.importanceIndex = {
+                critical: new Set(databaseData.importanceIndex.critical),
+                high: new Set(databaseData.importanceIndex.high),
+                medium: new Set(databaseData.importanceIndex.medium),
+                low: new Set(databaseData.importanceIndex.low)
+            };
+            
+            this.database.categoryIndex = new Map(
+                Object.entries(databaseData.categoryIndex).map(([k, v]) => [k, new Set(v)])
+            );
+            
+            this.database.timelineIndex = databaseData.timelineIndex || [];
+            
+            // 恢复统计
+            if (databaseData.stats) {
+                this.stats = { ...this.stats, ...databaseData.stats };
+            }
+
+            // 更新统计（确保一致性）
+            this.updateStats();
+
+            console.log(`[AIMemoryDatabase] ✅ 数据库索引加载完成 (键: ${storageKey})`);
+            console.log('[AIMemoryDatabase] 📊 加载后统计:', {
+                记忆数: this.database.memories.size,
+                关键词数: this.database.keywordIndex.size,
+                分类数: this.database.categoryIndex.size,
+                时间线: this.database.timelineIndex.length
+            });
+
+            // 🔧 新增：触发数据加载事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('aiMemoryDatabase:dataLoaded', {
+                    storageKey: storageKey,
+                    memoryCount: this.database.memories.size,
+                    keywordCount: this.database.keywordIndex.size,
+                    timestamp: Date.now()
+                });
+            }
+
+            return true;
+
+        } catch (error) {
+            console.error('[AIMemoryDatabase] ❌ 加载数据库索引失败:', error);
+            return false;
+        }
+    }
+
+    /**
      * 索引单个记忆
      * @param {string} memoryId - 记忆ID
      * @param {Object} memoryData - 记忆数据
@@ -341,11 +536,116 @@ export class AIMemoryDatabase {
             // 保持时间线排序
             this.database.timelineIndex.sort((a, b) => b.timestamp - a.timestamp);
 
+            // 更新统计
+            this.updateStats();
+
             console.log(`[AIMemoryDatabase] 📌 记忆已索引: ${memoryId.substring(0, 20)}... (关键词: ${keywords.length}, 重要性: ${importance.toFixed(2)})`);
+
+            // 🔧 修复：自动保存索引（防抖处理，避免频繁保存）
+            this.debouncedSave();
+
+            // 🔧 新增：触发状态更新事件（防抖）
+            this.debouncedStatusUpdate();
 
         } catch (error) {
             console.error('[AIMemoryDatabase] ❌ 索引记忆失败:', error);
         }
+    }
+
+    /**
+     * 🔧 新增：防抖保存（避免频繁保存）
+     */
+    debouncedSave() {
+        if (this._saveTimeout) {
+            clearTimeout(this._saveTimeout);
+        }
+        
+        this._saveTimeout = setTimeout(async () => {
+            await this.saveDatabaseIndex();
+        }, 2000); // 2秒防抖
+    }
+
+    /**
+     * 🔧 新增：防抖状态更新（避免频繁触发UI刷新）
+     */
+    debouncedStatusUpdate() {
+        if (this._statusUpdateTimeout) {
+            clearTimeout(this._statusUpdateTimeout);
+        }
+        
+        this._statusUpdateTimeout = setTimeout(() => {
+            if (this.eventSystem) {
+                this.eventSystem.emit('aiMemoryDatabase:statusChanged', {
+                    memoryCount: this.database.memories.size,
+                    keywordCount: this.database.keywordIndex.size,
+                    categoryCount: this.database.categoryIndex.size,
+                    stats: this.stats,
+                    timestamp: Date.now()
+                });
+            }
+        }, 500); // 500ms防抖
+    }
+
+    /**
+     * 🔧 新增：获取当前聊天ID（带重试机制）
+     */
+    async getCurrentChatIdWithRetry(maxRetries = 5, retryDelay = 200) {
+        for (let i = 0; i < maxRetries; i++) {
+            // 方法1：从UnifiedDataCore获取
+            let chatId = this.unifiedDataCore?.getCurrentChatId?.();
+            
+            // 方法2：从SillyTavern上下文获取
+            if (!chatId) {
+                const context = SillyTavern?.getContext?.();
+                chatId = context?.chatId;
+            }
+            
+            // 方法3：从UnifiedDataCore的内部状态获取
+            if (!chatId && this.unifiedDataCore?.currentChatId) {
+                chatId = this.unifiedDataCore.currentChatId;
+            }
+            
+            if (chatId) {
+                if (i > 0) {
+                    console.log(`[AIMemoryDatabase] ✅ 第${i + 1}次重试成功获取聊天ID:`, chatId);
+                }
+                return chatId;
+            }
+            
+            // 如果不是最后一次重试，等待后重试
+            if (i < maxRetries - 1) {
+                console.log(`[AIMemoryDatabase] ⏳ 第${i + 1}次获取聊天ID失败，${retryDelay}ms后重试...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                retryDelay *= 1.5; // 指数退避
+            }
+        }
+        
+        console.warn('[AIMemoryDatabase] ⚠️ 所有重试都失败，无法获取聊天ID');
+        return null;
+    }
+
+    /**
+     * 🔧 新增：设置延迟加载（在聊天ID可用后重新加载）
+     */
+    setupDelayedLoad() {
+        console.log('[AIMemoryDatabase] ⏰ 设置延迟加载任务...');
+        
+        const retryIntervals = [1000, 2000, 5000]; // 1秒、2秒、5秒后重试
+        
+        retryIntervals.forEach((delay, index) => {
+            setTimeout(async () => {
+                console.log(`[AIMemoryDatabase] 🔄 延迟加载尝试 ${index + 1}/${retryIntervals.length}...`);
+                
+                const chatId = await this.getCurrentChatIdWithRetry(2, 100);
+                if (chatId) {
+                    console.log('[AIMemoryDatabase] 📍 延迟加载获取到聊天ID:', chatId);
+                    const loaded = await this.loadDatabaseIndex();
+                    if (loaded) {
+                        console.log('[AIMemoryDatabase] ✅ 延迟加载成功！');
+                    }
+                }
+            }, delay);
+        });
     }
 
     /**
@@ -576,16 +876,34 @@ export class AIMemoryDatabase {
         try {
             console.log('[AIMemoryDatabase] 🔄 处理聊天切换事件');
 
+            // 🔧 修复：检查是否启用
+            if (!this.config.enabled) {
+                console.log('[AIMemoryDatabase] ⏸️ AI记忆数据库已禁用，跳过聊天切换处理');
+                return;
+            }
+
+            // 🔧 修复：先保存当前聊天的索引
+            await this.saveDatabaseIndex();
+
             // 清空当前索引
             this.clearIndex();
 
-            // 重新加载新聊天的记忆
-            await this.loadExistingMemories();
+            // 🔧 修复：优先加载新聊天的持久化索引
+            const indexLoaded = await this.loadDatabaseIndex();
 
-            // 重建索引
-            await this.buildInitialIndex();
+            // 如果没有持久化索引，从深度记忆管理器重建
+            if (!indexLoaded) {
+                console.log('[AIMemoryDatabase] 📥 未找到持久化索引，从深度记忆管理器重建...');
+                await this.loadExistingMemories();
+                await this.buildInitialIndex();
+                await this.saveDatabaseIndex();
+            }
 
             console.log('[AIMemoryDatabase] ✅ 聊天切换处理完成');
+            console.log('[AIMemoryDatabase] 📊 新聊天统计:', {
+                记忆数: this.database.memories.size,
+                关键词数: this.database.keywordIndex.size
+            });
 
         } catch (error) {
             console.error('[AIMemoryDatabase] ❌ 处理聊天切换事件失败:', error);
@@ -1053,6 +1371,11 @@ export class AIMemoryDatabase {
         this.updateStats();
 
         console.log('[AIMemoryDatabase] ✅ 索引已清空');
+        
+        // 🔧 修复：清空后也保存状态（确保持久化）
+        this.saveDatabaseIndex().catch(err => {
+            console.warn('[AIMemoryDatabase] ⚠️ 保存清空状态失败:', err);
+        });
     }
 
     /**
