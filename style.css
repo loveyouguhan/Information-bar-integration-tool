@@ -944,6 +944,124 @@
     word-break: break-word;
 }
 
+/* ========== 🎨 单元格更新高亮样式 ========== */
+
+/* 基础高亮状态 */
+.cell-value.cell-updated {
+    position: relative;
+    background: linear-gradient(135deg, 
+        rgba(52, 211, 153, 0.15) 0%, 
+        rgba(16, 185, 129, 0.1) 100%);
+    border-left: 3px solid #10b981;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+/* 高亮动画效果 */
+@keyframes cellHighlight {
+    0% {
+        background: linear-gradient(135deg, 
+            rgba(52, 211, 153, 0.4) 0%, 
+            rgba(16, 185, 129, 0.3) 100%);
+        box-shadow: 0 0 20px rgba(16, 185, 129, 0.4),
+                    inset 0 0 20px rgba(16, 185, 129, 0.2);
+        transform: scale(1.02);
+    }
+    50% {
+        background: linear-gradient(135deg, 
+            rgba(52, 211, 153, 0.35) 0%, 
+            rgba(16, 185, 129, 0.25) 100%);
+        box-shadow: 0 0 15px rgba(16, 185, 129, 0.3),
+                    inset 0 0 15px rgba(16, 185, 129, 0.15);
+    }
+    100% {
+        background: linear-gradient(135deg, 
+            rgba(52, 211, 153, 0.15) 0%, 
+            rgba(16, 185, 129, 0.1) 100%);
+        box-shadow: none;
+        transform: scale(1);
+    }
+}
+
+/* 脉冲光效果 */
+@keyframes cellPulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* 应用动画 */
+.cell-value.cell-highlight-animation {
+    animation: cellHighlight 1.2s ease-out;
+}
+
+/* 添加闪烁指示器 */
+.cell-value.cell-updated::before {
+    content: '●';
+    position: absolute;
+    left: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #10b981;
+    font-size: 8px;
+    animation: cellPulse 1.5s ease-in-out infinite;
+}
+
+/* 暗色主题适配 */
+[data-theme="dark"] .cell-value.cell-updated,
+.dark-mode .cell-value.cell-updated {
+    background: linear-gradient(135deg, 
+        rgba(16, 185, 129, 0.2) 0%, 
+        rgba(5, 150, 105, 0.15) 100%);
+    border-left-color: #34d399;
+}
+
+[data-theme="dark"] .cell-value.cell-updated::before,
+.dark-mode .cell-value.cell-updated::before {
+    color: #34d399;
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+    .cell-value.cell-updated {
+        border-left-width: 2px;
+    }
+    
+    .cell-value.cell-updated::before {
+        left: -8px;
+        font-size: 6px;
+    }
+    
+    @keyframes cellHighlight {
+        0% {
+            background: rgba(16, 185, 129, 0.25);
+            transform: scale(1.01);
+        }
+        100% {
+            background: rgba(16, 185, 129, 0.1);
+            transform: scale(1);
+        }
+    }
+}
+
+/* 辅助功能：减少动画（尊重用户偏好） */
+@media (prefers-reduced-motion: reduce) {
+    .cell-value.cell-highlight-animation {
+        animation: none;
+    }
+    
+    .cell-value.cell-updated::before {
+        animation: none;
+    }
+    
+    .cell-value.cell-updated {
+        background: rgba(16, 185, 129, 0.15);
+    }
+}
+
 /* 状态徽章样式 */
 .status-badge {
     display: inline-block;
@@ -11777,5 +11895,169 @@
         color: var(--theme-text-primary, #fff) !important;
         word-wrap: break-word !important;
         word-break: break-word !important;
+    }
+}
+
+/* 🗄️ AI记忆数据库可视化样式 */
+.ai-memory-database-card {
+    grid-column: span 2 !important; /* 占据两列，更宽 */
+}
+
+.ai-db-visualization {
+    margin-top: 12px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.visualization-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 10px;
+}
+
+.visualization-row:last-child {
+    margin-bottom: 0;
+}
+
+.viz-label {
+    font-size: 12px;
+    color: var(--theme-text-secondary, #999);
+    min-width: 90px;
+    flex-shrink: 0;
+}
+
+/* 进度条样式 */
+.progress-bar-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    transition: width 0.3s ease, background 0.3s ease;
+    border-radius: 8px;
+}
+
+.progress-text {
+    font-size: 12px;
+    color: var(--theme-text-primary, #fff);
+    font-weight: 600;
+    min-width: 42px;
+    text-align: right;
+}
+
+/* 重要性指示器样式 */
+.importance-indicator {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.importance-bar {
+    flex: 1;
+    height: 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 7px;
+    overflow: hidden;
+    position: relative;
+}
+
+.importance-fill {
+    height: 100%;
+    transition: width 0.3s ease, background 0.3s ease;
+    border-radius: 7px;
+}
+
+.importance-value {
+    font-size: 13px;
+    color: var(--theme-text-primary, #fff);
+    font-weight: 600;
+    min-width: 38px;
+    text-align: right;
+}
+
+/* 分类分布标签云 */
+.category-distribution {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.category-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    background: rgba(156, 39, 176, 0.2);
+    border: 1px solid rgba(156, 39, 176, 0.3);
+    border-radius: 12px;
+    font-size: 11px;
+    color: #d946ef;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.category-tag:hover {
+    background: rgba(156, 39, 176, 0.3);
+    border-color: rgba(156, 39, 176, 0.5);
+    transform: scale(1.05);
+}
+
+.category-tag.more-categories {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--theme-text-secondary, #999);
+}
+
+.no-data {
+    font-size: 11px;
+    color: var(--theme-text-secondary, #666);
+    font-style: italic;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .ai-memory-database-card {
+        grid-column: span 1 !important;
+    }
+
+    .visualization-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .viz-label {
+        min-width: unset;
+        width: 100%;
+    }
+
+    .progress-bar-container,
+    .importance-indicator {
+        width: 100%;
+    }
+
+    .category-distribution {
+        width: 100%;
+    }
+
+    .category-tag {
+        font-size: 10px;
+        padding: 2px 6px;
     }
 }

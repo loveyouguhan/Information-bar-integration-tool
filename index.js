@@ -572,7 +572,7 @@ class InformationBarIntegrationTool {
             aiMemorySummarizer: this.aiMemorySummarizer,
             vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
             deepMemoryManager: this.deepMemoryManager,
-            aiMemoryDatabase: this.aiMemoryDatabase,
+            aiMemoryDatabase: this.aiMemoryDatabase, // 🗄️ AI记忆数据库
             intelligentMemoryClassifier: this.intelligentMemoryClassifier,
             ragMemoryFormatter: this.ragMemoryFormatter, // 🎨 RAG优化：记忆格式化器
             aiMemoryDatabaseInjector: this.aiMemoryDatabaseInjector,
@@ -887,6 +887,7 @@ class InformationBarIntegrationTool {
                 aiMemorySummarizer: this.aiMemorySummarizer,
                 vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
                 deepMemoryManager: this.deepMemoryManager,
+                aiMemoryDatabase: this.aiMemoryDatabase, // 🗄️ 新增：AI记忆数据库
                 intelligentMemoryClassifier: this.intelligentMemoryClassifier,
                 memoryMaintenanceSystem: this.memoryMaintenanceSystem, // 🔧 新增：记忆自动维护系统
                 contextualRetrieval: this.contextualRetrieval, // 🔍 新增：上下文感知检索系统
