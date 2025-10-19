@@ -34,6 +34,7 @@ import { WorldBookConfigPanel } from './ui/WorldBookConfigPanel.js';
 import { AIMemoryDatabaseInjector } from './core/AIMemoryDatabaseInjector.js';
 import { ContentFilterManager } from './core/ContentFilterManager.js';
 import { MessageFilterHook } from './core/MessageFilterHook.js';
+import { PresetPanelsManager } from './core/PresetPanelsManager.js';
 
 // 导入UI组件
 import { InfoBarSettings } from './ui/InfoBarSettings.js';
@@ -43,6 +44,7 @@ import { SummaryManager } from './core/SummaryManager.js';
 import { AIMemorySummarizer } from './core/AIMemorySummarizer.js';
 import { VectorizedMemoryRetrieval } from './core/VectorizedMemoryRetrieval.js';
 import { DeepMemoryManager } from './core/DeepMemoryManager.js';
+import { AIMemoryDatabase } from './core/AIMemoryDatabase.js';
 import { IntelligentMemoryClassifier } from './core/IntelligentMemoryClassifier.js';
 import { MemoryMaintenanceSystem } from './core/MemoryMaintenanceSystem.js';
 import { ContextualRetrieval } from './core/ContextualRetrieval.js';
@@ -397,6 +399,29 @@ class InformationBarIntegrationTool {
         );
         await this.deepMemoryManager.init();
 
+        // 🗄️ 新增：初始化AI记忆数据库
+        this.aiMemoryDatabase = new AIMemoryDatabase({
+            unifiedDataCore: this.dataCore,
+            eventSystem: this.eventSystem,
+            deepMemoryManager: this.deepMemoryManager,
+            aiMemorySummarizer: this.aiMemorySummarizer
+        });
+        await this.aiMemoryDatabase.init();
+        console.log('[InfoBarTool] ✅✅✅ AI记忆数据库初始化完成 ✅✅✅');
+        console.log('[InfoBarTool] 📊 AI记忆数据库配置:', this.aiMemoryDatabase.config);
+
+        // 🔗 将AI记忆数据库设置到智能提示词系统
+        if (this.smartPromptSystem) {
+            this.smartPromptSystem.aiMemoryDatabase = this.aiMemoryDatabase;
+            console.log('[InfoBarTool] ✅ AI记忆数据库已设置到智能提示词系统');
+        }
+
+        // 🔧 强制添加到全局，确保可访问
+        if (typeof window !== 'undefined') {
+            window.__TEST_AIMemoryDatabase = this.aiMemoryDatabase;
+            console.log('[InfoBarTool] 🧪 AI记忆数据库已添加到window.__TEST_AIMemoryDatabase供调试');
+        }
+
         // 🎨 RAG优化：初始化RAG记忆格式化器
         this.ragMemoryFormatter = new RAGMemoryFormatter(
             this.dataCore,
@@ -480,7 +505,8 @@ class InformationBarIntegrationTool {
             aiMemorySummarizer: this.aiMemorySummarizer,
             vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
             deepMemoryManager: this.deepMemoryManager,
-            intelligentMemoryClassifier: this.intelligentMemoryClassifier
+            intelligentMemoryClassifier: this.intelligentMemoryClassifier,
+            aiMemoryDatabase: this.aiMemoryDatabase // 🗄️ 新增：传入AI记忆数据库
         });
         await this.aiMemoryDatabaseInjector.init();
 
@@ -523,11 +549,13 @@ class InformationBarIntegrationTool {
             aiMemorySummarizer: this.aiMemorySummarizer,
             vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
             deepMemoryManager: this.deepMemoryManager,
+            aiMemoryDatabase: this.aiMemoryDatabase,
             intelligentMemoryClassifier: this.intelligentMemoryClassifier,
             ragMemoryFormatter: this.ragMemoryFormatter, // 🎨 RAG优化：记忆格式化器
             aiMemoryDatabaseInjector: this.aiMemoryDatabaseInjector,
             frontendDisplayManager: this.frontendDisplayManager,
             fieldRuleManager: this.fieldRuleManager,
+            presetPanelsManager: PresetPanelsManager, // 🔧 新增：预设面板管理器（静态类）
             panelRuleManager: this.panelRuleManager,
             htmlTemplateParser: this.htmlTemplateParser,
             aiTemplateAssistant: this.aiTemplateAssistant,
@@ -799,6 +827,12 @@ class InformationBarIntegrationTool {
      */
     disable() {
         this.initialized = false;
+        
+        // 🔧 新增：禁用时清理所有错误UI元素
+        if (this.messageInfoBarRenderer && typeof this.messageInfoBarRenderer.cleanupErrorUI === 'function') {
+            this.messageInfoBarRenderer.cleanupErrorUI();
+        }
+        
         console.log('[InfoBarTool] 🚫 扩展已禁用');
     }
 
@@ -907,7 +941,9 @@ window.SillyTavernInfobar = {
         fieldRuleManager: informationBarTool.fieldRuleManager,
         panelRuleManager: informationBarTool.panelRuleManager
     },
-    eventSource: informationBarTool.eventSystem
+    eventSource: informationBarTool.eventSystem,
+    // 🔧 新增：暴露PresetPanelsManager供UI使用
+    PresetPanelsManager: PresetPanelsManager
 };
 // 🔧 已移除：STScript数据同步功能已删除
 // window.STScriptDataSync = STScriptDataSync;

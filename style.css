@@ -1664,100 +1664,8 @@
     border-left-color: var(--theme-primary-light, #63b3ed);
 }
 
-/* 🚨 终极自定义面板导航项样式修复 - 最强选择器优先级 */
-html body .infobar-modal-new .sidebar-nav .nav-item[data-custom="true"],
-html body .infobar-modal-new .nav-item[data-custom="true"],
-html .infobar-modal-new .sidebar-nav .nav-item[data-custom="true"],
-html .infobar-modal-new .nav-item[data-custom="true"],
-body .infobar-modal-new .sidebar-nav .nav-item[data-custom="true"],
-body .infobar-modal-new .nav-item[data-custom="true"],
-.infobar-modal-new .sidebar-nav .nav-item[data-custom="true"],
-.infobar-modal-new .nav-item[data-custom="true"] {
-    /* 基础布局样式 */
-    display: flex !important;
-    align-items: center !important;
-    gap: 12px !important;
-    padding: 12px 20px !important;
-    cursor: pointer !important;
-    transition: all 0.3s ease !important;
-    border-left: 3px solid transparent !important;
-    
-    /* 🚨 终极强制颜色统一 - 使用与普通面板相同的主题变量 */
-    color: var(--theme-text-primary, #ffffff) !important;
-    background-color: var(--theme-bg-primary, #ffffff) !important;
-    background-image: none !important;
-    background: var(--theme-bg-primary, #ffffff) !important;
-    
-    /* 消除任何可能的分层和视觉差异 */
-    position: static !important;
-    z-index: auto !important;
-    box-shadow: none !important;
-    margin: 0 !important;
-    border-radius: 0 !important;
-    border-top: none !important;
-    border-right: none !important;
-    border-bottom: none !important;
-    transform: none !important;
-    opacity: 1 !important;
-    outline: none !important;
-    filter: none !important;
-    border-color: transparent !important;
-    /* 额外的背景属性覆盖 */
-    background-attachment: initial !important;
-    background-blend-mode: initial !important;
-    background-clip: initial !important;
-    background-origin: initial !important;
-    background-position: initial !important;
-    background-repeat: initial !important;
-    background-size: initial !important;
-}
-
-/* 🚨 桌面端额外的自定义面板样式强制 - 使用主题变量 */
-@media (min-width: 769px) {
-    html body .infobar-modal-new .sidebar-nav .nav-item[data-custom="true"],
-    html body .infobar-modal-new .nav-item[data-custom="true"] {
-        padding: 12px 20px !important;
-        color: var(--theme-text-primary, #ffffff) !important;
-        background: var(--theme-bg-primary, #ffffff) !important;
-        background-color: var(--theme-bg-primary, #ffffff) !important;
-    }
-}
-
-/* 🔧 自定义面板导航项悬停状态 */
-.infobar-modal-new .sidebar-nav .nav-item[data-custom="true"]:hover,
-.infobar-modal-new .nav-item[data-custom="true"]:hover {
-    background-color: var(--theme-bg-hover, #4a5568) !important;
-    background: var(--theme-bg-hover, #4a5568) !important;
-    color: var(--theme-text-primary, #ffffff) !important;
-    z-index: auto !important;
-    transform: none !important;
-    filter: none !important;
-}
-
-/* 🔧 自定义面板导航项激活状态 */
-.infobar-modal-new .sidebar-nav .nav-item[data-custom="true"].active,
-.infobar-modal-new .nav-item[data-custom="true"].active {
-    background-color: var(--theme-primary-color, #4299e1) !important;
-    background: var(--theme-primary-color, #4299e1) !important;
-    color: var(--theme-text-primary, #ffffff) !important;
-    border-left-color: var(--theme-primary-light, #63b3ed) !important;
-    z-index: auto !important;
-    filter: none !important;
-}
-
-/* 🔧 自定义面板图标和文字统一样式 */
-.infobar-modal-new .nav-item[data-custom="true"] .nav-icon {
-    font-size: 16px;
-    width: 20px;
-    text-align: center;
-    color: inherit; /* 继承父级颜色 */
-}
-
-.infobar-modal-new .nav-item[data-custom="true"] .nav-text {
-    font-size: 14px;
-    font-weight: 500;
-    color: inherit; /* 继承父级颜色 */
-}
+/* 🔧 自定义面板导航项 - 继承普通导航项的所有样式 */
+/* 不需要特殊样式，让JavaScript的applyNavItemTheme()方法动态应用主题 */
 
 .infobar-modal-new .nav-icon {
     font-size: 16px;
@@ -2314,75 +2222,8 @@ body .infobar-modal-new .nav-item[data-custom="true"],
         background: rgba(66, 153, 225, 0.1); /* 轻微背景色 */
     }
     
-    /* 🚨 移动端终极自定义面板导航项样式修复 - 最强选择器优先级 */
-    html body .infobar-modal-new .sidebar-nav .nav-item[data-custom="true"],
-    html body .infobar-modal-new .nav-item[data-custom="true"],
-    html .infobar-modal-new .sidebar-nav .nav-item[data-custom="true"],
-    html .infobar-modal-new .nav-item[data-custom="true"],
-    body .infobar-modal-new .sidebar-nav .nav-item[data-custom="true"],
-    body .infobar-modal-new .nav-item[data-custom="true"],
-    .infobar-modal-new .sidebar-nav .nav-item[data-custom="true"],
-    .infobar-modal-new .nav-item[data-custom="true"] {
-        min-width: 80px !important; /* 与基础导航项一致 */
-        flex-shrink: 0 !important;
-        padding: 8px 12px !important; /* 与基础导航项一致 */
-        font-size: 12px !important; /* 与基础导航项一致 */
-        text-align: center !important; /* 与基础导航项一致 */
-        border-left: none !important; /* 与基础导航项一致 */
-        border-bottom: 2px solid transparent !important; /* 与基础导航项一致 */
-        
-        /* 🚨 终极强制使用主题变量与基础导航保持一致 */
-        background-color: var(--theme-bg-primary, #ffffff) !important;
-        background-image: none !important;
-        background: var(--theme-bg-primary, #ffffff) !important;
-        color: var(--theme-text-primary, #ffffff) !important;
-        
-        /* 完全消除移动端分层效果 */
-        position: static !important;
-        z-index: auto !important;
-        box-shadow: none !important;
-        margin: 0 !important;
-        border-radius: 0 !important;
-        border-top: none !important;
-        border-right: none !important;
-        transform: none !important;
-        opacity: 1 !important;
-        outline: none !important;
-        filter: none !important;
-        border-color: transparent !important;
-        /* 额外的背景属性覆盖 */
-        background-attachment: initial !important;
-        background-blend-mode: initial !important;
-        background-clip: initial !important;
-        background-origin: initial !important;
-        background-position: initial !important;
-        background-repeat: initial !important;
-        background-size: initial !important;
-    }
-    
-    /* 🔧 移动端自定义面板导航项悬停状态 */
-    .infobar-modal-new .sidebar-nav .nav-item[data-custom="true"]:hover,
-    .infobar-modal-new .nav-item[data-custom="true"]:hover {
-        background-color: var(--theme-bg-hover, #4a5568) !important;
-        background: var(--theme-bg-hover, #4a5568) !important;
-        color: var(--theme-text-primary, #ffffff) !important;
-        filter: none !important;
-    }
-    
-    /* 🔧 移动端自定义面板导航项激活状态 */
-    .infobar-modal-new .sidebar-nav .nav-item[data-custom="true"].active,
-    .infobar-modal-new .nav-item[data-custom="true"].active {
-        border-bottom-color: var(--theme-primary-color, #4299e1) !important; /* 与基础导航项一致 */
-        background-color: rgba(66, 153, 225, 0.1) !important; /* 与基础导航项一致 */
-        background: rgba(66, 153, 225, 0.1) !important;
-        filter: none !important;
-    }
-    
-    /* 🔧 移动端自定义面板图标和文字 */
-    .infobar-modal-new .nav-item[data-custom="true"] .nav-icon,
-    .infobar-modal-new .nav-item[data-custom="true"] .nav-text {
-        color: inherit; /* 继承父级颜色 */
-    }
+    /* 🔧 移动端自定义面板导航项 - 继承普通导航项的所有样式 */
+    /* 不需要特殊样式，让JavaScript的applyNavItemTheme()方法动态应用主题 */
 
     .infobar-modal-new .nav-bottom {
         display: none;
@@ -4645,6 +4486,266 @@ body .infobar-modal-new .nav-item[data-custom="true"],
 /* 面板属性表单 */
 .properties-form {
     max-width: 600px;
+}
+
+/* 🔧 新增：带操作按钮的节标题 */
+.section-header-with-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.section-header-with-actions h5 {
+    margin: 0;
+}
+
+/* 🔧 新增：子项操作按钮组 */
+.sub-items-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* 🔧 新增：小型图标按钮 */
+.btn-icon-small {
+    background: var(--theme-bg-secondary, #f8f9fa);
+    border: 1px solid var(--theme-border-color, #dee2e6);
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon-small:hover {
+    background: var(--theme-primary-color, #007bff);
+    color: white;
+    border-color: var(--theme-primary-color, #007bff);
+    transform: scale(1.1);
+}
+
+.btn-icon-small:active {
+    transform: scale(0.95);
+}
+
+.btn-delete-panel-inline {
+    background: #fee;
+    border-color: #fcc;
+    color: #c00;
+}
+
+.btn-delete-panel-inline:hover {
+    background: #e53e3e;
+    color: white;
+    border-color: #e53e3e;
+}
+
+/* 🔧 新增：子项内联操作按钮组 */
+.sub-item-actions-inline {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+/* 🔧 新增：微型图标按钮 */
+.btn-icon-tiny {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 4px 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon-tiny:hover {
+    background: var(--theme-bg-hover, #e9ecef);
+    border-color: var(--theme-border-color, #dee2e6);
+    transform: scale(1.15);
+}
+
+.btn-icon-tiny:active {
+    transform: scale(0.9);
+}
+
+/* 🔧 修改：子项简化表单布局 */
+.sub-item-simple {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--theme-bg-primary, #ffffff);
+    border: 1px solid var(--theme-border-color, #dee2e6);
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.sub-item-simple:hover {
+    background: var(--theme-bg-hover, #f8f9fa);
+    border-color: var(--theme-primary-color, #007bff);
+}
+
+/* 🔧 新增：带操作的标题行 */
+.header-with-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.header-with-actions h3 {
+    margin: 0;
+    flex: 1;
+}
+
+/* 🔧 新增：子项配置区域包装 */
+.sub-items-section-wrapper {
+    margin-top: 20px;
+}
+
+.sub-items-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--theme-border-color, #dee2e6);
+}
+
+.sub-items-section-header h4 {
+    margin: 0;
+    color: var(--theme-text-primary, #212529);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.sub-items-quick-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* 🔧 新增：头部图标按钮 */
+.btn-icon-header {
+    background: var(--theme-bg-secondary, #f8f9fa);
+    border: 1px solid var(--theme-border-color, #dee2e6);
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 36px;
+}
+
+.btn-icon-header:hover {
+    background: var(--theme-primary-color, #007bff);
+    color: white;
+    border-color: var(--theme-primary-color, #007bff);
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+.btn-icon-header:active {
+    transform: scale(0.95);
+}
+
+.btn-delete-panel-header {
+    background: var(--theme-bg-secondary, #f8f9fa);
+    border-color: var(--theme-border-color, #dee2e6);
+    color: var(--theme-text-primary, #212529);
+}
+
+.btn-delete-panel-header:hover {
+    background: #e53e3e;
+    color: white;
+    border-color: #e53e3e;
+    box-shadow: 0 2px 8px rgba(229, 62, 62, 0.3);
+}
+
+/* 🔧 新增：子项内联操作按钮（微型） */
+.sub-item-inline-actions {
+    display: flex !important;
+    gap: 4px;
+    align-items: center;
+    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.sub-item-with-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sub-item-with-actions:hover .sub-item-inline-actions {
+    opacity: 1;
+}
+
+.btn-icon-micro {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.7;
+}
+
+.btn-icon-micro:hover {
+    background: var(--theme-bg-hover, #e9ecef);
+    border-color: var(--theme-border-color, #dee2e6);
+    transform: scale(1.2);
+    opacity: 1;
+}
+
+.btn-icon-micro:active {
+    transform: scale(0.9);
+}
+
+/* 🔧 新增：字段名称编辑输入框 */
+.field-name-edit-input {
+    padding: 4px 8px;
+    border: 2px solid var(--theme-primary-color, #007bff);
+    border-radius: 4px;
+    background: white;
+    color: var(--theme-text-primary, #212529);
+    font-size: 14px;
+    outline: none;
+    min-width: 150px;
+}
+
+.field-name-edit-input:focus {
+    border-color: var(--theme-primary-color, #007bff);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+/* 🔧 新增：确认和取消按钮的颜色 */
+.btn-confirm-edit:hover {
+    background: #28a745;
+    color: white;
+    border-color: #28a745;
+}
+
+.btn-cancel-edit:hover {
+    background: #dc3545;
+    color: white;
+    border-color: #dc3545;
 }
 
 .form-section {
@@ -10393,6 +10494,26 @@ body .infobar-modal-new .nav-item[data-custom="true"],
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     border: 2px solid var(--theme-border-color, #4a5568);
     animation: dialogFadeIn 0.3s ease;
+}
+
+/* 🔧 移动端对话框适配 */
+@media (max-width: 768px) {
+    .custom-panel-dialog,
+    .sub-item-dialog,
+    .delete-confirm-dialog,
+    .save-confirm-dialog {
+        min-width: 90vw;
+        max-width: 95vw;
+        max-height: 80vh;
+        margin: 0 10px;
+    }
+    
+    .delete-confirm-dialog-overlay,
+    .save-confirm-dialog-overlay,
+    .sub-item-dialog-overlay,
+    .custom-panel-dialog-overlay {
+        padding: 10px;
+    }
 }
 
 @keyframes dialogFadeIn {
