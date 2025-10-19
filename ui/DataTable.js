@@ -155,6 +155,10 @@ export class DataTable {
                             <button class="btn-toolbar btn-compact" data-action="add-panel" title="增加新面板">
                                 增加面板
                             </button>
+                            <button id="refill-data-btn" class="btn-toolbar btn-compact btn-refill" title="重新填表">
+                                <i class="fa-solid fa-rotate-right"></i>
+                                重新填表
+                            </button>
                         </div>
                         <div class="toolbar-right">
                             <button class="btn-toolbar btn-compact" data-action="export-preset" title="导出预设配置">
@@ -178,10 +182,7 @@ export class DataTable {
                             <span class="record-count">共 <span class="count-number">0</span> 条记录</span>
                         </div>
                         <div class="footer-right">
-                            <button id="refill-data-btn" class="refill-data-btn">
-                                <i class="fa-solid fa-rotate-right"></i>
-                                重新填表
-                            </button>
+                            <!-- 重新填表按钮已移至顶部工具栏 -->
                         </div>
                     </div>
                 </div>
@@ -325,130 +326,52 @@ export class DataTable {
 
             const enabledPanels = [];
 
-            // 处理基础面板 - 修复：基础面板直接存储在configs根级别
-            const basicPanelIds = ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+            // 🔧 新架构：统一从customPanels获取所有面板
+            const customPanels = configs.customPanels || {};
 
-            basicPanelIds.forEach(panelId => {
-                if (configs[panelId]) {
-                    const panel = configs[panelId];
-                    const isEnabled = panel.enabled !== false; // 默认为true，除非明确设置为false
+            Object.entries(customPanels).forEach(([panelKey, panel]) => {
+                if (!panel || panel.enabled === false) {
+                    return;
+                }
 
-                    if (isEnabled) {
-                        // 🔧 修复：同时处理基础设置复选框和面板管理自定义子项
-                        const allSubItems = [];
+                // 处理子项
+                const allSubItems = panel.subItems || [];
+                const enabledSubItems = allSubItems.filter(subItem => subItem && subItem.enabled !== false);
 
-                        // 1. 处理基础设置中的复选框配置（panel[key].enabled格式）
-                        const subItemKeys = Object.keys(panel).filter(key => 
-                            key !== 'enabled' && 
-                            key !== 'subItems' && 
-                            key !== 'description' && 
-                            key !== 'icon' && 
-                            key !== 'required' && 
-                            key !== 'memoryInject' && 
-                            key !== 'prompts' && 
-                            typeof panel[key] === 'object' && 
-                            panel[key].enabled !== undefined
-                        );
-                        const enabledSubItems = subItemKeys.filter(key => panel[key].enabled === true);
-
-                        // 添加基础设置的子项
-                        enabledSubItems.forEach(key => {
-                            const displayName = this.getSubItemDisplayName(panelId, key);
-
-                            // 🔧 检查是否在subItems中被禁用
-                            let isDisabledInSubItems = false;
-                            if (panel.subItems && Array.isArray(panel.subItems)) {
-                                const subItem = panel.subItems.find(item =>
-                                    item.name === displayName ||
-                                    item.key === key ||
-                                    item.key === displayName
-                                );
-                                if (subItem && subItem.enabled === false) {
-                                    isDisabledInSubItems = true;
-                                    console.log(`[DataTable] 🚫 基础字段 ${displayName} 在subItems中被禁用，跳过`);
-                                }
-                            }
-
-                            // 只有在subItems中没有被禁用的字段才添加
-                            if (!isDisabledInSubItems) {
-                                allSubItems.push({
-                                    name: displayName,
-                                    key: key,
-                                    enabled: true,
-                                    value: panel[key].value || '',
-                                    source: 'basicSettings' // 标记来源
-                                });
-                            }
-                        });
-
-                        // 2. 处理面板管理中的自定义子项（panel.subItems数组格式）
-                        if (panel.subItems && Array.isArray(panel.subItems)) {
-                            const enabledCustomSubItems = panel.subItems.filter(subItem => subItem.enabled !== false);
-                            enabledCustomSubItems.forEach(subItem => {
-                                const subItemKey = subItem.key || subItem.name.toLowerCase().replace(/\s+/g, '_');
-                                
-                                // 🔧 修复：检查是否已经存在相同的子项，避免重复添加
-                                const existingItem = allSubItems.find(item => 
-                                    item.key === subItemKey || 
-                                    item.name === (subItem.displayName || subItem.name)
-                                );
-                                
-                                if (!existingItem) {
-                                    allSubItems.push({
-                                        name: subItem.displayName || subItem.name,
-                                        key: subItemKey,
-                                        enabled: true,
-                                        value: subItem.value || '',
-                                        source: 'panelManagement' // 标记来源
-                                    });
-                                }
-                                // 🔧 移除日志：这是正常行为，不需要每次都输出
-                                // 避免大量重复日志导致性能问题
-                            });
-                        }
-
-                        if (allSubItems.length > 0) {
-                            enabledPanels.push({
-                                id: panelId,
-                                key: panelId,
-                                type: 'basic',
-                                name: this.getBasicPanelDisplayName(panelId),
-                                icon: this.getBasicPanelIcon(panelId),
-                                subItems: allSubItems,
-                                count: allSubItems.length
-                            });
-
-                            // 🔧 减少日志输出，避免性能问题
-                            // console.log(`[DataTable] 📊 基础面板 ${panelId}: ${allSubItems.length} 个子项`);
-                        }
+                // 处理子项格式
+                const processedSubItems = enabledSubItems.map(subItem => {
+                    if (typeof subItem === 'string') {
+                        return {
+                            name: subItem,
+                            key: subItem,
+                            enabled: true,
+                            value: ''
+                        };
+                    } else if (subItem && typeof subItem === 'object') {
+                        return {
+                            name: subItem.displayName || subItem.name || subItem.key,
+                            key: subItem.key || subItem.name,
+                            enabled: true,
+                            value: subItem.value || '',
+                            description: subItem.description || '',
+                            type: subItem.type || 'text'
+                        };
                     }
+                    return null;
+                }).filter(Boolean);
+
+                if (processedSubItems.length > 0) {
+                    enabledPanels.push({
+                        id: panelKey,
+                        key: panelKey,
+                        type: panel.type || 'custom',
+                        name: panel.name || panelKey,
+                        icon: panel.icon || 'fa-solid fa-folder',
+                        subItems: processedSubItems,
+                        count: processedSubItems.length
+                    });
                 }
             });
-
-            // 处理自定义面板
-            if (configs.customPanels) {
-                Object.keys(configs.customPanels).forEach(panelId => {
-                    const panel = configs.customPanels[panelId];
-                    if (panel.enabled) {
-                        const allSubItems = panel.subItems || [];
-                        // 🔧 修复：只显示启用的子项，与基础面板逻辑保持一致
-                        const enabledSubItems = allSubItems.filter(subItem => subItem.enabled !== false);
-                        // 🔧 减少日志输出，避免性能问题
-                        // console.log(`[DataTable] 📊 自定义面板 ${panelId}: ${enabledSubItems.length} 个子项`);
-                        
-                        if (enabledSubItems.length > 0) {
-                            enabledPanels.push({
-                                id: panelId,
-                                type: 'custom',
-                                name: panel.name || '未命名面板',
-                                icon: '🔧',
-                                subItems: enabledSubItems, // 🔧 修复：使用过滤后的启用子项
-                                count: enabledSubItems.length // 🔧 修复：统计启用子项数量
-                            });
-                        }
-                    }
-                });
-            }
 
             console.log(`[DataTable] 📋 找到 ${enabledPanels.length} 个启用的面板:`, enabledPanels.map(p => p.name));
             // 🔧 缓存结果
@@ -473,51 +396,43 @@ export class DataTable {
     }
 
     /**
-     * 获取基础面板显示名称
+     * 🗑️ 已废弃：获取面板显示名称（现在直接从customPanels获取）
      */
-    getBasicPanelDisplayName(panelId) {
-        const nameMap = {
-            'personal': '个人信息',
-            'world': '世界信息',
-            'interaction': '交互对象',
-            'tasks': '任务系统',
-            'organization': '组织架构',
-            'news': '新闻资讯',
-            'inventory': '物品清单',
-            'abilities': '能力技能',
-            'plot': '剧情发展',
-            'cultivation': '修炼体系',
-            'fantasy': '奇幻设定',
-            'modern': '现代设定',
-            'historical': '历史设定',
-            'magic': '魔法系统',
-            'training': '训练系统'
-        };
-        return nameMap[panelId] || panelId;
+    getBasicPanelDisplayName(panelKey) {
+        try {
+            const context = SillyTavern.getContext();
+            const customPanels = context.extensionSettings?.['Information bar integration tool']?.customPanels || {};
+            const panel = customPanels[panelKey];
+            
+            if (panel && panel.name) {
+                return panel.name;
+            }
+        } catch (error) {
+            console.warn('[DataTable] 获取面板名称失败:', error);
+        }
+        
+        // 回退：返回键名本身
+        return panelKey;
     }
 
     /**
-     * 获取基础面板图标
+     * 🗑️ 已废弃：获取面板图标（现在直接从customPanels获取）
      */
-    getBasicPanelIcon(panelId) {
-        const iconMap = {
-            'personal': '👤',
-            'world': '🌍',
-            'interaction': '👥',
-            'tasks': '📋',
-            'organization': '🏢',
-            'news': '📰',
-            'inventory': '🎒',
-            'abilities': '⚡',
-            'plot': '📖',
-            'cultivation': '🌱',
-            'fantasy': '🧙',
-            'modern': '🏙️',
-            'historical': '🏛️',
-            'magic': '✨',
-            'training': '🎯'
-        };
-        return iconMap[panelId] || '📋';
+    getBasicPanelIcon(panelKey) {
+        try {
+            const context = SillyTavern.getContext();
+            const customPanels = context.extensionSettings?.['Information bar integration tool']?.customPanels || {};
+            const panel = customPanels[panelKey];
+            
+            if (panel && panel.icon) {
+                return panel.icon;
+            }
+        } catch (error) {
+            console.warn('[DataTable] 获取面板图标失败:', error);
+        }
+        
+        // 回退：返回默认图标
+        return 'fa-solid fa-folder';
     }
     /**
      * 获取子项显示名称 - 使用统一的完整映射表
@@ -576,79 +491,36 @@ export class DataTable {
     }
 
     /**
-     * 获取面板配置数据
+     * 🗑️ 已废弃：获取面板配置（现在从customPanels统一获取）
+     * 保留此方法以兼容可能的旧代码调用
      */
     getPanelConfig(panelId) {
         try {
-            // 从 SillyTavern 扩展设置中获取配置
             const context = SillyTavern.getContext();
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings['Information bar integration tool'] || {};
-
-            // 获取基础面板配置
-            if (panelId === 'personal' || panelId === 'world' || panelId === 'interaction') {
-                // 从基础面板配置中获取子项
-                const basicPanels = configs.basicPanels || {};
-                const panelConfig = basicPanels[panelId];
-
-                if (panelConfig && panelConfig.subItems) {
-                    const enabledItems = panelConfig.subItems.filter(item => item.enabled === true);
-                    console.log(`[DataTable] 📋 ${panelId}面板启用的子项:`, enabledItems.length, '个');
-                    return enabledItems;
-                }
+            const customPanels = configs.customPanels || {};
+            
+            const panel = customPanels[panelId];
+            if (panel && panel.subItems) {
+                return panel.subItems.filter(item => item.enabled !== false);
             }
-
-            // 如果没有找到配置，返回默认配置
-            return this.getDefaultPanelConfig(panelId);
+            
+            return [];
         } catch (error) {
             console.error('[DataTable] ❌ 获取面板配置失败:', error);
-            return this.getDefaultPanelConfig(panelId);
+            return [];
         }
     }
 
     /**
-     * 获取默认面板配置
+     * 🗑️ 已废弃：获取默认面板配置（现在使用预设面板系统）
+     * 保留空方法以兼容旧代码
      */
     getDefaultPanelConfig(panelId) {
-        const defaultConfigs = {
-            personal: [
-                { name: '姓名', key: 'name', value: '林天' },
-                { name: '年龄', key: 'age', value: '25' },
-                { name: '职业', key: 'job', value: '软件工程师' },
-                { name: '性格', key: 'personality', value: '开朗、友善' },
-                { name: '爱好', key: 'hobbies', value: '编程、阅读、音乐' },
-                { name: '身高', key: 'height', value: '175cm' },
-                { name: '体重', key: 'weight', value: '70kg' },
-                { name: '血型', key: 'bloodType', value: 'O型' }
-            ],
-            world: [
-                { name: '世界名称', key: 'worldName', value: '现代都市' },
-                { name: '时代背景', key: 'era', value: '21世纪' },
-                { name: '地理位置', key: 'location', value: '中国上海' },
-                { name: '气候环境', key: 'climate', value: '亚热带季风气候' },
-                { name: '科技水平', key: 'technology', value: '高度发达' },
-                { name: '社会制度', key: 'society', value: '现代社会' },
-                { name: '文化特色', key: 'culture', value: '中西融合' }
-            ],
-            interaction: [
-                { name: 'NPC姓名', key: 'npc0.name', value: '小雨' },
-                { name: 'NPC类型', key: 'npc0.type', value: '朋友' },
-                { name: 'NPC状态', key: 'npc0.status', value: '开心' },
-                { name: 'NPC关系', key: 'npc0.relationship', value: '好友' },
-                { name: 'NPC心情', key: 'npc0.mood', value: '愉快' },
-                { name: 'NPC位置', key: 'npc0.location', value: '咖啡厅' }
-            ],
-            organization: [
-                { name: '组织名称', key: 'org0.组织名称', value: '天剑宗' },
-                { name: '组织类型', key: 'org0.组织类型', value: '修仙门派' },
-                { name: '组织等级', key: 'org0.组织等级', value: '一流门派' },
-                { name: '掌门', key: 'org0.掌门', value: '剑无极' },
-                { name: '成员数量', key: 'org0.成员数量', value: '3000人' },
-                { name: '势力范围', key: 'org0.势力范围', value: '东域' }
-            ]
-        };
-
-        return defaultConfigs[panelId] || [];
+        // 🔧 新架构：不再提供默认配置，预设面板由PresetPanelsManager管理
+        console.warn('[DataTable] ⚠️ getDefaultPanelConfig已废弃，请使用PresetPanelsManager');
+        return [];
     }
 
     /**
@@ -1732,14 +1604,27 @@ export class DataTable {
 
             // 构建可能的字段名列表
             const possibleFieldNames = [
-                item.key,           // 原始key
-                item.name,          // 显示名称
+                item.key,           // 原始key（可能是中文）
+                item.name,          // 显示名称（可能是中文）
                 item.id,            // ID
                 item.fieldName,     // 字段名
                 item.originalKey    // 原始键名
             ].filter(name => name); // 过滤掉空值
 
-            // 🔧 修复：添加中文映射字段名
+            // 🔧 修复：如果item.key或item.name是中文，添加对应的英文key
+            // 这样可以在旧数据（英文key）中查找值
+            [item.key, item.name].forEach(fieldName => {
+                if (fieldName && /[\u4e00-\u9fa5]/.test(fieldName)) {
+                    // 是中文字段名，查找对应的英文key
+                    const englishKey = this.mapDisplayNameToLegacyField(fieldName);
+                    if (englishKey && !possibleFieldNames.includes(englishKey)) {
+                        possibleFieldNames.push(englishKey);
+                        console.log(`[DataTable] 🔄 中文字段映射到英文key: ${fieldName} -> ${englishKey}`);
+                    }
+                }
+            });
+
+            // 🔧 修复：添加中文映射字段名（反向映射）
             possibleFieldNames.forEach(fieldName => {
                 if (fieldMapping[fieldName]) {
                     possibleFieldNames.push(fieldMapping[fieldName]);
@@ -2862,41 +2747,72 @@ export class DataTable {
      * 🆕 绑定单元格操作菜单事件
      */
     bindCellActionMenuEvents(menu, cellInfo) {
-        // 点击遮罩层关闭菜单
-        const overlay = menu.querySelector('.menu-overlay');
-        overlay.addEventListener('click', () => {
-            this.hideCellActionMenu();
-        });
+        const menuContent = menu.querySelector('.menu-content');
+        
+        // 🔧 点击外部区域关闭菜单（使用捕获阶段，优先级更高）
+        const handleClickOutside = (e) => {
+            // 检查点击是否在菜单内容区域内
+            if (!menuContent.contains(e.target)) {
+                console.log('[DataTable] 🖱️ 检测到外部点击，关闭菜单');
+                this.hideCellActionMenu();
+                // 移除事件监听
+                document.removeEventListener('click', handleClickOutside, true);
+            }
+        };
+        
+        // 延迟添加事件监听，避免菜单刚打开就被关闭
+        setTimeout(() => {
+            document.addEventListener('click', handleClickOutside, true);
+        }, 100);
 
         // 菜单按钮事件
         menu.addEventListener('click', (e) => {
             const action = e.target.closest('[data-action]')?.getAttribute('data-action');
 
             if (action === 'rename-field') {
+                console.log('[DataTable] 📝 执行字段重命名');
+                // 移除外部点击监听
+                document.removeEventListener('click', handleClickOutside, true);
                 this.hideCellActionMenu();
                 this.showRenameFieldDialog(cellInfo);
             } else if (action === 'edit-cell') {
+                console.log('[DataTable] ✏️ 执行单元格编辑');
+                document.removeEventListener('click', handleClickOutside, true);
                 this.hideCellActionMenu();
                 this.showEditCellDialog(cellInfo);
             } else if (action === 'edit-field-rule') {
+                console.log('[DataTable] 📋 执行字段规则编辑');
+                document.removeEventListener('click', handleClickOutside, true);
                 this.hideCellActionMenu();
                 this.showFieldRuleDialog(cellInfo);
             } else if (action === 'view-history') {
+                console.log('[DataTable] 📜 查看历史记录');
+                document.removeEventListener('click', handleClickOutside, true);
                 this.hideCellActionMenu();
                 this.showCellHistoryDialog(cellInfo);
             } else if (action === 'add-field-before') {
+                console.log('[DataTable] ➕ 向前添加字段');
+                document.removeEventListener('click', handleClickOutside, true);
                 this.hideCellActionMenu();
                 this.showAddFieldDialog(cellInfo, 'before');
             } else if (action === 'add-field-after') {
+                console.log('[DataTable] ➕ 向后添加字段');
+                document.removeEventListener('click', handleClickOutside, true);
                 this.hideCellActionMenu();
                 this.showAddFieldDialog(cellInfo, 'after');
             } else if (action === 'delete-field') {
+                console.log('[DataTable] 🗑️ 删除字段');
+                document.removeEventListener('click', handleClickOutside, true);
                 this.hideCellActionMenu();
                 this.showDeleteFieldConfirmation(cellInfo);
             } else if (action === 'delete-data') {
+                console.log('[DataTable] 🗑️ 删除数据');
+                document.removeEventListener('click', handleClickOutside, true);
                 this.hideCellActionMenu();
                 this.showDeleteDataConfirmation(cellInfo);
             } else if (action === 'delete-row') {
+                console.log('[DataTable] 🗑️ 删除数据行');
+                document.removeEventListener('click', handleClickOutside, true);
                 this.hideCellActionMenu();
                 this.showDeleteRowConfirmation(cellInfo);
             }
@@ -2905,6 +2821,8 @@ export class DataTable {
         // ESC键关闭菜单
         const handleKeyDown = (e) => {
             if (e.key === 'Escape') {
+                console.log('[DataTable] ⌨️ ESC键关闭菜单');
+                document.removeEventListener('click', handleClickOutside, true);
                 this.hideCellActionMenu();
                 document.removeEventListener('keydown', handleKeyDown);
             }
@@ -4200,11 +4118,12 @@ export class DataTable {
         }
 
         // 🔧 修复：过滤无效的占位符文本（与MessageInfoBarRenderer保持一致）
+        // 🆕 修复：移除"未知"/"unknown"和"无"/"none"，这些是有效的状态值，应该显示
         const invalidPlaceholders = [
             '待补全', '暂无', '缺失', '空', '无数据', '无信息',
             'null', 'undefined', 'missing', 'tbd', 'to be determined',
             'not mentioned', 'not specified', 'blank', 'empty', 'void', 'nil', 'na', 'n/a',
-            '-', '—', '无', 'none', 'unknown', '未知', '未提及', '未指定'
+            '-', '—', '未提及', '未指定'
         ];
 
         return !invalidPlaceholders.includes(strValue);
@@ -4978,9 +4897,18 @@ export class DataTable {
             if (infoBarSettings) {
                 const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
                 
+                if (!completeMapping) {
+                    console.warn('[DataTable] ⚠️ 未能获取字段映射表');
+                    return fieldKey;
+                }
+                
                 // 如果指定了面板类型，优先从对应面板的映射中查找
-                if (panelType && completeMapping[panelType] && completeMapping[panelType][fieldKey]) {
-                    return completeMapping[panelType][fieldKey];
+                if (panelType && completeMapping[panelType]) {
+                    if (completeMapping[panelType][fieldKey]) {
+                        return completeMapping[panelType][fieldKey];
+                    }
+                    // 🔧 调试：记录未找到的映射
+                    console.warn(`[DataTable] ⚠️ 在面板 ${panelType} 中未找到字段 ${fieldKey} 的映射`);
                 }
                 
                 // 否则在所有面板映射中查找
@@ -4989,6 +4917,11 @@ export class DataTable {
                         return panelMapping[fieldKey];
                     }
                 }
+                
+                // 🔧 调试：记录完全未找到的映射
+                console.warn(`[DataTable] ⚠️ 在所有面板中都未找到字段 ${fieldKey} 的映射`);
+            } else {
+                console.warn('[DataTable] ⚠️ 未找到InfoBarSettings模块');
             }
             
             // 如果没有找到映射，返回原始键名
@@ -9581,9 +9514,9 @@ export class DataTable {
             const addRule = dialog.querySelector('#add-rule').value.trim();
             const deleteRule = dialog.querySelector('#delete-rule').value.trim();
 
-            // 验证必填字段
-            if (!description) {
-                this.showErrorMessage('请填写规则描述');
+            // 🔧 修复验证逻辑：至少需要一个字段有内容
+            if (!description && !updateRule && !addRule && !deleteRule) {
+                this.showErrorMessage('请至少填写一个规则字段（规则描述、更新规则、增加规则或删除规则）');
                 return;
             }
 
@@ -10883,6 +10816,48 @@ export class DataTable {
     }
 
     /**
+     * 🔧 新增：将英文key映射到中文name（用于旧数据兼容）
+     * @param {string} englishKey - 英文字段key
+     * @param {string} panelId - 面板ID
+     * @returns {string|null} 中文字段名称，如果未找到返回null
+     */
+    mapEnglishKeyToChineseName(englishKey, panelId) {
+        try {
+            // 从PresetPanelsManager获取预设面板配置
+            const PresetPanelsManager = window.PresetPanelsManager;
+            if (!PresetPanelsManager) {
+                return null;
+            }
+
+            const presets = PresetPanelsManager.getPresets();
+            const preset = presets[panelId];
+
+            if (!preset || !preset.subItems) {
+                return null;
+            }
+
+            // 在预设面板的subItems中查找匹配的字段
+            // 旧数据使用英文key，新预设使用中文key
+            // 我们需要找到name相同的字段
+            for (const item of preset.subItems) {
+                // 如果预设字段的key是中文，但我们要查找的是英文key
+                // 我们需要通过mapDisplayNameToLegacyField反向查找
+                const legacyKey = this.mapDisplayNameToLegacyField(item.name, panelId);
+                if (legacyKey === englishKey) {
+                    console.log(`[DataTable] 🔄 英文key映射: ${englishKey} -> ${item.name} (面板: ${panelId})`);
+                    return item.name;
+                }
+            }
+
+            return null;
+
+        } catch (error) {
+            console.warn('[DataTable] ⚠️ 英文key映射失败:', error);
+            return null;
+        }
+    }
+
+    /**
      * 🆕 获取字段显示名称（统一方法）
      */
     getFieldDisplayName(fieldKey, panelId) {
@@ -10900,22 +10875,28 @@ export class DataTable {
                 const subItem = panelConfig.subItems.find(item =>
                     item.key === fieldKey || item.name === fieldKey
                 );
-                if (subItem && subItem.displayName) {
-                    displayName = subItem.displayName;
+                if (subItem) {
+                    // 🔧 修复：优先使用name，其次使用displayName
+                    displayName = subItem.name || subItem.displayName;
                 }
             }
 
-            // 2. 从字段映射获取
+            // 2. 🔧 新增：如果是英文key，尝试映射到中文name
+            if (!displayName && /^[a-zA-Z]+$/.test(fieldKey)) {
+                displayName = this.mapEnglishKeyToChineseName(fieldKey, panelId);
+            }
+
+            // 3. 从字段映射获取
             if (!displayName) {
                 displayName = this.mapColFieldToDisplayName?.(fieldKey, panelId);
             }
 
-            // 3. 从本地标签获取
+            // 4. 从本地标签获取
             if (!displayName && this.FIELD_LABELS) {
                 displayName = this.FIELD_LABELS[fieldKey];
             }
 
-            // 4. 使用原始字段名
+            // 5. 使用原始字段名
             return displayName || fieldKey;
 
         } catch (error) {

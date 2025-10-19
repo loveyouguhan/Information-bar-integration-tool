@@ -1956,7 +1956,7 @@ export class FrontendDisplayManager {
 
 
     /**
-     * 获取可用面板列表 - 🔧 修复：优化启用状态检查逻辑
+     * 🔧 重构：获取可用面板列表（统一从customPanels获取）
      */
     getAvailablePanels() {
         try {
@@ -1965,48 +1965,23 @@ export class FrontendDisplayManager {
             const configs = extensionSettings['Information bar integration tool'] || {};
 
             const result = [];
-            const basicPanelIds = [
-                'personal','world','interaction','tasks','organization',
-                'news','inventory','abilities','plot','cultivation',
-                'fantasy','modern','historical','magic','training'
-            ];
 
-            console.log('[FrontendDisplayManager] 📋 检查基础面板启用状态...');
-
-            basicPanelIds.forEach(id => {
-                const panel = configs[id];
-                if (panel) {
-                    // 🔧 修复：与其他模块保持一致的启用检查逻辑
-                    const isEnabled = panel.enabled !== false; // 默认为true，除非明确设置为false
-                    
-                    if (isEnabled) {
-                        const name = this.getBasicPanelDisplayName(id);
-                        result.push({ id, name, icon: this.getBasicPanelIcon(id) });
-                        console.log(`[FrontendDisplayManager] ✅ 基础面板启用: ${id} (${name})`);
-                    } else {
-                        console.log(`[FrontendDisplayManager] ❌ 基础面板禁用: ${id}`);
-                    }
-                } else {
-                    console.log(`[FrontendDisplayManager] ⚠️ 基础面板未配置: ${id}`);
-                }
-            });
-
-            // 🔧 修复：检查自定义面板
+            // 🔧 新架构：统一从customPanels获取所有面板
             const customPanels = configs.customPanels || {};
-            console.log(`[FrontendDisplayManager] 📋 检查 ${Object.keys(customPanels).length} 个自定义面板...`);
+            console.log(`[FrontendDisplayManager] 📋 检查 ${Object.keys(customPanels).length} 个面板...`);
             
-            Object.entries(customPanels).forEach(([id, panel]) => {
-                if (panel && panel.enabled === true) {
-                    const panelName = panel.name || id;
+            Object.entries(customPanels).forEach(([panelKey, panel]) => {
+                if (panel && panel.enabled !== false) {
+                    const panelName = panel.name || panelKey;
                     result.push({ 
-                        id, 
+                        id: panelKey, 
                         name: panelName, 
-                        icon: panel.icon || '🔧',
-                        type: 'custom'
+                        icon: panel.icon || 'fa-solid fa-folder',
+                        type: panel.type || 'custom'
                     });
-                    console.log(`[FrontendDisplayManager] ✅ 自定义面板启用: ${id} (${panelName})`);
+                    console.log(`[FrontendDisplayManager] ✅ 面板启用: ${panelKey} (${panelName})`);
                 } else {
-                    console.log(`[FrontendDisplayManager] ❌ 自定义面板禁用或未配置: ${id}`);
+                    console.log(`[FrontendDisplayManager] ❌ 面板禁用: ${panelKey}`);
                 }
             });
 
@@ -2019,7 +1994,7 @@ export class FrontendDisplayManager {
     }
 
     /**
-     * 获取可用子项列表 - 🔧 修复：优化启用状态检查和中文映射
+     * 🔧 重构：获取可用子项列表（统一从customPanels获取）
      */
     getAvailableSubItems() {
         try {
@@ -2028,115 +2003,38 @@ export class FrontendDisplayManager {
             const configs = extensionSettings['Information bar integration tool'] || {};
 
             const result = [];
-            const basicPanelIds = [
-                'personal','world','interaction','tasks','organization',
-                'news','inventory','abilities','plot','cultivation',
-                'fantasy','modern','historical','magic','training'
-            ];
 
-            console.log('[FrontendDisplayManager] 📋 检查基础面板子项...');
-
-            // 🔧 修复：优化字段显示名称获取
-            const getDisplayName = (panelType, key) => {
-                try {
-                    // 优先使用InfoBarSettings的完整映射
-                    const infoBarTool = window.SillyTavernInfobar;
-                    const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
-                    if (infoBarSettings?.getCompleteDisplayNameMapping) {
-                        const completeMapping = infoBarSettings.getCompleteDisplayNameMapping();
-                        if (completeMapping[panelType] && completeMapping[panelType][key]) {
-                            return completeMapping[panelType][key];
-                        }
-                    }
-                    
-                    // 备用方案：使用DataTable的映射
-                    const settingsModule = window.SillyTavernInfobar?.modules?.settings;
-                    if (settingsModule?.getDataTableDisplayName) {
-                        return settingsModule.getDataTableDisplayName(panelType, key) || key;
-                    }
-                    
-                    return key;
-                } catch (error) {
-                    console.warn(`[FrontendDisplayManager] ⚠️ 获取字段显示名称失败: ${panelType}.${key}`, error);
-                    return key;
-                }
-            };
-
-            const pushEnabled = (panelType, key) => {
-                const displayName = getDisplayName(panelType, key);
-                result.push({ id: `${panelType}.${key}`, name: displayName });
-                console.log(`[FrontendDisplayManager] ✅ 子项启用: ${panelType}.${key} (${displayName})`);
-            };
-
-            basicPanelIds.forEach(panelId => {
-                const panel = configs[panelId];
-                if (!panel) {
-                    console.log(`[FrontendDisplayManager] ⚠️ 面板未配置: ${panelId}`);
-                    return;
-                }
-                
-                // 🔧 修复：与其他模块保持一致的启用检查逻辑
-                const isPanelEnabled = panel.enabled !== false; // 默认为true，除非明确设置为false
-                if (!isPanelEnabled) {
-                    console.log(`[FrontendDisplayManager] ❌ 面板禁用，跳过子项: ${panelId}`);
-                    return;
-                }
-
-                console.log(`[FrontendDisplayManager] 🔍 检查面板 ${panelId} 的子项...`);
-
-                // 基础复选项字段
-                let fieldCount = 0;
-                Object.keys(panel).forEach(key => {
-                    if (
-                        key !== 'enabled' &&
-                        key !== 'subItems' &&
-                        key !== 'description' &&
-                        key !== 'icon' &&
-                        key !== 'required' &&
-                        key !== 'memoryInject' &&
-                        key !== 'prompts' &&
-                        typeof panel[key] === 'object' &&
-                        panel[key].enabled === true
-                    ) {
-                        pushEnabled(panelId, key);
-                        fieldCount++;
-                    }
-                });
-
-                // 面板管理的子项
-                let customSubItemCount = 0;
-                if (Array.isArray(panel.subItems)) {
-                    panel.subItems.forEach(sub => {
-                        if (sub && sub.enabled !== false) {
-                            const key = sub.key;
-                            const displayName = sub.displayName || key;
-                            result.push({ id: `${panelId}.${key}`, name: displayName });
-                            console.log(`[FrontendDisplayManager] ✅ 自定义子项启用: ${panelId}.${key} (${displayName})`);
-                            customSubItemCount++;
-                        }
-                    });
-                }
-
-                console.log(`[FrontendDisplayManager] 📊 面板 ${panelId}: ${fieldCount} 个基础字段 + ${customSubItemCount} 个自定义子项`);
-            });
-
-            // 自定义面板
+            // 🔧 新架构：统一从customPanels获取所有面板的子项
             const customPanels = configs.customPanels || {};
-            console.log(`[FrontendDisplayManager] 📋 检查 ${Object.keys(customPanels).length} 个自定义面板的子项...`);
+            console.log(`[FrontendDisplayManager] 📋 检查 ${Object.keys(customPanels).length} 个面板的子项...`);
             
-            Object.entries(customPanels).forEach(([id, panel]) => {
-                if (panel && panel.enabled === true && Array.isArray(panel.subItems)) {
-                    let subItemCount = 0;
-                    panel.subItems.forEach(sub => {
-                        if (sub && sub.enabled !== false) {
-                            const displayName = sub.displayName || sub.key;
-                            result.push({ id: `${id}.${sub.key}`, name: displayName });
-                            console.log(`[FrontendDisplayManager] ✅ 自定义面板子项启用: ${id}.${sub.key} (${displayName})`);
+            Object.entries(customPanels).forEach(([panelKey, panel]) => {
+                if (!panel || panel.enabled === false) {
+                    console.log(`[FrontendDisplayManager] ⏭️ 跳过禁用面板: ${panelKey}`);
+                    return;
+                }
+
+                console.log(`[FrontendDisplayManager] 🔍 检查面板 ${panelKey} 的子项...`);
+
+                let subItemCount = 0;
+                if (Array.isArray(panel.subItems)) {
+                    panel.subItems.forEach(subItem => {
+                        if (subItem && subItem.enabled !== false) {
+                            const key = subItem.key || subItem.name;
+                            const displayName = subItem.displayName || subItem.name || key;
+                            result.push({ 
+                                id: `${panelKey}.${key}`, 
+                                name: displayName,
+                                panelKey: panelKey,
+                                panelName: panel.name
+                            });
+                            console.log(`[FrontendDisplayManager] ✅ 子项启用: ${panelKey}.${key} (${displayName})`);
                             subItemCount++;
                         }
                     });
-                    console.log(`[FrontendDisplayManager] 📊 自定义面板 ${id}: ${subItemCount} 个子项`);
                 }
+
+                console.log(`[FrontendDisplayManager] 📊 面板 ${panelKey}: ${subItemCount} 个子项`);
             });
 
             console.log(`[FrontendDisplayManager] 📊 总共找到 ${result.length} 个可用子项`);
@@ -2174,51 +2072,45 @@ export class FrontendDisplayManager {
     }
 
     /**
-     * 基础面板中文名称 - 🔧 修复：使用正确的英文ID作为key
+     * 🗑️ 已废弃：获取面板显示名称（现在直接从customPanels获取）
+     * 保留此方法以兼容可能的旧代码调用
      */
-    getBasicPanelDisplayName(panelId) {
-        const nameMap = {
-            'personal': '个人信息',
-            'world': '世界信息',
-            'interaction': '交互对象',
-            'tasks': '任务系统',
-            'organization': '组织架构',
-            'news': '新闻资讯',
-            'inventory': '物品清单',
-            'abilities': '能力技能',
-            'plot': '剧情发展',
-            'cultivation': '修炼体系',
-            'fantasy': '奇幻设定',
-            'modern': '现代设定',
-            'historical': '历史设定',
-            'magic': '魔法系统',
-            'training': '训练系统'
-        };
-        return nameMap[panelId] || panelId;
+    getBasicPanelDisplayName(panelKey) {
+        try {
+            const context = window.SillyTavern?.getContext?.() || SillyTavern.getContext();
+            const customPanels = context.extensionSettings?.['Information bar integration tool']?.customPanels || {};
+            const panel = customPanels[panelKey];
+            
+            if (panel && panel.name) {
+                return panel.name;
+            }
+        } catch (error) {
+            console.warn('[FrontendDisplayManager] 获取面板名称失败:', error);
+        }
+        
+        // 回退：返回键名本身
+        return panelKey;
     }
 
     /**
-     * 🔧 新增：获取基础面板图标
+     * 🗑️ 已废弃：获取面板图标（现在直接从customPanels获取）
+     * 保留此方法以兼容可能的旧代码调用
      */
-    getBasicPanelIcon(panelId) {
-        const iconMap = {
-            'personal': '👤',
-            'world': '🌍',
-            'interaction': '👥',
-            'tasks': '📋',
-            'organization': '🏢',
-            'news': '📰',
-            'inventory': '🎒',
-            'abilities': '⚡',
-            'plot': '📖',
-            'cultivation': '🏔️',
-            'fantasy': '🐲',
-            'modern': '🏙️',
-            'historical': '🏛️',
-            'magic': '🪄',
-            'training': '🏋️'
-        };
-        return iconMap[panelId] || '📊';
+    getBasicPanelIcon(panelKey) {
+        try {
+            const context = window.SillyTavern?.getContext?.() || SillyTavern.getContext();
+            const customPanels = context.extensionSettings?.['Information bar integration tool']?.customPanels || {};
+            const panel = customPanels[panelKey];
+            
+            if (panel && panel.icon) {
+                return panel.icon;
+            }
+        } catch (error) {
+            console.warn('[FrontendDisplayManager] 获取面板图标失败:', error);
+        }
+        
+        // 回退：返回默认图标
+        return 'fa-solid fa-folder';
     }
 
     /**

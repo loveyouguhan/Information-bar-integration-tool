@@ -37,27 +37,15 @@ export class InfoBarSettings {
         this.currentTab = 'basic';
 
         // 设置面板
+        // 🔧 重构：移除15个基础面板属性，统一使用customPanels管理
         this.panels = {
             basic: null,
             api: null,
             theme: null,
             panels: null,
-            advanced: null,
-            personal: null,
-            interaction: null,
-            tasks: null,
-            world: null,
-            organization: null,
-            news: null,
-            inventory: null,
-            abilities: null,
-            plot: null,
-            cultivation: null,
-            fantasy: null,
-            modern: null,
-            historical: null,
-            magic: null,
-            training: null
+            advanced: null
+            // 🗑️ 已删除15个基础面板属性（personal, world, interaction等）
+            // 现在所有面板（预设+自定义）都通过customPanels统一管理
         };
 
         // 表单数据
@@ -437,6 +425,9 @@ export class InfoBarSettings {
             // 加载当前设置
             await this.loadSettings();
 
+            // 🔧 新增：初始化后刷新导航栏，动态创建所有面板的导航项
+            this.refreshNavigation();
+
             // 注意：事件绑定已在createUI()中的bindNewEvents()完成，避免重复绑定
 
             this.initialized = true;
@@ -577,51 +568,8 @@ export class InfoBarSettings {
                             <div class="nav-item" data-nav="npc-management">
                                 NPC管理
                             </div>
-                            <div class="nav-item" data-nav="personal">
-                                个人信息
-                            </div>
-                            <div class="nav-item" data-nav="interaction">
-                                交互对象
-                            </div>
-                            <div class="nav-item" data-nav="tasks">
-                                任务系统
-                            </div>
-                            <div class="nav-item" data-nav="world">
-                                世界信息
-                            </div>
-                            <div class="nav-item" data-nav="organization">
-                                组织信息
-                            </div>
-                            <div class="nav-item" data-nav="news">
-                                资讯内容
-                            </div>
-                            <div class="nav-item" data-nav="inventory">
-                                背包仓库
-                            </div>
-                            <div class="nav-item" data-nav="abilities">
-                                能力系统
-                            </div>
-                            <div class="nav-item" data-nav="plot">
-                                剧情面板
-                            </div>
-                            <div class="nav-item" data-nav="cultivation">
-                                修仙世界
-                            </div>
-                            <div class="nav-item" data-nav="fantasy">
-                                玄幻世界
-                            </div>
-                            <div class="nav-item" data-nav="modern">
-                                都市现代
-                            </div>
-                            <div class="nav-item" data-nav="historical">
-                                历史古代
-                            </div>
-                            <div class="nav-item" data-nav="magic">
-                                魔法能力
-                            </div>
-                            <div class="nav-item" data-nav="training">
-                                调教系统
-                            </div>
+                            <!-- 🔧 重构：删除15个硬编码的基础面板导航项 -->
+                            <!-- 现在通过refreshNavigation()动态创建所有面板的导航项 -->
                             <div class="nav-item" data-nav="theme">
                                 主题设置
                             </div>
@@ -658,53 +606,8 @@ export class InfoBarSettings {
                             <div class="content-panel" data-content="summary">
                                 ${this.createSummaryPanel()}
                             </div>
-                            <div class="content-panel" data-content="personal">
-                                ${this.createPersonalPanel()}
-                            </div>
-                            <div class="content-panel" data-content="interaction">
-                                ${this.createInteractionPanel()}
-                            </div>
                             <div class="content-panel" data-content="npc-management">
                                 ${this.createNPCManagementPanel()}
-                            </div>
-                            <div class="content-panel" data-content="tasks">
-                                ${this.createTasksPanel()}
-                            </div>
-                            <div class="content-panel" data-content="world">
-                                ${this.createWorldPanel()}
-                            </div>
-                            <div class="content-panel" data-content="organization">
-                                ${this.createOrganizationPanel()}
-                            </div>
-                            <div class="content-panel" data-content="news">
-                                ${this.createNewsPanel()}
-                            </div>
-                            <div class="content-panel" data-content="inventory">
-                                ${this.createInventoryPanel()}
-                            </div>
-                            <div class="content-panel" data-content="abilities">
-                                ${this.createAbilitiesPanel()}
-                            </div>
-                            <div class="content-panel" data-content="plot">
-                                ${this.createPlotPanel()}
-                            </div>
-                            <div class="content-panel" data-content="cultivation">
-                                ${this.createCultivationPanel()}
-                            </div>
-                            <div class="content-panel" data-content="fantasy">
-                                ${this.createFantasyPanel()}
-                            </div>
-                            <div class="content-panel" data-content="modern">
-                                ${this.createModernPanel()}
-                            </div>
-                            <div class="content-panel" data-content="historical">
-                                ${this.createHistoricalPanel()}
-                            </div>
-                            <div class="content-panel" data-content="magic">
-                                ${this.createMagicPanel()}
-                            </div>
-                            <div class="content-panel" data-content="training">
-                                ${this.createTrainingPanel()}
                             </div>
                             <div class="content-panel" data-content="theme">
                                 ${this.createThemePanel()}
@@ -712,6 +615,8 @@ export class InfoBarSettings {
                             <div class="content-panel" data-content="frontend-display">
                                 ${this.createFrontendDisplayPanel()}
                             </div>
+                            <!-- 🔧 重构：删除15个基础面板的内容面板 -->
+                            <!-- 现在所有面板都通过panelManagement统一管理 -->
                             <div class="content-panel" data-content="advanced">
                                 ${this.createAdvancedPanel()}
                             </div>
@@ -1618,9 +1523,19 @@ export class InfoBarSettings {
                 return;
             }
 
+            // 🔧 修复：优先处理按钮事件，避免被面板列表项点击事件覆盖
+            const actionButton = e.target.closest('[data-action]');
+            const action = actionButton?.dataset?.action;
+            const panelId = actionButton?.dataset?.panelId;
+
+            // 如果点击的是按钮，阻止事件冒泡并处理按钮事件
+            if (actionButton) {
+                e.stopPropagation(); // 阻止事件冒泡到面板列表项
+            }
+
             // 面板列表项选择
             const panelListItem = e.target.closest('.panel-list-item');
-            if (panelListItem) {
+            if (panelListItem && !actionButton) {
                 const panelId = panelListItem.dataset.panelId;
                 const panelType = panelListItem.dataset.panelType;
 
@@ -1634,11 +1549,6 @@ export class InfoBarSettings {
                 }
                 return;
             }
-
-            // 🔧 修复：面板管理按钮事件，使用closest查找按钮元素
-            const actionButton = e.target.closest('[data-action]');
-            const action = actionButton?.dataset?.action;
-            const panelId = actionButton?.dataset?.panelId;
 
             switch (action) {
                 case 'add-custom-panel':
@@ -1668,11 +1578,56 @@ export class InfoBarSettings {
                 case 'delete-panel':
                     this.deletePanel();
                     break;
+                case 'delete-panel-inline':
+                    this.deletePanel();
+                    break;
                 case 'add-sub-item':
                     this.addSubItem();
                     break;
+                case 'select-all-sub-items':
+                    this.selectAllSubItems();
+                    break;
+                case 'deselect-all-sub-items':
+                    this.deselectAllSubItems();
+                    break;
+                case 'edit-sub-item':
+                    this.editSubItem(e?.target?.closest('[data-action="edit-sub-item"]') || e?.target);
+                    break;
                 case 'remove-sub-item':
                     this.removeSubItem(e?.target?.closest('[data-action="remove-sub-item"]') || e?.target);
+                    break;
+                case 'delete-custom-panel':
+                    this.deleteCustomPanelFromContent(actionButton?.dataset?.panelId);
+                    break;
+                case 'add-custom-field':
+                    this.addCustomField(actionButton?.dataset?.panelId);
+                    break;
+                case 'select-all-fields':
+                    this.selectAllCustomFields(actionButton?.dataset?.panelId);
+                    break;
+                case 'deselect-all-fields':
+                    this.deselectAllCustomFields(actionButton?.dataset?.panelId);
+                    break;
+                case 'edit-custom-field':
+                    this.editCustomField(actionButton?.dataset?.panelId, actionButton?.dataset?.fieldKey);
+                    break;
+                case 'confirm-edit-field':
+                    this.confirmEditField(actionButton?.dataset?.panelId, actionButton?.dataset?.fieldKey);
+                    break;
+                case 'cancel-edit-field':
+                    this.cancelEditField(actionButton?.dataset?.panelId, actionButton?.dataset?.fieldKey);
+                    break;
+                case 'delete-custom-field':
+                    this.deleteCustomField(actionButton?.dataset?.panelId, actionButton?.dataset?.fieldKey, actionButton?.dataset?.fieldName);
+                    break;
+                case 'rename-panel':
+                    this.showRenamePanelDialog(actionButton?.dataset?.panelId);
+                    break;
+                case 'move-panel-up':
+                    this.movePanelUp(actionButton?.dataset?.panelId);
+                    break;
+                case 'move-panel-down':
+                    this.movePanelDown(actionButton?.dataset?.panelId);
                     break;
             }
 
@@ -2151,15 +2106,10 @@ export class InfoBarSettings {
                 return;
             }
 
-            // 🔧 修复：检查面板是否真实存在
+            // 🔧 新架构：统一从customPanels检查面板是否存在
             let panelExists = false;
-            if (panelType === 'basic') {
-                const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
-                panelExists = basicPanelIds.includes(panelId);
-            } else if (panelType === 'custom') {
-                const customPanels = this.getCustomPanels();
-                panelExists = customPanels.hasOwnProperty(panelId);
-            }
+            const customPanels = this.getCustomPanels();
+            panelExists = customPanels.hasOwnProperty(panelId);
 
             if (!panelExists) {
                 console.error('[InfoBarSettings] ❌ 面板不存在:', panelId, panelType);
@@ -2183,19 +2133,22 @@ export class InfoBarSettings {
                 }
             }
 
-            // 🔧 修复：更新面板列表项选中状态，使用更精确的选择器
-            this.modal.querySelectorAll('.panel-list-item').forEach(item => {
-                const itemPanelId = item.dataset.panelId;
-                const itemPanelType = item.dataset.panelType;
-                const shouldSelect = (itemPanelId === panelId && itemPanelType === panelType);
-
-                if (shouldSelect) {
-                    item.classList.add('selected');
-                    console.log('[InfoBarSettings] ✅ 选中面板项:', itemPanelId, itemPanelType);
-                } else {
+            // 🔧 修复：先清除所有面板的选中状态，然后只选中当前面板
+            const allPanelItems = this.modal.querySelectorAll('.panel-list-item');
+            console.log(`[InfoBarSettings] 🔄 清除所有面板选中状态，共 ${allPanelItems.length} 个面板`);
+            
+            allPanelItems.forEach(item => {
                     item.classList.remove('selected');
-                }
             });
+
+            // 🔧 修复：使用更精确的选择器找到要选中的面板
+            const targetPanel = this.modal.querySelector(`.panel-list-item[data-panel-id="${panelId}"][data-panel-type="${panelType}"]`);
+            if (targetPanel) {
+                targetPanel.classList.add('selected');
+                console.log('[InfoBarSettings] ✅ 已选中面板项:', panelId, panelType);
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ 未找到要选中的面板项:', panelId, panelType);
+            }
 
             // 显示面板属性表单
             this.showPanelProperties(panelId, panelType);
@@ -2216,7 +2169,8 @@ export class InfoBarSettings {
             const noSelectionMessage = this.modal.querySelector('.no-selection-message');
             const propertiesForm = this.modal.querySelector('.panel-properties-form');
             const saveBtn = this.modal.querySelector('[data-action="save-panel-properties"]');
-            const deleteBtn = this.modal.querySelector('[data-action="delete-panel"]');
+            // 🔧 修复：使用更精确的选择器，确保选择属性区域的删除按钮
+            const deleteBtn = this.modal.querySelector('.properties-actions [data-action="delete-panel"]');
 
             // 🔧 修复：在显示面板属性前，预防性清理子项容器，防止UI污染
             const container = this.modal.querySelector('.sub-items-container');
@@ -2231,7 +2185,7 @@ export class InfoBarSettings {
 
             // 启用/禁用按钮
             saveBtn.disabled = false;
-            deleteBtn.disabled = panelType === 'basic'; // 基础面板不能删除
+            deleteBtn.disabled = false; // 🔧 新架构：所有面板（包括预设）都可以删除
 
             // 加载面板数据到表单
             this.loadPanelDataToForm(panelId, panelType);
@@ -2624,19 +2578,35 @@ export class InfoBarSettings {
                 container.innerHTML = newContent;
             });
 
-            // 🔧 修复：刷新后恢复选中状态
+            // 🔧 修复：刷新后立即恢复选中状态和按钮状态，不使用setTimeout
             if (currentSelectedPanelId) {
-                setTimeout(() => {
+                // 立即查找新渲染的面板项
                     const newSelectedPanel = this.modal.querySelector(`[data-panel-id="${currentSelectedPanelId}"]`);
                     if (newSelectedPanel) {
+                    // 恢复选中状态
                         newSelectedPanel.classList.add('selected');
                         console.log('[InfoBarSettings] ✅ 已恢复面板选中状态:', currentSelectedPanelId);
+                    
+                    // 🔧 重要修复：恢复删除按钮和保存按钮的启用状态
+                    // 🔧 修复：使用更精确的选择器，确保选择属性区域的删除按钮
+                    const deleteBtn = this.modal.querySelector('.properties-actions [data-action="delete-panel"]');
+                    const saveBtn = this.modal.querySelector('[data-action="save-panel-properties"]');
+                    if (deleteBtn) {
+                        deleteBtn.disabled = false;
+                        console.log('[InfoBarSettings] ✅ 已恢复删除按钮启用状态');
+                    }
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        console.log('[InfoBarSettings] ✅ 已恢复保存按钮启用状态');
+                    }
                     } else {
                         console.warn('[InfoBarSettings] ⚠️ 刷新后未找到之前选中的面板:', currentSelectedPanelId);
-                        // 清空面板属性表单
+                    // 🔧 修复：只有在确实找不到面板时才清空属性
+                    // 这种情况应该很少发生（例如面板被删除）
+                    if (this.currentEditingPanel && this.currentEditingPanel.id === currentSelectedPanelId) {
                         this.clearPanelProperties();
                     }
-                }, 100);
+                }
             }
 
             // 更新面板数量
@@ -2754,8 +2724,8 @@ export class InfoBarSettings {
                     // 自定义面板
                     this.updateCustomPanelCount(panelName, customPanel);
                 } else {
-                    // 基础面板
-                    this.updatePanelConfigCount(panelName);
+                    // 🔧 新架构：统一使用updateCustomPanelCount
+                    this.updateCustomPanelCount(panelName, { subItems: [] });
                 }
             }
 
@@ -2803,20 +2773,16 @@ export class InfoBarSettings {
             // 更新基础设置面板计数
             this.updateBasicPanelCount();
 
-            // 更新所有基础面板计数
-            const basicPanels = ['personal', 'interaction', 'tasks', 'world', 'organization',
-                               'news', 'inventory', 'abilities', 'plot', 'cultivation',
-                               'fantasy', 'modern', 'historical', 'magic', 'training'];
-
-            basicPanels.forEach(panelName => {
-                this.updatePanelConfigCount(panelName);
-            });
-
-            // 更新所有自定义面板计数
+            // 🔧 新架构：更新所有面板计数（从customPanels获取）
             const customPanels = this.getCustomPanels();
-            for (const [panelId, panel] of Object.entries(customPanels)) {
-                this.updateCustomPanelCount(panelId, panel);
-            }
+            const allPanels = Object.keys(customPanels);
+
+            allPanels.forEach(panelKey => {
+                const panel = customPanels[panelKey];
+                if (panel) {
+                    this.updateCustomPanelCount(panelKey, panel);
+                }
+            });
 
             console.log('[InfoBarSettings] 📊 所有面板配置计数已更新');
 
@@ -2919,7 +2885,7 @@ export class InfoBarSettings {
      * 查看面板
      */
     viewPanel(panelId) {
-        // 基础面板只能查看，不能编辑
+        // 🔧 新架构：所有面板（包括预设）都可以编辑
         this.editPanel(panelId);
     }
 
@@ -3058,9 +3024,8 @@ export class InfoBarSettings {
                 // 保存设置
                 context.saveSettingsDebounced();
 
-                // 🔧 修复：刷新对应的基础面板内容，确保新增的子项在基础设置中显示
-                this.refreshBasicPanelContent(id);
-                console.log(`[InfoBarSettings] 🔄 已刷新基础面板 ${id} 的设置页面内容`);
+                // 🔧 修复：所有面板已通过统一渲染，不需要单独刷新
+                console.log('[InfoBarSettings] ℹ️ 面板配置已保存，字段已在createCustomPanelContent()中渲染');
 
                 console.log('[InfoBarSettings] ✅ 基础面板属性保存成功:', id);
                 this.showMessage('基础面板保存成功', 'success');
@@ -3127,10 +3092,8 @@ export class InfoBarSettings {
 
             const { id, type } = this.currentEditingPanel;
 
-            if (type === 'basic') {
-                console.error('[InfoBarSettings] ❌ 不能删除基础面板');
-                return;
-            }
+            // 🔧 新架构：所有面板（包括预设）都可以删除
+            // 预设面板删除后可以通过PresetPanelsManager.restorePreset()恢复
 
             // 显示删除确认对话框
             this.showDeleteConfirmDialog('面板', id, async () => {
@@ -3150,6 +3113,7 @@ export class InfoBarSettings {
         try {
             // 从自定义面板中删除
             const customPanels = this.getCustomPanels();
+            const panelToDelete = customPanels[id];
             delete customPanels[id];
 
             // 保存配置
@@ -3170,6 +3134,9 @@ export class InfoBarSettings {
             // 🔧 修复：也从根级别删除自定义面板配置
             delete extensionSettings['Information bar integration tool'][id];
             console.log(`[InfoBarSettings] 🔧 已从根级别删除自定义面板配置: ${id}`);
+            
+            // 📝 新架构：预设面板删除后不会自动恢复（已废弃deletedPresetPanels机制）
+            console.log(`[InfoBarSettings] 📝 面板已删除: ${id}${panelToDelete?.type === 'preset' ? ' (预设面板)' : ''}，后续由用户完全控制`);
 
             // 触发 SillyTavern 保存设置
             context.saveSettingsDebounced();
@@ -3193,6 +3160,361 @@ export class InfoBarSettings {
             this.showMessage('面板删除失败: ' + error.message, 'error');
         }
     }
+
+    /**
+     * 🆕 显示重命名面板对话框
+     */
+    showRenamePanelDialog(panelId) {
+        try {
+            console.log('[InfoBarSettings] ✏️ 显示重命名面板对话框:', panelId);
+
+            if (!panelId) {
+                console.error('[InfoBarSettings] ❌ 面板ID无效');
+                return;
+            }
+
+            // 获取面板信息
+            const customPanels = this.getCustomPanels();
+            const panel = customPanels[panelId];
+            if (!panel) {
+                console.error('[InfoBarSettings] ❌ 面板不存在:', panelId);
+                return;
+            }
+
+            // 创建对话框背景（参考删除确认对话框的移动端兼容样式）
+            const dialogOverlay = document.createElement('div');
+            dialogOverlay.className = 'rename-panel-dialog-overlay';
+
+            // 🔧 移动端兼容：使用与删除确认对话框相同的样式
+            dialogOverlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 99999;
+                backdrop-filter: blur(4px);
+            `;
+
+            dialogOverlay.innerHTML = `
+                <div class="rename-panel-dialog" style="
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    color: var(--theme-text-primary, #ffffff);
+                    border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                    border-radius: 12px;
+                    padding: 0;
+                    width: 420px;
+                    max-width: 90vw;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                ">
+                    <div class="dialog-header" style="
+                        padding: 20px;
+                        border-bottom: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <h3 style="margin: 0; font-size: 18px; font-weight: 600;">编辑面板名称</h3>
+                        <button class="dialog-close-btn" style="
+                            background: none;
+                            border: none;
+                            color: var(--theme-text-primary, #ffffff);
+                            font-size: 24px;
+                            cursor: pointer;
+                            padding: 0;
+                            width: 32px;
+                            height: 32px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            border-radius: 4px;
+                            transition: background 0.2s;
+                        ">×</button>
+                    </div>
+                    <div class="dialog-content" style="padding: 20px;">
+                        <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">
+                            面板名称
+                        </label>
+                        <input
+                            type="text"
+                            id="rename-panel-input"
+                            value="${this.escapeHtml(panel.name)}"
+                            style="
+                                width: 100%;
+                                padding: 10px 12px;
+                                background: var(--theme-bg-secondary, #1a1a1a);
+                                border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                                border-radius: 6px;
+                                color: var(--theme-text-primary, #ffffff);
+                                font-size: 14px;
+                                box-sizing: border-box;
+                                transition: border-color 0.2s;
+                            "
+                            placeholder="请输入面板名称"
+                        />
+                    </div>
+                    <div class="dialog-footer" style="
+                        padding: 16px 20px;
+                        border-top: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                        display: flex;
+                        gap: 12px;
+                        justify-content: flex-end;
+                    ">
+                        <button class="btn-cancel" data-action="cancel-rename" style="
+                            padding: 8px 20px;
+                            background: var(--theme-bg-secondary, #1a1a1a);
+                            color: var(--theme-text-primary, #ffffff);
+                            border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-size: 14px;
+                            font-weight: 500;
+                            transition: all 0.2s;
+                        ">取消</button>
+                        <button class="btn-confirm" data-action="confirm-rename" style="
+                            padding: 8px 20px;
+                            background: var(--theme-primary-color, #007bff);
+                            color: white;
+                            border: none;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-size: 14px;
+                            font-weight: 500;
+                            transition: all 0.2s;
+                        ">确认</button>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            document.body.appendChild(dialogOverlay);
+
+            // 聚焦输入框并选中文本
+            const input = dialogOverlay.querySelector('#rename-panel-input');
+            setTimeout(() => {
+                input.focus();
+                input.select();
+            }, 100);
+
+            // 绑定事件
+            const closeDialog = () => {
+                dialogOverlay.remove();
+            };
+
+            // 点击背景关闭
+            dialogOverlay.addEventListener('click', (e) => {
+                if (e.target === dialogOverlay) closeDialog();
+            });
+
+            // 点击关闭按钮
+            dialogOverlay.querySelector('.dialog-close-btn').addEventListener('click', closeDialog);
+            dialogOverlay.querySelector('[data-action="cancel-rename"]').addEventListener('click', closeDialog);
+
+            // 确认重命名
+            dialogOverlay.querySelector('[data-action="confirm-rename"]').addEventListener('click', async () => {
+                const newName = input.value.trim();
+                if (!newName) {
+                    this.showMessage('面板名称不能为空', 'error');
+                    return;
+                }
+
+                // 更新面板名称
+                panel.name = newName;
+                customPanels[panelId] = panel;
+
+                // 保存配置
+                const context = SillyTavern.getContext();
+                const extensionSettings = context.extensionSettings;
+                if (!extensionSettings['Information bar integration tool']) {
+                    extensionSettings['Information bar integration tool'] = {};
+                }
+                extensionSettings['Information bar integration tool'].customPanels = customPanels;
+
+                // 🔧 修复：更新全局变量
+                window.InfoBarCustomPanels = customPanels;
+
+                context.saveSettingsDebounced();
+
+                // 🔧 修复：立即更新导航栏中的名称（不刷新整个列表）
+                const navItem = this.modal.querySelector(`.nav-item[data-nav="${panelId}"]`);
+                if (navItem) {
+                    const navText = navItem.querySelector('.nav-text');
+                    if (navText) {
+                        navText.textContent = newName;
+                    }
+                }
+
+                // 🔧 修复：立即更新当前显示的内容面板标题
+                const contentPanel = this.modal.querySelector(`.content-panel[data-content="${panelId}"]`);
+                if (contentPanel) {
+                    const header = contentPanel.querySelector('.content-header h3');
+                    if (header) {
+                        header.textContent = newName;
+                    }
+
+                    // 同时更新卡片标题
+                    const cardTitle = contentPanel.querySelector('.card-title');
+                    if (cardTitle) {
+                        cardTitle.textContent = newName;
+                    }
+                }
+
+                // 显示成功提示
+                this.showMessage('面板名称已更新', 'success');
+
+                closeDialog();
+            });
+
+            // 支持回车确认
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    dialogOverlay.querySelector('[data-action="confirm-rename"]').click();
+                }
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示重命名对话框失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 上移面板
+     */
+    movePanelUp(panelId) {
+        try {
+            console.log('[InfoBarSettings] ⬆️ 上移面板:', panelId);
+
+            if (!panelId) {
+                console.error('[InfoBarSettings] ❌ 面板ID无效');
+                return;
+            }
+
+            const customPanels = this.getCustomPanels();
+            const panelKeys = Object.keys(customPanels);
+            const currentIndex = panelKeys.indexOf(panelId);
+
+            if (currentIndex === -1) {
+                console.error('[InfoBarSettings] ❌ 面板不存在:', panelId);
+                return;
+            }
+
+            if (currentIndex === 0) {
+                this.showMessage('已经是第一个面板了', 'info');
+                return;
+            }
+
+            // 交换位置
+            [panelKeys[currentIndex - 1], panelKeys[currentIndex]] = [panelKeys[currentIndex], panelKeys[currentIndex - 1]];
+
+            // 重建面板对象（按新顺序）
+            const reorderedPanels = {};
+            panelKeys.forEach(key => {
+                reorderedPanels[key] = customPanels[key];
+            });
+
+            // 保存配置
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            if (!extensionSettings['Information bar integration tool']) {
+                extensionSettings['Information bar integration tool'] = {};
+            }
+            extensionSettings['Information bar integration tool'].customPanels = reorderedPanels;
+
+            // 🔧 修复：更新全局变量
+            window.InfoBarCustomPanels = reorderedPanels;
+
+            context.saveSettingsDebounced();
+
+            // 🔧 修复：立即刷新导航栏，保持当前面板选中状态
+            this.refreshNavigation();
+
+            // 重新选中当前面板（确保UI状态正确）
+            const navItem = this.modal.querySelector(`.nav-item[data-nav="${panelId}"]`);
+            if (navItem) {
+                navItem.classList.add('active');
+            }
+
+            this.showMessage('面板已上移', 'success');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 上移面板失败:', error);
+            this.showMessage('上移失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 下移面板
+     */
+    movePanelDown(panelId) {
+        try {
+            console.log('[InfoBarSettings] ⬇️ 下移面板:', panelId);
+
+            if (!panelId) {
+                console.error('[InfoBarSettings] ❌ 面板ID无效');
+                return;
+            }
+
+            const customPanels = this.getCustomPanels();
+            const panelKeys = Object.keys(customPanels);
+            const currentIndex = panelKeys.indexOf(panelId);
+
+            if (currentIndex === -1) {
+                console.error('[InfoBarSettings] ❌ 面板不存在:', panelId);
+                return;
+            }
+
+            if (currentIndex === panelKeys.length - 1) {
+                this.showMessage('已经是最后一个面板了', 'info');
+                return;
+            }
+
+            // 交换位置
+            [panelKeys[currentIndex], panelKeys[currentIndex + 1]] = [panelKeys[currentIndex + 1], panelKeys[currentIndex]];
+
+            // 重建面板对象（按新顺序）
+            const reorderedPanels = {};
+            panelKeys.forEach(key => {
+                reorderedPanels[key] = customPanels[key];
+            });
+
+            // 保存配置
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            if (!extensionSettings['Information bar integration tool']) {
+                extensionSettings['Information bar integration tool'] = {};
+            }
+            extensionSettings['Information bar integration tool'].customPanels = reorderedPanels;
+
+            // 🔧 修复：更新全局变量
+            window.InfoBarCustomPanels = reorderedPanels;
+
+            context.saveSettingsDebounced();
+
+            // 🔧 修复：立即刷新导航栏，保持当前面板选中状态
+            this.refreshNavigation();
+
+            // 重新选中当前面板（确保UI状态正确）
+            const navItem = this.modal.querySelector(`.nav-item[data-nav="${panelId}"]`);
+            if (navItem) {
+                navItem.classList.add('active');
+            }
+
+            this.showMessage('面板已下移', 'success');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 下移面板失败:', error);
+            this.showMessage('下移失败: ' + error.message, 'error');
+        }
+    }
+
     /**
      * 显示子项添加对话框
      */
@@ -3480,8 +3802,37 @@ export class InfoBarSettings {
             // 创建对话框背景
             const dialogOverlay = document.createElement('div');
             dialogOverlay.className = 'delete-confirm-dialog-overlay';
+            
+            // 🔧 修复：添加内联样式，确保移动端正确居中
+            dialogOverlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 99999;
+                backdrop-filter: blur(4px);
+            `;
+            
             dialogOverlay.innerHTML = `
-                <div class="delete-confirm-dialog">
+                <div class="delete-confirm-dialog" style="
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    color: var(--theme-text-primary, #ffffff);
+                    border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                    border-radius: 12px;
+                    padding: 0;
+                    width: 420px;
+                    max-width: 90vw;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                ">
                     <div class="dialog-header">
                         <h3>确认删除</h3>
                         <button class="dialog-close-btn">×</button>
@@ -3702,8 +4053,8 @@ export class InfoBarSettings {
 
             if (!panelId) {
                 console.warn('[InfoBarSettings] ⚠️ 无法确定当前面板ID，跳过持久化删除');
-            } else if (panelType === 'custom') {
-                // 自定义面板：从 customPanels 与 根级镜像配置 同步删除
+            } else if (panelType === 'custom' || panelType === 'preset') {
+                // 自定义面板/预设面板：从 customPanels 与 根级镜像配置 同步删除
                 const customPanels = this.getCustomPanels();
                 const panel = customPanels[panelId];
                 if (panel && Array.isArray(panel.subItems)) {
@@ -3712,7 +4063,17 @@ export class InfoBarSettings {
                         item.id !== subItemId && item.key !== subItemKey && item.name !== subItemName
                     );
                     const after = panel.subItems.length;
-                    console.log(`[InfoBarSettings] 🧹 自定义面板 ${panelId} 子项已从内存删除: ${before} -> ${after}`);
+                    console.log(`[InfoBarSettings] 🧹 面板 ${panelId} 子项已从内存删除: ${before} -> ${after}`);
+
+                    // 🔧 关键修复：标记预设面板为用户已修改
+                    if (panel.type === 'preset') {
+                        panel.userModified = true;
+                        console.log(`[InfoBarSettings] 🔒 预设面板 ${panelId} 已标记为用户修改，将不再自动更新字段`);
+                    }
+
+                    // 🔧 立即保存到extensionSettings，确保刷新页面后不会恢复
+                    extensionSettings['Information bar integration tool'].customPanels = customPanels;
+                    console.log(`[InfoBarSettings] 💾 已立即保存customPanels到extensionSettings`);
 
                     // 根级镜像（用于数据表格/其他模块读取）
                     const mirrorKey = panel.key || panelId;
@@ -3720,17 +4081,6 @@ export class InfoBarSettings {
                         extensionSettings['Information bar integration tool'][mirrorKey] = { enabled: panel.enabled !== false };
                     }
                     extensionSettings['Information bar integration tool'][mirrorKey].subItems = panel.subItems;
-                }
-            } else if (panelType === 'basic') {
-                // 基础面板：写入根级配置的 subItems
-                const panelConfig = extensionSettings['Information bar integration tool'][panelId];
-                if (panelConfig && Array.isArray(panelConfig.subItems)) {
-                    const before = panelConfig.subItems.length;
-                    panelConfig.subItems = panelConfig.subItems.filter(item =>
-                        item.id !== subItemId && item.key !== subItemKey && item.name !== subItemName
-                    );
-                    const after = panelConfig.subItems.length;
-                    console.log(`[InfoBarSettings] 🧹 基础面板 ${panelId} 子项已从配置删除: ${before} -> ${after}`);
                 }
             }
 
@@ -3743,13 +4093,10 @@ export class InfoBarSettings {
                 // 更新面板计数显示
                 this.updatePanelConfigCount(panelId);
 
-                // 立即刷新相关UI，避免“影子字段”仍显示
-                if (panelType === 'basic') {
-                    this.refreshBasicPanelContent(panelId);
-                } else if (panelType === 'custom') {
-                    // 重新渲染自定义面板区块（导航与内容）
-                    this.refreshNavigation();
-                }
+                // 🔧 新架构：所有面板统一刷新方式
+                // 重新渲染面板区块（导航与内容）
+                this.refreshNavigation();
+                // 🔧 修复：不需要单独刷新，createCustomPanelContent()已包含所有字段
 
                 // 通知其他模块（如数据表格）
                 if (this.eventSystem) {
@@ -3767,6 +4114,517 @@ export class InfoBarSettings {
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 执行删除子项操作失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：全选所有子项
+     */
+    selectAllSubItems() {
+        try {
+            console.log('[InfoBarSettings] ☑️ 全选所有子项');
+            
+            const container = this.modal.querySelector('.sub-items-container');
+            if (!container) {
+                console.error('[InfoBarSettings] ❌ 未找到子项容器');
+                return;
+            }
+            
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                if (!checkbox.checked) {
+                    checkbox.checked = true;
+                    // 触发change事件以更新状态
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+            
+            console.log(`[InfoBarSettings] ✅ 已全选 ${checkboxes.length} 个子项`);
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 全选子项失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：全不选所有子项
+     */
+    deselectAllSubItems() {
+        try {
+            console.log('[InfoBarSettings] ☐ 全不选所有子项');
+            
+            const container = this.modal.querySelector('.sub-items-container');
+            if (!container) {
+                console.error('[InfoBarSettings] ❌ 未找到子项容器');
+                return;
+            }
+            
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    checkbox.checked = false;
+                    // 触发change事件以更新状态
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+            
+            console.log(`[InfoBarSettings] ✅ 已取消选择 ${checkboxes.length} 个子项`);
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 取消选择子项失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：编辑子项
+     */
+    editSubItem(buttonElement) {
+        try {
+            // 找到子项表单元素
+            const subItemForm = buttonElement.closest('.sub-item-form');
+            if (!subItemForm) {
+                console.error('[InfoBarSettings] ❌ 未找到子项表单');
+                return;
+            }
+            
+            const nameInput = subItemForm.querySelector('.sub-item-name');
+            if (!nameInput) {
+                console.error('[InfoBarSettings] ❌ 未找到子项名称输入框');
+                return;
+            }
+            
+            // 聚焦到输入框并选中文本
+            nameInput.focus();
+            nameInput.select();
+            
+            console.log('[InfoBarSettings] ✏️ 开始编辑子项');
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 编辑子项失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：从内容区删除自定义面板
+     */
+    deleteCustomPanelFromContent(panelId) {
+        try {
+            console.log('[InfoBarSettings] 🗑️ 删除自定义面板:', panelId);
+            
+            if (!panelId) {
+                console.error('[InfoBarSettings] ❌ 面板ID无效');
+                return;
+            }
+            
+            // 显示删除确认对话框
+            this.showDeleteConfirmDialog('面板', panelId, async () => {
+                await this.performDeletePanel(panelId);
+                
+                // 删除后切换到基础设置
+                this.switchToContent('basic');
+            });
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除自定义面板失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：添加自定义字段（直接弹窗，不跳转）
+     */
+    addCustomField(panelId) {
+        try {
+            console.log('[InfoBarSettings] ➕ 添加字段到面板:', panelId);
+            
+            // 直接显示添加字段对话框
+            this.showAddCustomFieldDialog(panelId);
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 添加字段失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：显示添加自定义字段对话框
+     */
+    showAddCustomFieldDialog(panelId) {
+        try {
+            console.log('[InfoBarSettings] 📋 显示添加字段对话框:', panelId);
+            
+            // 创建对话框
+            const dialogOverlay = document.createElement('div');
+            dialogOverlay.className = 'sub-item-dialog-overlay';
+            
+            // 🔧 修复：添加内联样式，确保移动端正确居中
+            dialogOverlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 99999;
+                backdrop-filter: blur(4px);
+            `;
+            
+            dialogOverlay.innerHTML = `
+                <div class="sub-item-dialog" style="
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    color: var(--theme-text-primary, #ffffff);
+                    border: 1px solid var(--theme-border-color, rgba(255,255,255,0.1));
+                    border-radius: 12px;
+                    padding: 0;
+                    width: 450px;
+                    max-width: 90vw;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                ">
+                    <div class="dialog-header">
+                        <h3>添加字段</h3>
+                        <button class="dialog-close-btn">×</button>
+                    </div>
+                    <div class="dialog-content">
+                        <div class="form-group">
+                            <label for="field-name">字段名称</label>
+                            <input type="text" id="field-name" placeholder="请输入字段名称" />
+                        </div>
+                    </div>
+                    <div class="dialog-footer">
+                        <button class="btn-cancel">取消</button>
+                        <button class="btn-confirm">添加</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(dialogOverlay);
+            
+            // 绑定事件
+            const closeBtn = dialogOverlay.querySelector('.dialog-close-btn');
+            const cancelBtn = dialogOverlay.querySelector('.btn-cancel');
+            const confirmBtn = dialogOverlay.querySelector('.btn-confirm');
+            const nameInput = dialogOverlay.querySelector('#field-name');
+            
+            const closeDialog = () => dialogOverlay.remove();
+            
+            closeBtn.addEventListener('click', closeDialog);
+            cancelBtn.addEventListener('click', closeDialog);
+            dialogOverlay.addEventListener('click', (e) => {
+                if (e.target === dialogOverlay) closeDialog();
+            });
+            
+            // 确认添加
+            confirmBtn.addEventListener('click', async () => {
+                const fieldName = nameInput.value.trim();
+                
+                if (!fieldName) {
+                    this.showMessage('字段名称不能为空', 'error');
+                    return;
+                }
+                
+                // 自动生成键名
+                const fieldKey = this.generateKeyFromName(fieldName);
+                
+                // 添加字段到面板
+                const customPanels = this.getCustomPanels();
+                const panel = customPanels[panelId];
+                
+                if (!panel) {
+                    console.error('[InfoBarSettings] ❌ 面板不存在');
+                    return;
+                }
+                
+                // 创建新字段
+                const newField = {
+                    id: `field_${Date.now()}`,
+                    name: fieldName,
+                    key: fieldKey,
+                    enabled: true
+                };
+                
+                // 添加到面板
+                if (!panel.subItems) {
+                    panel.subItems = [];
+                }
+                panel.subItems.push(newField);
+                
+                // 保存配置
+                await this.saveCustomPanel(panel);
+                
+                // 刷新内容面板显示
+                const contentPanel = this.modal.querySelector(`.content-panel[data-content="${panelId}"]`);
+                if (contentPanel) {
+                    contentPanel.innerHTML = this.createCustomPanelContent(panel);
+                    this.applyThemeToCustomSubItems(contentPanel, panelId);
+                }
+                
+                closeDialog();
+                this.showMessage('字段添加成功', 'success');
+                console.log('[InfoBarSettings] ✅ 字段添加成功');
+            });
+            
+            // 聚焦到名称输入框
+            setTimeout(() => nameInput.focus(), 100);
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示添加字段对话框失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：全选自定义面板字段
+     */
+    selectAllCustomFields(panelId) {
+        try {
+            console.log('[InfoBarSettings] ☑️ 全选字段:', panelId);
+            
+            const contentPanel = this.modal.querySelector(`.content-panel[data-content="${panelId}"]`);
+            if (!contentPanel) {
+                console.error('[InfoBarSettings] ❌ 未找到内容面板');
+                return;
+            }
+            
+            const checkboxes = contentPanel.querySelectorAll('.sub-item input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                if (!checkbox.checked) {
+                    checkbox.checked = true;
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+            
+            console.log(`[InfoBarSettings] ✅ 已全选 ${checkboxes.length} 个字段`);
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 全选字段失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：全不选自定义面板字段
+     */
+    deselectAllCustomFields(panelId) {
+        try {
+            console.log('[InfoBarSettings] ☐ 全不选字段:', panelId);
+            
+            const contentPanel = this.modal.querySelector(`.content-panel[data-content="${panelId}"]`);
+            if (!contentPanel) {
+                console.error('[InfoBarSettings] ❌ 未找到内容面板');
+                return;
+            }
+            
+            const checkboxes = contentPanel.querySelectorAll('.sub-item input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    checkbox.checked = false;
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+            
+            console.log(`[InfoBarSettings] ✅ 已取消选择 ${checkboxes.length} 个字段`);
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 取消选择字段失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：编辑自定义字段（内联编辑模式）
+     */
+    editCustomField(panelId, fieldKey) {
+        try {
+            console.log('[InfoBarSettings] ✏️ 进入编辑模式:', panelId, fieldKey);
+            
+            // 找到对应的子项元素
+            const contentPanel = this.modal.querySelector(`.content-panel[data-content="${panelId}"]`);
+            if (!contentPanel) {
+                console.error('[InfoBarSettings] ❌ 未找到内容面板');
+                return;
+            }
+            
+            const subItem = contentPanel.querySelector(`.sub-item[data-field-key="${fieldKey}"]`);
+            if (!subItem) {
+                console.error('[InfoBarSettings] ❌ 未找到子项元素');
+                return;
+            }
+            
+            // 获取元素
+            const label = subItem.querySelector('.checkbox-label');
+            const editInput = subItem.querySelector('.field-name-edit-input');
+            const actions = subItem.querySelector('.sub-item-inline-actions');
+            const editBtn = subItem.querySelector('.btn-edit-field');
+            const deleteBtn = subItem.querySelector('.btn-delete-field');
+            const confirmBtn = subItem.querySelector('.btn-confirm-edit');
+            const cancelBtn = subItem.querySelector('.btn-cancel-edit');
+            
+            // 切换到编辑模式
+            label.style.display = 'none';
+            editInput.style.display = 'inline-block';
+            editInput.focus();
+            editInput.select();
+            
+            // 切换按钮显示
+            editBtn.style.display = 'none';
+            deleteBtn.style.display = 'none';
+            confirmBtn.style.display = 'inline-flex';
+            cancelBtn.style.display = 'inline-flex';
+            
+            // 标记编辑模式
+            actions.dataset.mode = 'edit';
+            
+            console.log('[InfoBarSettings] ✅ 已进入编辑模式');
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 编辑字段失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：确认编辑字段
+     */
+    confirmEditField(panelId, fieldKey) {
+        try {
+            console.log('[InfoBarSettings] ✓ 确认编辑字段:', panelId, fieldKey);
+            
+            const contentPanel = this.modal.querySelector(`.content-panel[data-content="${panelId}"]`);
+            const subItem = contentPanel?.querySelector(`.sub-item[data-field-key="${fieldKey}"]`);
+            
+            if (!subItem) {
+                console.error('[InfoBarSettings] ❌ 未找到子项元素');
+                return;
+            }
+            
+            const label = subItem.querySelector('.checkbox-label');
+            const editInput = subItem.querySelector('.field-name-edit-input');
+            const newName = editInput.value.trim();
+            
+            if (!newName) {
+                this.showMessage('字段名称不能为空', 'error');
+                return;
+            }
+            
+            // 更新字段名称
+            const originalName = label.dataset.originalName;
+            
+            // 更新配置
+            const customPanels = this.getCustomPanels();
+            const panel = customPanels[panelId];
+            
+            if (panel && panel.subItems) {
+                const fieldIndex = panel.subItems.findIndex(item => 
+                    item.name === originalName || item.key === fieldKey
+                );
+                
+                if (fieldIndex !== -1) {
+                    panel.subItems[fieldIndex].name = newName;
+                    
+                    // 保存配置
+                    this.saveCustomPanel(panel);
+                    
+                    // 刷新显示
+                    contentPanel.innerHTML = this.createCustomPanelContent(panel);
+                    this.applyThemeToCustomSubItems(contentPanel, panelId);
+                    
+                    console.log('[InfoBarSettings] ✅ 字段名称已更新');
+                    this.showMessage('字段编辑成功', 'success');
+                }
+            }
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 确认编辑失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：取消编辑字段
+     */
+    cancelEditField(panelId, fieldKey) {
+        try {
+            console.log('[InfoBarSettings] ✕ 取消编辑字段:', panelId, fieldKey);
+            
+            const contentPanel = this.modal.querySelector(`.content-panel[data-content="${panelId}"]`);
+            const subItem = contentPanel?.querySelector(`.sub-item[data-field-key="${fieldKey}"]`);
+            
+            if (!subItem) {
+                console.error('[InfoBarSettings] ❌ 未找到子项元素');
+                return;
+            }
+            
+            // 获取元素
+            const label = subItem.querySelector('.checkbox-label');
+            const editInput = subItem.querySelector('.field-name-edit-input');
+            const actions = subItem.querySelector('.sub-item-inline-actions');
+            const editBtn = subItem.querySelector('.btn-edit-field');
+            const deleteBtn = subItem.querySelector('.btn-delete-field');
+            const confirmBtn = subItem.querySelector('.btn-confirm-edit');
+            const cancelBtn = subItem.querySelector('.btn-cancel-edit');
+            
+            // 恢复原始值
+            editInput.value = label.dataset.originalName || label.textContent.trim();
+            
+            // 切换回查看模式
+            label.style.display = '';
+            editInput.style.display = 'none';
+            
+            // 切换按钮显示
+            editBtn.style.display = 'inline-flex';
+            deleteBtn.style.display = 'inline-flex';
+            confirmBtn.style.display = 'none';
+            cancelBtn.style.display = 'none';
+            
+            // 标记查看模式
+            actions.dataset.mode = 'view';
+            
+            console.log('[InfoBarSettings] ✅ 已退出编辑模式');
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 取消编辑失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：删除自定义字段
+     */
+    deleteCustomField(panelId, fieldKey, fieldName) {
+        try {
+            console.log('[InfoBarSettings] 🗑️ 删除字段:', panelId, fieldKey, fieldName);
+            
+            // 显示确认对话框
+            this.showDeleteConfirmDialog('字段', fieldName || fieldKey, async () => {
+                // 获取面板配置
+                const customPanels = this.getCustomPanels();
+                const panel = customPanels[panelId];
+                
+                if (!panel || !panel.subItems) {
+                    console.error('[InfoBarSettings] ❌ 面板或子项不存在');
+                    return;
+                }
+                
+                // 删除字段（通过key或name匹配）
+                panel.subItems = panel.subItems.filter(item => 
+                    item.key !== fieldKey && item.name !== fieldName
+                );
+                
+                // 保存配置
+                await this.saveCustomPanel(panel);
+                
+                // 刷新内容面板显示
+                const contentPanel = this.modal.querySelector(`.content-panel[data-content="${panelId}"]`);
+                if (contentPanel) {
+                    contentPanel.innerHTML = this.createCustomPanelContent(panel);
+                    this.applyThemeToCustomSubItems(contentPanel, panelId);
+                }
+                
+                console.log('[InfoBarSettings] ✅ 字段删除成功');
+                this.showMessage('字段删除成功', 'success');
+            });
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除字段失败:', error);
         }
     }
 
@@ -3886,25 +4744,32 @@ export class InfoBarSettings {
     }
 
     /**
-     * 🔧 新增：刷新所有基础面板内容，确保新增子项立即显示
+     * 🔧 重构：刷新所有面板内容（统一从customPanels获取）
      */
     refreshAllBasicPanelContent() {
         try {
-            console.log('[InfoBarSettings] 🔄 开始刷新所有基础面板内容...');
+            // 🔧 重要修复：所有面板现在都通过createCustomPanelContent()统一渲染
+            // 不再需要单独刷新"自定义子项"区域
+            console.log('[InfoBarSettings] ℹ️ 所有面板已通过统一渲染，跳过旧的刷新逻辑');
+            return;
+            
+            // 以下代码已废弃
+            /*
+            console.log('[InfoBarSettings] 🔄 开始刷新所有面板内容...');
 
-            const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
-
+            const customPanels = this.getCustomPanels();
             let refreshedCount = 0;
-            basicPanelIds.forEach(panelId => {
-                const panelData = this.getBasicPanelData(panelId);
-                if (panelData && panelData.subItems && panelData.subItems.length > 0) {
-                    // 临时移除modal可见性检查，强制刷新
-                    this.forceRefreshBasicPanelContent(panelId);
+
+            Object.entries(customPanels).forEach(([panelKey, panel]) => {
+                if (panel && panel.subItems && panel.subItems.length > 0) {
+                    // 刷新面板内容
+                    this.refreshBasicPanelContent(panelKey);
                     refreshedCount++;
                 }
             });
 
             console.log(`[InfoBarSettings] ✅ 已刷新 ${refreshedCount} 个基础面板的内容`);
+            */
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 刷新所有基础面板内容失败:', error);
@@ -4099,6 +4964,9 @@ export class InfoBarSettings {
             // 应用当前主题到新创建的自定义面板
             this.applyCurrentThemeToCustomPanels();
 
+            // 🔧 修复：应用导航项主题样式到所有导航项（包括自定义面板）
+            this.applyNavItemTheme();
+
             console.log('[InfoBarSettings] 🔄 导航栏已刷新，添加了', customPanelArray.length, '个自定义面板');
 
         } catch (error) {
@@ -4275,7 +5143,23 @@ export class InfoBarSettings {
 
         return `
             <div class="content-header">
+                <div class="header-with-actions">
                 <h3>${panel.name}</h3>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button type="button" class="btn-icon-header" data-action="rename-panel" data-panel-id="${panel.id}" title="编辑名称">
+                            ✏️
+                        </button>
+                        <button type="button" class="btn-icon-header" data-action="move-panel-up" data-panel-id="${panel.id}" title="上移面板">
+                            ⬆️
+                        </button>
+                        <button type="button" class="btn-icon-header" data-action="move-panel-down" data-panel-id="${panel.id}" title="下移面板">
+                            ⬇️
+                        </button>
+                        <button type="button" class="btn-icon-header btn-delete-panel-header" data-action="delete-custom-panel" data-panel-id="${panel.id}" title="删除此面板">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="content-body">
@@ -4305,8 +5189,24 @@ export class InfoBarSettings {
                 </div>
 
                 <!-- 子项配置 -->
+                <div class="sub-items-section-wrapper">
+                    <div class="sub-items-section-header">
+                        <h4>配置选项</h4>
+                        <div class="sub-items-quick-actions">
+                            <button type="button" class="btn-icon-header" data-action="add-custom-field" data-panel-id="${panel.id}" title="添加字段">
+                                ➕
+                            </button>
+                            <button type="button" class="btn-icon-header" data-action="select-all-fields" data-panel-id="${panel.id}" title="全选">
+                                ☑️
+                            </button>
+                            <button type="button" class="btn-icon-header" data-action="deselect-all-fields" data-panel-id="${panel.id}" title="全不选">
+                                ☐
+                            </button>
+                        </div>
+                    </div>
                 <div class="sub-items">
-                    ${this.createCustomPanelSubItems(panel.subItems || [])}
+                        ${this.createCustomPanelSubItems(panel.subItems || [], panel.id)}
+                    </div>
                 </div>
             </div>
         `;
@@ -4315,7 +5215,7 @@ export class InfoBarSettings {
     /**
      * 创建自定义面板子项（与基础面板一致的两列布局）
      */
-    createCustomPanelSubItems(subItems) {
+    createCustomPanelSubItems(subItems, panelId) {
         if (!subItems || subItems.length === 0) {
             return `
                 <div class="empty-sub-items">
@@ -4331,8 +5231,8 @@ export class InfoBarSettings {
             const leftItem = subItems[i];
             const rightItem = subItems[i + 1];
 
-            const leftItemHtml = this.createSubItemHtml(leftItem);
-            const rightItemHtml = rightItem ? this.createSubItemHtml(rightItem) : '<div class="sub-item"></div>'; // 空占位符
+            const leftItemHtml = this.createSubItemHtmlWithActions(leftItem, panelId);
+            const rightItemHtml = rightItem ? this.createSubItemHtmlWithActions(rightItem, panelId) : '<div class="sub-item"></div>'; // 空占位符
 
             rows.push(`
                 <div class="sub-item-row">
@@ -4366,6 +5266,75 @@ export class InfoBarSettings {
                     <label for="${subItem.id}" class="checkbox-label">
                         ${subItem.name}
                     </label>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 🔧 新增：创建带操作图标的子项HTML
+     */
+    createSubItemHtmlWithActions(subItem, panelId) {
+        if (!subItem) return '<div class="sub-item"></div>';
+
+        // 🔧 重要修复：确保显示名称是中文
+        let displayName = subItem.name;
+        
+        // 1. 优先使用 displayName（如果存在且是中文）
+        if (subItem.displayName && !this.isEnglishName(subItem.displayName)) {
+            displayName = subItem.displayName;
+            console.log(`[InfoBarSettings] 🔧 使用displayName: ${displayName}`);
+        }
+        // 2. 如果name是英文，尝试从映射表获取中文名
+        else if (this.isEnglishName(displayName)) {
+            // 优先用key查找
+            let chineseName = this.getChineseNameForField(panelId, subItem.key);
+            
+            // 如果key查找失败，尝试用name查找
+            if (!chineseName && subItem.name !== subItem.key) {
+                chineseName = this.getChineseNameForField(panelId, subItem.name);
+            }
+            
+            // 如果找到了中文名，使用它
+            if (chineseName) {
+                displayName = chineseName;
+                console.log(`[InfoBarSettings] ✅ 字段名转换: ${subItem.name} (key: ${subItem.key}) -> ${displayName}`);
+            } else {
+                console.warn(`[InfoBarSettings] ⚠️ 未找到字段映射: panelId=${panelId}, name=${subItem.name}, key=${subItem.key}`);
+            }
+        }
+        
+        // 确保子项有enabled属性，默认为true
+        const isEnabled = subItem.enabled !== false;
+        // 使用子项的name作为表单字段名，确保能被collectFormData收集
+        const fieldName = subItem.name || subItem.key || subItem.id;
+        const subItemKey = subItem.key || subItem.id;
+
+        return `
+            <div class="sub-item sub-item-with-actions" data-field-key="${subItemKey}" data-panel-id="${panelId}">
+                <div class="checkbox-wrapper">
+                    <input type="checkbox"
+                           id="${subItem.id}"
+                           name="${fieldName}"
+                           ${isEnabled ? 'checked' : ''} />
+                    <label for="${subItem.id}" class="checkbox-label" data-original-name="${fieldName}">
+                        ${displayName}
+                    </label>
+                    <input type="text" class="field-name-edit-input" style="display: none;" value="${displayName}" />
+                </div>
+                <div class="sub-item-inline-actions" data-mode="view">
+                    <button type="button" class="btn-icon-micro btn-edit-field" data-action="edit-custom-field" data-panel-id="${panelId}" data-field-key="${subItemKey}" data-field-name="${fieldName}" title="编辑字段">
+                        ✏️
+                    </button>
+                    <button type="button" class="btn-icon-micro btn-delete-field" data-action="delete-custom-field" data-panel-id="${panelId}" data-field-key="${subItemKey}" data-field-name="${fieldName}" title="删除字段">
+                        🗑️
+                    </button>
+                    <button type="button" class="btn-icon-micro btn-confirm-edit" data-action="confirm-edit-field" data-panel-id="${panelId}" data-field-key="${subItemKey}" style="display: none;" title="确认">
+                        ✓
+                    </button>
+                    <button type="button" class="btn-icon-micro btn-cancel-edit" data-action="cancel-edit-field" data-panel-id="${panelId}" data-field-key="${subItemKey}" style="display: none;" title="取消">
+                        ✕
+                    </button>
                 </div>
             </div>
         `;
@@ -4593,16 +5562,9 @@ export class InfoBarSettings {
      */
     loadPanelDataToForm(panelId, panelType) {
         try {
-            let panelData = null;
-
-            if (panelType === 'basic') {
-                // 获取基础面板数据
-                panelData = this.getBasicPanelData(panelId);
-            } else {
-                // 获取自定义面板数据
-                const customPanels = this.getCustomPanels();
-                panelData = customPanels[panelId];
-            }
+            // 🔧 新架构：统一从customPanels获取所有面板数据
+            const customPanels = this.getCustomPanels();
+            let panelData = customPanels[panelId];
 
             if (!panelData) {
                 console.error('[InfoBarSettings] ❌ 未找到面板数据:', panelId);
@@ -4624,66 +5586,19 @@ export class InfoBarSettings {
     }
 
     /**
-     * 获取基础面板数据
+     * 🗑️ 已废弃：获取基础面板数据（现在统一从customPanels获取）
      */
     getBasicPanelData(panelId) {
-        // 默认基础面板数据
-        const defaultBasicPanelsData = {
-            // 移除基础设置面板，它是系统设置，不是面板
-            personal: { name: '个人信息', key: 'personal', description: '个人相关信息配置', icon: '👤', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            interaction: { name: '交互对象', key: 'interaction', description: '交互对象相关配置', icon: '👥', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            tasks: { name: '任务系统', key: 'tasks', description: '任务系统相关配置', icon: '📋', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            world: { name: '世界设定', key: 'world', description: '世界设定相关配置', icon: '🌍', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            organization: { name: '组织架构', key: 'organization', description: '组织架构相关配置', icon: '🏢', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            news: { name: '新闻事件', key: 'news', description: '新闻事件相关配置', icon: '📰', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            inventory: { name: '物品清单', key: 'inventory', description: '物品清单相关配置', icon: '🎒', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            abilities: { name: '能力技能', key: 'abilities', description: '能力技能相关配置', icon: '⚡', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            plot: { name: '剧情发展', key: 'plot', description: '剧情发展相关配置', icon: '📖', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            cultivation: { name: '修炼系统', key: 'cultivation', description: '修炼系统相关配置', icon: '🧘', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            fantasy: { name: '玄幻世界', key: 'fantasy', description: '玄幻世界相关配置', icon: '🔮', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            modern: { name: '现代都市', key: 'modern', description: '现代都市相关配置', icon: '🏙️', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            historical: { name: '历史古代', key: 'historical', description: '历史古代相关配置', icon: '🏛️', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            magic: { name: '魔法能力', key: 'magic', description: '魔法能力相关配置', icon: '🪄', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] },
-            training: { name: '调教系统', key: 'training', description: '调教系统相关配置', icon: '🎯', prompts: { init: '', insert: '', update: '', delete: '' }, subItems: [] }
-        };
-
-        // 🔧 修复：获取默认数据
-        const defaultPanelData = defaultBasicPanelsData[panelId];
-        if (!defaultPanelData) {
-            return null;
-        }
-
+        // 🔧 新架构：所有面板都从customPanels获取，不再使用硬编码
+        console.warn('[InfoBarSettings] ⚠️ getBasicPanelData已废弃，请直接从customPanels获取');
+        
+        // 尝试从customPanels获取
         try {
-            // 🔧 修复：从 extensionSettings 读取已保存的基础面板配置
-            const context = SillyTavern.getContext();
-            const extensionSettings = context.extensionSettings;
-            const savedConfig = extensionSettings['Information bar integration tool']?.[panelId];
-
-            if (savedConfig) {
-                console.log('[InfoBarSettings] 📊 从配置读取基础面板数据:', panelId);
-
-                // 合并默认数据和已保存的配置，确保所有必需字段都存在
-                const mergedData = {
-                    ...defaultPanelData, // 默认结构
-                    ...savedConfig, // 用户保存的配置覆盖默认值
-                    name: defaultPanelData.name, // 基础面板名称不能修改
-                    key: defaultPanelData.key, // 基础面板键名不能修改
-                    subItems: savedConfig.subItems || [], // 🔧 修复：从配置中读取用户添加的子项
-                    prompts: {
-                        ...defaultPanelData.prompts, // 默认提示词结构
-                        ...savedConfig.prompts // 用户的提示词配置
-                    }
-                };
-
-                return mergedData;
-            } else {
-                console.log('[InfoBarSettings] 📊 使用默认基础面板数据:', panelId);
-                return defaultPanelData;
-            }
-
+            const customPanels = this.getCustomPanels();
+            return customPanels[panelId] || null;
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 获取基础面板配置失败，使用默认数据:', error);
-            return defaultPanelData;
+            console.error('[InfoBarSettings] ❌ 获取面板数据失败:', error);
+            return null;
         }
     }
 
@@ -4702,46 +5617,17 @@ export class InfoBarSettings {
         form.querySelector('#panel-required').checked = !!panelData.required;
         form.querySelector('#panel-memory-inject').checked = !!panelData.memoryInject;
 
+        // 🔧 新架构：所有面板完全一样，全部可编辑，无任何限制
+        form.querySelector('#panel-name').readOnly = false;
+        form.querySelector('#panel-key').readOnly = false;
+        form.querySelector('#panel-description').readOnly = false;
+        form.querySelector('#panel-required').disabled = false;
+        form.querySelector('#panel-memory-inject').disabled = false;
 
-        // 基础面板只限制名称和键名不可修改
-        const isBasicPanel = panelType === 'basic';
-        if (isBasicPanel) {
-            // 只限制名称和键名
-            form.querySelector('#panel-name').readOnly = true;
-            form.querySelector('#panel-key').readOnly = true;
-
-            // 其他字段可以编辑
-            form.querySelector('#panel-description').readOnly = false;
-            // 🔧 修复：删除图标字段引用，因为已从表单中移除
-            // form.querySelector('#panel-icon').readOnly = false;
-            form.querySelector('#panel-required').disabled = false;
-            form.querySelector('#panel-memory-inject').disabled = false;
-
-            // 为只读输入框添加样式类
-            form.querySelector('#panel-name').classList.add('readonly-input');
-            form.querySelector('#panel-key').classList.add('readonly-input');
-
-            // 移除其他字段的只读样式
-            form.querySelector('#panel-description').classList.remove('readonly-input');
-            // 🔧 修复：删除图标字段引用，因为已从表单中移除
-            // form.querySelector('#panel-icon').classList.remove('readonly-input');
-        } else {
-            // 自定义面板移除只读状态
-            form.querySelector('#panel-name').readOnly = false;
-            form.querySelector('#panel-key').readOnly = false;
-            form.querySelector('#panel-description').readOnly = false;
-            // 🔧 修复：删除图标字段引用，因为已从表单中移除
-            // form.querySelector('#panel-icon').readOnly = false;
-            form.querySelector('#panel-required').disabled = false;
-            form.querySelector('#panel-memory-inject').disabled = false;
-
-            // 移除只读样式类
-            form.querySelector('#panel-name').classList.remove('readonly-input');
-            form.querySelector('#panel-key').classList.remove('readonly-input');
-            form.querySelector('#panel-description').classList.remove('readonly-input');
-            // 🔧 修复：删除图标字段引用，因为已从表单中移除
-            // form.querySelector('#panel-icon').classList.remove('readonly-input');
-        }
+        // 移除只读样式类
+        form.querySelector('#panel-name').classList.remove('readonly-input');
+        form.querySelector('#panel-key').classList.remove('readonly-input');
+        form.querySelector('#panel-description').classList.remove('readonly-input');
     }
 
     /**
@@ -4761,44 +5647,22 @@ export class InfoBarSettings {
         if (updateInput) updateInput.value = prompts.update || '';
         if (deleteInput) deleteInput.value = prompts.delete || '';
 
-        // 基础面板的提示词可以编辑（移除只读限制）
-        const isBasicPanel = panelType === 'basic';
-        if (isBasicPanel) {
-            // 基础面板的提示词也可以编辑
-            if (initInput) {
-                initInput.readOnly = false;
-                initInput.classList.remove('readonly-input');
-            }
-            if (insertInput) {
-                insertInput.readOnly = false;
-                insertInput.classList.remove('readonly-input');
-            }
-            if (updateInput) {
-                updateInput.readOnly = false;
-                updateInput.classList.remove('readonly-input');
-            }
-            if (deleteInput) {
-                deleteInput.readOnly = false;
-                deleteInput.classList.remove('readonly-input');
-            }
-        } else {
-            // 自定义面板移除只读状态
-            if (initInput) {
-                initInput.readOnly = false;
-                initInput.classList.remove('readonly-input');
-            }
-            if (insertInput) {
-                insertInput.readOnly = false;
-                insertInput.classList.remove('readonly-input');
-            }
-            if (updateInput) {
-                updateInput.readOnly = false;
-                updateInput.classList.remove('readonly-input');
-            }
-            if (deleteInput) {
-                deleteInput.readOnly = false;
-                deleteInput.classList.remove('readonly-input');
-            }
+        // 🔧 新架构：所有面板完全一样，提示词全部可编辑
+        if (initInput) {
+            initInput.readOnly = false;
+            initInput.classList.remove('readonly-input');
+        }
+        if (insertInput) {
+            insertInput.readOnly = false;
+            insertInput.classList.remove('readonly-input');
+        }
+        if (updateInput) {
+            updateInput.readOnly = false;
+            updateInput.classList.remove('readonly-input');
+        }
+        if (deleteInput) {
+            deleteInput.readOnly = false;
+            deleteInput.classList.remove('readonly-input');
         }
     }
 
@@ -4866,9 +5730,14 @@ export class InfoBarSettings {
                 <div class="sub-item-input-group">
                     <input type="text" class="sub-item-name" value="${subItem.name || ''}" placeholder="子项名称" />
                 </div>
-                <button type="button" class="btn-icon btn-remove-sub-item" data-action="remove-sub-item" title="删除子项">
-                    <span style="pointer-events: none;">🗑️</span>
+                <div class="sub-item-actions-inline">
+                    <button type="button" class="btn-icon-tiny" data-action="edit-sub-item" title="修改">
+                        ✏️
+                    </button>
+                    <button type="button" class="btn-icon-tiny btn-remove-sub-item" data-action="remove-sub-item" title="删除">
+                        🗑️
                 </button>
+                </div>
             </div>
         `;
 
@@ -4927,7 +5796,8 @@ export class InfoBarSettings {
             const noSelectionMessage = this.modal.querySelector('.no-selection-message');
             const propertiesForm = this.modal.querySelector('.panel-properties-form');
             const saveBtn = this.modal.querySelector('[data-action="save-panel-properties"]');
-            const deleteBtn = this.modal.querySelector('[data-action="delete-panel"]');
+            // 🔧 修复：使用更精确的选择器，确保选择属性区域的删除按钮
+            const deleteBtn = this.modal.querySelector('.properties-actions [data-action="delete-panel"]');
 
             // 显示无选择消息，隐藏属性表单
             if (noSelectionMessage) noSelectionMessage.style.display = 'block';
@@ -5357,7 +6227,7 @@ export class InfoBarSettings {
                     </div>
                     <div class="form-group">
                         <label>最大令牌数</label>
-                        <input type="number" name="apiConfig.maxTokens" min="1" max="100000" step="100" value="2048" />
+                        <input type="number" name="apiConfig.maxTokens" min="1" max="100000" step="100" value="20000" />
                         <small>生成文本的最大长度</small>
                     </div>
                 </div>
@@ -5796,7 +6666,7 @@ export class InfoBarSettings {
                             <input type="checkbox" id="memory-ai-memory-enabled" />
                             <span class="checkbox-text">启用AI记忆总结</span>
                         </label>
-                        <div class="setting-hint">使用AI智能分析和总结消息内容</div>
+                        <div class="setting-hint">使用AI智能分析和总结消息内容 <span style="color: #FF9800;">⚠️ 需要配合深度记忆管理器使用</span></div>
                     </div>
                 </div>
 
@@ -5821,6 +6691,54 @@ export class InfoBarSettings {
                     </div>
                 </div>
 
+                <!-- 🗄️ AI记忆数据库设置 -->
+                <div class="setting-row ai-memory-database-section">
+                    <h5 style="color: #9C27B0; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🗄️ AI记忆数据库</h5>
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-ai-memory-database-enabled" />
+                            <span class="checkbox-text">启用AI记忆数据库</span>
+                        </label>
+                        <div class="setting-hint">基于关键词和重要性的智能记忆索引和检索系统 <span style="color: #FF9800;">⚠️ 只在主API生成剧情时注入</span></div>
+                    </div>
+                </div>
+
+                <div class="setting-row ai-memory-database-options" id="memory-ai-memory-database-options" style="display: none; margin-left: 20px; border-left: 2px solid #9C27B0; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-ai-db-auto-indexing" checked />
+                            <span class="checkbox-text">自动索引新记忆</span>
+                        </label>
+                        <div class="setting-hint">自动建立AI记忆总结的关键词索引</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-ai-db-thinking-interface" checked />
+                            <span class="checkbox-text">启用AI思考接口</span>
+                        </label>
+                        <div class="setting-hint">允许AI在主API生成时通过关键词主动检索记忆</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-ai-db-max-results">最大检索结果数</label>
+                        <div class="input-group">
+                            <input type="range" id="memory-ai-db-max-results" min="5" max="50" step="5" value="20" />
+                            <span class="input-unit" id="memory-ai-db-max-results-value">20</span>
+                        </div>
+                        <div class="setting-hint">单次检索返回的最大记忆数量</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-ai-db-min-importance">最小重要性过滤</label>
+                        <div class="input-group">
+                            <input type="range" id="memory-ai-db-min-importance" min="0.0" max="1.0" step="0.1" value="0.5" />
+                            <span class="input-unit" id="memory-ai-db-min-importance-value">50%</span>
+                        </div>
+                        <div class="setting-hint">只索引重要性高于此值的记忆</div>
+                    </div>
+                </div>
+
                 <!-- 🔍 语义搜索设置 -->
                 <div class="setting-row vectorized-memory-section">
                     <h5 style="color: #2196F3; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🔍 语义搜索</h5>
@@ -5829,7 +6747,7 @@ export class InfoBarSettings {
                             <input type="checkbox" id="memory-vectorized-memory-enabled" />
                             <span class="checkbox-text">启用语义搜索</span>
                         </label>
-                        <div class="setting-hint">使用向量化技术进行智能语义搜索</div>
+                        <div class="setting-hint">使用向量化技术进行智能语义搜索 <span style="color: #FF9800;">⚠️ 需要配合深度记忆管理器使用</span></div>
                     </div>
                 </div>
 
@@ -6015,7 +6933,7 @@ export class InfoBarSettings {
                             <input type="checkbox" id="memory-intelligent-classifier-enabled" />
                             <span class="checkbox-text">启用智能记忆分类器</span>
                         </label>
-                        <div class="setting-hint">AI驱动的智能记忆分类系统</div>
+                        <div class="setting-hint">AI驱动的智能记忆分类系统 <span style="color: #FF9800;">⚠️ 需要配合深度记忆管理器使用</span></div>
                     </div>
                 </div>
 
@@ -6082,21 +7000,21 @@ export class InfoBarSettings {
                         <div class="cleanup-button-wrapper">
                             <button class="cleanup-btn" id="cleanup-ai-memory-database" style="
                                 width: 100%;
-                                padding: 12px 20px;
+                                padding: 8px 16px;
                                 background: linear-gradient(135deg, #FF5722 0%, #F44336 100%);
                                 color: white;
                                 border: none;
                                 border-radius: 8px;
-                                font-size: 14px;
+                                font-size: 13px;
                                 font-weight: 600;
                                 cursor: pointer;
                                 transition: all 0.3s ease;
                                 box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
                             ">
-                                🗑️ 清理AI记忆数据库
+                                🗑️ 清理记忆索引
                             </button>
                             <div class="setting-hint" style="margin-top: 8px; font-size: 12px;">
-                                清空所有AI记忆总结数据（感知层、短期、长期、归档）
+                                清空AI记忆数据库的关键词索引和检索缓存
                             </div>
                         </div>
 
@@ -6104,12 +7022,12 @@ export class InfoBarSettings {
                         <div class="cleanup-button-wrapper">
                             <button class="cleanup-btn" id="cleanup-vector-data" style="
                                 width: 100%;
-                                padding: 12px 20px;
+                                padding: 8px 16px;
                                 background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
                                 color: white;
                                 border: none;
                                 border-radius: 8px;
-                                font-size: 14px;
+                                font-size: 13px;
                                 font-weight: 600;
                                 cursor: pointer;
                                 transition: all 0.3s ease;
@@ -6126,12 +7044,12 @@ export class InfoBarSettings {
                         <div class="cleanup-button-wrapper">
                             <button class="cleanup-btn" id="cleanup-deep-memory" style="
                                 width: 100%;
-                                padding: 12px 20px;
+                                padding: 8px 16px;
                                 background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
                                 color: white;
                                 border: none;
                                 border-radius: 8px;
-                                font-size: 14px;
+                                font-size: 13px;
                                 font-weight: 600;
                                 cursor: pointer;
                                 transition: all 0.3s ease;
@@ -6148,12 +7066,12 @@ export class InfoBarSettings {
                         <div class="cleanup-button-wrapper">
                             <button class="cleanup-btn" id="cleanup-knowledge-graph" style="
                                 width: 100%;
-                                padding: 12px 20px;
+                                padding: 8px 16px;
                                 background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
                                 color: white;
                                 border: none;
                                 border-radius: 8px;
-                                font-size: 14px;
+                                font-size: 13px;
                                 font-weight: 600;
                                 cursor: pointer;
                                 transition: all 0.3s ease;
@@ -6988,24 +7906,24 @@ export class InfoBarSettings {
     }
 
     /**
-     * 创建面板列表项
+     * 🔧 重构：创建面板列表项（所有面板统一显示，无分类）
      */
     createPanelListItems(category) {
+        // 🔧 新架构：所有面板统一从customPanels获取，不区分类型
+        const customPanels = this.getCustomPanels();
         let panels = [];
 
-        if (category === 'all' || category === 'basic') {
-            panels = panels.concat(this.getBasicPanelItems());
-        }
-
-        if (category === 'all' || category === 'custom') {
-            panels = panels.concat(this.getCustomPanelItems());
-        }
+        Object.entries(customPanels).forEach(([key, panel]) => {
+            if (!panel) return;
+            // 不再按type过滤，所有面板都显示
+            panels.push({ ...panel, id: key });
+        });
 
         if (panels.length === 0) {
             return `
                 <div class="empty-panel-list">
                     <div class="empty-icon">📭</div>
-                    <div class="empty-text">暂无${category === 'custom' ? '自定义' : ''}面板</div>
+                    <div class="empty-text">暂无面板</div>
                 </div>
             `;
         }
@@ -7014,69 +7932,61 @@ export class InfoBarSettings {
     }
 
     /**
-     * 获取基础面板项
+     * 🗑️ 已废弃：获取基础面板项（现在所有面板统一获取）
      */
     getBasicPanelItems() {
-        const basicPanels = [
-            // 移除基础设置面板，它是系统设置，不是面板
-                    { id: 'personal', name: '个人信息', icon: '👤', type: 'basic' },
-        { id: 'interaction', name: '交互对象', icon: '👥', type: 'basic' },
-        { id: 'tasks', name: '任务系统', icon: '📋', type: 'basic' },
-        { id: 'world', name: '世界设定', icon: '🌍', type: 'basic' },
-        { id: 'organization', name: '组织架构', icon: '🏢', type: 'basic' },
-        { id: 'news', name: '新闻事件', icon: '📰', type: 'basic' },
-        { id: 'inventory', name: '物品清单', icon: '🎒', type: 'basic' },
-        { id: 'abilities', name: '能力技能', icon: '⚡', type: 'basic' },
-        { id: 'plot', name: '剧情发展', icon: '📖', type: 'basic' },
-        { id: 'cultivation', name: '修炼系统', icon: '🧘', type: 'basic' },
-        { id: 'fantasy', name: '玄幻世界', icon: '🔮', type: 'basic' },
-        { id: 'modern', name: '现代都市', icon: '🏙️', type: 'basic' },
-        { id: 'historical', name: '历史古代', icon: '🏛️', type: 'basic' },
-        { id: 'magic', name: '魔法能力', icon: '🪄', type: 'basic' },
-        { id: 'training', name: '调教系统', icon: '🎯', type: 'basic' }
-        ];
-
-        return basicPanels;
+        // 🔧 新架构：返回所有面板，不区分类型
+        return this.getAllPanelItems();
     }
 
     /**
-     * 获取自定义面板项
+     * 🗑️ 已废弃：获取自定义面板项（现在所有面板统一获取）
      */
     getCustomPanelItems() {
+        // 🔧 新架构：返回所有面板，不区分类型
+        return this.getAllPanelItems();
+    }
+
+    /**
+     * 🔧 新增：获取所有面板项（统一方法）
+     */
+    getAllPanelItems() {
         const customPanels = this.getCustomPanels();
-        return Object.values(customPanels).map(panel => ({
+        return Object.entries(customPanels).map(([key, panel]) => ({
             ...panel,
-            type: 'custom'
+            id: key
         }));
     }
 
     /**
-     * 创建单个面板列表项
+     * 🔧 重构：创建单个面板列表项（所有面板统一显示，无区分）
      */
     createPanelListItem(panel) {
-        const typeClass = panel.type === 'custom' ? 'custom-panel' : 'basic-panel';
-
+        // 🔧 新架构：预设和自定义面板完全一样，不做任何区分
         return `
-            <div class="panel-list-item ${typeClass}" data-panel-id="${panel.id}" data-panel-type="${panel.type}">
+            <div class="panel-list-item" data-panel-id="${panel.id}" data-panel-type="${panel.type}">
                 <div class="panel-item-info">
                     <div class="panel-item-name">${panel.name}</div>
-                    <div class="panel-item-meta">
-                        <span class="panel-type">（${panel.type === 'custom' ? '自定义' : '基础'}）</span>
-                    </div>
                 </div>
                 <div class="panel-item-actions">
-                    ${panel.type === 'custom' ? `
-                        <button class="btn-icon" data-action="edit-panel" data-panel-id="${panel.id}" title="编辑">
-                            编辑
-                        </button>
-                        <button class="btn-icon" data-action="duplicate-panel" data-panel-id="${panel.id}" title="复制">
-                            复制
-                        </button>
-                    ` : `
-                        <button class="btn-icon" data-action="view-panel" data-panel-id="${panel.id}" title="查看">
-                            查看
-                        </button>
-                    `}
+                    <button class="btn-icon" data-action="edit-panel" data-panel-id="${panel.id}" title="编辑">
+                        编辑
+                    </button>
+                    <button class="btn-icon" data-action="duplicate-panel" data-panel-id="${panel.id}" title="复制">
+                        复制
+                    </button>
+                    <button class="btn-icon" data-action="rename-panel" data-panel-id="${panel.id}" title="编辑名称">
+                        ✏️
+                    </button>
+                    <button class="btn-icon" data-action="move-panel-up" data-panel-id="${panel.id}" title="上移面板">
+                        ⬆️
+                    </button>
+                    <button class="btn-icon" data-action="move-panel-down" data-panel-id="${panel.id}" title="下移面板">
+                        ⬇️
+                    </button>
+                    <button class="btn-icon" data-action="delete-panel" data-panel-id="${panel.id}" title="删除">
+                        删除
+                    </button>
                 </div>
             </div>
         `;
@@ -7090,7 +8000,12 @@ export class InfoBarSettings {
             <div class="properties-form">
                 <!-- 基本信息 -->
                 <div class="form-section">
+                    <div class="section-header-with-actions">
                     <h5>基本信息</h5>
+                        <button type="button" class="btn-icon-small btn-delete-panel-inline" data-action="delete-panel-inline" title="删除此面板">
+                            🗑️
+                        </button>
+                    </div>
                     <div class="form-group">
                         <label for="panel-name">面板名称</label>
                         <input type="text" id="panel-name" name="panel.name" placeholder="请输入面板名称" />
@@ -7128,8 +8043,21 @@ export class InfoBarSettings {
 
                 <!-- 子项配置 -->
                 <div class="form-section">
+                    <div class="section-header-with-actions">
                     <h5>子项配置</h5>
-                    <div class="sub-items-header">
+                        <div class="sub-items-actions">
+                            <button type="button" class="btn-icon-small" data-action="add-sub-item" title="添加字段">
+                                ➕
+                            </button>
+                            <button type="button" class="btn-icon-small" data-action="select-all-sub-items" title="全选">
+                                ☑️
+                            </button>
+                            <button type="button" class="btn-icon-small" data-action="deselect-all-sub-items" title="全不选">
+                                ☐
+                            </button>
+                        </div>
+                    </div>
+                    <div class="sub-items-header" style="display: none;">
                         <span>子项列表</span>
                         <button type="button" class="btn-small btn-add-sub-item" data-action="add-sub-item">
                             <span class="btn-icon" style="pointer-events: none;">➕</span>
@@ -7497,19 +8425,26 @@ export class InfoBarSettings {
     }
 
     /**
-     * 初始化所有基础面板的自定义子项显示
+     * 🔧 重构：初始化所有面板的子项显示（统一从customPanels获取）
      */
     initAllBasicPanelCustomSubItems() {
         try {
-            const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+            // 🔧 重要修复：所有面板现在都通过createCustomPanelContent()统一渲染
+            // 不再需要单独添加"自定义子项"区域，否则会导致字段重复显示
+            console.log('[InfoBarSettings] ℹ️ 所有面板已通过统一渲染，跳过旧的自定义子项初始化逻辑');
+            return;
+            
+            // 以下代码已废弃，保留仅供参考
+            /*
+            const customPanels = this.getCustomPanels();
 
-            basicPanelIds.forEach(panelId => {
-                const panelData = this.getBasicPanelData(panelId);
-                if (panelData && panelData.subItems && panelData.subItems.length > 0) {
-                    this.refreshBasicPanelContent(panelId);
-                    console.log(`[InfoBarSettings] 🔄 已初始化基础面板 ${panelId} 的自定义子项显示`);
+            Object.entries(customPanels).forEach(([panelKey, panel]) => {
+                if (panel && panel.subItems && panel.subItems.length > 0) {
+                    this.refreshBasicPanelContent(panelKey);
+                    console.log(`[InfoBarSettings] 🔄 已初始化面板 ${panelKey} 的子项显示`);
                 }
             });
+            */
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 初始化基础面板自定义子项失败:', error);
@@ -7890,22 +8825,7 @@ export class InfoBarSettings {
                 extensionSettings['Information bar integration tool'] = {};
             }
 
-            // 🔧 修复：完全保护基础面板属性配置，避免被基础设置页面覆盖
-            // 基础面板的属性配置（description、icon、required、memoryInject、prompts等）
-            // 应该只通过面板管理页面修改，不应该被基础设置页面的表单数据覆盖
-            const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
-            const preservedBasicPanelConfigs = {};
-
-            // 完整备份所有基础面板配置
-            basicPanelIds.forEach(panelId => {
-                const existingConfig = extensionSettings['Information bar integration tool'][panelId];
-                if (existingConfig) {
-                    preservedBasicPanelConfigs[panelId] = { ...existingConfig };
-                    console.log(`[InfoBarSettings] 🛡️ 保护基础面板 ${panelId} 的完整属性配置`);
-                }
-            });
-
-            // 保存基础设置表单数据（不包含基础面板属性）
+            // 保存基础设置表单数据
             Object.assign(extensionSettings['Information bar integration tool'], formData);
 
             // 额外收集记忆增强面板的设置（这些控件大多没有 name，需要单独处理）
@@ -7920,56 +8840,14 @@ export class InfoBarSettings {
                 }
             }
 
-            // 🔧 修复：智能恢复基础面板属性配置，保留子项启用状态
-            Object.keys(preservedBasicPanelConfigs).forEach(panelId => {
-                const currentConfig = extensionSettings['Information bar integration tool'][panelId];
-                const preservedConfig = preservedBasicPanelConfigs[panelId];
-
-                // 合并配置：保留新的子项启用状态和面板启用状态，恢复其他属性
-                if (currentConfig && preservedConfig) {
-                    // 备份当前的子项启用状态和面板启用状态（来自formData）
-                    const currentSubItemStates = {};
-                    const currentPanelEnabled = currentConfig.enabled; // 保留面板的enabled状态
-
-                    if (currentConfig && typeof currentConfig === 'object') {
-                        Object.keys(currentConfig).forEach(key => {
-                            if (key !== 'enabled' && typeof currentConfig[key] === 'object' &&
-                                currentConfig[key] && typeof currentConfig[key].enabled === 'boolean') {
-                                currentSubItemStates[key] = currentConfig[key];
-                            }
-                        });
-                    }
-
-                    // 恢复基础面板属性配置
-                    extensionSettings['Information bar integration tool'][panelId] = { ...preservedConfig };
-
-                    // 🔧 修复：重新应用面板的enabled状态
-                    if (typeof currentPanelEnabled === 'boolean') {
-                        extensionSettings['Information bar integration tool'][panelId].enabled = currentPanelEnabled;
-                    }
-
-                    // 重新应用子项启用状态
-                    Object.keys(currentSubItemStates).forEach(subItemKey => {
-                        const existingSubItem = extensionSettings['Information bar integration tool'][panelId][subItemKey];
-                        if (!existingSubItem || typeof existingSubItem !== 'object' || Array.isArray(existingSubItem)) {
-                            extensionSettings['Information bar integration tool'][panelId][subItemKey] = {};
-                        }
-                        extensionSettings['Information bar integration tool'][panelId][subItemKey].enabled = currentSubItemStates[subItemKey].enabled;
-                    });
-
-                    console.log(`[InfoBarSettings] 🔄 智能恢复基础面板 ${panelId} 的属性配置，保留面板启用状态: ${currentPanelEnabled}，保留 ${Object.keys(currentSubItemStates).length} 个子项状态`);
-                } else {
-                    // 如果没有当前配置，直接恢复旧配置
-                    extensionSettings['Information bar integration tool'][panelId] = preservedBasicPanelConfigs[panelId];
-                    console.log(`[InfoBarSettings] 🔄 完全恢复基础面板 ${panelId} 的属性配置`);
-                }
-            });
-
             // 触发 SillyTavern 保存设置
             context.saveSettingsDebounced();
 
-            // 🔧 修复：在隐藏界面前先刷新面板内容，确保新增子项立即显示
-            this.refreshAllBasicPanelContent();
+            // 🔧 修复：清除字段映射缓存，确保下次获取时重新生成最新映射
+            this._cachedCompleteMapping = null;
+            console.log('[InfoBarSettings] 🔄 已清除字段映射缓存');
+
+            // 🔧 修复：所有面板已通过统一渲染，不需要额外刷新
 
             // 触发面板配置变更事件，通知数据表格更新
             if (this.eventSystem) {
@@ -8116,6 +8994,21 @@ export class InfoBarSettings {
                 console.log('[InfoBarSettings] ✅ DeepMemoryManager设置已同步');
             }
 
+            // 1.5. 同步AIMemoryDatabase设置
+            if (memoryEnhancementData.aiDatabase) {
+                if (modules.aiMemoryDatabase) {
+                    modules.aiMemoryDatabase.config.enabled = memoryEnhancementData.aiDatabase.enabled;
+                    modules.aiMemoryDatabase.config.autoIndexing = memoryEnhancementData.aiDatabase.autoIndexing;
+                    modules.aiMemoryDatabase.config.enableThinkingInterface = memoryEnhancementData.aiDatabase.enableThinkingInterface;
+                    modules.aiMemoryDatabase.config.maxSearchResults = memoryEnhancementData.aiDatabase.maxSearchResults || 20;
+                    await modules.aiMemoryDatabase.saveConfig();
+                    console.log('[InfoBarSettings] ✅ AIMemoryDatabase设置已同步');
+                } else {
+                    console.warn('[InfoBarSettings] ⚠️ AIMemoryDatabase模块未找到，配置无法同步');
+                    console.warn('[InfoBarSettings] 可用模块:', Object.keys(modules));
+                }
+            }
+
             // 2. 同步VectorizedMemoryRetrieval设置
             if (modules.vectorizedMemoryRetrieval && memoryEnhancementData.vector) {
                 const storageMode = memoryEnhancementData.vector.storageMode || 'local';
@@ -8225,6 +9118,13 @@ export class InfoBarSettings {
                     messageLevelSummary: aiSettings.messageLevelSummary !== undefined ? aiSettings.messageLevelSummary : getBool('memory-ai-message-level-summary'),
                     importanceThreshold: aiSettings.importanceThreshold !== undefined ? aiSettings.importanceThreshold : getNum('memory-ai-importance-threshold')
                 },
+                aiDatabase: {
+                    enabled: getBool('memory-ai-memory-database-enabled'),
+                    autoIndexing: getBool('memory-ai-db-auto-indexing'),
+                    enableThinkingInterface: getBool('memory-ai-db-thinking-interface'),
+                    maxSearchResults: getNum('memory-ai-db-max-results') || 20,
+                    minImportance: getNum('memory-ai-db-min-importance') || 0.5
+                },
                 vector: {
                     enabled: getBool('memory-vectorized-memory-enabled'),
                     vectorEngine: getVal('memory-vector-engine'),
@@ -8301,36 +9201,35 @@ export class InfoBarSettings {
     }
 
     /**
-     * 加载基础面板子项的勾选状态到表单
+     * 🔧 重构：加载面板子项的勾选状态（统一从customPanels获取）
      */
     loadBasicPanelSubItemStates(configs) {
         try {
-            const basicPanelIds = ['personal', 'interaction', 'tasks', 'world', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+            const customPanels = configs.customPanels || {};
 
-            // 遍历所有基础面板
-            basicPanelIds.forEach(panelId => {
-                const panelConfig = configs[panelId];
+            // 遍历所有面板
+            Object.entries(customPanels).forEach(([panelKey, panelConfig]) => {
                 if (panelConfig && typeof panelConfig === 'object') {
-                    console.log(`[InfoBarSettings] 📊 加载基础面板 ${panelId} 的子项状态`);
+                    console.log(`[InfoBarSettings] 📊 加载面板 ${panelKey} 的子项状态`);
 
                     // 遍历面板的所有子项
                     Object.keys(panelConfig).forEach(subItemKey => {
                         if (subItemKey !== 'enabled' && typeof panelConfig[subItemKey] === 'object' &&
                             panelConfig[subItemKey] && typeof panelConfig[subItemKey].enabled === 'boolean') {
 
-                            const fieldName = `${panelId}.${subItemKey}.enabled`;
+                            const fieldName = `${panelKey}.${subItemKey}.enabled`;  // 🔧 修复：使用panelKey而不是panelId
                             const checkbox = this.modal.querySelector(`input[name="${fieldName}"]`);
 
                             if (checkbox && checkbox.type === 'checkbox') {
                                 checkbox.checked = panelConfig[subItemKey].enabled;
-                                console.log(`[InfoBarSettings] 📊 设置基础面板子项勾选状态: ${fieldName} = ${checkbox.checked}`);
+                                console.log(`[InfoBarSettings] 📊 设置面板子项勾选状态: ${fieldName} = ${checkbox.checked}`);
                             }
                         }
                     });
                 }
             });
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 加载基础面板子项状态失败:', error);
+            console.error('[InfoBarSettings] ❌ 加载面板子项状态失败:', error);
         }
     }
 
@@ -8339,20 +9238,53 @@ export class InfoBarSettings {
      */
     updateCustomPanelSubItemStates(customPanels, formData) {
         try {
+            console.log('[InfoBarSettings] 🔄 开始更新自定义面板子项状态...');
+            
             // 遍历所有自定义面板
             for (const [panelId, panel] of Object.entries(customPanels)) {
-                if (panel.subItems && Array.isArray(panel.subItems)) {
-                    // 更新每个子项的enabled状态
-                    panel.subItems.forEach(subItem => {
-                        // 使用子项的name作为字段名查找勾选状态
-                        const fieldName = subItem.name || subItem.key || subItem.id;
-                        if (formData.hasOwnProperty(fieldName)) {
-                            subItem.enabled = formData[fieldName];
-                            console.log(`[InfoBarSettings] 📊 更新子项状态: ${fieldName} = ${subItem.enabled}`);
-                        }
-                    });
+                if (!panel.subItems || !Array.isArray(panel.subItems)) {
+                    continue;
                 }
+                
+                console.log(`[InfoBarSettings] 📊 处理面板: ${panelId}, ${panel.subItems.length} 个字段`);
+                
+                    // 更新每个子项的enabled状态
+                panel.subItems.forEach((subItem, index) => {
+                    // 🔧 重要修复：尝试多种可能的字段名格式
+                    // 1. 中文name（新版格式）
+                    // 2. 英文key（旧版格式）
+                    // 3. id（备用）
+                    const possibleFieldNames = [
+                        subItem.name,           // 中文name，如 "姓名"
+                        subItem.key,            // 英文key，如 "name"
+                        subItem.id,             // id
+                        `${panelId}.${subItem.key}.enabled`, // 旧格式
+                        `${panelId}.${subItem.name}.enabled`  // 备用格式
+                    ].filter(Boolean); // 过滤掉undefined
+                    
+                    let found = false;
+                    for (const fieldName of possibleFieldNames) {
+                        if (formData.hasOwnProperty(fieldName)) {
+                            const newState = formData[fieldName];
+                            if (subItem.enabled !== newState) {
+                                console.log(`[InfoBarSettings] 📊 更新字段 [${index}] "${subItem.name}" (${fieldName}): ${subItem.enabled} -> ${newState}`);
+                                subItem.enabled = newState;
+                            }
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found) {
+                        console.warn(`[InfoBarSettings] ⚠️ 未找到字段状态: ${subItem.name} (尝试: ${possibleFieldNames.join(', ')})`);
+                        // 🔧 修复：未找到时保持原状态，不要修改
+                        console.log(`[InfoBarSettings] 📊 保持原状态: ${subItem.name} = ${subItem.enabled}`);
+                    }
+                });
             }
+            
+            console.log('[InfoBarSettings] ✅ 自定义面板子项状态更新完成');
+            
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 更新自定义面板子项状态失败:', error);
         }
@@ -8368,32 +9300,10 @@ export class InfoBarSettings {
                 formData.basicPanels = {};
             }
 
-            // 定义所有基础面板ID列表
-            const basicPanelIds = ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
-
-            // 循环处理所有基础面板
-            basicPanelIds.forEach(panelId => {
-                if (formData[panelId]) {
-                    formData.basicPanels[panelId] = {
-                        enabled: formData[panelId].enabled !== false,
-                        subItems: []
-                    };
-
-                    // 转换子项配置
-                    Object.keys(formData[panelId]).forEach(key => {
-                        if (key !== 'enabled' && typeof formData[panelId][key] === 'object' && formData[panelId][key].enabled !== undefined) {
-                            formData.basicPanels[panelId].subItems.push({
-                                name: this.getSubItemDisplayName(panelId, key),
-                                key: key,
-                                enabled: formData[panelId][key].enabled,
-                                value: this.getDefaultSubItemValue(panelId, key)
-                            });
-                        }
-                    });
-
-                    console.log(`[InfoBarSettings] 📊 处理${panelId}面板配置:`, formData.basicPanels[panelId].subItems.length, '个子项');
-                }
-            });
+            // 🔧 重构：处理customPanels（现在所有面板都在这里）
+            const customPanels = formData.customPanels || {};
+            
+            console.log(`[InfoBarSettings] 📊 处理 ${Object.keys(customPanels).length} 个面板的数据`);
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理基础面板配置失败:', error);
@@ -8401,95 +9311,521 @@ export class InfoBarSettings {
     }
 
     /**
-     * 获取子项显示名称
+     * 🔧 新增：检查是否为英文名称
+     */
+    isEnglishName(name) {
+        if (!name || typeof name !== 'string') return false;
+        // 如果包含中文字符，则不是英文
+        return !/[\u4e00-\u9fa5]/.test(name);
+    }
+
+    /**
+     * 🔧 新增：根据面板ID和字段key获取中文名称
+     */
+    getChineseNameForField(panelId, fieldKey) {
+        if (!panelId || !fieldKey) return null;
+        
+        try {
+            // 🔧 重要修复：直接使用本地映射表（最可靠）
+            // 因为云端数据中的key是英文，但PresetPanelsManager中的key是中文，无法匹配
+            const chineseName = this.getSubItemDisplayName(panelId, fieldKey);
+            
+            // 检查是否找到了映射（返回值与原key不同，且不是英文）
+            if (chineseName) {
+                // 如果返回的是中文，说明找到了映射
+                if (!this.isEnglishName(chineseName)) {
+                    return chineseName;
+                }
+                // 如果返回的还是英文，但与原key不同，也可能是映射（如 "name" -> "姓名" 的情况）
+                if (chineseName !== fieldKey && !this.isEnglishName(chineseName)) {
+                    return chineseName;
+                }
+            }
+            
+            // 备用：尝试从PresetPanelsManager获取（用于新增的自定义字段）
+            const presets = window.SillyTavernInfobar?.PresetPanelsManager?.getPresets?.() || {};
+            const preset = presets[panelId];
+            
+            if (preset && preset.subItems) {
+                const field = preset.subItems.find(item => item.key === fieldKey || item.name === fieldKey);
+                if (field && field.name && !this.isEnglishName(field.name)) {
+                    return field.name;
+                }
+            }
+            
+            // 如果都找不到，返回null（让调用者知道没找到）
+            return null;
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取字段中文名失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 获取子项显示名称（支持旧版col_X格式key的兼容映射）
      */
     getSubItemDisplayName(panelType, key) {
         const displayNames = {
             personal: {
-                name: '姓名', age: '年龄', gender: '性别', occupation: '职业',
-                personality: '性格', hobbies: '爱好', height: '身高', weight: '体重',
-                bloodType: '血型', birthplace: '出生地', nationality: '国籍',
-                religion: '宗教信仰', politicalViews: '政治观点', values: '价值观',
-                goals: '人生目标', fears: '恐惧', strengths: '优点', weaknesses: '缺点',
-                mentalHealth: '心理健康', physicalHealth: '身体健康', appearance: '外貌',
-                clothing: '穿着风格', accessories: '配饰', tattoos: '纹身',
-                scars: '疤痕', voice: '声音', mannerisms: '习惯动作',
-                familyBackground: '家庭背景', education: '教育经历', workExperience: '工作经历',
-                income: '收入', socialStatus: '社会地位', relationships: '人际关系',
-                loveStatus: '恋爱状态', maritalStatus: '婚姻状态', sports: '运动',
-                music: '音乐', art: '艺术', reading: '阅读', gaming: '游戏',
-                travel: '旅行', cooking: '烹饪', skills: '技能特长',
-                languages: '语言能力', habits: '生活习惯', healthStatus: '健康状态'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'name': '姓名', 'age': '年龄', 'gender': '性别', 'occupation': '职业',
+                'height': '身高', 'weight': '体重', 'bloodType': '血型', 'zodiac': '星座',
+                'birthday': '生日', 'birthplace': '出生地', 'nationality': '国籍', 'ethnicity': '民族',
+                'hairColor': '发色', 'hairStyle': '发型', 'eyeColor': '眼色', 'skinColor': '肤色',
+                'bodyType': '体型', 'facialFeatures': '面部特征', 'scars': '疤痕', 'tattoos': '纹身',
+                'accessories': '配饰', 'clothingStyle': '穿着风格', 'appearance': '外貌', 'voice': '声音',
+                'personality': '性格', 'temperament': '性情', 'attitude': '态度', 'values': '价值观',
+                'beliefs': '信念', 'fears': '恐惧', 'dreams': '梦想', 'goals': '人生目标',
+                'intelligence': '智力', 'strength': '力量', 'charisma': '魅力', 'luck': '运气',
+                'perception': '感知', 'willpower': '意志力', 'reactionSpeed': '反应速度', 'learningAbility': '学习能力',
+                'familyBackground': '家庭背景', 'education': '教育经历', 'workExperience': '工作经历', 'income': '收入',
+                'socialStatus': '社会地位', 'relationships': '人际关系', 'loveStatus': '恋爱状态', 'maritalStatus': '婚姻状态',
+                'hobbies': '爱好', 'sports': '运动', 'music': '音乐', 'art': '艺术',
+                'reading': '阅读', 'gaming': '游戏', 'travel': '旅行', 'cooking': '烹饪',
+                'skills': '技能特长', 'languages': '语言能力', 'habits': '生活习惯', 'healthStatus': '健康状态',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '姓名': '姓名', '年龄': '年龄', '性别': '性别', '职业': '职业',
+                '身高': '身高', '体重': '体重', '血型': '血型', '星座': '星座',
+                '生日': '生日', '出生地': '出生地', '国籍': '国籍', '民族': '民族',
+                '发色': '发色', '发型': '发型', '眼色': '眼色', '肤色': '肤色',
+                '体型': '体型', '面部特征': '面部特征', '疤痕': '疤痕', '纹身': '纹身',
+                '配饰': '配饰', '穿着风格': '穿着风格', '外貌': '外貌', '声音': '声音',
+                '性格': '性格', '性情': '性情', '态度': '态度', '价值观': '价值观',
+                '信念': '信念', '恐惧': '恐惧', '梦想': '梦想', '人生目标': '人生目标',
+                '智力': '智力', '力量': '力量', '魅力': '魅力', '运气': '运气',
+                '感知': '感知', '意志力': '意志力', '反应速度': '反应速度', '学习能力': '学习能力',
+                '家庭背景': '家庭背景', '教育经历': '教育经历', '工作经历': '工作经历', '收入': '收入',
+                '社会地位': '社会地位', '人际关系': '人际关系', '恋爱状态': '恋爱状态', '婚姻状态': '婚姻状态',
+                '爱好': '爱好', '运动': '运动', '音乐': '音乐', '艺术': '艺术',
+                '阅读': '阅读', '游戏': '游戏', '旅行': '旅行', '烹饪': '烹饪',
+                '技能特长': '技能特长', '语言能力': '语言能力', '生活习惯': '生活习惯', '健康状态': '健康状态',
+                '种族': '种族', '职业类别': '职业类别'
             },
             world: {
-                name: '世界名称', type: '世界类型', genre: '世界风格',
-                description: '世界描述', geography: '地理环境', locations: '重要地点',
-                time: '时间设定'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'name': '世界名称', 'type': '世界类型', 'genre': '世界风格', 'theme': '世界主题',
+                'history': '世界历史', 'mythology': '神话传说', 'lore': '世界设定',
+                'geography': '地理环境', 'climate': '气候条件', 'terrain': '地形地貌', 'biomes': '生物群落',
+                'locations': '重要地点', 'landmarks': '地标建筑', 'cities': '城市设定', 'dungeons': '地下城',
+                'time': '时间设定', 'calendar': '历法系统', 'seasons': '季节变化', 'dayNight': '昼夜循环',
+                'weather': '天气系统', 'events': '世界事件', 'festivals': '节日庆典', 'disasters': '自然灾害',
+                'cultures': '文化设定', 'languages': '语言系统', 'religions': '宗教信仰', 'customs': '风俗习惯',
+                'politics': '政治体系', 'economy': '经济系统', 'technology': '科技水平', 'magic': '魔法系统',
+                'races': '种族设定', 'creatures': '生物设定', 'monsters': '怪物设定', 'npcs': 'NPC设定',
+                'factions': '势力组织', 'conflicts': '冲突矛盾', 'alliances': '联盟关系', 'wars': '战争历史',
+                'resources': '资源分布', 'materials': '材料设定', 'artifacts': '神器文物', 'currency': '货币系统',
+                'trade': '贸易体系', 'markets': '市场设定', 'guilds': '公会组织', 'transportation': '交通运输',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '世界名称': '世界名称', '世界类型': '世界类型', '世界风格': '世界风格', '世界主题': '世界主题',
+                '世界描述': '世界描述', '世界历史': '世界历史', '神话传说': '神话传说', '世界设定': '世界设定',
+                '地理环境': '地理环境', '气候条件': '气候条件', '地形地貌': '地形地貌', '生物群落': '生物群落',
+                '重要地点': '重要地点', '地标建筑': '地标建筑', '城市设定': '城市设定', '地下城': '地下城',
+                '时间设定': '时间设定', '历法系统': '历法系统', '季节变化': '季节变化', '昼夜循环': '昼夜循环',
+                '天气系统': '天气系统', '世界事件': '世界事件', '节日庆典': '节日庆典', '自然灾害': '自然灾害',
+                '文化设定': '文化设定', '语言系统': '语言系统', '宗教信仰': '宗教信仰', '风俗习惯': '风俗习惯',
+                '政治体系': '政治体系', '经济系统': '经济系统', '科技水平': '科技水平', '魔法系统': '魔法系统',
+                '种族设定': '种族设定', '生物设定': '生物设定', '怪物设定': '怪物设定', 'NPC设定': 'NPC设定',
+                '势力组织': '势力组织', '冲突矛盾': '冲突矛盾', '联盟关系': '联盟关系', '战争历史': '战争历史',
+                '资源分布': '资源分布', '材料设定': '材料设定', '神器文物': '神器文物', '货币系统': '货币系统',
+                '贸易体系': '贸易体系', '市场设定': '市场设定', '公会组织': '公会组织', '交通运输': '交通运输',
+                '位置': '位置', '环境': '环境', '氛围': '氛围', '季节': '季节',
+                '文化': '文化'
             },
             interaction: {
-                name: '对象名称', type: '对象类型', status: '当前状态',
-                location: '所在位置', activity: '当前活动', relationship: '关系类型',
-                intimacy: '亲密度', history: '历史记录', autoRecord: '自动记录'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'name': '对象名称', 'type': '对象类型', 'status': '当前状态', 'location': '所在位置',
+                'mood': '情绪状态', 'activity': '当前活动', 'availability': '可用性', 'priority': '优先级',
+                'relationship': '关系类型', 'intimacy': '亲密度', 'trust': '信任度', 'friendship': '友谊度',
+                'romance': '浪漫度', 'respect': '尊重度', 'dependency': '依赖度', 'conflict': '冲突度',
+                'history': '历史记录', 'frequency': '互动频率', 'duration': '互动时长', 'quality': '互动质量',
+                'topics': '话题偏好', 'emotions': '情感状态', 'milestones': '重要节点', 'memories': '共同回忆',
+                'autoRecord': '自动记录', 'notifications': '通知设置', 'analysis': '关系分析', 'suggestions': '建议提示',
+                'network': '社交网络', 'groups': '群体关系', 'influence': '影响力', 'reputation': '声誉度',
+                'alliances': '联盟关系', 'rivalries': '竞争关系', 'mentorship': '师徒关系', 'hierarchy': '等级关系',
+                'communicationStyle': '沟通风格', 'preferredTopics': '偏好话题', 'avoidedTopics': '回避话题', 'boundaries': '边界设定',
+                'comfortLevel': '舒适度', 'energyLevel': '活跃度', 'responseTime': '响应时间', 'engagement': '参与度',
+                'specialEvents': '特殊事件', 'achievements': '成就记录', 'challenges': '挑战任务', 'growth': '成长轨迹',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '对象名称': '对象名称', '对象类型': '对象类型', '当前状态': '当前状态', '所在位置': '所在位置',
+                '情绪状态': '情绪状态', '当前活动': '当前活动', '可用性': '可用性', '优先级': '优先级',
+                '关系类型': '关系类型', '亲密度': '亲密度', '信任度': '信任度', '友谊度': '友谊度',
+                '浪漫度': '浪漫度', '尊重度': '尊重度', '依赖度': '依赖度', '冲突度': '冲突度',
+                '历史记录': '历史记录', '互动频率': '互动频率', '互动时长': '互动时长', '互动质量': '互动质量',
+                '话题偏好': '话题偏好', '情感状态': '情感状态', '重要节点': '重要节点', '共同回忆': '共同回忆',
+                '自动记录': '自动记录', '通知设置': '通知设置', '关系分析': '关系分析', '建议提示': '建议提示',
+                '社交网络': '社交网络', '群体关系': '群体关系', '影响力': '影响力', '声誉度': '声誉度',
+                '联盟关系': '联盟关系', '竞争关系': '竞争关系', '师徒关系': '师徒关系', '等级关系': '等级关系',
+                '沟通风格': '沟通风格', '偏好话题': '偏好话题', '回避话题': '回避话题', '边界设定': '边界设定',
+                '舒适度': '舒适度', '活跃度': '活跃度', '响应时间': '响应时间', '参与度': '参与度',
+                '特殊事件': '特殊事件', '成就记录': '成就记录', '挑战任务': '挑战任务', '成长轨迹': '成长轨迹',
+                'NPC姓名': 'NPC姓名', 'NPC性格': 'NPC性格', 'NPC状态': 'NPC状态',
+                '态度': '态度', '对话主题': '对话主题', '交互历史': '交互历史',
+                '好感度': '好感度', '社交背景': '社交背景'
             },
             tasks: {
-                title: '任务标题', description: '任务描述', priority: '优先级',
-                status: '任务状态', deadline: '截止日期', assignee: '负责人',
-                progress: '完成进度', category: '任务分类'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'creation': '任务创建', 'editing': '任务编辑', 'deletion': '任务删除', 'completion': '任务完成',
+                'priority': '优先级', 'deadline': '截止日期', 'progress': '进度跟踪', 'status': '状态管理',
+                'categories': '分类管理', 'tags': '标签系统', 'projects': '项目管理', 'milestones': '里程碑',
+                'subtasks': '子任务', 'dependencies': '依赖关系', 'templates': '任务模板', 'recurring': '重复任务',
+                'notifications': '通知提醒', 'reminders': '提醒设置', 'alerts': '警报通知', 'dailySummary': '每日总结',
+                'weeklyReview': '周报回顾', 'achievementBadges': '成就徽章', 'productivityStats': '生产力统计', 'timeTracking': '时间跟踪',
+                'assignment': '任务分配', 'collaboration': '协作功能', 'comments': '评论系统', 'attachments': '附件管理',
+                'sharing': '共享功能', 'permissions': '权限管理', 'approval': '审批流程', 'delegation': '任务委派',
+                'listView': '列表视图', 'kanbanView': '看板视图', 'calendarView': '日历视图', 'ganttView': '甘特图',
+                'sorting': '排序功能', 'filtering': '筛选功能', 'search': '搜索功能', 'grouping': '分组功能',
+                'backup': '备份功能', 'export': '导出功能', 'import': '导入功能', 'sync': '同步功能',
+                'archive': '归档管理', 'history': '历史记录', 'versioning': '版本控制', 'recovery': '恢复功能',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '任务创建': '任务创建', '任务编辑': '任务编辑', '任务删除': '任务删除', '任务完成': '任务完成',
+                '优先级': '优先级', '截止日期': '截止日期', '进度跟踪': '进度跟踪', '状态管理': '状态管理',
+                '分类管理': '分类管理', '标签系统': '标签系统', '项目管理': '项目管理', '里程碑': '里程碑',
+                '子任务': '子任务', '依赖关系': '依赖关系', '任务模板': '任务模板', '重复任务': '重复任务',
+                '通知提醒': '通知提醒', '提醒设置': '提醒设置', '警报通知': '警报通知', '每日总结': '每日总结',
+                '周报回顾': '周报回顾', '成就徽章': '成就徽章', '生产力统计': '生产力统计', '时间跟踪': '时间跟踪',
+                '任务分配': '任务分配', '协作功能': '协作功能', '评论系统': '评论系统', '附件管理': '附件管理',
+                '共享功能': '共享功能', '权限管理': '权限管理', '审批流程': '审批流程', '任务委派': '任务委派',
+                '列表视图': '列表视图', '看板视图': '看板视图', '日历视图': '日历视图', '甘特图': '甘特图',
+                '排序功能': '排序功能', '筛选功能': '筛选功能', '搜索功能': '搜索功能', '分组功能': '分组功能',
+                '备份功能': '备份功能', '导出功能': '导出功能', '导入功能': '导入功能', '同步功能': '同步功能',
+                '归档管理': '归档管理', '历史记录': '历史记录', '版本控制': '版本控制', '恢复功能': '恢复功能'
             },
             organization: {
-                name: '组织名称', type: '组织类型', leader: '领导者',
-                members: '成员数量', purpose: '组织目标', location: '总部位置',
-                influence: '影响力', resources: '资源状况'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'name': '组织名称', 'type': '组织类型', 'purpose': '组织描述', 'history': '组织历史',
+                'founding': '成立背景', 'motto': '组织格言', 'values': '核心价值',
+                'hierarchy': '层级结构', 'departments': '部门设置', 'leadership': '领导层', 'council': '理事会',
+                'positions': '职位设置', 'ranks': '等级制度', 'promotion': '晋升机制', 'authority': '权限分配',
+                'members': '成员管理', 'recruitment': '招募制度', 'training': '培训体系', 'evaluation': '考核评估',
+                'rewards': '奖励机制', 'punishment': '惩罚制度', 'benefits': '福利待遇', 'retirement': '退休制度',
+                'rules': '组织规则', 'code': '行为准则', 'ethics': '道德规范', 'discipline': '纪律制度',
+                'procedures': '操作流程', 'protocols': '协议规范', 'standards': '标准制度', 'compliance': '合规管理',
+                'allies': '盟友关系', 'enemies': '敌对关系', 'neutral': '中立关系', 'partnerships': '合作伙伴',
+                'reputation': '组织声誉', 'influence': '影响力', 'diplomacy': '外交关系', 'treaties': '条约协议',
+                'finances': '财务状况', 'assets': '资产管理', 'facilities': '设施设备', 'equipment': '装备器材',
+                'technology': '技术资源', 'knowledge': '知识库', 'archives': '档案管理', 'secrets': '机密信息',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '组织名称': '组织名称', '组织类型': '组织类型', '组织描述': '组织描述', '组织目标': '组织目标',
+                '组织历史': '组织历史', '成立背景': '成立背景', '组织格言': '组织格言', '核心价值': '核心价值',
+                '层级结构': '层级结构', '部门设置': '部门设置', '领导层': '领导层', '理事会': '理事会',
+                '职位设置': '职位设置', '等级制度': '等级制度', '晋升机制': '晋升机制', '权限分配': '权限分配',
+                '成员管理': '成员管理', '招募制度': '招募制度', '培训体系': '培训体系', '考核评估': '考核评估',
+                '奖励机制': '奖励机制', '惩罚制度': '惩罚制度', '福利待遇': '福利待遇', '退休制度': '退休制度',
+                '组织规则': '组织规则', '行为准则': '行为准则', '道德规范': '道德规范', '纪律制度': '纪律制度',
+                '操作流程': '操作流程', '协议规范': '协议规范', '标准制度': '标准制度', '合规管理': '合规管理',
+                '盟友关系': '盟友关系', '敌对关系': '敌对关系', '中立关系': '中立关系', '合作伙伴': '合作伙伴',
+                '组织声誉': '组织声誉', '影响力': '影响力', '外交关系': '外交关系', '条约协议': '条约协议',
+                '财务状况': '财务状况', '资产管理': '资产管理', '设施设备': '设施设备', '装备器材': '装备器材',
+                '技术资源': '技术资源', '知识库': '知识库', '档案管理': '档案管理', '机密信息': '机密信息'
             },
             news: {
-                title: '新闻标题', content: '新闻内容', source: '消息来源',
-                date: '发布日期', importance: '重要程度', category: '新闻分类',
-                impact: '影响范围'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'breaking': '突发新闻', 'politics': '政治新闻', 'economy': '经济新闻', 'social': '社会新闻',
+                'military': '军事新闻', 'technology': '科技新闻', 'culture': '文化新闻', 'sports': '体育新闻',
+                'official': '官方公告', 'media': '媒体报道', 'rumors': '传言消息', 'insider': '内幕消息',
+                'witness': '目击报告', 'intelligence': '情报信息', 'leaked': '泄露消息', 'anonymous': '匿名爆料',
+                'creation': '新闻创建', 'editing': '新闻编辑', 'review': '新闻审核', 'publishing': '新闻发布',
+                'archiving': '新闻归档', 'deletion': '新闻删除', 'backup': '备份管理', 'versioning': '版本控制',
+                'broadcast': '广播发布', 'newsletter': '新闻简报', 'alerts': '新闻警报', 'digest': '新闻摘要',
+                'socialMedia': '社交媒体', 'forums': '论坛讨论', 'messaging': '消息推送', 'email': '邮件通知',
+                'comments': '评论系统', 'likes': '点赞功能', 'sharing': '分享功能', 'bookmarks': '收藏功能',
+                'ratings': '评分系统', 'polls': '投票调查', 'discussions': '讨论区', 'feedback': '反馈系统',
+                'analytics': '数据分析', 'metrics': '指标统计', 'trends': '趋势分析', 'reports': '报告生成',
+                'monitoring': '监控系统', 'alertsSystem': '警报系统', 'automation': '自动化', 'aiAnalysis': 'AI分析',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '突发新闻': '突发新闻', '政治新闻': '政治新闻', '经济新闻': '经济新闻', '社会新闻': '社会新闻',
+                '军事新闻': '军事新闻', '科技新闻': '科技新闻', '文化新闻': '文化新闻', '体育新闻': '体育新闻',
+                '官方公告': '官方公告', '媒体报道': '媒体报道', '传言消息': '传言消息', '内幕消息': '内幕消息',
+                '目击报告': '目击报告', '情报信息': '情报信息', '泄露消息': '泄露消息', '匿名爆料': '匿名爆料',
+                '新闻创建': '新闻创建', '新闻编辑': '新闻编辑', '新闻审核': '新闻审核', '新闻发布': '新闻发布',
+                '新闻归档': '新闻归档', '新闻删除': '新闻删除', '备份管理': '备份管理', '版本控制': '版本控制',
+                '广播发布': '广播发布', '新闻简报': '新闻简报', '新闻警报': '新闻警报', '新闻摘要': '新闻摘要',
+                '社交媒体': '社交媒体', '论坛讨论': '论坛讨论', '消息推送': '消息推送', '邮件通知': '邮件通知',
+                '评论系统': '评论系统', '点赞功能': '点赞功能', '分享功能': '分享功能', '收藏功能': '收藏功能',
+                '评分系统': '评分系统', '投票调查': '投票调查', '讨论区': '讨论区', '反馈系统': '反馈系统',
+                '数据分析': '数据分析', '指标统计': '指标统计', '趋势分析': '趋势分析', '报告生成': '报告生成',
+                '监控系统': '监控系统', '警报系统': '警报系统', '自动化': '自动化', 'AI分析': 'AI分析',
+                '事件': '事件'
             },
             inventory: {
-                name: '物品名称', type: '物品类型', quantity: '数量',
-                condition: '物品状态', value: '价值', location: '存放位置',
-                description: '物品描述'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'storage': '物品存储', 'retrieval': '物品取出', 'organization': '物品整理', 'search': '物品搜索',
+                'sorting': '排序功能', 'filtering': '筛选功能', 'categories': '分类管理', 'tags': '标签系统',
+                'weapons': '武器装备', 'armor': '防具装备', 'accessories': '饰品配件', 'consumables': '消耗品',
+                'materials': '材料物品', 'tools': '工具器械', 'books': '书籍文献', 'treasures': '珍宝收藏',
+                'capacity': '容量管理', 'weight': '重量限制', 'stacking': '堆叠功能', 'expansion': '扩容升级',
+                'compartments': '分隔管理', 'protection': '保护功能', 'durability': '耐久度', 'repair': '修理维护',
+                'trading': '交易功能', 'selling': '出售功能', 'buying': '购买功能', 'auction': '拍卖系统',
+                'gifting': '赠送功能', 'lending': '借用功能', 'sharing': '共享功能', 'banking': '银行存储',
+                'crafting': '制作功能', 'recipes': '配方管理', 'enhancement': '强化功能', 'enchanting': '附魔功能',
+                'upgrading': '升级功能', 'combining': '合成功能', 'dismantling': '拆解功能', 'recycling': '回收功能',
+                'automation': '自动化', 'aiSorting': 'AI整理', 'recommendations': '推荐系统', 'analytics': '数据分析',
+                'backup': '备份功能', 'sync': '同步功能', 'security': '安全保护', 'history': '历史记录',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '物品存储': '物品存储', '物品取出': '物品取出', '物品整理': '物品整理', '物品搜索': '物品搜索',
+                '排序功能': '排序功能', '筛选功能': '筛选功能', '分类管理': '分类管理', '标签系统': '标签系统',
+                '武器装备': '武器装备', '防具装备': '防具装备', '饰品配件': '饰品配件', '消耗品': '消耗品',
+                '材料物品': '材料物品', '工具器械': '工具器械', '书籍文献': '书籍文献', '珍宝收藏': '珍宝收藏',
+                '容量管理': '容量管理', '重量限制': '重量限制', '堆叠功能': '堆叠功能', '扩容升级': '扩容升级',
+                '分隔管理': '分隔管理', '保护功能': '保护功能', '耐久度': '耐久度', '修理维护': '修理维护',
+                '交易功能': '交易功能', '出售功能': '出售功能', '购买功能': '购买功能', '拍卖系统': '拍卖系统',
+                '赠送功能': '赠送功能', '借用功能': '借用功能', '共享功能': '共享功能', '银行存储': '银行存储',
+                '制作功能': '制作功能', '配方管理': '配方管理', '强化功能': '强化功能', '附魔功能': '附魔功能',
+                '升级功能': '升级功能', '合成功能': '合成功能', '拆解功能': '拆解功能', '回收功能': '回收功能',
+                '自动化': '自动化', 'AI整理': 'AI整理', '推荐系统': '推荐系统', '数据分析': '数据分析',
+                '备份功能': '备份功能', '同步功能': '同步功能', '安全保护': '安全保护', '历史记录': '历史记录',
+                '金币': '金币', '武器': '武器', '护甲': '护甲', '道具': '道具'
             },
             abilities: {
-                name: '能力名称', type: '能力类型', level: '能力等级',
-                description: '能力描述', cooldown: '冷却时间', cost: '消耗',
-                effect: '效果描述'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'strength': '力量属性', 'agility': '敏捷属性', 'intelligence': '智力属性', 'constitution': '体质属性',
+                'wisdom': '智慧属性', 'charisma': '魅力属性', 'luck': '幸运属性', 'perception': '感知属性',
+                'swordsmanship': '剑术技能', 'archery': '射箭技能', 'magic': '魔法技能', 'defense': '防御技能',
+                'martialArts': '武术技能', 'stealth': '潜行技能', 'tactics': '战术技能', 'healing': '治疗技能',
+                'crafting': '制作技能', 'cooking': '烹饪技能', 'farming': '农业技能', 'mining': '采矿技能',
+                'fishing': '钓鱼技能', 'hunting': '狩猎技能', 'trading': '贸易技能', 'negotiation': '谈判技能',
+                'research': '研究技能', 'investigation': '调查技能', 'languages': '语言技能', 'history': '历史知识',
+                'medicine': '医学知识', 'alchemy': '炼金术', 'engineering': '工程学', 'astronomy': '天文学',
+                'persuasion': '说服技能', 'deception': '欺骗技能', 'intimidation': '威吓技能', 'performance': '表演技能',
+                'leadership': '领导能力', 'empathy': '共情能力', 'insight': '洞察能力', 'networking': '社交能力',
+                'telepathy': '心灵感应', 'telekinesis': '念动力', 'precognition': '预知能力', 'shapeshifting': '变形能力',
+                'invisibility': '隐身能力', 'flight': '飞行能力', 'regeneration': '再生能力', 'immortality': '不朽能力',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '力量属性': '力量属性', '敏捷属性': '敏捷属性', '智力属性': '智力属性', '体质属性': '体质属性',
+                '智慧属性': '智慧属性', '魅力属性': '魅力属性', '幸运属性': '幸运属性', '感知属性': '感知属性',
+                '剑术技能': '剑术技能', '射箭技能': '射箭技能', '魔法技能': '魔法技能', '防御技能': '防御技能',
+                '武术技能': '武术技能', '潜行技能': '潜行技能', '战术技能': '战术技能', '治疗技能': '治疗技能',
+                '制作技能': '制作技能', '烹饪技能': '烹饪技能', '农业技能': '农业技能', '采矿技能': '采矿技能',
+                '钓鱼技能': '钓鱼技能', '狩猎技能': '狩猎技能', '贸易技能': '贸易技能', '谈判技能': '谈判技能',
+                '研究技能': '研究技能', '调查技能': '调查技能', '语言技能': '语言技能', '历史知识': '历史知识',
+                '医学知识': '医学知识', '炼金术': '炼金术', '工程学': '工程学', '天文学': '天文学',
+                '说服技能': '说服技能', '欺骗技能': '欺骗技能', '威吓技能': '威吓技能', '表演技能': '表演技能',
+                '领导能力': '领导能力', '共情能力': '共情能力', '洞察能力': '洞察能力', '社交能力': '社交能力',
+                '心灵感应': '心灵感应', '念动力': '念动力', '预知能力': '预知能力', '变形能力': '变形能力',
+                '隐身能力': '隐身能力', '飞行能力': '飞行能力', '再生能力': '再生能力', '不朽能力': '不朽能力'
             },
             plot: {
-                title: '剧情标题', description: '剧情描述', stage: '当前阶段',
-                characters: '相关角色', location: '发生地点', importance: '重要程度',
-                outcome: '结果影响'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'mainStory': '主线剧情', 'sideQuests': '支线任务', 'subplots': '子剧情', 'backstory': '背景故事',
+                'prologue': '序章', 'epilogue': '尾声', 'flashbacks': '回忆片段', 'foreshadowing': '伏笔铺垫',
+                'exposition': '背景说明', 'risingAction': '情节发展', 'climax': '高潮部分', 'fallingAction': '情节回落',
+                'resolution': '问题解决', 'denouement': '结局收尾', 'cliffhanger': '悬念结尾', 'twist': '剧情转折',
+                'characterArc': '角色成长', 'relationships': '人物关系', 'motivations': '动机驱动', 'conflicts': '冲突矛盾',
+                'internalConflicts': '内心冲突', 'externalConflicts': '外部冲突', 'moralDilemmas': '道德困境', 'sacrifices': '牺牲选择',
+                'dialogue': '对话系统', 'narration': '叙述描写', 'monologue': '独白表达', 'symbolism': '象征意义',
+                'themes': '主题思想', 'mood': '情绪氛围', 'tone': '语调风格', 'pacing': '节奏控制',
+                'choices': '选择分支', 'consequences': '后果影响', 'branching': '分支剧情', 'multipleEndings': '多重结局',
+                'playerAgency': '玩家主导', 'emergentNarrative': '涌现叙事', 'proceduralGeneration': '程序生成', 'adaptiveStorytelling': '自适应叙事',
+                'timeline': '时间线', 'notes': '剧情笔记', 'bookmarks': '书签标记', 'saveStates': '存档状态',
+                'autoSave': '自动保存', 'export': '导出功能', 'import': '导入功能', 'analytics': '数据分析',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '主线剧情': '主线剧情', '支线任务': '支线任务', '子剧情': '子剧情', '背景故事': '背景故事',
+                '序章': '序章', '尾声': '尾声', '回忆片段': '回忆片段', '伏笔铺垫': '伏笔铺垫',
+                '背景说明': '背景说明', '情节发展': '情节发展', '高潮部分': '高潮部分', '情节回落': '情节回落',
+                '问题解决': '问题解决', '结局收尾': '结局收尾', '悬念结尾': '悬念结尾', '剧情转折': '剧情转折',
+                '角色成长': '角色成长', '人物关系': '人物关系', '动机驱动': '动机驱动', '冲突矛盾': '冲突矛盾',
+                '内心冲突': '内心冲突', '外部冲突': '外部冲突', '道德困境': '道德困境', '牺牲选择': '牺牲选择',
+                '对话系统': '对话系统', '叙述描写': '叙述描写', '独白表达': '独白表达', '象征意义': '象征意义',
+                '主题思想': '主题思想', '情绪氛围': '情绪氛围', '语调风格': '语调风格', '节奏控制': '节奏控制',
+                '选择分支': '选择分支', '后果影响': '后果影响', '分支剧情': '分支剧情', '多重结局': '多重结局',
+                '玩家主导': '玩家主导', '涌现叙事': '涌现叙事', '程序生成': '程序生成', '自适应叙事': '自适应叙事',
+                '时间线': '时间线', '剧情笔记': '剧情笔记', '书签标记': '书签标记', '存档状态': '存档状态',
+                '自动保存': '自动保存', '导出功能': '导出功能', '导入功能': '导入功能', '数据分析': '数据分析'
             },
             cultivation: {
-                realm: '修炼境界', technique: '修炼功法', progress: '修炼进度',
-                qi: '灵气值', foundation: '根基', breakthrough: '突破条件',
-                resources: '修炼资源'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'qiRefining': '炼气期', 'foundation': '筑基期', 'goldenCore': '金丹期', 'nascentSoul': '元婴期',
+                'soulTransformation': '化神期', 'voidRefinement': '炼虚期', 'bodyIntegration': '合体期', 'mahayana': '大乘期',
+                'tribulation': '渡劫期', 'immortal': '真仙', 'trueImmortal': '天仙', 'goldenImmortal': '金仙',
+                'breathingTechnique': '呼吸法', 'bodyRefining': '炼体术', 'soulCultivation': '神魂修炼', 'dualCultivation': '双修功法',
+                'swordCultivation': '剑修之道', 'alchemy': '炼丹术', 'formation': '阵法', 'talisman': '符箓',
+                'spiritualPower': '灵力值', 'spiritualRoot': '灵根', 'meridians': '经脉', 'dantian': '丹田',
+                'divineSense': '神识', 'lifeSpan': '寿命', 'karma': '因果', 'heavenlyDao': '天道',
+                'flyingSword': '飞剑', 'magicTreasure': '法宝', 'spiritualArmor': '灵甲', 'storageRing': '储物戒',
+                'spiritBeast': '灵兽', 'puppet': '傀儡', 'avatar': '化身', 'clone': '分身',
+                'spiritStone': '灵石', 'spiritHerb': '灵草', 'pill': '丹药', 'spiritVein': '灵脉',
+                'caveMansion': '洞府', 'secretRealm': '秘境', 'inheritance': '传承', 'opportunity': '机缘',
+                'meditation': '打坐', 'tribulationCrossing': '渡劫', 'enlightenment': '顿悟', 'breakthrough': '突破',
+                'sect': '宗门', 'masterDisciple': '师徒', 'daoCompanion': '道侣', 'immortalAscension': '飞升',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '炼气期': '炼气期', '筑基期': '筑基期', '金丹期': '金丹期', '元婴期': '元婴期',
+                '化神期': '化神期', '炼虚期': '炼虚期', '合体期': '合体期', '大乘期': '大乘期',
+                '渡劫期': '渡劫期', '真仙': '真仙', '天仙': '天仙', '金仙': '金仙',
+                '呼吸法': '呼吸法', '炼体术': '炼体术', '神魂修炼': '神魂修炼', '双修功法': '双修功法',
+                '剑修之道': '剑修之道', '炼丹术': '炼丹术', '阵法': '阵法', '符箓': '符箓',
+                '灵力值': '灵力值', '灵根': '灵根', '经脉': '经脉', '丹田': '丹田',
+                '神识': '神识', '寿命': '寿命', '因果': '因果', '天道': '天道',
+                '飞剑': '飞剑', '法宝': '法宝', '灵甲': '灵甲', '储物戒': '储物戒',
+                '灵兽': '灵兽', '傀儡': '傀儡', '化身': '化身', '分身': '分身',
+                '灵石': '灵石', '灵草': '灵草', '丹药': '丹药', '灵脉': '灵脉',
+                '洞府': '洞府', '秘境': '秘境', '传承': '传承', '机缘': '机缘',
+                '打坐': '打坐', '渡劫': '渡劫', '顿悟': '顿悟', '突破': '突破',
+                '宗门': '宗门', '师徒': '师徒', '道侣': '道侣', '飞升': '飞升'
             },
             fantasy: {
-                race: '种族', class: '职业', level: '等级',
-                hp: '生命值', mp: '魔法值', strength: '力量',
-                agility: '敏捷', intelligence: '智力', equipment: '装备'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'human': '人类种族', 'elf': '精灵种族', 'dwarf': '矮人种族', 'orc': '兽人种族',
+                'dragon': '龙族', 'demon': '恶魔', 'angel': '天使', 'undead': '不死族',
+                'halfling': '半身人', 'giant': '巨人族', 'fairy': '仙灵', 'vampire': '吸血鬼',
+                'fireMagic': '火系魔法', 'waterMagic': '水系魔法', 'earthMagic': '土系魔法', 'airMagic': '风系魔法',
+                'lightMagic': '光系魔法', 'darkMagic': '暗系魔法', 'natureMagic': '自然魔法', 'spaceMagic': '空间魔法',
+                'timeMagic': '时间魔法', 'necromancy': '死灵法术', 'illusionMagic': '幻术魔法', 'enchantment': '附魔术',
+                'warrior': '战士职业', 'mage': '法师职业', 'archer': '弓箭手', 'rogue': '盗贼职业',
+                'priest': '牧师职业', 'paladin': '圣骑士', 'druid': '德鲁伊', 'warlock': '术士职业',
+                'bard': '吟游诗人', 'monk': '武僧职业', 'ranger': '游侠职业', 'assassin': '刺客职业',
+                'phoenix': '凤凰', 'unicorn': '独角兽', 'griffin': '狮鹫', 'pegasus': '飞马',
+                'kraken': '海怪', 'chimera': '奇美拉', 'basilisk': '蛇怪', 'hydra': '九头蛇',
+                'legendaryWeapon': '传说武器', 'magicArmor': '魔法护甲', 'artifact': '神器', 'relic': '圣物',
+                'magicCrystal': '魔法水晶', 'enchantedItem': '附魔物品', 'potion': '魔法药水', 'scroll': '魔法卷轴',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '人类种族': '人类种族', '精灵种族': '精灵种族', '矮人种族': '矮人种族', '兽人种族': '兽人种族',
+                '龙族': '龙族', '恶魔': '恶魔', '天使': '天使', '不死族': '不死族',
+                '半身人': '半身人', '巨人族': '巨人族', '仙灵': '仙灵', '吸血鬼': '吸血鬼',
+                '火系魔法': '火系魔法', '水系魔法': '水系魔法', '土系魔法': '土系魔法', '风系魔法': '风系魔法',
+                '光系魔法': '光系魔法', '暗系魔法': '暗系魔法', '自然魔法': '自然魔法', '空间魔法': '空间魔法',
+                '时间魔法': '时间魔法', '死灵法术': '死灵法术', '幻术魔法': '幻术魔法', '附魔术': '附魔术',
+                '战士职业': '战士职业', '法师职业': '法师职业', '弓箭手': '弓箭手', '盗贼职业': '盗贼职业',
+                '牧师职业': '牧师职业', '圣骑士': '圣骑士', '德鲁伊': '德鲁伊', '术士职业': '术士职业',
+                '吟游诗人': '吟游诗人', '武僧职业': '武僧职业', '游侠职业': '游侠职业', '刺客职业': '刺客职业',
+                '凤凰': '凤凰', '独角兽': '独角兽', '狮鹫': '狮鹫', '飞马': '飞马',
+                '海怪': '海怪', '奇美拉': '奇美拉', '蛇怪': '蛇怪', '九头蛇': '九头蛇',
+                '传说武器': '传说武器', '魔法护甲': '魔法护甲', '神器': '神器', '圣物': '圣物',
+                '魔法水晶': '魔法水晶', '附魔物品': '附魔物品', '魔法药水': '魔法药水', '魔法卷轴': '魔法卷轴'
             },
             modern: {
-                job: '工作', income: '收入', education: '学历',
-                skills: '技能', social: '社交圈', lifestyle: '生活方式',
-                goals: '人生目标'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'city': '城市环境', 'district': '区域设定', 'housing': '住房情况', 'transport': '交通工具',
+                'neighborhood': '社区环境', 'facilities': '设施配套', 'cost': '生活成本', 'safety': '安全状况',
+                'pollution': '环境污染', 'job': '职业工作', 'company': '公司企业', 'position': '职位等级',
+                'income': '收入水平', 'worktime': '工作时间', 'benefits': '福利待遇', 'career': '职业发展',
+                'skills': '技能要求', 'education': '教育背景', 'smartphone': '智能手机', 'computer': '电脑设备',
+                'internet': '网络连接', 'social': '社交媒体', 'gaming': '游戏娱乐', 'streaming': '流媒体',
+                'shopping': '购物消费', 'payment': '支付方式', 'ai': '人工智能', 'health': '健康管理',
+                'fitness': '健身运动', 'diet': '饮食习惯', 'sleep': '睡眠质量', 'medical': '医疗保健',
+                'stress': '压力管理', 'mental': '心理健康', 'checkup': '体检检查', 'budget': '预算管理',
+                'brands': '品牌偏好', 'fashion': '时尚潮流', 'luxury': '奢侈消费', 'investment': '投资理财',
+                'saving': '储蓄计划', 'credit': '信用记录', 'insurance': '保险保障', 'movies': '电影娱乐',
+                'music': '音乐欣赏', 'books': '阅读习惯', 'travel': '旅游出行', 'sports': '体育运动',
+                'hobbies': '兴趣爱好', 'clubs': '俱乐部', 'events': '活动参与',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '城市环境': '城市环境', '区域设定': '区域设定', '住房情况': '住房情况', '交通工具': '交通工具',
+                '社区环境': '社区环境', '设施配套': '设施配套', '生活成本': '生活成本', '安全状况': '安全状况',
+                '环境污染': '环境污染', '职业工作': '职业工作', '公司企业': '公司企业', '职位等级': '职位等级',
+                '收入水平': '收入水平', '工作时间': '工作时间', '福利待遇': '福利待遇', '职业发展': '职业发展',
+                '技能要求': '技能要求', '教育背景': '教育背景', '智能手机': '智能手机', '电脑设备': '电脑设备',
+                '网络连接': '网络连接', '社交媒体': '社交媒体', '游戏娱乐': '游戏娱乐', '流媒体': '流媒体',
+                '购物消费': '购物消费', '支付方式': '支付方式', '人工智能': '人工智能', '健康管理': '健康管理',
+                '健身运动': '健身运动', '饮食习惯': '饮食习惯', '睡眠质量': '睡眠质量', '医疗保健': '医疗保健',
+                '压力管理': '压力管理', '心理健康': '心理健康', '体检检查': '体检检查', '预算管理': '预算管理',
+                '品牌偏好': '品牌偏好', '时尚潮流': '时尚潮流', '奢侈消费': '奢侈消费', '投资理财': '投资理财',
+                '储蓄计划': '储蓄计划', '信用记录': '信用记录', '保险保障': '保险保障', '电影娱乐': '电影娱乐',
+                '音乐欣赏': '音乐欣赏', '阅读习惯': '阅读习惯', '旅游出行': '旅游出行', '体育运动': '体育运动',
+                '兴趣爱好': '兴趣爱好', '俱乐部': '俱乐部', '活动参与': '活动参与'
             },
             historical: {
-                era: '历史时期', position: '社会地位', family: '家族背景',
-                achievements: '成就', reputation: '声望', allies: '盟友',
-                enemies: '敌人'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'dynasty': '朝代背景', 'period': '历史时期', 'emperor': '皇帝君主', 'capital': '都城首府',
+                'region': '地域分布', 'events': '历史事件', 'wars': '战争冲突', 'politics': '政治制度',
+                'economy': '经济状况', 'class': '社会阶层', 'title': '爵位头衔', 'family': '家族背景',
+                'wealth': '财富状况', 'land': '土地财产', 'servants': '仆从随从', 'influence': '影响力',
+                'reputation': '名声声誉', 'connections': '人脉关系', 'education': '教育程度', 'poetry': '诗词文学',
+                'calligraphy': '书法艺术', 'music': '音乐才艺', 'chess': '棋艺技巧', 'classics': '经典学问',
+                'philosophy': '哲学思想', 'etiquette': '礼仪规范', 'language': '语言文字', 'martial': '武艺修为',
+                'weapons': '兵器使用', 'archery': '射箭技艺', 'horsemanship': '骑术技能', 'strategy': '兵法谋略',
+                'bodyguard': '护卫随从', 'hunting': '狩猎技能', 'survival': '生存技能', 'residence': '居住环境',
+                'clothing': '服饰风格', 'food': '饮食习惯', 'transport': '出行方式', 'entertainment': '娱乐活动',
+                'festivals': '节庆活动', 'religion': '宗教信仰', 'medicine': '医学知识', 'profession': '职业身份',
+                'crafts': '手工技艺', 'trade': '商贸活动', 'farming': '农业生产', 'administration': '行政管理',
+                'teaching': '教学传授', 'healing': '医疗救治', 'construction': '建筑营造',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '朝代背景': '朝代背景', '历史时期': '历史时期', '皇帝君主': '皇帝君主', '都城首府': '都城首府',
+                '地域分布': '地域分布', '历史事件': '历史事件', '战争冲突': '战争冲突', '政治制度': '政治制度',
+                '经济状况': '经济状况', '社会阶层': '社会阶层', '爵位头衔': '爵位头衔', '家族背景': '家族背景',
+                '财富状况': '财富状况', '土地财产': '土地财产', '仆从随从': '仆从随从', '影响力': '影响力',
+                '名声声誉': '名声声誉', '人脉关系': '人脉关系', '教育程度': '教育程度', '诗词文学': '诗词文学',
+                '书法艺术': '书法艺术', '音乐才艺': '音乐才艺', '棋艺技巧': '棋艺技巧', '经典学问': '经典学问',
+                '哲学思想': '哲学思想', '礼仪规范': '礼仪规范', '语言文字': '语言文字', '武艺修为': '武艺修为',
+                '兵器使用': '兵器使用', '射箭技艺': '射箭技艺', '骑术技能': '骑术技能', '兵法谋略': '兵法谋略',
+                '护卫随从': '护卫随从', '狩猎技能': '狩猎技能', '生存技能': '生存技能', '居住环境': '居住环境',
+                '服饰风格': '服饰风格', '饮食习惯': '饮食习惯', '出行方式': '出行方式', '娱乐活动': '娱乐活动',
+                '节庆活动': '节庆活动', '宗教信仰': '宗教信仰', '医学知识': '医学知识', '职业身份': '职业身份',
+                '手工技艺': '手工技艺', '商贸活动': '商贸活动', '农业生产': '农业生产', '行政管理': '行政管理',
+                '教学传授': '教学传授', '医疗救治': '医疗救治', '建筑营造': '建筑营造'
             },
             magic: {
-                school: '魔法学派', spells: '法术列表', mana: '魔力值',
-                focus: '施法焦点', components: '法术材料', familiar: '魔宠',
-                research: '研究项目'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'evocation': '塑能系', 'illusion': '幻术系', 'enchantment': '惑控系', 'necromancy': '死灵系',
+                'divination': '预言系', 'transmutation': '变化系', 'conjuration': '咒法系', 'abjuration': '防护系',
+                'elemental': '元素法术', 'cantrip': '戏法法术', 'level1': '一环法术', 'level2': '二环法术',
+                'level3': '三环法术', 'level4': '四环法术', 'level5': '五环法术', 'level6': '六环法术',
+                'level7': '七环法术', 'level8': '八环法术', 'level9': '九环法术', 'level': '法术等级',
+                'mana': '法力值', 'intelligence': '智力属性', 'wisdom': '感知属性', 'charisma': '魅力属性',
+                'concentration': '专注能力', 'spellpower': '法术强度', 'resistance': '魔法抗性', 'regeneration': '法力回复',
+                'spellbook': '法术书', 'known': '已知法术', 'prepared': '准备法术', 'slots': '法术位',
+                'components': '施法材料', 'rituals': '仪式法术', 'metamagic': '超魔专长', 'scrolls': '法术卷轴',
+                'fire': '火元素', 'water': '水元素', 'earth': '土元素', 'air': '风元素',
+                'lightning': '雷电', 'ice': '冰霜', 'light': '光明', 'dark': '黑暗',
+                'staff': '法杖', 'wand': '魔杖', 'orb': '法球', 'robe': '法袍',
+                'amulet': '护符', 'ring': '魔法戒指', 'crystal': '魔法水晶', 'tome': '魔法典籍',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '塑能系': '塑能系', '幻术系': '幻术系', '惑控系': '惑控系', '死灵系': '死灵系',
+                '预言系': '预言系', '变化系': '变化系', '咒法系': '咒法系', '防护系': '防护系',
+                '元素法术': '元素法术', '戏法法术': '戏法法术', '一环法术': '一环法术', '二环法术': '二环法术',
+                '三环法术': '三环法术', '四环法术': '四环法术', '五环法术': '五环法术', '六环法术': '六环法术',
+                '七环法术': '七环法术', '八环法术': '八环法术', '九环法术': '九环法术', '法术等级': '法术等级',
+                '法力值': '法力值', '智力属性': '智力属性', '感知属性': '感知属性', '魅力属性': '魅力属性',
+                '专注能力': '专注能力', '法术强度': '法术强度', '魔法抗性': '魔法抗性', '法力回复': '法力回复',
+                '法术书': '法术书', '已知法术': '已知法术', '准备法术': '准备法术', '法术位': '法术位',
+                '施法材料': '施法材料', '仪式法术': '仪式法术', '超魔专长': '超魔专长', '法术卷轴': '法术卷轴',
+                '火元素': '火元素', '水元素': '水元素', '土元素': '土元素', '风元素': '风元素',
+                '雷电': '雷电', '冰霜': '冰霜', '光明': '光明', '黑暗': '黑暗',
+                '法杖': '法杖', '魔杖': '魔杖', '法球': '法球', '法袍': '法袍',
+                '护符': '护符', '魔法戒指': '魔法戒指', '魔法水晶': '魔法水晶', '魔法典籍': '魔法典籍'
             },
             training: {
-                skill: '训练技能', instructor: '指导者', progress: '训练进度',
-                schedule: '训练计划', equipment: '训练器材', goals: '训练目标',
-                achievements: '训练成果'
+                // 🔧 修复：使用实际存在的英文字段key值创建映射
+                'obedience': '服从训练', 'discipline': '纪律训练', 'etiquette': '礼仪训练', 'posture': '姿态训练',
+                'speech': '言语训练', 'behavior': '行为训练', 'attention': '注意力训练', 'patience': '耐心训练',
+                'focus': '专注训练', 'service': '服务训练', 'cooking': '烹饪训练', 'cleaning': '清洁训练',
+                'massage': '按摩训练', 'entertainment': '娱乐训练', 'music': '音乐训练', 'dance': '舞蹈训练',
+                'art': '艺术训练', 'language': '语言训练', 'strength': '力量训练', 'endurance': '耐力训练',
+                'flexibility': '柔韧训练', 'balance': '平衡训练', 'coordination': '协调训练', 'agility': '敏捷训练',
+                'stamina': '体能训练', 'recovery': '恢复训练', 'confidence': '自信训练', 'stress': '抗压训练',
+                'emotion': '情绪训练', 'memory': '记忆训练', 'logic': '逻辑训练', 'creativity': '创造训练',
+                'meditation': '冥想训练', 'mindfulness': '正念训练', 'intensity': '强度设置', 'duration': '持续时间',
+                'frequency': '训练频率', 'progress': '进度跟踪', 'rewards': '奖励机制', 'punishment': '惩罚机制',
+                'schedule': '训练计划', 'evaluation': '评估系统', 'auto': '自动训练', 'adaptive': '自适应训练',
+                'ai': 'AI辅助', 'analytics': '数据分析', 'reports': '训练报告', 'export': '导出功能',
+                'backup': '备份功能', 'sync': '同步功能',
+
+                // 🔧 完整的中文字段名映射 (保持不变)
+                '服从训练': '服从训练', '纪律训练': '纪律训练', '礼仪训练': '礼仪训练', '姿态训练': '姿态训练',
+                '言语训练': '言语训练', '行为训练': '行为训练', '注意力训练': '注意力训练', '耐心训练': '耐心训练',
+                '专注训练': '专注训练', '服务训练': '服务训练', '烹饪训练': '烹饪训练', '清洁训练': '清洁训练',
+                '按摩训练': '按摩训练', '娱乐训练': '娱乐训练', '音乐训练': '音乐训练', '舞蹈训练': '舞蹈训练',
+                '艺术训练': '艺术训练', '语言训练': '语言训练', '力量训练': '力量训练', '耐力训练': '耐力训练',
+                '柔韧训练': '柔韧训练', '平衡训练': '平衡训练', '协调训练': '协调训练', '敏捷训练': '敏捷训练',
+                '体能训练': '体能训练', '恢复训练': '恢复训练', '自信训练': '自信训练', '抗压训练': '抗压训练',
+                '情绪训练': '情绪训练', '记忆训练': '记忆训练', '逻辑训练': '逻辑训练', '创造训练': '创造训练',
+                '冥想训练': '冥想训练', '正念训练': '正念训练', '强度设置': '强度设置', '持续时间': '持续时间',
+                '训练频率': '训练频率', '进度跟踪': '进度跟踪', '奖励机制': '奖励机制', '惩罚机制': '惩罚机制',
+                '训练计划': '训练计划', '评估系统': '评估系统', '自动训练': '自动训练', '自适应训练': '自适应训练',
+                'AI辅助': 'AI辅助', '数据分析': '数据分析', '训练报告': '训练报告', '导出功能': '导出功能',
+                '备份功能': '备份功能', '同步功能': '同步功能'
             }
         };
 
@@ -8529,7 +9865,9 @@ export class InfoBarSettings {
         let current = obj;
 
         for (let i = 0; i < keys.length - 1; i++) {
-            if (!current[keys[i]]) {
+            // 🔧 修复：检查中间节点是否是对象类型
+            // 如果不存在或者不是对象（比如是布尔值、字符串等），则创建新对象
+            if (!current[keys[i]] || typeof current[keys[i]] !== 'object' || Array.isArray(current[keys[i]])) {
                 current[keys[i]] = {};
             }
             current = current[keys[i]];
@@ -9372,13 +10710,8 @@ export class InfoBarSettings {
                     exportData.configs.customPanels = extensionSettings.customPanels;
                 }
 
-                // 基础面板配置（含subItems/prompts等）
-                const basicPanelIds = ['personal','world','interaction','tasks','organization','news','inventory','abilities','plot','cultivation','fantasy','modern','historical','magic','training'];
-                basicPanelIds.forEach(id => {
-                    if (extensionSettings[id] && !exportData.configs[id]) {
-                        exportData.configs[id] = extensionSettings[id];
-                    }
-                });
+                // 🔧 新架构：customPanels已包含所有面板配置，无需单独导出基础面板
+                console.log('[InfoBarSettings] 📦 customPanels已包含所有面板配置');
 
                 // 前端显示配置（如果未被收集）
                 if (!exportData.configs.frontendDisplay) {
@@ -20400,7 +21733,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             model: apiConfig.model,
             messages: messages,
             temperature: apiConfig.temperature || 0.7,
-            max_tokens: apiConfig.maxTokens || 4000 // 🔧 修复：移除硬编码限制，完全使用用户设置
+            max_tokens: apiConfig.maxTokens || 20000 // 🔧 修复：默认20000，与UI表单一致
         };
 
         console.log('[InfoBarSettings] 🔧 API请求参数:', {
@@ -23466,8 +24799,8 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
                     panelConfig.subItems.forEach(subItem => {
                         if (subItem.key) {
-                            // 🔧 修复：优先使用displayName，如果没有则使用name作为显示名称
-                            const displayName = subItem.displayName || subItem.name || subItem.key;
+                            // 🔧 修复：使用 getSubItemDisplayName 方法获取正确的中文显示名称
+                            const displayName = this.getSubItemDisplayName(panelId, subItem.key);
 
                             // 使用字段的key作为映射键
                             customPanelMapping[subItem.key] = displayName;
@@ -23475,6 +24808,11 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                             // 🔧 兼容性：同时支持name字段（如果与key不同）
                             if (subItem.name && subItem.name !== subItem.key) {
                                 customPanelMapping[subItem.name] = displayName;
+                            }
+                            
+                            // 🔧 兼容性：如果displayName是中文，也添加中文->中文的映射
+                            if (displayName && displayName !== subItem.key) {
+                                customPanelMapping[displayName] = displayName;
                             }
                         }
                     });
@@ -23521,8 +24859,8 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                     if (Array.isArray(panelConfig.subItems)) {
                         panelConfig.subItems.forEach(subItem => {
                             if (subItem.key) {
-                                // 🔧 修复：优先使用displayName，如果没有则使用name作为显示名称
-                                const displayName = subItem.displayName || subItem.name || subItem.key;
+                                // 🔧 修复：使用 getSubItemDisplayName 方法获取正确的中文显示名称
+                                const displayName = this.getSubItemDisplayName(panelId, subItem.key);
 
                                 // 使用字段的key作为映射键
                                 customFieldMapping[subItem.key] = displayName;
@@ -23530,6 +24868,11 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                                 // 🔧 兼容性：同时支持name字段（如果与key不同）
                                 if (subItem.name && subItem.name !== subItem.key) {
                                     customFieldMapping[subItem.name] = displayName;
+                                }
+                                
+                                // 🔧 兼容性：如果displayName是中文，也添加中文->中文的映射
+                                if (displayName && displayName !== subItem.key) {
+                                    customFieldMapping[displayName] = displayName;
                                 }
                             }
                         });
@@ -29729,7 +31072,7 @@ ${userTemplate}
                         }]
                     }],
                     generationConfig: {
-                        maxOutputTokens: Math.min(apiConfig.maxTokens || 4000, 8000), // 🔧 使用用户设置，最大限制8000避免超限
+                        maxOutputTokens: apiConfig.maxTokens || 20000, // 🔧 默认20000，与UI表单一致
                         temperature: apiConfig.temperature || 0.7, // 🔧 使用用户设置的温度
                         topP: 0.8,
                         topK: 20
@@ -29754,7 +31097,7 @@ ${userTemplate}
                             content: prompt
                         }
                     ],
-                    max_tokens: Math.min(apiConfig.maxTokens || 4000, 8000), // 🔧 使用用户设置的最大令牌数，最大限制8000
+                    max_tokens: apiConfig.maxTokens || 20000, // 🔧 默认20000，与UI表单一致
                     temperature: apiConfig.temperature || 0.7 // 🔧 使用用户设置的温度
                 };
 
@@ -30050,7 +31393,7 @@ ${userTemplate}
                 provider: apiConfig.provider || 'openai',
                 headers: apiConfig.headers || {},
                 // 🔧 添加缺失的配置字段
-                maxTokens: apiConfig.maxTokens || 4000, // 从用户设置或默认4000
+                maxTokens: apiConfig.maxTokens || 20000, // 默认20000，与UI表单一致
                 temperature: apiConfig.temperature || 0.7,
                 retryCount: apiConfig.retryCount || 3,
                 format: apiConfig.format || 'native'
@@ -31241,20 +32584,10 @@ ${dataExamples}
     }
 
     /**
-     * 🚀 获取子项显示名称
+     * 🚀 获取子项显示名称（已废弃，使用8875行的新版本）
+     * 🔧 修复：移除对不存在的getFieldMappings()的调用
      */
-    getSubItemDisplayName(panelId, subItemKey) {
-        // 使用现有的字段映射逻辑
-        const fieldMappings = this.getFieldMappings();
-        const panelMappings = fieldMappings[panelId];
-
-        if (panelMappings && panelMappings[subItemKey]) {
-            return panelMappings[subItemKey];
-        }
-
-        // 如果没有映射，返回格式化的key
-        return subItemKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-    }
+    // getSubItemDisplayName() 方法已在8875行重新实现，此处不再需要
 
     /**
      * 🚀 绑定状态栏提示词编辑器事件
@@ -31750,6 +33083,55 @@ ${dataExamples}
         try {
             console.log('[InfoBarSettings] 🧠 AI记忆总结启用状态变化:', enabled);
 
+            // 🔧 新增：检查深度记忆管理器依赖
+            if (enabled) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+                const deepMemoryEnabled = deepMemoryManager?.settings?.enabled;
+
+                if (!deepMemoryEnabled) {
+                    // 深度记忆管理器未启用，提醒用户
+                    const confirmEnable = confirm(
+                        '⚠️ AI记忆总结功能依赖提醒\n\n' +
+                        'AI记忆总结功能需要配合"深度记忆管理器"一起使用才能正常工作。\n\n' +
+                        '当前深度记忆管理器未启用，AI记忆总结生成的内容将无法被处理和存储。\n\n' +
+                        '是否同时启用深度记忆管理器？\n\n' +
+                        '点击"确定"将同时启用两个功能\n' +
+                        '点击"取消"将只启用AI记忆总结（但功能无法正常工作）'
+                    );
+
+                    if (confirmEnable) {
+                        // 用户确认，同时启用深度记忆管理器
+                        console.log('[InfoBarSettings] 🔧 用户确认，同时启用深度记忆管理器');
+
+                        // 启用深度记忆管理器
+                        if (deepMemoryManager) {
+                            deepMemoryManager.updateSettings({
+                                enabled: true
+                            });
+                        }
+
+                        // 更新UI中的深度记忆管理器复选框
+                        const deepMemoryCheckbox = this.modal.querySelector('#memory-deep-memory-enabled');
+                        if (deepMemoryCheckbox) {
+                            deepMemoryCheckbox.checked = true;
+                        }
+
+                        this.showMessage(
+                            '✅ 已同时启用AI记忆总结和深度记忆管理器',
+                            'success'
+                        );
+                    } else {
+                        // 用户取消，只启用AI记忆总结，但显示警告
+                        console.warn('[InfoBarSettings] ⚠️ 用户选择只启用AI记忆总结，但深度记忆管理器未启用');
+                        this.showMessage(
+                            '⚠️ AI记忆总结已启用，但深度记忆管理器未启用，功能将无法正常工作',
+                            'warning'
+                        );
+                    }
+                }
+            }
+
             // 显示/隐藏AI记忆选项
             const aiMemoryOptions = this.modal.querySelectorAll('.ai-memory-options');
             aiMemoryOptions.forEach(option => {
@@ -31765,10 +33147,16 @@ ${dataExamples}
                 });
             }
 
-            this.showMessage(
-                enabled ? '✅ AI记忆总结已启用' : '❌ AI记忆总结已禁用',
-                enabled ? 'success' : 'info'
-            );
+            // 🔧 修复：只有在没有显示依赖提醒的情况下才显示普通消息
+            const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+            const deepMemoryEnabled = deepMemoryManager?.settings?.enabled;
+
+            if (!enabled || deepMemoryEnabled) {
+                this.showMessage(
+                    enabled ? '✅ AI记忆总结已启用' : '❌ AI记忆总结已禁用',
+                    enabled ? 'success' : 'info'
+                );
+            }
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理AI记忆总结启用状态变化失败:', error);
@@ -31793,6 +33181,57 @@ ${dataExamples}
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理消息级别总结变化失败:', error);
+        }
+    }
+
+    /**
+     * 🗄️ 新增：处理AI记忆数据库启用状态变化
+     */
+    handleAIMemoryDatabaseEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 🗄️ AI记忆数据库启用状态变化:', enabled);
+
+            // 显示/隐藏AI记忆数据库选项
+            const aiMemoryDatabaseOptions = this.modal.querySelector('#memory-ai-memory-database-options');
+            if (aiMemoryDatabaseOptions) {
+                aiMemoryDatabaseOptions.style.display = enabled ? 'block' : 'none';
+            }
+
+            // 更新AI记忆数据库设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const aiMemoryDatabase = infoBarTool?.modules?.aiMemoryDatabase;
+            
+            if (aiMemoryDatabase) {
+                aiMemoryDatabase.config.enabled = enabled;
+                console.log('[InfoBarSettings] ✅ AI记忆数据库配置已更新');
+                console.log('[InfoBarSettings] 📊 当前配置:', aiMemoryDatabase.config);
+            } else {
+                console.error('[InfoBarSettings] ❌ AI记忆数据库模块未找到！');
+                console.error('[InfoBarSettings] 可用模块列表:', Object.keys(infoBarTool?.modules || {}));
+                
+                // 🔧 降级方案：尝试从其他位置访问
+                if (infoBarTool?.aiMemoryDatabase) {
+                    console.warn('[InfoBarSettings] 🔧 从主对象找到AI记忆数据库，手动更新配置');
+                    infoBarTool.aiMemoryDatabase.config.enabled = enabled;
+                } else if (window.__TEST_AIMemoryDatabase) {
+                    console.warn('[InfoBarSettings] 🔧 从测试全局变量找到AI记忆数据库，手动更新配置');
+                    window.__TEST_AIMemoryDatabase.config.enabled = enabled;
+                } else {
+                    this.showMessage(
+                        '⚠️ AI记忆数据库模块未加载，请刷新页面（Ctrl+Shift+R清除缓存）',
+                        'error'
+                    );
+                    return;
+                }
+            }
+
+            this.showMessage(
+                enabled ? '✅ AI记忆数据库已启用' : '❌ AI记忆数据库已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理AI记忆数据库启用状态变化失败:', error);
         }
     }
 
@@ -32089,6 +33528,55 @@ ${dataExamples}
         try {
             console.log('[InfoBarSettings] 🔍 向量化记忆检索启用状态变化:', enabled);
 
+            // 🔧 新增：检查深度记忆管理器依赖
+            if (enabled) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+                const deepMemoryEnabled = deepMemoryManager?.settings?.enabled;
+
+                if (!deepMemoryEnabled) {
+                    // 深度记忆管理器未启用，提醒用户
+                    const confirmEnable = confirm(
+                        '⚠️ 语义搜索功能依赖提醒\n\n' +
+                        '语义搜索功能需要配合"深度记忆管理器"一起使用才能正常工作。\n\n' +
+                        '当前深度记忆管理器未启用，语义搜索将无法检索到记忆数据。\n\n' +
+                        '是否同时启用深度记忆管理器？\n\n' +
+                        '点击"确定"将同时启用两个功能\n' +
+                        '点击"取消"将只启用语义搜索（但功能无法正常工作）'
+                    );
+
+                    if (confirmEnable) {
+                        // 用户确认，同时启用深度记忆管理器
+                        console.log('[InfoBarSettings] 🔧 用户确认，同时启用深度记忆管理器');
+
+                        // 启用深度记忆管理器
+                        if (deepMemoryManager) {
+                            deepMemoryManager.updateSettings({
+                                enabled: true
+                            });
+                        }
+
+                        // 更新UI中的深度记忆管理器复选框
+                        const deepMemoryCheckbox = this.modal.querySelector('#memory-deep-memory-enabled');
+                        if (deepMemoryCheckbox) {
+                            deepMemoryCheckbox.checked = true;
+                        }
+
+                        this.showMessage(
+                            '✅ 已同时启用语义搜索和深度记忆管理器',
+                            'success'
+                        );
+                    } else {
+                        // 用户取消，只启用语义搜索，但显示警告
+                        console.warn('[InfoBarSettings] ⚠️ 用户选择只启用语义搜索，但深度记忆管理器未启用');
+                        this.showMessage(
+                            '⚠️ 语义搜索已启用，但深度记忆管理器未启用，功能将无法正常工作',
+                            'warning'
+                        );
+                    }
+                }
+            }
+
             // 显示/隐藏向量化记忆选项
             const vectorizedMemoryOptions = this.modal.querySelectorAll('.vectorized-memory-options');
             vectorizedMemoryOptions.forEach(option => {
@@ -32104,10 +33592,16 @@ ${dataExamples}
                 });
             }
 
-            this.showMessage(
-                enabled ? '✅ 语义搜索已启用' : '❌ 语义搜索已禁用',
-                enabled ? 'success' : 'info'
-            );
+            // 🔧 修复：只有在没有显示依赖提醒的情况下才显示普通消息
+            const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+            const deepMemoryEnabled = deepMemoryManager?.settings?.enabled;
+
+            if (!enabled || deepMemoryEnabled) {
+                this.showMessage(
+                    enabled ? '✅ 语义搜索已启用' : '❌ 语义搜索已禁用',
+                    enabled ? 'success' : 'info'
+                );
+            }
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理向量化记忆检索启用状态变化失败:', error);
@@ -32655,6 +34149,55 @@ ${dataExamples}
         try {
             console.log('[InfoBarSettings] 🤖 智能记忆分类器启用状态变化:', enabled);
 
+            // 🔧 新增：检查深度记忆管理器依赖
+            if (enabled) {
+                const infoBarTool = window.SillyTavernInfobar;
+                const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+                const deepMemoryEnabled = deepMemoryManager?.settings?.enabled;
+
+                if (!deepMemoryEnabled) {
+                    // 深度记忆管理器未启用，提醒用户
+                    const confirmEnable = confirm(
+                        '⚠️ 智能记忆分类器功能依赖提醒\n\n' +
+                        '智能记忆分类器需要配合"深度记忆管理器"一起使用才能正常工作。\n\n' +
+                        '当前深度记忆管理器未启用，智能记忆分类器将无法对记忆进行分类和管理。\n\n' +
+                        '是否同时启用深度记忆管理器？\n\n' +
+                        '点击"确定"将同时启用两个功能\n' +
+                        '点击"取消"将只启用智能记忆分类器（但功能无法正常工作）'
+                    );
+
+                    if (confirmEnable) {
+                        // 用户确认，同时启用深度记忆管理器
+                        console.log('[InfoBarSettings] 🔧 用户确认，同时启用深度记忆管理器');
+
+                        // 启用深度记忆管理器
+                        if (deepMemoryManager) {
+                            deepMemoryManager.updateSettings({
+                                enabled: true
+                            });
+                        }
+
+                        // 更新UI中的深度记忆管理器复选框
+                        const deepMemoryCheckbox = this.modal.querySelector('#memory-deep-memory-enabled');
+                        if (deepMemoryCheckbox) {
+                            deepMemoryCheckbox.checked = true;
+                        }
+
+                        this.showMessage(
+                            '✅ 已同时启用智能记忆分类器和深度记忆管理器',
+                            'success'
+                        );
+                    } else {
+                        // 用户取消，只启用智能记忆分类器，但显示警告
+                        console.warn('[InfoBarSettings] ⚠️ 用户选择只启用智能记忆分类器，但深度记忆管理器未启用');
+                        this.showMessage(
+                            '⚠️ 智能记忆分类器已启用，但深度记忆管理器未启用，功能将无法正常工作',
+                            'warning'
+                        );
+                    }
+                }
+            }
+
             // 显示/隐藏智能分类器选项
             const intelligentClassifierOptions = this.modal.querySelectorAll('.intelligent-classifier-options');
             intelligentClassifierOptions.forEach(option => {
@@ -32670,10 +34213,16 @@ ${dataExamples}
                 });
             }
 
-            this.showMessage(
-                enabled ? '✅ 智能记忆分类器已启用' : '❌ 智能记忆分类器已禁用',
-                enabled ? 'success' : 'info'
-            );
+            // 🔧 修复：只有在没有显示依赖提醒的情况下才显示普通消息
+            const deepMemoryManager = infoBarTool?.modules?.deepMemoryManager;
+            const deepMemoryEnabled = deepMemoryManager?.settings?.enabled;
+
+            if (!enabled || deepMemoryEnabled) {
+                this.showMessage(
+                    enabled ? '✅ 智能记忆分类器已启用' : '❌ 智能记忆分类器已禁用',
+                    enabled ? 'success' : 'info'
+                );
+            }
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理智能记忆分类器启用状态变化失败:', error);
@@ -32964,6 +34513,30 @@ ${dataExamples}
                 });
             }
 
+            // 🗄️ AI记忆数据库事件
+            const memoryAiDatabaseEnabled = this.modal.querySelector('#memory-ai-memory-database-enabled');
+            if (memoryAiDatabaseEnabled) {
+                memoryAiDatabaseEnabled.addEventListener('change', (e) => {
+                    this.handleAIMemoryDatabaseEnabledChange(e.target.checked);
+                });
+            }
+
+            const memoryAiDbMaxResults = this.modal.querySelector('#memory-ai-db-max-results');
+            const memoryAiDbMaxResultsValue = this.modal.querySelector('#memory-ai-db-max-results-value');
+            if (memoryAiDbMaxResults && memoryAiDbMaxResultsValue) {
+                memoryAiDbMaxResults.addEventListener('input', (e) => {
+                    memoryAiDbMaxResultsValue.textContent = e.target.value;
+                });
+            }
+
+            const memoryAiDbMinImportance = this.modal.querySelector('#memory-ai-db-min-importance');
+            const memoryAiDbMinImportanceValue = this.modal.querySelector('#memory-ai-db-min-importance-value');
+            if (memoryAiDbMinImportance && memoryAiDbMinImportanceValue) {
+                memoryAiDbMinImportance.addEventListener('input', (e) => {
+                    memoryAiDbMinImportanceValue.textContent = (parseFloat(e.target.value) * 100).toFixed(0) + '%';
+                });
+            }
+
             // 语义搜索事件
             const memoryVectorizedEnabled = this.modal.querySelector('#memory-vectorized-memory-enabled');
             if (memoryVectorizedEnabled) {
@@ -33207,6 +34780,35 @@ ${dataExamples}
             this.modal.querySelectorAll('.ai-memory-options').forEach(opt => {
                 opt.style.display = aiSettings.enabled ? 'block' : 'none';
             });
+
+            // 🗄️ AI记忆数据库设置
+            const aiDatabaseSettings = savedMem.aiDatabase || {};
+            const aiDbEnabledEl = this.modal.querySelector('#memory-ai-memory-database-enabled');
+            const aiDbAutoIndexingEl = this.modal.querySelector('#memory-ai-db-auto-indexing');
+            const aiDbThinkingEl = this.modal.querySelector('#memory-ai-db-thinking-interface');
+            const aiDbMaxResultsEl = this.modal.querySelector('#memory-ai-db-max-results');
+            const aiDbMaxResultsVal = this.modal.querySelector('#memory-ai-db-max-results-value');
+            const aiDbMinImportanceEl = this.modal.querySelector('#memory-ai-db-min-importance');
+            const aiDbMinImportanceVal = this.modal.querySelector('#memory-ai-db-min-importance-value');
+
+            if (aiDbEnabledEl) aiDbEnabledEl.checked = !!aiDatabaseSettings.enabled;
+            if (aiDbAutoIndexingEl) aiDbAutoIndexingEl.checked = aiDatabaseSettings.autoIndexing !== false;
+            if (aiDbThinkingEl) aiDbThinkingEl.checked = aiDatabaseSettings.enableThinkingInterface !== false;
+            if (aiDbMaxResultsEl) {
+                const v = aiDatabaseSettings.maxSearchResults || 20;
+                aiDbMaxResultsEl.value = v;
+                if (aiDbMaxResultsVal) aiDbMaxResultsVal.textContent = v;
+            }
+            if (aiDbMinImportanceEl) {
+                const v = aiDatabaseSettings.minImportance || 0.5;
+                aiDbMinImportanceEl.value = v;
+                if (aiDbMinImportanceVal) aiDbMinImportanceVal.textContent = (v * 100).toFixed(0) + '%';
+            }
+            // 显示/隐藏AI记忆数据库选项
+            const aiDbOptions = this.modal.querySelector('#memory-ai-memory-database-options');
+            if (aiDbOptions) {
+                aiDbOptions.style.display = aiDatabaseSettings.enabled ? 'block' : 'none';
+            }
 
             // 🔍 语义搜索设置
             const vectorSettings = summaryManager?.vectorizedMemoryRetriever?.settings || savedMem.vector || {};
@@ -35002,45 +36604,45 @@ ${dataExamples}
     }
 
     /**
-     * 🗑️ 清理AI记忆数据库
+     * 🗑️ 清理AI记忆数据库索引
      */
     async handleCleanupAIMemoryDatabase() {
         try {
             const confirmed = confirm(
-                '⚠️ 确认清理AI记忆数据库？\n\n' +
-                '此操作将清空所有AI记忆总结数据，包括：\n' +
-                '• 感知层记忆\n' +
-                '• 短期记忆\n' +
-                '• 长期记忆\n' +
-                '• 深度归档\n\n' +
+                '⚠️ 确认清理AI记忆数据库索引？\n\n' +
+                '此操作将清空AI记忆数据库的索引数据，包括：\n' +
+                '• 关键词索引\n' +
+                '• 重要性索引\n' +
+                '• 分类索引\n' +
+                '• 检索缓存\n\n' +
+                '注意：这不会删除原始记忆数据，只会清空索引。\n' +
+                '下次有新记忆时会自动重建索引。\n\n' +
                 '此操作不可撤销！'
             );
 
             if (!confirmed) return;
 
-            console.log('[InfoBarSettings] 🗑️ 开始清理AI记忆数据库...');
+            console.log('[InfoBarSettings] 🗑️ 开始清理AI记忆数据库索引...');
 
             const infoBarTool = window.SillyTavernInfobar;
-            if (!infoBarTool?.modules?.aiMemoryDatabaseInjector) {
+            const aiMemoryDatabase = infoBarTool?.modules?.aiMemoryDatabase;
+            
+            if (!aiMemoryDatabase) {
                 throw new Error('AI记忆数据库模块未找到');
             }
 
-            // 清空记忆数据库
-            const injector = infoBarTool.modules.aiMemoryDatabaseInjector;
-            if (injector.memoryDatabase) {
-                injector.memoryDatabase.sensoryMemory.clear();
-                injector.memoryDatabase.shortTermMemory.clear();
-                injector.memoryDatabase.longTermMemory.clear();
-                injector.memoryDatabase.deepArchive.clear();
-                console.log('[InfoBarSettings] ✅ AI记忆数据库已清空');
-            }
+            // 清空索引
+            aiMemoryDatabase.clearIndex();
+            console.log('[InfoBarSettings] ✅ AI记忆数据库索引已清空');
 
-            this.showNotification('✅ AI记忆数据库已成功清空', 'success');
-            this.refreshMemoryStatus();
+            this.showNotification('✅ AI记忆数据库索引已成功清空', 'success');
+            
+            // 🔧 修复：立即刷新状态显示
+            await this.refreshMemoryStatus();
 
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 清理AI记忆数据库失败:', error);
-            this.showNotification('❌ 清理AI记忆数据库失败: ' + error.message, 'error');
+            console.error('[InfoBarSettings] ❌ 清理AI记忆数据库索引失败:', error);
+            this.showNotification('❌ 清理失败: ' + error.message, 'error');
         }
     }
 
@@ -35081,7 +36683,9 @@ ${dataExamples}
             }
 
             this.showNotification('✅ 向量化数据已成功清空', 'success');
-            this.refreshMemoryStatus();
+            
+            // 🔧 修复：立即刷新状态显示
+            await this.refreshMemoryStatus();
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 清理向量化数据失败:', error);
@@ -35135,7 +36739,9 @@ ${dataExamples}
             }
 
             this.showNotification('✅ 深度记忆数据已成功清空', 'success');
-            this.refreshMemoryStatus();
+            
+            // 🔧 修复：立即刷新状态显示
+            await this.refreshMemoryStatus();
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 清理深度记忆数据失败:', error);
@@ -35177,7 +36783,9 @@ ${dataExamples}
             }
 
             this.showNotification('✅ 知识图谱数据已成功清空', 'success');
-            this.refreshMemoryStatus();
+            
+            // 🔧 修复：立即刷新状态显示
+            await this.refreshMemoryStatus();
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 清理知识图谱数据失败:', error);
@@ -35227,19 +36835,15 @@ ${dataExamples}
             let successCount = 0;
             let failCount = 0;
 
-            // 1. 清理AI记忆数据库
+            // 1. 清理AIMemoryDatabase索引
             try {
-                if (modules.aiMemoryDatabaseInjector?.memoryDatabase) {
-                    const db = modules.aiMemoryDatabaseInjector.memoryDatabase;
-                    db.sensoryMemory.clear();
-                    db.shortTermMemory.clear();
-                    db.longTermMemory.clear();
-                    db.deepArchive.clear();
+                if (modules.aiMemoryDatabase) {
+                    modules.aiMemoryDatabase.clearIndex();
                     successCount++;
-                    console.log('[InfoBarSettings] ✅ AI记忆数据库已清空');
+                    console.log('[InfoBarSettings] ✅ AI记忆数据库索引已清空');
                 }
             } catch (error) {
-                console.error('[InfoBarSettings] ❌ 清理AI记忆数据库失败:', error);
+                console.error('[InfoBarSettings] ❌ 清理AI记忆数据库索引失败:', error);
                 failCount++;
             }
 
@@ -35333,10 +36937,11 @@ ${dataExamples}
             if (failCount === 0) {
                 this.showNotification(`✅ 所有记忆数据已成功清空（${successCount}项）`, 'success');
             } else {
-                this.showNotification(`⚠️ 部分数据清理失败（成功${successCount}项，失败${failCount}项）`, 'error');
+                this.showNotification(`⚠️ 部分数据清理失败（成功${successCount}项，失败${failCount}项）`, 'warning');
             }
 
-            this.refreshMemoryStatus();
+            // 🔧 修复：立即刷新状态显示
+            await this.refreshMemoryStatus();
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 清空所有记忆数据失败:', error);

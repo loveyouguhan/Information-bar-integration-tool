@@ -173,6 +173,9 @@ export class MessageInfoBarRenderer {
                 throw new Error('事件系统未初始化');
             }
 
+            // 🔧 新增：初始化时清理所有残留的错误UI元素
+            this.cleanupErrorUI();
+
             // 绑定事件监听器
             this.bindEventListeners();
 
@@ -674,6 +677,28 @@ export class MessageInfoBarRenderer {
         // 如果错误过多，可以考虑禁用渲染器
         if (this.errorCount > 10) {
             console.error('[MessageInfoBarRenderer] ❌ 错误过多，考虑重新初始化');
+        }
+    }
+
+    /**
+     * 🔧 新增：清理所有错误UI元素
+     * 用于在初始化、禁用插件或切换聊天时清理残留的错误提示
+     */
+    cleanupErrorUI() {
+        try {
+            // 查找并移除所有 infobar-error 和 infobar-empty 类的元素
+            const errorElements = document.querySelectorAll('.infobar-error, .infobar-empty');
+            if (errorElements.length > 0) {
+                console.log(`[MessageInfoBarRenderer] 🧹 开始清理 ${errorElements.length} 个错误UI元素`);
+                errorElements.forEach(element => {
+                    element.remove();
+                });
+                console.log('[MessageInfoBarRenderer] ✅ 错误UI清理完成');
+            } else {
+                console.log('[MessageInfoBarRenderer] ℹ️ 没有发现错误UI元素需要清理');
+            }
+        } catch (error) {
+            console.error('[MessageInfoBarRenderer] ❌ 清理错误UI失败:', error);
         }
     }
 
@@ -1938,17 +1963,40 @@ export class MessageInfoBarRenderer {
             if (dataTable) {
                 const enabledPanels = dataTable.getAllEnabledPanels();
 
-                // 🔧 修复：特殊处理信息面板的键匹配
-                let targetPanel = enabledPanels.find(panel => panel.key === panelKey);
+                // 🔧 增强：支持多种方式查找面板（key、id、name）
+                let targetPanel = null;
+                
+                // 方式1: 通过key查找
+                if (panelKey) {
+                    targetPanel = enabledPanels.find(panel => panel.key === panelKey);
+                }
+                
+                // 方式2: 通过id查找（如custom1）
+                if (!targetPanel && panelKey) {
+                    targetPanel = enabledPanels.find(panel => panel.id === panelKey);
+                    if (targetPanel) {
+                        console.log(`[MessageInfoBarRenderer] 🔧 通过id找到面板: ${panelKey} -> ${targetPanel.name}`);
+                    }
+                }
+                
+                // 方式3: 通过name查找
+                if (!targetPanel && panelKey) {
+                    targetPanel = enabledPanels.find(panel => panel.name === panelKey);
+                    if (targetPanel) {
+                        console.log(`[MessageInfoBarRenderer] 🔧 通过name找到面板: ${panelKey} -> ${targetPanel.name}`);
+                    }
+                }
 
-                // 如果没找到，尝试通过面板名称匹配（特别是信息面板）
+                // 方式4: 特殊处理信息面板（兼容旧逻辑）
                 if (!targetPanel && (panelKey === 'info' || panelKey === undefined)) {
                     targetPanel = enabledPanels.find(panel =>
                         panel.name === '信息' ||
                         (panel.key === undefined && panel.name === '信息') ||
                         panel.key === 'info'
                     );
-                    console.log(`[MessageInfoBarRenderer] 🔧 通过名称找到信息面板:`, targetPanel?.name);
+                    if (targetPanel) {
+                        console.log(`[MessageInfoBarRenderer] 🔧 通过名称找到信息面板:`, targetPanel?.name);
+                    }
                 }
 
                 if (targetPanel && targetPanel.subItems) {
@@ -2250,11 +2298,12 @@ export class MessageInfoBarRenderer {
                 }
             });
 
-            return html || '<div class="infobar-empty">暂无有效数据</div>';
+            return html || ''; // 🔧 修复：移除"暂无有效数据"提示，避免空数据时显示不必要的UI
 
         } catch (error) {
             console.error('[MessageInfoBarRenderer] ❌ 渲染行数据失败:', error);
-            return '<div class="infobar-error">数据渲染失败</div>';
+            // 🔧 修复：不显示错误UI，避免插件禁用后无法清理的问题
+            return '';
         }
     }
 
@@ -4165,42 +4214,56 @@ export class MessageInfoBarRenderer {
 
     /**
      * 获取启用的面板配置
+     * 🔧 修复：优先从DataTable获取最新配置，避免使用extensionSettings中的旧配置
      */
     getEnabledPanels() {
         try {
+            // 🔧 关键修复：优先从DataTable获取最新的面板配置
+            const dataTable = window.SillyTavernInfobar?.modules?.dataTable;
+            if (dataTable && typeof dataTable.getAllEnabledPanels === 'function') {
+                try {
+                    const dataTablePanels = dataTable.getAllEnabledPanels();
+                    
+                    // DataTable返回的是数组，需要转换为对象格式
+                    if (Array.isArray(dataTablePanels)) {
+                        const enabledPanels = {};
+                        dataTablePanels.forEach(panel => {
+                            if (panel && panel.id) {
+                                enabledPanels[panel.id] = panel;
+                                // 也使用key作为索引（如果存在）
+                                if (panel.key) {
+                                    enabledPanels[panel.key] = panel;
+                                }
+                            }
+                        });
+                        console.log('[MessageInfoBarRenderer] ✅ 从DataTable获取到最新面板配置，面板数量:', dataTablePanels.length);
+                        return enabledPanels;
+                    } else if (dataTablePanels && typeof dataTablePanels === 'object') {
+                        console.log('[MessageInfoBarRenderer] ✅ 从DataTable获取到最新面板配置（对象格式）');
+                        return dataTablePanels;
+                    }
+                } catch (dataTableError) {
+                    console.warn('[MessageInfoBarRenderer] ⚠️ 从DataTable获取配置失败:', dataTableError);
+                }
+            }
+
+            // 🔧 备用方案：从extensionSettings读取（旧逻辑）
+            console.warn('[MessageInfoBarRenderer] ⚠️ DataTable不可用，使用extensionSettings配置（可能不是最新）');
+            
             const context = SillyTavern.getContext();
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings['Information bar integration tool'] || {};
 
             const enabledPanels = {};
 
-            // 基础面板
-            const basicPanelIds = [
-                'personal', 'world', 'interaction', 'tasks', 'organization',
-                'news', 'inventory', 'abilities', 'plot', 'cultivation',
-                'fantasy', 'modern', 'historical', 'magic', 'training'
-            ];
-
-            basicPanelIds.forEach(panelId => {
-                if (configs[panelId]) {
-                    const panel = configs[panelId];
-                    // 修复：与SmartPromptSystem保持一致的启用检查逻辑
-                    const isEnabled = panel.enabled !== false; // 默认为true，除非明确设置为false
-
-                    if (isEnabled) {
-                        enabledPanels[panelId] = panel;
-                    }
+            // 🔧 新架构：统一从customPanels获取所有面板
+            const customPanels = configs.customPanels || {};
+            
+            Object.entries(customPanels).forEach(([panelKey, panel]) => {
+                if (panel && panel.enabled !== false) {
+                    enabledPanels[panelKey] = panel;
                 }
             });
-
-            // 自定义面板
-            if (configs.customPanels) {
-                Object.entries(configs.customPanels).forEach(([panelId, panelConfig]) => {
-                    if (panelConfig && panelConfig.enabled) {
-                        enabledPanels[panelId] = panelConfig;
-                    }
-                });
-            }
 
             return enabledPanels;
 
@@ -4251,12 +4314,12 @@ export class MessageInfoBarRenderer {
         }
 
         // 🔧 修复：与DataTable保持一致的无效占位符列表
-        // 🆕 修复：移除"未知"/"unknown"，这是有效的状态值，应该显示
+        // 🆕 修复：移除"未知"/"unknown"和"无"/"none"，这些是有效的状态值，应该显示
         const invalidPlaceholders = [
             '待补全', '暂无', '缺失', '空', '无数据', '无信息',
             'null', 'undefined', 'missing', 'tbd', 'to be determined',
             'not mentioned', 'not specified', 'blank', 'empty', 'void', 'nil', 'na', 'n/a',
-            '-', '—', '无', 'none', '未提及', '未指定'
+            '-', '—', '未提及', '未指定'
         ];
 
         return !invalidPlaceholders.includes(strValue);
@@ -4336,28 +4399,29 @@ export class MessageInfoBarRenderer {
     }
 
     /**
-     * 获取面板信息
+     * 🔧 重构：获取面板信息（动态从customPanels获取）
      */
     getPanelInfo(panelKey) {
-        const panelInfoMap = {
-            'personal': { name: '个人信息', icon: 'fa-solid fa-user' },
-            'world': { name: '世界信息', icon: 'fa-solid fa-globe' },
-            'interaction': { name: '交互对象', icon: 'fa-solid fa-users' },
-            'tasks': { name: '任务系统', icon: 'fa-solid fa-tasks' },
-            'organization': { name: '组织架构', icon: 'fa-solid fa-building' },
-            'news': { name: '新闻资讯', icon: 'fa-solid fa-newspaper' },
-            'inventory': { name: '物品清单', icon: 'fa-solid fa-box' },
-            'abilities': { name: '能力技能', icon: 'fa-solid fa-magic' },
-            'plot': { name: '剧情发展', icon: 'fa-solid fa-book' },
-            'cultivation': { name: '修炼体系', icon: 'fa-solid fa-mountain' },
-            'fantasy': { name: '奇幻设定', icon: 'fa-solid fa-dragon' },
-            'modern': { name: '现代设定', icon: 'fa-solid fa-city' },
-            'historical': { name: '历史设定', icon: 'fa-solid fa-landmark' },
-            'magic': { name: '魔法系统', icon: 'fa-solid fa-wand-magic' },
-            'training': { name: '训练系统', icon: 'fa-solid fa-dumbbell' }
-        };
-
-        return panelInfoMap[panelKey] || { name: panelKey, icon: 'fa-solid fa-info' };
+        try {
+            // 从customPanels动态获取面板信息
+            const context = window.SillyTavern?.getContext?.() || SillyTavern?.getContext?.();
+            if (context && context.extensionSettings) {
+                const customPanels = context.extensionSettings['Information bar integration tool']?.customPanels || {};
+                const panel = customPanels[panelKey];
+                
+                if (panel) {
+                    return {
+                        name: panel.name || panelKey,
+                        icon: panel.icon || 'fa-solid fa-folder'
+                    };
+                }
+            }
+        } catch (error) {
+            console.warn('[MessageInfoBarRenderer] 获取面板信息失败:', error);
+        }
+        
+        // 回退：返回键名本身
+        return { name: panelKey, icon: 'fa-solid fa-info' };
     }
 
     /**
@@ -4958,11 +5022,12 @@ export class MessageInfoBarRenderer {
                 }
             });
 
-            return html || '<div class="infobar-empty">暂无有效数据</div>';
+            return html || ''; // 🔧 修复：移除"暂无有效数据"提示，避免空数据时显示不必要的UI
 
         } catch (error) {
             console.error('[MessageInfoBarRenderer] ❌ 渲染自定义面板行数据失败:', error);
-            return '<div class="infobar-error">数据渲染失败</div>';
+            // 🔧 修复：不显示错误UI，避免插件禁用后无法清理的问题
+            return '';
         }
     }
 
