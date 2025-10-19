@@ -196,37 +196,200 @@ export class InfoBarSettings {
      */
     openErrorLogModal() {
         try {
+            // 🔧 添加移动端适配样式（参考添加字段窗口）
+            if (!document.getElementById('error-log-modal-styles')) {
+                const style = document.createElement('style');
+                style.id = 'error-log-modal-styles';
+                style.textContent = `
+                    /* 🔧 遮罩层 */
+                    .error-log-overlay {
+                        position: fixed;
+                        inset: 0;
+                        background: rgba(0, 0, 0, 0.7);
+                        z-index: 19999;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        padding: 20px;
+                    }
+                    
+                    .error-log-modal {
+                        position: relative;
+                        width: 600px;
+                        max-width: 95vw;
+                        max-height: 80vh;
+                        background: var(--theme-bg-primary, #1a1a1a);
+                        border: 2px solid var(--theme-border-color, #333);
+                        border-radius: 8px;
+                        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                        z-index: 20000;
+                        color: var(--theme-text-primary, #e0e0e0);
+                        font-family: monospace;
+                        display: flex;
+                        flex-direction: column;
+                    }
+                    
+                    .error-log-header {
+                        padding: 15px;
+                        border-bottom: 1px solid var(--theme-border-color, #333);
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        flex-shrink: 0;
+                    }
+                    
+                    .error-log-header h4 {
+                        margin: 0;
+                        color: #ff6b6b;
+                        font-size: 16px;
+                    }
+                    
+                    .error-log-header .filter-group {
+                        margin-top: 8px;
+                    }
+                    
+                    .error-log-header label {
+                        margin-right: 10px;
+                        font-size: 12px;
+                    }
+                    
+                    .error-log-header select {
+                        background: var(--theme-bg-secondary, #333);
+                        color: var(--theme-text-primary, #e0e0e0);
+                        border: 1px solid var(--theme-border-color, #555);
+                        padding: 4px 8px;
+                        border-radius: 4px;
+                        font-size: 13px;
+                    }
+                    
+                    .error-log-body {
+                        padding: 15px;
+                        overflow: auto;
+                        flex: 1;
+                        min-height: 0;
+                    }
+                    
+                    .error-log-body pre {
+                        white-space: pre-wrap;
+                        margin: 0;
+                        font-size: 12px;
+                        line-height: 1.4;
+                        color: var(--theme-text-primary, #e0e0e0);
+                    }
+                    
+                    /* 🔧 移动端适配 - 参考添加字段窗口 */
+                    @media (max-width: 768px) {
+                        .error-log-overlay {
+                            padding: 10px !important;
+                            align-items: flex-start !important;
+                            padding-top: 10vh !important;
+                        }
+                        
+                        .error-log-modal {
+                            width: 100% !important;
+                            max-width: none !important;
+                            max-height: 85vh !important;
+                            margin: 0 !important;
+                            border-radius: 12px !important;
+                        }
+                        
+                        .error-log-header {
+                            padding: 12px 16px !important;
+                            flex-direction: column !important;
+                            align-items: flex-start !important;
+                            gap: 12px !important;
+                            position: sticky !important;
+                            top: 0 !important;
+                            z-index: 10 !important;
+                            background: var(--theme-bg-primary, #1a1a1a) !important;
+                        }
+                        
+                        .error-log-header h4 {
+                            font-size: 15px !important;
+                        }
+                        
+                        .error-log-header .header-content {
+                            width: 100% !important;
+                            display: flex !important;
+                            justify-content: space-between !important;
+                            align-items: center !important;
+                        }
+                        
+                        .error-log-header .filter-group {
+                            margin-top: 0 !important;
+                            width: 100% !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            gap: 10px !important;
+                        }
+                        
+                        .error-log-header select {
+                            flex: 1 !important;
+                            padding: 10px 12px !important;
+                            font-size: 16px !important;
+                            min-height: 44px !important;
+                            border-radius: 6px !important;
+                        }
+                        
+                        .error-log-header button {
+                            min-height: 44px !important;
+                            padding: 10px 20px !important;
+                            font-size: 15px !important;
+                            border-radius: 6px !important;
+                            white-space: nowrap !important;
+                        }
+                        
+                        .error-log-body {
+                            padding: 16px !important;
+                            max-height: calc(85vh - 140px) !important;
+                            overflow-y: auto !important;
+                            -webkit-overflow-scrolling: touch !important;
+                        }
+                        
+                        .error-log-body pre {
+                            font-size: 12px !important;
+                            line-height: 1.6 !important;
+                            word-break: break-word !important;
+                        }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            // 🔧 创建遮罩层容器
+            const overlay = document.createElement('div');
+            overlay.className = 'error-log-overlay';
+            
             const modal = document.createElement('div');
             modal.className = 'error-log-modal';
-            modal.style.cssText = `
-                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-                width: 600px; max-height: 500px; background: #1a1a1a; border: 2px solid #333;
-                border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 20000;
-                color: #e0e0e0; font-family: monospace;
-            `;
 
             modal.innerHTML = `
-                <div class="error-log-header" style="padding: 15px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <h4 style="margin: 0; color: #ff6b6b;">📋 程序日志</h4>
-                        <div style="margin-top: 5px;">
-                            <label style="margin-right: 10px; font-size: 12px;">过滤级别:</label>
-                            <select id="log-level-filter" style="background: #333; color: #e0e0e0; border: 1px solid #555; padding: 2px 5px;">
-                                <option value="all">全部</option>
-                                <option value="error">错误</option>
-                                <option value="warn">警告</option>
-                                <option value="info">信息</option>
-                                <option value="debug">调试</option>
-                            </select>
+                <div class="error-log-header">
+                    <div class="header-content">
+                        <h4>📋 程序日志</h4>
+                        <div class="header-buttons" style="display: flex; gap: 8px;">
+                            <button class="btn btn-small" data-action="export-error-log" style="background: #51cf66; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">📥 导出</button>
+                            <button class="btn btn-small" data-action="close-error-log" style="background: #ff6b6b; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">关闭</button>
                         </div>
                     </div>
-                    <button class="btn btn-small" data-action="close-error-log" style="background: #ff6b6b; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">关闭</button>
+                    <div class="filter-group">
+                        <label>过滤级别:</label>
+                        <select id="log-level-filter">
+                            <option value="all">全部</option>
+                            <option value="error">错误</option>
+                            <option value="warn">警告</option>
+                            <option value="info">信息</option>
+                            <option value="debug">调试</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="error-log-body" style="padding: 15px; max-height: 350px; overflow: auto;">
-                    <pre id="error-log-content" style="white-space: pre-wrap; margin: 0; font-size: 12px; line-height: 1.4;"></pre>
+                <div class="error-log-body">
+                    <pre id="error-log-content"></pre>
                 </div>
             `;
-            document.body.appendChild(modal);
+            
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
 
             const updateLogs = () => {
                 const filter = modal.querySelector('#log-level-filter').value;
@@ -249,9 +412,84 @@ export class InfoBarSettings {
             // 绑定过滤器变化
             modal.querySelector('#log-level-filter').addEventListener('change', updateLogs);
 
-            // 绑定关闭事件
-            modal.querySelector('[data-action="close-error-log"]').onclick = () => {
-                if (modal && modal.parentNode) modal.parentNode.removeChild(modal);
+            // 🔧 导出日志功能
+            const exportLogs = () => {
+                try {
+                    // 获取当前过滤器的日志
+                    const filter = modal.querySelector('#log-level-filter').value;
+                    const logs = (window.SillyTavernInfobar?.runtimeLogs || [])
+                        .filter(item => filter === 'all' || item.level === filter)
+                        .map(item => {
+                            const time = new Date(item.time).toLocaleString();
+                            const levelIcon = {
+                                error: '❌', warn: '⚠️', info: 'ℹ️', debug: '🔧'
+                            }[item.level] || '📝';
+                            const levelText = item.level.toUpperCase().padEnd(5);
+                            return `[${time}] [${levelText}] ${levelIcon} ${item.message}`;
+                        })
+                        .join('\n');
+                    
+                    if (!logs) {
+                        const original = window.__InfobarConsoleOriginal;
+                        if (original) {
+                            original.warn('[InfoBarSettings] ⚠️ 没有可导出的日志');
+                        }
+                        return;
+                    }
+                    
+                    // 添加文件头信息
+                    const header = `Information Bar Integration Tool - 程序日志
+导出时间: ${new Date().toLocaleString()}
+过滤级别: ${filter === 'all' ? '全部' : filter}
+日志数量: ${logs.split('\n').length} 条
+${'='.repeat(80)}
+
+`;
+                    const content = header + logs;
+                    
+                    // 创建Blob并下载
+                    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    
+                    // 使用时间戳命名
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').split('.')[0];
+                    a.href = url;
+                    a.download = `infobar-logs_${timestamp}.log`;
+                    
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    const original = window.__InfobarConsoleOriginal;
+                    if (original) {
+                        original.info('[InfoBarSettings] ✅ 日志已导出:', a.download);
+                    }
+                } catch (error) {
+                    const original = window.__InfobarConsoleOriginal;
+                    if (original) {
+                        original.error('[InfoBarSettings] ❌ 导出日志失败:', error);
+                    }
+                }
+            };
+            
+            modal.querySelector('[data-action="export-error-log"]').onclick = exportLogs;
+            
+            // 🔧 绑定关闭事件 - 关闭整个遮罩层
+            const closeModal = () => {
+                if (overlay && overlay.parentNode) {
+                    overlay.parentNode.removeChild(overlay);
+                }
+            };
+            
+            modal.querySelector('[data-action="close-error-log"]').onclick = closeModal;
+            
+            // 🔧 点击遮罩层背景关闭
+            overlay.onclick = (e) => {
+                if (e.target === overlay) {
+                    closeModal();
+                }
             };
         } catch (error) {
             const original = window.__InfobarConsoleOriginal;
@@ -280,12 +518,37 @@ export class InfoBarSettings {
         try {
             // 使用全局门禁系统
             const original = window.__InfobarConsoleOriginal;
-            if (!original) {
+            const enableCollection = window.__InfobarEnableCollection;
+            
+            if (!original || !enableCollection) {
                 console.warn('[InfoBarSettings] ⚠️ 控制台门禁未初始化');
                 return;
             }
 
             const rt = window.SillyTavernInfobar.runtimeLogs;
+            
+            // 🔧 修复：使用新的收集开关
+            const shouldCollect = level !== 'none';
+            
+            // 根据级别设置过滤器
+            const allows = {
+                none: { error: false, warn: false, info: false, debug: false },
+                error: { error: true, warn: false, info: false, debug: false },
+                warn: { error: true, warn: true, info: false, debug: false },
+                info: { error: true, warn: true, info: true, debug: false },
+                debug: { error: true, warn: true, info: true, debug: true }
+            }[level] || { error: true, warn: true, info: true, debug: true };
+
+            // 🔧 修复：禁用模式下完全恢复原生console，不收集不输出
+            if (level === 'none') {
+                enableCollection(false);
+                original.info('[InfoBarSettings] 📊 已禁用调试模式，停止收集日志');
+                return;
+            }
+
+            // 🔧 启用收集并重新绑定console方法
+            enableCollection(true);
+            
             const push = (logLevel, args) => {
                 try {
                     const message = Array.from(args).map(v =>
@@ -296,15 +559,6 @@ export class InfoBarSettings {
                     if (rt.length > 500) rt.shift();
                 } catch {}
             };
-
-            // 根据级别设置过滤器
-            const allows = {
-                none: { error: false, warn: false, info: false, debug: false },
-                error: { error: true, warn: false, info: false, debug: false },
-                warn: { error: true, warn: true, info: false, debug: false },
-                info: { error: true, warn: true, info: true, debug: false },
-                debug: { error: true, warn: true, info: true, debug: true }
-            }[level] || { error: true, warn: true, info: true, debug: true };
 
             // 重新绑定console方法：既收集又按级别输出
             console.log = (...args) => {
@@ -325,9 +579,7 @@ export class InfoBarSettings {
             };
 
             // 使用原生console输出设置确认
-            if (level !== 'none') {
-                original.info('[InfoBarSettings] 📊 日志级别已设置为:', level);
-            }
+            original.info('[InfoBarSettings] 📊 日志级别已设置为:', level);
         } catch (error) {
             const original = window.__InfobarConsoleOriginal;
             if (original) {
