@@ -840,43 +840,69 @@ export class CustomAPITaskQueue {
             try {
                 console.log('[CustomAPITaskQueue] 💬 显示数据生成确认对话框');
                 
-                // 创建确认对话框（右上角小弹窗）
+                // 🔧 检测屏幕尺寸，判断是否为移动端
+                const isMobile = window.innerWidth <= 768;
+                console.log(`[CustomAPITaskQueue] 📱 检测到设备类型: ${isMobile ? '移动端' : '桌面端'}, 屏幕宽度: ${window.innerWidth}px`);
+                
+                // 创建确认对话框
                 const dialog = document.createElement('div');
                 dialog.className = 'custom-api-confirmation-toast';
-                dialog.style.cssText = `
-                    position: fixed;
-                    top: 20px;
-                    right: 20px;
-                    background: var(--theme-bg-primary, #2a2a2a);
-                    border: 2px solid var(--theme-primary-color, #4CAF50);
-                    border-radius: 8px;
-                    padding: 16px 20px;
-                    min-width: 300px;
-                    max-width: 400px;
-                    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-                    z-index: 10000;
-                    animation: slideInRight 0.3s ease-out;
-                `;
+                
+                // 🔧 移动端和桌面端使用不同的定位策略
+                if (isMobile) {
+                    // 移动端：居中显示，尺寸更紧凑
+                    dialog.style.cssText = `
+                        position: fixed;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        background: var(--theme-bg-primary, #2a2a2a);
+                        border: 2px solid var(--theme-primary-color, #4CAF50);
+                        border-radius: 8px;
+                        padding: 12px 16px;
+                        width: calc(100vw - 40px);
+                        max-width: 320px;
+                        box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+                        z-index: 10000;
+                        animation: fadeInScale 0.3s ease-out;
+                    `;
+                } else {
+                    // 桌面端：右上角显示
+                    dialog.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        background: var(--theme-bg-primary, #2a2a2a);
+                        border: 2px solid var(--theme-primary-color, #4CAF50);
+                        border-radius: 8px;
+                        padding: 16px 20px;
+                        min-width: 280px;
+                        max-width: 360px;
+                        box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+                        z-index: 10000;
+                        animation: slideInRight 0.3s ease-out;
+                    `;
+                }
                 
                 dialog.innerHTML = `
                     <div class="toast-header" style="
-                        margin-bottom: 12px;
+                        margin-bottom: ${isMobile ? '8px' : '12px'};
                         display: flex;
                         align-items: center;
                         gap: 8px;
                     ">
-                        <span style="font-size: 20px;">🤔</span>
+                        <span style="font-size: ${isMobile ? '18px' : '20px'};">🤔</span>
                         <span style="
                             color: var(--theme-text-primary, #fff);
-                            font-size: 16px;
+                            font-size: ${isMobile ? '14px' : '16px'};
                             font-weight: 600;
                         ">是否进行数据生成？</span>
                     </div>
                     
                     <div class="toast-body" style="
-                        margin-bottom: 16px;
+                        margin-bottom: ${isMobile ? '12px' : '16px'};
                         color: var(--theme-text-secondary, #ccc);
-                        font-size: 13px;
+                        font-size: ${isMobile ? '12px' : '13px'};
                         line-height: 1.5;
                     ">
                         系统检测到AI消息，即将调用自定义API生成信息栏数据。
@@ -888,33 +914,36 @@ export class CustomAPITaskQueue {
                         justify-content: flex-end;
                     ">
                         <button class="btn-cancel" style="
-                            padding: 6px 16px;
+                            padding: ${isMobile ? '8px 12px' : '6px 16px'};
                             background: var(--theme-bg-secondary, #555);
                             color: var(--theme-text-primary, #fff);
                             border: 1px solid var(--theme-border-color, #666);
                             border-radius: 4px;
                             cursor: pointer;
-                            font-size: 13px;
+                            font-size: ${isMobile ? '12px' : '13px'};
                             transition: all 0.2s;
+                            flex: ${isMobile ? '1' : 'none'};
                         ">
                             取消
                         </button>
                         <button class="btn-confirm" style="
-                            padding: 6px 16px;
+                            padding: ${isMobile ? '8px 12px' : '6px 16px'};
                             background: var(--theme-primary-color, #4CAF50);
                             color: white;
                             border: none;
                             border-radius: 4px;
                             cursor: pointer;
-                            font-size: 13px;
+                            font-size: ${isMobile ? '12px' : '13px'};
                             font-weight: 500;
                             transition: all 0.2s;
+                            flex: ${isMobile ? '1' : 'none'};
                         ">
                             确认
                         </button>
                     </div>
                     
                     <style>
+                        /* 桌面端动画 */
                         @keyframes slideInRight {
                             from {
                                 opacity: 0;
@@ -937,12 +966,52 @@ export class CustomAPITaskQueue {
                             }
                         }
                         
+                        /* 移动端动画 */
+                        @keyframes fadeInScale {
+                            from {
+                                opacity: 0;
+                                transform: translate(-50%, -50%) scale(0.9);
+                            }
+                            to {
+                                opacity: 1;
+                                transform: translate(-50%, -50%) scale(1);
+                            }
+                        }
+                        
+                        @keyframes fadeOutScale {
+                            from {
+                                opacity: 1;
+                                transform: translate(-50%, -50%) scale(1);
+                            }
+                            to {
+                                opacity: 0;
+                                transform: translate(-50%, -50%) scale(0.9);
+                            }
+                        }
+                        
                         .custom-api-confirmation-toast .btn-cancel:hover {
                             background: var(--theme-bg-hover, #666) !important;
                         }
                         
                         .custom-api-confirmation-toast .btn-confirm:hover {
                             background: #45a049 !important;
+                        }
+                        
+                        /* 移动端按钮触摸优化 */
+                        @media (max-width: 768px) {
+                            .custom-api-confirmation-toast .btn-cancel,
+                            .custom-api-confirmation-toast .btn-confirm {
+                                min-height: 44px;
+                                -webkit-tap-highlight-color: transparent;
+                            }
+                            
+                            .custom-api-confirmation-toast .btn-cancel:active {
+                                opacity: 0.8;
+                            }
+                            
+                            .custom-api-confirmation-toast .btn-confirm:active {
+                                opacity: 0.8;
+                            }
                         }
                     </style>
                 `;
@@ -955,7 +1024,10 @@ export class CustomAPITaskQueue {
                 const btnConfirm = dialog.querySelector('.btn-confirm');
                 
                 const closeDialog = (confirmed) => {
-                    dialog.style.animation = 'slideOutRight 0.2s ease-in';
+                    // 🔧 根据设备类型使用不同的退出动画
+                    dialog.style.animation = isMobile 
+                        ? 'fadeOutScale 0.2s ease-in'
+                        : 'slideOutRight 0.2s ease-in';
                     setTimeout(() => {
                         if (dialog.parentNode) {
                             dialog.remove();
@@ -976,7 +1048,7 @@ export class CustomAPITaskQueue {
                 };
                 document.addEventListener('keydown', handleKeyDown);
                 
-                console.log('[CustomAPITaskQueue] ✅ 确认对话框已显示（右上角）');
+                console.log(`[CustomAPITaskQueue] ✅ 确认对话框已显示（${isMobile ? '居中模式' : '右上角模式'}）`);
                 
             } catch (error) {
                 console.error('[CustomAPITaskQueue] ❌ 显示确认对话框失败:', error);

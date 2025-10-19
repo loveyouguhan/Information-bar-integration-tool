@@ -3483,41 +3483,42 @@ export class UnifiedDataCore {
     }
 
     /**
-     * 🔧 新增：获取当前启用的面板列表
-     * @returns {Array} 启用的面板ID列表
+     * 🔧 修改：获取当前启用的面板列表（统一从customPanels获取）
+     * @returns {Array} 启用的面板键名列表
      */
     async getEnabledPanelsList() {
         try {
-            // 获取配置管理器
-            const infoBarTool = window.SillyTavernInfobar;
-            const configManager = infoBarTool?.modules?.configManager;
-
-            if (!configManager) {
-                console.warn('[UnifiedDataCore] 配置管理器不可用，返回默认面板列表');
-                // 返回默认的基础面板列表
-                return ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+            // 获取SillyTavern上下文
+            const context = window.SillyTavern?.getContext?.() || SillyTavern?.getContext?.();
+            if (!context || !context.extensionSettings) {
+                console.warn('[UnifiedDataCore] 无法获取扩展设置，返回空列表');
+                return [];
             }
 
-            // 基础面板列表
-            const basePanels = ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+            const extensionSettings = context.extensionSettings['Information bar integration tool'];
+            if (!extensionSettings) {
+                console.warn('[UnifiedDataCore] 扩展设置不存在，返回空列表');
+                return [];
+            }
 
-            // 检查每个基础面板是否启用
+            // 🔧 新架构：统一从customPanels获取所有面板
+            const customPanels = extensionSettings.customPanels || {};
             const enabledPanels = [];
-            for (const panelId of basePanels) {
-                try {
-                    const panelConfig = await configManager.getConfig(panelId);
-                    // 如果配置不存在或者enabled不是false，则认为是启用的
-                    if (!panelConfig || panelConfig.enabled !== false) {
-                        enabledPanels.push(panelId);
-                    }
-                } catch (error) {
-                    // 如果获取配置失败，默认认为是启用的
-                    enabledPanels.push(panelId);
+
+            // 遍历所有customPanels，获取启用的面板
+            for (const [panelKey, panelConfig] of Object.entries(customPanels)) {
+                if (panelConfig && panelConfig.enabled !== false) {
+                    enabledPanels.push(panelKey);
+                    console.log(`[UnifiedDataCore] ✅ 启用面板: ${panelKey}`);
+                } else {
+                    console.log(`[UnifiedDataCore] ❌ 禁用面板: ${panelKey}`);
                 }
             }
 
-            // 🔧 强制策略：总是尝试数据扫描检测自定义面板（无论配置是否可用）
-            console.log('[UnifiedDataCore] 🔧 开始数据扫描策略检测自定义面板...');
+            console.log(`[UnifiedDataCore] 📋 共检测到 ${enabledPanels.length} 个启用的面板`);
+
+            // 🔧 数据扫描策略：检测当前聊天中存在的面板数据
+            console.log('[UnifiedDataCore] 🔧 开始数据扫描策略检测面板...');
             
             const chatId = this.getCurrentChatId();
             if (chatId) {
@@ -3552,8 +3553,8 @@ export class UnifiedDataCore {
                     const chatPrefix = `panels.${chatId}.`;
                     const characterPrefix = characterId !== null ? `panels.${characterId}.` : null;
                     
-                    // 扫描所有面板数据，找到自定义面板
-                    const detectedCustomPanels = [];
+                    // 🔧 新架构：扫描所有面板数据，找到尚未在customPanels中的面板
+                    const detectedPanels = [];
                     for (const [key, value] of Object.entries(allChatData)) {
                         let panelName = null;
                         
@@ -3563,44 +3564,32 @@ export class UnifiedDataCore {
                             panelName = key.substring(characterPrefix.length);
                         }
                         
-                        // 如果是非基础面板且有数据，认为是自定义面板
-                        if (panelName && !panelName.includes('.') && !basePanels.includes(panelName) && 
-                            value && typeof value === 'object' && Object.keys(value).length > 0) {
-                            detectedCustomPanels.push(panelName);
+                        // 如果是有效的面板数据且尚未在enabledPanels中
+                        if (panelName && !panelName.includes('.') && 
+                            value && typeof value === 'object' && Object.keys(value).length > 0 &&
+                            !enabledPanels.includes(panelName)) {
+                            detectedPanels.push(panelName);
                         }
                     }
                     
-                    // 添加检测到的自定义面板
-                    enabledPanels.push(...detectedCustomPanels);
-                    console.log('[UnifiedDataCore] 🔍 通过数据扫描检测到自定义面板:', detectedCustomPanels);
+                    // 添加检测到的面板
+                    if (detectedPanels.length > 0) {
+                        enabledPanels.push(...detectedPanels);
+                        console.log('[UnifiedDataCore] 🔍 通过数据扫描检测到额外面板:', detectedPanels);
+                    }
                     
                 } catch (error) {
                     console.warn('[UnifiedDataCore] 数据扫描检测自定义面板失败:', error);
                 }
             }
             
-            // 🔧 兜底策略：尝试传统配置获取（如果配置管理器可用）
-            try {
-                const customPanels = await configManager.getConfig('customPanels');
-                if (customPanels && typeof customPanels === 'object') {
-                    console.log('[UnifiedDataCore] 🔧 传统配置获取到自定义面板:', Object.keys(customPanels));
-                    for (const [panelId, config] of Object.entries(customPanels)) {
-                        if (config && config.enabled !== false && !enabledPanels.includes(panelId)) {
-                            enabledPanels.push(panelId);
-                        }
-                    }
-                }
-            } catch (configError) {
-                console.warn('[UnifiedDataCore] 传统配置获取失败，已通过数据扫描补偿:', configError.message);
-            }
-
             console.log('[UnifiedDataCore] 📋 最终启用面板列表:', `(${enabledPanels.length})`, enabledPanels);
             return enabledPanels;
 
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 获取启用面板列表失败:', error);
-            // 返回默认的基础面板列表作为后备
-            return ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+            // 返回空列表，不再使用硬编码的默认列表
+            return [];
         }
     }
 

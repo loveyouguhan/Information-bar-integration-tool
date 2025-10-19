@@ -35,6 +35,7 @@ export class AIMemoryDatabaseInjector {
         this.vectorizedMemoryRetrieval = dependencies.vectorizedMemoryRetrieval;
         this.deepMemoryManager = dependencies.deepMemoryManager;
         this.intelligentMemoryClassifier = dependencies.intelligentMemoryClassifier;
+        this.aiMemoryDatabase = dependencies.aiMemoryDatabase || null; // 🗄️ 新增：AI记忆数据库
         
         // SillyTavern上下文
         this.context = null;
@@ -551,6 +552,33 @@ export class AIMemoryDatabaseInjector {
             console.log('[AIMemoryDatabaseInjector] 📋 准备记忆数据...');
 
             const memoryEntries = [];
+
+            // 🗄️ 新增：优先使用AI记忆数据库（智能检索）
+            if (this.aiMemoryDatabase && this.aiMemoryDatabase.initialized && this.aiMemoryDatabase.config.enabled) {
+                console.log('[AIMemoryDatabaseInjector] 🗄️ 使用AI记忆数据库智能检索记忆...');
+                
+                try {
+                    // 获取高重要性和关键记忆
+                    const criticalMemories = this.aiMemoryDatabase.getMemoriesByImportance('critical', 5);
+                    const highMemories = this.aiMemoryDatabase.getMemoriesByImportance('high', 10);
+                    
+                    const allMemories = [...criticalMemories, ...highMemories];
+                    
+                    console.log(`[AIMemoryDatabaseInjector] ✅ 从AI记忆数据库获取${allMemories.length}条记忆`);
+                    
+                    return allMemories.map(memory => ({
+                        type: memory.layer || 'database',
+                        content: memory.content,
+                        importance: memory.importance,
+                        timestamp: memory.timestamp,
+                        keywords: memory.keywords,
+                        category: memory.category,
+                        source: 'ai_memory_database'
+                    }));
+                } catch (error) {
+                    console.error('[AIMemoryDatabaseInjector] ❌ 从AI记忆数据库获取记忆失败:', error);
+                }
+            }
 
             // 🧠 收集不同类型的记忆
 
@@ -1069,7 +1097,14 @@ export class AIMemoryDatabaseInjector {
             // 分类记忆内容
             for (const memory of memoryData) {
                 const category = this.categorizeMemory(memory);
-                const formattedContent = `• ${memory.content}`;
+                
+                // 🗄️ 优化：如果记忆来自AI记忆数据库，包含关键词和重要性信息
+                let formattedContent = `• ${memory.content}`;
+                if (memory.source === 'ai_memory_database') {
+                    const importance = memory.importance ? `[重要性:${(memory.importance * 100).toFixed(0)}%]` : '';
+                    const keywords = memory.keywords && memory.keywords.length > 0 ? ` #${memory.keywords.join(' #')}` : '';
+                    formattedContent = `• ${memory.content} ${importance}${keywords}`;
+                }
                 
                 if (sections[category]) {
                     sections[category].push(formattedContent);
@@ -1088,12 +1123,26 @@ export class AIMemoryDatabaseInjector {
             
             // 🎯 RAG优化：使用SillyTavern最佳实践的注入模板
             // 参考：SillyTavern Data Bank推荐的注入模板格式
-            const header = `以下是可能相关的先前事件的记忆：
+            
+            // 🗄️ 检查是否包含AI记忆数据库的记忆
+            const hasAIMemoryDatabase = memoryData.some(m => m.source === 'ai_memory_database');
+            
+            let header = `以下是可能相关的先前事件的记忆：
 <回忆>`;
-            const footer = `</回忆>
+            
+            let footer = `</回忆>
 
 这些记忆以第三人称视角、过去时态记录。{{char}}能够回忆起这些记忆，并在适当时自然地提及它们。
 记忆可能与当前对话相关，也可能不相关，请根据上下文判断是否使用。`;
+
+            // 🗄️ 如果包含AI记忆数据库记忆，添加额外说明
+            if (hasAIMemoryDatabase) {
+                footer += `
+
+【AI记忆数据库提示】
+带有 # 标签的记忆来自智能索引系统，已按关键词和重要性组织。
+你可以参考这些关键词来理解记忆的核心要点。`;
+            }
             
             return header + formattedSections.join('\n') + '\n' + footer;
             

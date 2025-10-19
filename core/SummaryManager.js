@@ -908,12 +908,29 @@ ${messageContent}
                 // 🔧 修复：检查自定义API配置（不检查enabled状态）
                 // 用户只要配置了API，就应该能够使用，不需要额外启用开关
                 const context = SillyTavern.getContext();
-                const extensionSettings = context.extensionSettings['Information bar integration tool'];
-                const apiConfig = extensionSettings?.apiConfig;
+                if (!context || !context.extensionSettings) {
+                    throw new Error('无法获取SillyTavern上下文或扩展设置');
+                }
 
-                // 🔧 修复：只检查必要的配置项，不检查enabled状态
-                if (!apiConfig?.apiKey || !apiConfig?.model) {
-                    throw new Error('自定义API配置不完整：缺少API密钥或模型配置');
+                const extensionSettings = context.extensionSettings['Information bar integration tool'];
+                if (!extensionSettings) {
+                    throw new Error('未找到Information bar integration tool扩展设置');
+                }
+
+                const apiConfig = extensionSettings.apiConfig;
+                if (!apiConfig) {
+                    throw new Error('未找到API配置，请先在设置中配置自定义API');
+                }
+
+                // 🔧 增强：详细检查API配置项，提供具体的错误信息
+                const missingConfigs = [];
+                if (!apiConfig.apiKey) missingConfigs.push('API密钥');
+                if (!apiConfig.model) missingConfigs.push('模型');
+                if (!apiConfig.provider) missingConfigs.push('提供商');
+                if (!apiConfig.endpoint && !apiConfig.baseUrl) missingConfigs.push('API端点');
+
+                if (missingConfigs.length > 0) {
+                    throw new Error(`自定义API配置不完整，缺少：${missingConfigs.join('、')}。请在扩展设置中完整配置API信息。`);
                 }
 
                 console.log('[SummaryManager] 📡 使用API配置:', {
@@ -924,7 +941,8 @@ ${messageContent}
                     format: apiConfig.format,
                     maxTokens: apiConfig.maxTokens,
                     temperature: apiConfig.temperature,
-                    attempt: attempt
+                    attempt: attempt,
+                    hasApiKey: !!apiConfig.apiKey
                 });
 
                 // 构建消息格式
@@ -945,12 +963,23 @@ ${messageContent}
                         endpoint: apiConfig.endpoint,
                         baseUrl: apiConfig.baseUrl || apiConfig.endpoint,
                         format: apiConfig.format,
-                        maxTokens: apiConfig.maxTokens || 4000,
+                        maxTokens: apiConfig.maxTokens || 20000,
                         temperature: apiConfig.temperature || 0.7,
                         headers: apiConfig.headers,
                         enabled: apiConfig.enabled,
                         retryCount: apiConfig.retryCount
                     }
+                });
+
+                console.log('[SummaryManager] 📊 API返回结果类型:', typeof apiResult);
+                console.log('[SummaryManager] 📊 API返回结果详情:', {
+                    isObject: typeof apiResult === 'object',
+                    hasSuccess: apiResult?.success !== undefined,
+                    successValue: apiResult?.success,
+                    hasText: !!apiResult?.text,
+                    textLength: apiResult?.text?.length || 0,
+                    hasContent: !!apiResult?.content,
+                    contentLength: apiResult?.content?.length || 0
                 });
 
                 // 🔧 优化：处理API返回结果，增强错误检测
@@ -962,22 +991,30 @@ ${messageContent}
                     throw new Error(errorMessage);
                 }
 
-                // 提取文本内容
+                // 🔧 关键修复：正确提取文本内容，按优先级尝试不同字段
                 if (typeof apiResult === 'string') {
                     resultText = apiResult;
                 } else if (apiResult && typeof apiResult === 'object') {
-                    resultText = apiResult.content || apiResult.text || apiResult.message || '';
-
-                    if (!resultText && apiResult.success !== false) {
-                        resultText = JSON.stringify(apiResult);
+                    // 按优先级尝试提取文本：text > content > message
+                    resultText = apiResult.text || apiResult.content || apiResult.message || '';
+                    
+                    // 🔧 关键修复：如果所有文本字段都为空，但success为true且有usage信息
+                    // 说明API调用成功但返回了空内容，这是一个错误情况
+                    if (!resultText && apiResult.success === true) {
+                        console.error('[SummaryManager] ❌ API调用成功但返回空内容:', apiResult);
+                        throw new Error('API调用成功但未返回任何文本内容。可能原因：1) API配置的max_tokens过小 2) API服务异常 3) 模型拒绝生成内容');
                     }
+
+                    // 🔧 移除：不再将空对象转换为JSON字符串
+                    // 之前的代码：if (!resultText && apiResult.success !== false) { resultText = JSON.stringify(apiResult); }
                 } else {
                     resultText = String(apiResult || '');
                 }
 
                 // 🔧 新增：验证返回内容的合理性
                 if (!resultText || !resultText.trim()) {
-                    throw new Error('API返回空结果');
+                    console.error('[SummaryManager] ❌ API返回空结果，完整响应:', apiResult);
+                    throw new Error('API返回空结果。请检查：1) API密钥是否有效 2) 模型是否可用 3) max_tokens设置是否足够 4) API服务是否正常');
                 }
 
                 // 🔧 新增：检测返回内容是否包含错误关键词
@@ -985,9 +1022,8 @@ ${messageContent}
                     '所有API密钥均请求失败',
                     '具体错误请查看各自的日志',
                     'API请求失败',
-                    'error',
-                    'Error',
-                    'ERROR'
+                    'API配置不完整',
+                    '配置不完整'
                 ];
 
                 const lowerResultText = resultText.toLowerCase();
@@ -1008,7 +1044,7 @@ ${messageContent}
                 // 🔧 新增：验证总结长度是否合理
                 const minLength = 50; // 最小50字符
                 if (resultText.trim().length < minLength) {
-                    throw new Error(`总结内容过短（${resultText.trim().length}字符），可能不是有效的总结`);
+                    throw new Error(`总结内容过短（${resultText.trim().length}字符），可能不是有效的总结。请检查API配置的max_tokens设置。`);
                 }
 
                 console.log('[SummaryManager] ✅ 总结生成完成，长度:', resultText.length);
@@ -1016,6 +1052,10 @@ ${messageContent}
 
             } catch (error) {
                 console.error(`[SummaryManager] ❌ 调用总结API失败 (尝试 ${attempt}/${maxRetries}):`, error);
+                console.error('[SummaryManager] 📋 错误详情:', {
+                    message: error.message,
+                    stack: error.stack?.split('\n')[0]
+                });
 
                 // 如果还有重试机会，等待后重试
                 if (attempt < maxRetries) {

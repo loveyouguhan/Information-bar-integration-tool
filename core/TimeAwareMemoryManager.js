@@ -65,6 +65,12 @@ export class TimeAwareMemoryManager {
         this.initialized = false;
         this.errorCount = 0;
         
+        // 🔧 修复：添加定时器管理
+        this.periodicTimers = {
+            decay: null,
+            refresh: null
+        };
+        
         console.log('[TimeAwareMemoryManager] 🏗️ 构造函数完成');
     }
 
@@ -291,16 +297,19 @@ export class TimeAwareMemoryManager {
      */
     startPeriodicTasks() {
         try {
+            // 🔧 修复：先停止现有的定时器
+            this.stopPeriodicTasks();
+            
             // 每小时执行一次时间衰减
             if (this.settings.enableDecay) {
-                setInterval(() => {
+                this.periodicTimers.decay = setInterval(() => {
                     this.applyTimeDecay();
                 }, 3600000); // 1小时
             }
             
             // 每天执行一次记忆刷新
             if (this.settings.enableRefresh) {
-                setInterval(() => {
+                this.periodicTimers.refresh = setInterval(() => {
                     this.refreshMemories();
                 }, 86400000); // 24小时
             }
@@ -309,6 +318,32 @@ export class TimeAwareMemoryManager {
             
         } catch (error) {
             console.error('[TimeAwareMemoryManager] ❌ 启动定期任务失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 修复：停止定期任务
+     */
+    stopPeriodicTasks() {
+        try {
+            // 清除时间衰减定时器
+            if (this.periodicTimers.decay) {
+                clearInterval(this.periodicTimers.decay);
+                this.periodicTimers.decay = null;
+                console.log('[TimeAwareMemoryManager] ⏹️ 已停止时间衰减定时器');
+            }
+            
+            // 清除记忆刷新定时器
+            if (this.periodicTimers.refresh) {
+                clearInterval(this.periodicTimers.refresh);
+                this.periodicTimers.refresh = null;
+                console.log('[TimeAwareMemoryManager] ⏹️ 已停止记忆刷新定时器');
+            }
+            
+            console.log('[TimeAwareMemoryManager] ⏹️ 所有定期任务已停止');
+            
+        } catch (error) {
+            console.error('[TimeAwareMemoryManager] ❌ 停止定期任务失败:', error);
         }
     }
 

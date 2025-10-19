@@ -391,7 +391,7 @@ export class AITemplateAssistant {
             // 🔧 修复：使用用户配置的API参数而不是硬编码
             const apiConfig = this.apiIntegration.apiConfig || {};
             const response = await this.apiIntegration.generateText(prompt, {
-                maxTokens: apiConfig.maxTokens || 4000,  // 使用用户设置的最大令牌数
+                maxTokens: apiConfig.maxTokens || 20000,  // 默认20000，与UI表单一致
                 temperature: apiConfig.temperature || 0.3,  // 使用用户设置的温度，模板生成使用较低温度
                 systemPrompt: '你是一个专业的HTML模板开发助手，专注于生成高质量、语义化的HTML代码。'
             });

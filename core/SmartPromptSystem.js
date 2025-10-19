@@ -910,9 +910,9 @@ ${panelRulesSection}
         let constraints = `启用面板总数：${enabledPanels.length}个\n\n`;
         constraints += '面板清单：\n';
         for (const panel of enabledPanels) {
-            const panelName = this.getBasicPanelDisplayName(panel.id);
+            const panelName = panel.name;
             const fieldCount = panel.subItems.length;
-            const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+            const panelKey = panel.key || panel.id;
             constraints += `• ${panelName} (${panelKey}) - ${fieldCount}个字段\n`;
         }
         constraints += `\n🚨 **验证要求**：输出必须包含上述所有${enabledPanels.length}个面板的数据！`;
@@ -975,8 +975,8 @@ ${panelRulesSection}
         checkList += '在输出<infobar_data>标签前，请确认已包含以下所有面板：\n\n';
 
         enabledPanels.forEach((panel, index) => {
-            const panelName = this.getBasicPanelDisplayName(panel.id);
-            const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+            const panelName = panel.name;
+            const panelKey = panel.key || panel.id;
             checkList += `${index + 1}. ☐ ${panelName} (${panelKey})\n`;
         });
 
@@ -2177,144 +2177,66 @@ ${aiMemoryInstruction}
     }
 
     /**
-     * 获取启用的面板 - 修复：与DataTable.js保持一致的数据读取逻辑
+     * 🔧 重构：获取启用的面板（统一从customPanels获取）
      */
     async getEnabledPanels() {
         try {
             const extensionSettings = this.context.extensionSettings['Information bar integration tool'] || {};
-            // 修复：直接从extensionSettings读取，而不是从configs子对象
-            const configs = extensionSettings;
+            const customPanels = extensionSettings.customPanels || {};
 
             const enabledPanels = [];
 
-            // 检查基础面板 - 修复：基础面板直接存储在configs根级别
-            const basicPanelIds = [
-                'personal', 'world', 'interaction', 'tasks', 'organization',
-                'news', 'inventory', 'abilities', 'plot', 'cultivation',
-                'fantasy', 'modern', 'historical', 'magic', 'training'
-            ];
-
-            for (const panelId of basicPanelIds) {
-                if (configs[panelId]) {
-                    const panel = configs[panelId];
-                    const isEnabled = panel.enabled !== false; // 默认为true，除非明确设置为false
-
-                    if (isEnabled) {
-                        // 🔧 修复：同时处理基础设置复选框和面板管理自定义子项
-                        const allSubItems = [];
-
-                        // 1. 处理基础设置中的复选框配置（panel[key].enabled格式）
-                        const subItemKeys = Object.keys(panel).filter(key =>
-                            key !== 'enabled' &&
-                            key !== 'subItems' &&     // 排除自定义子项数组
-                            key !== 'description' &&  // 排除面板属性
-                            key !== 'icon' &&
-                            key !== 'required' &&
-                            key !== 'memoryInject' &&
-                            key !== 'prompts' &&
-                            !key.startsWith('custom_field_') && // 🔧 修复：排除custom_field字段，这些字段应该只通过subItems管理
-                            typeof panel[key] === 'object' &&
-                            panel[key].enabled !== undefined
-                        );
-                        const enabledSubItems = subItemKeys.filter(key => panel[key].enabled === true);
-
-                        // 添加基础设置的子项
-                        enabledSubItems.forEach(key => {
-                            allSubItems.push({
-                                key: key,
-                                name: panel[key].name || key,
-                                enabled: true,
-                                value: panel[key].value || '',
-                                source: 'basicSettings' // 标记来源
-                            });
-                        });
-
-                        // 2. 处理面板管理中的自定义子项（panel.subItems数组格式）
-                        let enabledCustomSubItems = [];
-                        if (panel.subItems && Array.isArray(panel.subItems)) {
-                            enabledCustomSubItems = panel.subItems.filter(subItem => subItem.enabled !== false);
-
-                            // 🔧 修复：创建键名集合，避免重复添加
-                            const existingKeys = new Set(allSubItems.map(item => item.key));
-
-                            enabledCustomSubItems.forEach(subItem => {
-                                const key = subItem.key || subItem.name.toLowerCase().replace(/\s+/g, '_');
-
-                                // 🔧 修复：检查是否已存在，避免重复
-                                if (!existingKeys.has(key)) {
-                                    allSubItems.push({
-                                        key: key,
-                                        name: subItem.displayName || subItem.name,
-                                        enabled: true,
-                                        value: subItem.value || '',
-                                        source: 'panelManagement' // 标记来源
-                                    });
-                                    existingKeys.add(key);
-                                } else {
-                                    console.log(`[SmartPromptSystem] ⚠️ 跳过重复的自定义子项: ${key} (基础面板 ${panelId} 已存在该键)`);
-                                }
-                            });
-                        }
-
-                        if (allSubItems.length > 0) {
-                            enabledPanels.push({
-                                id: panelId,
-                                type: 'basic',
-                                name: this.getBasicPanelDisplayName(panelId),
-                                subItems: allSubItems
-                            });
-
-                            console.log(`[SmartPromptSystem] 📊 基础面板 ${panelId}: ${allSubItems.length} 个子项 (基础设置: ${enabledSubItems.length}, 自定义: ${enabledCustomSubItems.length})`);
-                        }
-                    }
+            // 🔧 新架构：统一从customPanels遍历所有面板
+            for (const [panelKey, panelConfig] of Object.entries(customPanels)) {
+                if (!panelConfig || panelConfig.enabled === false) {
+                    console.log(`[SmartPromptSystem] ⏭️ 跳过禁用面板: ${panelKey}`);
+                    continue;
                 }
+
+                console.log(`[SmartPromptSystem] 🔍 处理面板: ${panelKey} (${panelConfig.name || '未命名'})`);
+
+                // 处理子项
+                const allSubItems = panelConfig.subItems || [];
+                const enabledSubItems = allSubItems.filter(subItem => subItem && subItem.enabled !== false);
+
+                console.log(`[SmartPromptSystem] 📊 面板 ${panelKey}: 所有子项 ${allSubItems.length}, 启用 ${enabledSubItems.length}`);
+
+                // 处理子项格式
+                const processedSubItems = enabledSubItems.map(subItem => {
+                    if (typeof subItem === 'string') {
+                        return {
+                            key: subItem,
+                            name: subItem,
+                            enabled: true,
+                            value: ''
+                        };
+                    } else if (subItem && typeof subItem === 'object') {
+                        return {
+                            key: subItem.key || subItem.name || subItem.id,
+                            name: subItem.name || subItem.displayName || subItem.key || subItem.id,
+                            enabled: subItem.enabled !== false,
+                            value: subItem.value || '',
+                            description: subItem.description || '',
+                            type: subItem.type || 'text'
+                        };
+                    }
+                    return null;
+                }).filter(Boolean);
+
+                enabledPanels.push({
+                    id: panelKey,
+                    key: panelKey,
+                    type: panelConfig.type || 'custom',
+                    name: panelConfig.name || panelKey,
+                    subItems: processedSubItems,
+                    description: panelConfig.description || '',
+                    icon: panelConfig.icon || ''
+                });
+
+                console.log(`[SmartPromptSystem] ✅ 添加面板: ${panelKey}, 子项: ${processedSubItems.length}/${allSubItems.length}`);
             }
 
-            // 检查自定义面板 - 修复：使用与DataTable.js相同的读取逻辑
-            if (configs.customPanels) {
-                for (const [panelId, panelConfig] of Object.entries(configs.customPanels)) {
-                    console.log(`[SmartPromptSystem] 🔍 检查自定义面板: ${panelId}`, panelConfig);
-                    if (panelConfig && panelConfig.enabled !== false) { // 默认启用，除非明确设置为false
-                        const allSubItems = panelConfig.subItems || [];
-                        // 🔧 修复：只统计启用的子项
-                        const enabledSubItems = allSubItems.filter(subItem => subItem.enabled !== false);
-                        console.log(`[SmartPromptSystem] 📊 自定义面板 ${panelId} 所有子项: ${allSubItems.length}, 启用子项: ${enabledSubItems.length}`);
-
-                        // 🔧 修复：处理启用的子项
-                        const processedSubItems = enabledSubItems.map(subItem => {
-                            // 处理不同的子项格式
-                            if (typeof subItem === 'string') {
-                                return {
-                                    key: subItem,
-                                    name: subItem,
-                                    enabled: true,
-                                    value: ''
-                                };
-                            } else if (subItem && typeof subItem === 'object') {
-                                return {
-                                    key: subItem.key || subItem.name || subItem.id,
-                                    name: subItem.name || subItem.displayName || subItem.key || subItem.id,
-                                    enabled: subItem.enabled !== false,
-                                    value: subItem.value || ''
-                                };
-                            }
-                            return null;
-                        }).filter(Boolean);
-
-                        enabledPanels.push({
-                            id: panelId,
-                            key: panelConfig.key || panelId, // 添加key属性
-                            type: 'custom',
-                            name: panelConfig.name || '未命名面板',
-                            subItems: processedSubItems
-                        });
-
-                        console.log(`[SmartPromptSystem] ✅ 添加自定义面板: ${panelId}, 启用子项数量: ${processedSubItems.length}/${allSubItems.length}`);
-                    }
-                }
-            }
-
-            console.log(`[SmartPromptSystem] 📋 找到 ${enabledPanels.length} 个启用的面板`);
+            console.log(`[SmartPromptSystem] 📋 共找到 ${enabledPanels.length} 个启用的面板`);
             console.log(`[SmartPromptSystem] 📊 面板详情:`, enabledPanels.map(p => `${p.name}(${p.subItems.length}项)`));
 
             return enabledPanels;
@@ -2326,27 +2248,25 @@ ${aiMemoryInstruction}
     }
 
     /**
-     * 获取基础面板显示名称
+     * 🔧 废弃：获取面板显示名称（已统一使用panel.name）
+     * 保留此方法以兼容旧代码，但建议直接使用panel.name
      */
-    getBasicPanelDisplayName(panelId) {
-        const panelNames = {
-            'personal': '个人信息',
-            'world': '世界状态',
-            'interaction': '交互对象',
-            'tasks': '任务状态',
-            'organization': '组织关系',
-            'news': '新闻事件',
-            'inventory': '物品清单',
-            'abilities': '能力属性',
-            'plot': '剧情进展',
-            'cultivation': '修炼境界',
-            'fantasy': '奇幻设定',
-            'modern': '现代背景',
-            'historical': '历史背景',
-            'magic': '魔法系统',
-            'training': '训练记录'
-        };
-        return panelNames[panelId] || panelId;
+    getBasicPanelDisplayName(panelKey) {
+        // 🔧 新架构：尝试从customPanels获取面板名称
+        try {
+            const extensionSettings = this.context.extensionSettings['Information bar integration tool'] || {};
+            const customPanels = extensionSettings.customPanels || {};
+            const panel = customPanels[panelKey];
+            
+            if (panel && panel.name) {
+                return panel.name;
+            }
+        } catch (error) {
+            console.warn('[SmartPromptSystem] 获取面板名称失败:', error);
+        }
+        
+        // 回退：返回键名本身（现在键名就是中文名）
+        return panelKey;
     }
 
     /**
@@ -5653,6 +5573,16 @@ infobar_data标签（独立输出，必须后输出）`;
                 this.eventSystem.on('message:generated', (data) => {
                     this.handleGeneratedMessage(data);
                 });
+
+                // 🔧 新增：监听EventSystem的message:received事件
+                this.eventSystem.on('message:received', (data) => {
+                    this.handleSillyTavernMessage(data);
+                });
+
+                // 🔧 新增：监听MESSAGE_RECEIVED事件
+                this.eventSystem.on('MESSAGE_RECEIVED', (data) => {
+                    this.handleSillyTavernMessage(data);
+                });
             }
 
             // 监听SillyTavern的消息事件
@@ -5809,6 +5739,12 @@ infobar_data标签（独立输出，必须后输出）`;
             const messageContent = data.message;
             console.log('[SmartPromptSystem] 📝 检查生成消息中的总结内容...');
 
+            // 🤔 提取并处理AI思考过程（用于记忆检索）
+            const thinkingContent = this.extractAIThinkingProcess(messageContent);
+            if (thinkingContent && this.aiMemoryDatabase) {
+                await this.processAIThinking(thinkingContent);
+            }
+
             // 提取AI记忆总结
             const aiMemorySummary = this.extractAIMemorySummary(messageContent);
             if (aiMemorySummary) {
@@ -5941,7 +5877,71 @@ infobar_data标签（独立输出，必须后输出）`;
         }
     }
 
+    /**
+     * 🤔 新增：提取AI思考过程
+     */
+    extractAIThinkingProcess(messageContent) {
+        try {
+            // 匹配 <ai_think_process>...</ai_think_process>
+            const thinkingRegex = /<ai_think_process>([\s\S]*?)<\/ai_think_process>/i;
+            const match = messageContent.match(thinkingRegex);
 
+            if (match && match[1]) {
+                const thinkingContent = match[1].trim();
+                console.log('[SmartPromptSystem] 🤔 检测到AI思考过程');
+                return thinkingContent;
+            }
+
+            return null;
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 提取AI思考过程失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🤔 新增：处理AI思考过程并检索记忆
+     */
+    async processAIThinking(thinkingContent) {
+        try {
+            console.log('[SmartPromptSystem] 🤔 处理AI思考过程...');
+            console.log('[SmartPromptSystem] 💭 思考内容:', thinkingContent);
+
+            if (!this.aiMemoryDatabase || !this.aiMemoryDatabase.initialized) {
+                console.warn('[SmartPromptSystem] ⚠️ AI记忆数据库未初始化，跳过记忆检索');
+                return;
+            }
+
+            // 使用AI记忆数据库检索相关记忆
+            const memories = await this.aiMemoryDatabase.getMemoriesForAIThinking(thinkingContent);
+
+            if (memories.length > 0) {
+                console.log(`[SmartPromptSystem] ✅ 为AI思考检索到${memories.length}条相关记忆`);
+                
+                // 🔧 可选：将检索到的记忆注入到下一次生成的提示词中
+                // 这里可以触发一个事件，让其他模块知道AI正在主动检索记忆
+                if (this.eventSystem) {
+                    this.eventSystem.emit('ai:memoryRetrieval', {
+                        thinkingContent,
+                        memories,
+                        memoryCount: memories.length,
+                        timestamp: Date.now()
+                    });
+                }
+
+                // 📊 日志显示检索到的记忆摘要
+                memories.slice(0, 3).forEach((memory, index) => {
+                    console.log(`[SmartPromptSystem] 📝 记忆${index + 1}: ${memory.content.substring(0, 50)}... (重要性:${(memory.importance * 100).toFixed(0)}%)`);
+                });
+            } else {
+                console.log('[SmartPromptSystem] ℹ️ 未找到相关记忆');
+            }
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 处理AI思考过程失败:', error);
+        }
+    }
 
     /**
      * 🔧 新增：处理AI记忆总结

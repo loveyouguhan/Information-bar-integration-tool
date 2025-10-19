@@ -40,106 +40,64 @@ export class XMLDataParser {
     }
 
     /**
-     * 动态更新支持的面板类型和子项
+     * 🔧 重构：动态更新支持的面板类型（统一从customPanels获取）
+     * 移除中英文映射，直接使用中文键名
      */
     updateSupportedPanels() {
         try {
             console.log('[XMLDataParser] 🔄 动态更新支持的面板类型...');
 
-            // 基础面板类型（英文ID）
-            this.supportedPanels = new Set([
-                'personal', 'world', 'interaction', 'tasks', 'organization',
-                'news', 'inventory', 'abilities', 'plot', 'cultivation',
-                'fantasy', 'modern', 'historical', 'magic', 'training'
-            ]);
-
-            // 🔧 修复：添加中文名称到英文ID的映射表
-            this.panelNameMapping = {
-                // 中文名称到英文ID的映射
-                '个人信息': 'personal',
-                '世界信息': 'world',
-                '交互对象': 'interaction',
-                '任务系统': 'tasks',
-                '组织架构': 'organization',
-                '组织信息': 'organization', // 备用映射
-                '新闻资讯': 'news',
-                '新闻事件': 'news', // 备用映射
-                '物品清单': 'inventory',
-                '能力技能': 'abilities',
-                '能力属性': 'abilities', // 备用映射
-                '剧情发展': 'plot',
-                '修炼体系': 'cultivation',
-                '修真境界': 'cultivation', // 备用映射
-                '奇幻设定': 'fantasy',
-                '现代设定': 'modern',
-                '现代生活': 'modern', // 备用映射
-                '历史设定': 'historical',
-                '历史背景': 'historical', // 备用映射
-                '魔法系统': 'magic',
-                '魔法能力': 'magic', // 备用映射
-                '训练系统': 'training',
-                '调教系统': 'training' // 备用映射
-            };
-
-            // 反向映射：英文ID到中文名称
-            this.panelIdMapping = {};
-            Object.entries(this.panelNameMapping).forEach(([chineseName, englishId]) => {
-                this.panelIdMapping[englishId] = chineseName;
-            });
-
-            // 获取当前启用的面板配置，包括自定义子项
+            // 获取SillyTavern上下文
             const context = window.SillyTavern?.getContext?.();
             if (!context) {
-                console.log('[XMLDataParser] ⚠️ 无法获取SillyTavern上下文，使用默认面板配置');
+                console.log('[XMLDataParser] ⚠️ 无法获取SillyTavern上下文，跳过面板更新');
+                this.supportedPanels = new Set();
+                this.customSubItems = new Map();
                 return;
             }
 
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings?.['Information bar integration tool'] || {};
 
-            // 获取基础面板的自定义子项信息
+            // 🔧 新架构：从customPanels获取所有面板
+            this.supportedPanels = new Set();
             this.customSubItems = new Map();
 
-            const basicPanelIds = ['personal', 'world', 'interaction', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot', 'cultivation', 'fantasy', 'modern', 'historical', 'magic', 'training'];
+            const customPanels = configs.customPanels || {};
 
-            basicPanelIds.forEach(panelId => {
-                if (configs[panelId] && configs[panelId].subItems && Array.isArray(configs[panelId].subItems)) {
-                    const customSubItems = configs[panelId].subItems.map(subItem => ({
-                        key: subItem.key || subItem.name?.toLowerCase().replace(/\s+/g, '_'),
-                        name: subItem.displayName || subItem.name,
-                        enabled: subItem.enabled !== false
-                    }));
+            // 遍历所有customPanels
+            Object.entries(customPanels).forEach(([panelKey, panel]) => {
+                if (!panel) return;
 
-                    if (customSubItems.length > 0) {
-                        this.customSubItems.set(panelId, customSubItems);
-                        console.log(`[XMLDataParser] 📊 基础面板 ${panelId} 包含 ${customSubItems.length} 个自定义子项`);
+                // 只添加启用的面板到支持列表
+                if (panel.enabled !== false) {
+                    // 使用面板的键名（中文）作为标识符
+                    this.supportedPanels.add(panelKey);
+                    console.log(`[XMLDataParser] ✅ 添加面板支持: ${panelKey} (${panel.name || '未命名'})`);
+
+                    // 获取面板的子项信息
+                    if (panel.subItems && Array.isArray(panel.subItems)) {
+                        const subItems = panel.subItems.map(subItem => ({
+                            key: subItem.key || subItem.name?.toLowerCase().replace(/\s+/g, '_'),
+                            name: subItem.displayName || subItem.name,
+                            enabled: subItem.enabled !== false
+                        }));
+
+                        if (subItems.length > 0) {
+                            this.customSubItems.set(panelKey, subItems);
+                            console.log(`[XMLDataParser] 📊 面板 ${panelKey} 包含 ${subItems.length} 个子项`);
+                        }
                     }
                 }
             });
 
-            // 🔧 修复：添加自定义面板支持（customPanels是对象，键是面板ID）
-            if (configs.customPanels && typeof configs.customPanels === 'object') {
-                Object.entries(configs.customPanels).forEach(([panelId, panel]) => {
-                    if (panel && panel.enabled !== false) {
-                        // 自定义面板使用key或id作为标识符
-                        const actualPanelId = panel.key || panel.id || panelId;
-                        this.supportedPanels.add(actualPanelId);
-                        console.log(`[XMLDataParser] 📊 添加自定义面板支持: ${actualPanelId} (${panel.name || '未命名'})`);
-                    }
-                });
-            }
-
             console.log(`[XMLDataParser] ✅ 支持的面板更新完成，共 ${this.supportedPanels.size} 个面板`);
-            console.log(`[XMLDataParser] 📋 基础面板自定义子项: ${this.customSubItems.size} 个面板包含自定义子项`);
+            console.log(`[XMLDataParser] 📋 面板子项信息: ${this.customSubItems.size} 个面板包含子项`);
 
         } catch (error) {
             console.error('[XMLDataParser] ❌ 更新支持的面板失败:', error);
-            // 使用默认配置作为降级处理
-            this.supportedPanels = new Set([
-                'personal', 'world', 'interaction', 'tasks', 'organization',
-                'news', 'inventory', 'abilities', 'plot', 'cultivation',
-                'fantasy', 'modern', 'historical', 'magic', 'training'
-            ]);
+            // 降级处理：使用空集合
+            this.supportedPanels = new Set();
             this.customSubItems = new Map();
         }
     }
@@ -1257,22 +1215,22 @@ export class XMLDataParser {
             Object.keys(data).forEach(panelName => {
                 const panelData = data[panelName];
 
-                // 将中文面板名映射为英文ID，统一键名，避免跨面板污染
-                const englishPanelId = this.panelNameMapping?.[panelName] || panelName;
+                // 🔧 新架构：直接使用中文面板名作为键名
+                const panelKey = panelName;
 
                 // 验证面板数据
                 if (this.isValidPanelData(panelName, panelData)) {
                     // 依据启用配置过滤子项，只保留启用字段
-                    const filtered = this.filterEnabledSubItems(englishPanelId, panelData);
+                    const filtered = this.filterEnabledSubItems(panelKey, panelData);
                     if (Object.keys(filtered).length > 0) {
                         // 🔧 组织架构面板特殊处理：智能分解合并格式
-                        if (englishPanelId === 'organization') {
-                            cleanedData[englishPanelId] = this.smartSplitOrganizationData(filtered);
+                        if (panelKey === '组织架构') {
+                            cleanedData[panelKey] = this.smartSplitOrganizationData(filtered);
                         } else {
-                            cleanedData[englishPanelId] = this.cleanPanelData(filtered);
+                            cleanedData[panelKey] = this.cleanPanelData(filtered);
                         }
                     } else {
-                        console.log('[XMLDataParser] ℹ️ 过滤后无启用字段，跳过面板:', englishPanelId);
+                        console.log('[XMLDataParser] ℹ️ 过滤后无启用字段，跳过面板:', panelKey);
                     }
                 } else {
                     console.warn('[XMLDataParser] ⚠️ 面板数据验证失败:', panelName);
@@ -1337,9 +1295,8 @@ export class XMLDataParser {
             return false;
         }
 
-        // 检查是否在支持的面板列表中
-        const englishPanelId = this.panelNameMapping?.[panelName] || panelName;
-        const isSupported = this.supportedPanels.has(englishPanelId) || this.supportedPanels.has(panelName);
+        // 🔧 新架构：直接检查中文面板名是否在支持列表中
+        const isSupported = this.supportedPanels.has(panelName);
 
         if (!isSupported) {
             console.error(`[XMLDataParser] 🚨 面板名称验证失败: "${panelName}"`);
@@ -1413,13 +1370,12 @@ export class XMLDataParser {
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings?.['Information bar integration tool'] || {};
 
-            // 转换为英文面板ID
-            const englishPanelId = this.panelNameMapping?.[panelName] || panelName;
-
-            // 获取面板配置
-            const panelConfig = configs[englishPanelId];
+            // 🔧 新架构：直接从customPanels获取面板配置
+            const customPanels = configs.customPanels || {};
+            const panelConfig = customPanels[panelName];
+            
             if (!panelConfig) {
-                console.warn(`[XMLDataParser] ⚠️ 无法获取面板 "${englishPanelId}" 的配置`);
+                console.warn(`[XMLDataParser] ⚠️ 无法获取面板 "${panelName}" 的配置`);
                 return null;
             }
 
