@@ -55,7 +55,7 @@ import { TimeAwareMemoryManager } from './core/TimeAwareMemoryManager.js';
 import { SillyTavernIntegration } from './core/SillyTavernIntegration.js';
 import { FrontendDisplayManager } from './ui/FrontendDisplayManager.js';
 
-// 提前初始化控制台门禁：默认不输出信息栏日志，直到调试模式应用级别
+// 🔧 修复：初始化控制台门禁，默认禁用日志收集，避免在配置加载前收集日志
 (function bootstrapInfobarConsoleGate() {
     try {
         if (window.__InfobarConsoleOriginal) return;
@@ -70,24 +70,47 @@ import { FrontendDisplayManager } from './ui/FrontendDisplayManager.js';
         window.__InfobarConsoleOriginal = original;
         if (!window.SillyTavernInfobar) window.SillyTavernInfobar = {};
         const rt = (window.SillyTavernInfobar.runtimeLogs = window.SillyTavernInfobar.runtimeLogs || []);
+        
+        // 🔧 修复：添加收集开关，默认禁用
+        window.SillyTavernInfobar.logCollectionEnabled = false;
+        
         const push = (level, args) => {
+            // 🔧 只在启用收集时才记录日志
+            if (!window.SillyTavernInfobar.logCollectionEnabled) return;
             try {
                 rt.push({ level, time: Date.now(), message: Array.from(args).map(v => (typeof v === 'string' ? v : JSON.stringify(v))).join(' ') });
                 if (rt.length > 500) rt.shift();
             } catch {}
         };
 
-        // 默认静默收集
-        console.log = (...args) => { push('debug', args); };
-        console.info = (...args) => { push('info', args); };
-        console.warn = (...args) => { push('warn', args); };
-        console.error = (...args) => { push('error', args); };
+        // 🔧 修复：默认完全恢复原生console，不收集不拦截
+        console.log = original.log;
+        console.info = original.info;
+        console.warn = original.warn;
+        console.error = original.error;
+
+        // 🔧 提供手动启用收集的方法
+        window.__InfobarEnableCollection = (enabled) => {
+            window.SillyTavernInfobar.logCollectionEnabled = enabled;
+            if (enabled) {
+                console.log = (...args) => { push('debug', args); original.log(...args); };
+                console.info = (...args) => { push('info', args); original.info(...args); };
+                console.warn = (...args) => { push('warn', args); original.warn(...args); };
+                console.error = (...args) => { push('error', args); original.error(...args); };
+            } else {
+                console.log = original.log;
+                console.info = original.info;
+                console.warn = original.warn;
+                console.error = original.error;
+            }
+        };
 
         window.__InfobarRestore = () => {
             console.log = original.log;
             console.info = original.info;
             console.warn = original.warn;
             console.error = original.error;
+            window.SillyTavernInfobar.logCollectionEnabled = false;
         };
     } catch {}
 })();
@@ -931,8 +954,16 @@ if (document.readyState === 'loading') {
     informationBarTool.init();
 }
 
-// 🔧 修复：先创建基本的全局对象结构，modules 将在初始化完成后更新
-window.SillyTavernInfobar = {
+// 🔧 修复：保留 runtimeLogs 数组，不覆盖已存在的对象
+if (!window.SillyTavernInfobar) {
+    window.SillyTavernInfobar = {};
+}
+
+// 保存已存在的 runtimeLogs（如果有的话）
+const existingRuntimeLogs = window.SillyTavernInfobar.runtimeLogs;
+
+// 更新全局对象结构，但保留 runtimeLogs
+Object.assign(window.SillyTavernInfobar, {
     modules: {
         infoBarTool: informationBarTool,
         // 其他模块将在初始化完成后动态添加
@@ -943,8 +974,10 @@ window.SillyTavernInfobar = {
     },
     eventSource: informationBarTool.eventSystem,
     // 🔧 新增：暴露PresetPanelsManager供UI使用
-    PresetPanelsManager: PresetPanelsManager
-};
+    PresetPanelsManager: PresetPanelsManager,
+    // 🔧 保留 runtimeLogs 数组
+    runtimeLogs: existingRuntimeLogs || window.SillyTavernInfobar.runtimeLogs || []
+});
 // 🔧 已移除：STScript数据同步功能已删除
 // window.STScriptDataSync = STScriptDataSync;
 
