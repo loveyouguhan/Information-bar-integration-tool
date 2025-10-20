@@ -946,13 +946,10 @@
 
 /* ========== 🎨 单元格更新高亮样式 ========== */
 
-/* 基础高亮状态 */
+/* 基础高亮状态 - 整个单元格背景高亮 */
 .cell-value.cell-updated {
     position: relative;
-    background: linear-gradient(135deg, 
-        rgba(52, 211, 153, 0.15) 0%, 
-        rgba(16, 185, 129, 0.1) 100%);
-    border-left: 3px solid #10b981;
+    background: rgba(52, 211, 153, 0.3) !important;
     font-weight: 500;
     transition: all 0.3s ease;
 }
@@ -998,41 +995,30 @@
     animation: cellHighlight 1.2s ease-out;
 }
 
-/* 添加闪烁指示器 */
+/* 移除闪烁指示器 - 不需要花里胡哨的效果 */
 .cell-value.cell-updated::before {
-    content: '●';
-    position: absolute;
-    left: -10px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #10b981;
-    font-size: 8px;
-    animation: cellPulse 1.5s ease-in-out infinite;
+    display: none;
 }
 
-/* 暗色主题适配 */
+/* 暗色主题适配 - 整个单元格背景高亮 */
 [data-theme="dark"] .cell-value.cell-updated,
 .dark-mode .cell-value.cell-updated {
-    background: linear-gradient(135deg, 
-        rgba(16, 185, 129, 0.2) 0%, 
-        rgba(5, 150, 105, 0.15) 100%);
-    border-left-color: #34d399;
+    background: rgba(16, 185, 129, 0.25) !important;
 }
 
 [data-theme="dark"] .cell-value.cell-updated::before,
 .dark-mode .cell-value.cell-updated::before {
-    color: #34d399;
+    display: none;
 }
 
 /* 移动端优化 */
 @media (max-width: 768px) {
     .cell-value.cell-updated {
-        border-left-width: 2px;
+        background: rgba(52, 211, 153, 0.3) !important;
     }
-    
+
     .cell-value.cell-updated::before {
-        left: -8px;
-        font-size: 6px;
+        display: none;
     }
     
     @keyframes cellHighlight {
@@ -1052,13 +1038,13 @@
     .cell-value.cell-highlight-animation {
         animation: none;
     }
-    
+
     .cell-value.cell-updated::before {
-        animation: none;
+        display: none;
     }
-    
+
     .cell-value.cell-updated {
-        background: rgba(16, 185, 129, 0.15);
+        background: rgba(52, 211, 153, 0.3) !important;
     }
 }
 

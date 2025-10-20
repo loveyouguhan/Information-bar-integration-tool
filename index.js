@@ -54,6 +54,8 @@ import { RAGMemoryFormatter } from './core/RAGMemoryFormatter.js';
 import { TimeAwareMemoryManager } from './core/TimeAwareMemoryManager.js';
 import { SillyTavernIntegration } from './core/SillyTavernIntegration.js';
 import { FrontendDisplayManager } from './ui/FrontendDisplayManager.js';
+import { RegexScriptManager } from './core/RegexScriptManager.js';
+import { RegexScriptPanel } from './ui/RegexScriptPanel.js';
 
 // 🔧 修复：初始化控制台门禁，默认禁用日志收集，避免在配置加载前收集日志
 (function bootstrapInfobarConsoleGate() {
@@ -159,6 +161,10 @@ class InformationBarIntegrationTool {
 
         // 前端显示功能
         this.frontendDisplayManager = null;
+
+        // 🆕 正则表达式脚本管理
+        this.regexScriptManager = null;
+        this.regexScriptPanel = null;
 
         // 功能模块 (将在后续版本中添加)
         // this.contentManager = null;
@@ -314,6 +320,15 @@ class InformationBarIntegrationTool {
         // 🆕 新增：初始化世界书配置面板
         this.worldBookConfigPanel = new WorldBookConfigPanel(this.worldBookManager, this.configManager, this.eventSystem);
 
+        // 🆕 新增：初始化正则表达式脚本管理器
+        this.regexScriptManager = new RegexScriptManager({
+            configManager: this.configManager,
+            eventSystem: this.eventSystem,
+            unifiedDataCore: this.dataCore
+        });
+        await this.regexScriptManager.init();
+        console.log('[InfoBarTool] ✅ 正则表达式脚本管理器初始化完成');
+
         // 初始化智能提示词系统（需要在fieldRuleManager和panelRuleManager之后）
         this.smartPromptSystem = new SmartPromptSystem(this.configManager, this.eventSystem, this.dataCore, this.fieldRuleManager, this.panelRuleManager);
         await this.smartPromptSystem.init();
@@ -364,6 +379,13 @@ class InformationBarIntegrationTool {
 
         // InfoBarSettings初始化完成后，检查并自动设置自定义API Hook
         await this.checkAndSetupCustomAPIHookAfterInit();
+
+        // 🆕 新增：初始化正则表达式脚本面板
+        this.regexScriptPanel = new RegexScriptPanel({
+            regexScriptManager: this.regexScriptManager,
+            eventSystem: this.eventSystem
+        });
+        console.log('[InfoBarTool] ✅ 正则表达式脚本面板初始化完成');
 
         // 初始化数据表格界面
         this.dataTable = new DataTable(
@@ -907,6 +929,8 @@ class InformationBarIntegrationTool {
                 npcManagementPanel: this.npcManagementPanel,
                 worldBookManager: this.worldBookManager,
                 worldBookConfigPanel: this.worldBookConfigPanel,
+                regexScriptManager: this.regexScriptManager, // 🆕 新增：正则表达式脚本管理器
+                regexScriptPanel: this.regexScriptPanel, // 🆕 新增：正则表达式脚本面板
                 contentFilterManager: this.contentFilterManager, // 🔧 新增：内容过滤管理器
                 messageFilterHook: this.messageFilterHook, // 🔧 新增：消息过滤Hook
                 // 🔧 修复：添加自定义API任务队列模块
