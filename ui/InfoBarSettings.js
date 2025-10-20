@@ -747,6 +747,49 @@ ${'='.repeat(80)}
     }
 
     /**
+     * 🆕 打开正则表达式脚本管理器
+     */
+    async openRegexScriptManager() {
+        try {
+            console.log('[InfoBarSettings] 📝 打开正则表达式脚本管理器...');
+
+            // 获取RegexScriptPanel实例
+            const regexScriptPanel = window.SillyTavernInfobar?.modules?.regexScriptPanel;
+
+            if (!regexScriptPanel) {
+                console.warn('[InfoBarSettings] ⚠️ RegexScriptPanel未初始化，尝试动态加载...');
+                
+                // 动态导入RegexScriptPanel
+                const { RegexScriptPanel } = await import('./RegexScriptPanel.js');
+                
+                // 获取RegexScriptManager实例
+                const regexScriptManager = window.SillyTavernInfobar?.modules?.regexScriptManager;
+                
+                if (!regexScriptManager) {
+                    throw new Error('RegexScriptManager未初始化');
+                }
+                
+                // 创建面板实例
+                const panel = new RegexScriptPanel({
+                    regexScriptManager: regexScriptManager,
+                    eventSystem: this.eventSystem
+                });
+                
+                // 显示面板
+                await panel.show();
+                return;
+            }
+
+            // 显示正则表达式脚本管理面板
+            await regexScriptPanel.show();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 打开正则表达式脚本管理器失败:', error);
+            alert(`打开正则表达式脚本管理器失败: ${error.message}`);
+        }
+    }
+
+    /**
      * 🔧 新增：初始化自定义API任务队列
      */
     async initializeCustomAPITaskQueue() {
@@ -1663,6 +1706,10 @@ ${'='.repeat(80)}
                 if (e.target.id === 'test-connection-btn') {
                     this.testConnection();
                 }
+                // 🆕 正则表达式管理按钮
+                if (e.target.id === 'regex-script-manager-btn') {
+                    this.openRegexScriptManager();
+                }
 
                 // NPC管理相关按钮
                 if (e.target.id === 'npc-sync-now-btn') {
@@ -1673,6 +1720,24 @@ ${'='.repeat(80)}
                 }
                 if (e.target.id === 'npc-refresh-btn') {
                     this.refreshNPCList();
+                }
+                // 🆕 新增NPC按钮
+                if (e.target.id === 'npc-add-new-btn') {
+                    this.showAddNPCDialog();
+                }
+                // 🆕 AI模式立即更新按钮
+                if (e.target.id === 'npc-ai-update-now-btn') {
+                    this.updateNPCWithAI();
+                }
+                // 🆕 清除NPC变更日志按钮
+                if (e.target.id === 'npc-clear-change-log-btn') {
+                    this.clearNPCChangeLogs();
+                }
+                // 🆕 NPC模式切换
+                const npcModeTab = e.target.closest('.npc-mode-tab');
+                if (npcModeTab) {
+                    const mode = npcModeTab.dataset.mode;
+                    this.switchNPCMode(mode);
                 }
 
             // 🆕 破甲提示词文本框字符统计
@@ -6557,9 +6622,18 @@ ${'='.repeat(80)}
                     </div>
                 </div>
 
+                <!-- 🆕 正则表达式管理 -->
+                <div class="settings-group">
+                    <h4>10. 正则表达式管理</h4>
+                    <div class="form-group">
+                        <button type="button" id="regex-script-manager-btn" class="btn btn-secondary">📝 正则表达式管理</button>
+                        <small>管理用于自定义API的正则表达式脚本，可从SillyTavern导入或创建新脚本</small>
+                    </div>
+                </div>
+
                 <!-- 连接状态显示 -->
                 <div class="settings-group">
-                    <h4>10. 连接状态</h4>
+                    <h4>11. 连接状态</h4>
                     <div class="form-group">
                         <div id="connection-status" class="connection-status">
                             ⏳ 未测试连接
@@ -7711,6 +7785,16 @@ ${'='.repeat(80)}
 
                         <div class="setting-row">
                             <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-summary-use-regex" checked />
+                                    <span class="checkbox-text">使用正则表达式过滤</span>
+                                </label>
+                                <div class="setting-hint">启用后，在获取总结消息时应用OUTPUT正则表达式过滤标签内容（默认启用）</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-group">
                                 <label class="setting-label" for="content-summary-floor-count">总结楼层数</label>
                                 <div class="input-group">
                                     <input type="number" id="content-summary-floor-count" min="5" max="100" value="20" />
@@ -7846,63 +7930,67 @@ ${'='.repeat(80)}
                     <div class="history-section">
                         <h4>📚 总结历史</h4>
 
-                        <!-- 🚀 新增：总结类型筛选 -->
+                        <!-- 🚀 总结类型筛选：已简化，只保留总结记录 -->
                         <div class="summary-filter-tabs" style="display: flex; margin-bottom: 15px; border-bottom: 1px solid var(--SmartThemeBorderColor, #333);">
-                            <button class="filter-tab active" data-filter="all" style="background: none; border: none; padding: 8px 16px; color: var(--SmartThemeQuoteColor, #888); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;">全部</button>
-                            <button class="filter-tab" data-filter="traditional" style="background: none; border: none; padding: 8px 16px; color: var(--SmartThemeQuoteColor, #888); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;">传统总结</button>
-                            <button class="filter-tab" data-filter="ai_memory" style="background: none; border: none; padding: 8px 16px; color: var(--SmartThemeQuoteColor, #888); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;">AI记忆</button>
+                            <button class="filter-tab active" data-filter="all" style="background: none; border: none; padding: 8px 16px; color: var(--SmartThemeQuoteColor, #888); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;">总结记录</button>
                         </div>
 
                         <div class="history-selector-group">
                             <label class="setting-label" for="content-summary-history-select">选择总结记录</label>
-                            <div class="history-select-row">
-                                <select id="content-summary-history-select" class="setting-select summary-history-select">
+                            <select id="content-summary-history-select" class="setting-select summary-history-select" style="margin-bottom: 10px;">
                                     <option value="">请选择要查看的总结记录</option>
                                 </select>
-                                <button id="content-upload-to-worldbook-btn" class="btn btn-small" title="上传当前总结到世界书" style="background: var(--SmartThemeAccentColor, #4a9eff); margin-right: 4px;">📚 上传</button>
-                                <button id="content-delete-summary-btn" class="btn btn-small" title="删除当前选择的总结">🗑️ 删除</button>
+                            <div class="history-action-buttons" style="display: flex; gap: 10px;">
+                                <button id="content-upload-to-worldbook-btn" class="btn btn-small" title="上传当前总结到世界书" style="flex: 1; background: var(--SmartThemeAccentColor, #4a9eff);">📚 上传</button>
+                                <button id="content-delete-summary-btn" class="btn btn-small" title="删除当前选择的总结" style="flex: 1;">🗑️ 删除</button>
                             </div>
-                            <div class="setting-hint">选择总结记录后，下方将显示详细内容。可上传到世界书作为剧情记忆</div>
+                            <div class="setting-hint" style="margin-top: 8px;">选择总结记录后，下方将显示详细内容。可上传到世界书作为剧情记忆</div>
                         </div>
 
                         <!-- 🚀 新增：世界书上传配置 -->
-                        <div class="worldbook-upload-config" style="margin-top: 15px; padding: 12px; background: var(--SmartThemeSurfaceColor, #1a1a1a); border: 1px solid var(--SmartThemeBorderColor, #333); border-radius: 6px;">
-                            <h5 style="margin: 0 0 10px 0; color: var(--SmartThemeAccentColor, #4a9eff);">📚 世界书上传设置</h5>
+                        <div class="worldbook-upload-config" style="margin-top: 15px; padding: 12px; background: var(--theme-bg-secondary, #2a2a2a); border: 1px solid var(--theme-border-color, #333); border-radius: 6px;">
+                            <h5 style="margin: 0 0 10px 0; color: var(--theme-primary-color, #4CAF50); font-size: 14px;">📚 世界书上传设置</h5>
 
-                            <div class="setting-row">
-                                <label class="setting-label" for="worldbook-auto-upload">自动上传新总结</label>
-                                <input type="checkbox" id="worldbook-auto-upload" class="setting-checkbox">
+                            <div class="setting-row" style="margin-bottom: 12px;">
+                                <label class="setting-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="worldbook-auto-upload" class="setting-checkbox" style="width: 18px; height: 18px;">
+                                    <span>自动上传新总结</span>
+                                </label>
                                 <div class="setting-hint">启用后，新生成的总结将自动上传到世界书</div>
                             </div>
 
-                            <div class="setting-row">
-                                <label class="setting-label" for="worldbook-entry-format">条目命名格式</label>
-                                <select id="worldbook-entry-format" class="setting-select">
+                            <div class="setting-row" style="margin-bottom: 12px;">
+                                <label class="setting-label" for="worldbook-entry-format" style="color: var(--theme-text-primary, #e0e0e0);">条目命名格式</label>
+                                <select id="worldbook-entry-format" class="setting-select" style="background: var(--theme-bg-primary, #1a1a1a); color: var(--theme-text-primary, #e0e0e0); border-color: var(--theme-border-color, #333);">
                                     <option value="auto">自动命名（剧情总结 #1、AI记忆 #1）</option>
                                     <option value="floor_range">楼层范围（楼层 #1-10）</option>
                                     <option value="custom">自定义名称</option>
                                 </select>
                             </div>
 
-                            <div class="setting-row" id="worldbook-custom-name-row" style="display: none;">
-                                <label class="setting-label" for="worldbook-custom-name">自定义条目名称</label>
-                                <input type="text" id="worldbook-custom-name" class="setting-input" placeholder="输入自定义条目名称">
+                            <div class="setting-row" id="worldbook-custom-name-row" style="display: none; margin-bottom: 12px;">
+                                <label class="setting-label" for="worldbook-custom-name" style="color: var(--theme-text-primary, #e0e0e0);">自定义条目名称</label>
+                                <input type="text" id="worldbook-custom-name" class="setting-input" placeholder="输入自定义条目名称" style="background: var(--theme-bg-primary, #1a1a1a); color: var(--theme-text-primary, #e0e0e0); border-color: var(--theme-border-color, #333);">
                             </div>
 
-                            <div class="setting-row">
-                                <label class="setting-label" for="worldbook-add-timestamp">添加时间戳</label>
-                                <input type="checkbox" id="worldbook-add-timestamp" class="setting-checkbox" checked>
+                            <div class="setting-row" style="margin-bottom: 12px;">
+                                <label class="setting-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="worldbook-add-timestamp" class="setting-checkbox" checked style="width: 18px; height: 18px;">
+                                    <span style="color: var(--theme-text-primary, #e0e0e0);">添加时间戳</span>
+                                </label>
                                 <div class="setting-hint">在条目内容中添加生成时间信息</div>
                             </div>
 
-                            <div class="setting-row">
-                                <label class="setting-label" for="worldbook-use-tags">使用内容标签</label>
-                                <input type="checkbox" id="worldbook-use-tags" class="setting-checkbox" checked>
+                            <div class="setting-row" style="margin-bottom: 12px;">
+                                <label class="setting-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="worldbook-use-tags" class="setting-checkbox" checked style="width: 18px; height: 18px;">
+                                    <span style="color: var(--theme-text-primary, #e0e0e0);">使用内容标签</span>
+                                </label>
                                 <div class="setting-hint">为总结内容添加XML标签以便识别类型</div>
                             </div>
 
-                            <div class="worldbook-batch-actions" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--SmartThemeBorderColor, #333);">
-                                <button id="worldbook-batch-upload-btn" class="btn btn-small" style="background: var(--SmartThemeAccentColor, #4a9eff);">📤 批量上传所有总结</button>
+                            <div class="worldbook-batch-actions" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--theme-border-color, #333);">
+                                <button id="worldbook-batch-upload-btn" class="btn btn-small" style="background: var(--theme-primary-color, #4CAF50); color: white;">📤 批量上传所有总结</button>
                                 <span class="setting-hint" style="margin-left: 8px;">将当前聊天的所有总结上传到世界书</span>
                             </div>
                         </div>
@@ -9098,6 +9186,13 @@ ${'='.repeat(80)}
                     // 🔧 修复：同步设置到各个记忆增强模块
                     await this.syncMemoryEnhancementSettingsToModules(memoryEnhancementData);
                 }
+            }
+
+            // 🔧 修复：额外收集NPC管理面板的设置（这些控件没有 name 属性）
+            const npcSettings = this.collectNPCManagementSettings();
+            if (npcSettings && typeof npcSettings === 'object') {
+                Object.assign(extensionSettings['Information bar integration tool'], npcSettings);
+                console.log('[InfoBarSettings] 🎭 已收集NPC管理设置并写入配置:', npcSettings);
             }
 
             // 触发 SillyTavern 保存设置
@@ -12032,8 +12127,44 @@ ${'='.repeat(80)}
                 <p class="content-description">管理当前聊天中的NPC数据，支持数据同步和世界书集成</p>
             </div>
 
+            <!-- 🆕 NPC管理模式切换 -->
             <div class="settings-group">
-                <h4>1. 启用NPC数据库管理</h4>
+                <h4>NPC数据管理模式</h4>
+                <div class="form-group">
+                    <div class="npc-mode-tabs" style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <button type="button" class="npc-mode-tab active" data-mode="panel" style="
+                            flex: 1;
+                            padding: 10px 16px;
+                            background: var(--theme-primary-color, #4CAF50);
+                            color: white;
+                            border: 1px solid var(--theme-primary-color, #4CAF50);
+                            border-radius: 6px;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                        ">
+                            📊 面板模式
+                        </button>
+                        <button type="button" class="npc-mode-tab" data-mode="ai" style="
+                            flex: 1;
+                            padding: 10px 16px;
+                            background: var(--theme-bg-secondary, #2a2a2a);
+                            color: var(--theme-text-primary, #e0e0e0);
+                            border: 1px solid var(--theme-border-color, #333);
+                            border-radius: 6px;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                        ">
+                            🤖 AI模式
+                        </button>
+                    </div>
+                    <small>面板模式：从interaction面板获取NPC数据 | AI模式：调用自定义API智能提取NPC数据</small>
+                </div>
+            </div>
+
+            <!-- 面板模式设置区域 -->
+            <div class="npc-panel-mode-settings">
+                <div class="settings-group">
+                    <h4>启用NPC数据库管理</h4>
                 <div class="form-group">
                     <div class="checkbox-wrapper">
                         <input type="checkbox" id="npc-auto-sync-enabled" ${this.getNPCAutoSyncEnabled() ? 'checked' : ''}>
@@ -12044,7 +12175,7 @@ ${'='.repeat(80)}
             </div>
 
             <div class="settings-group">
-                <h4>2. NPC数据获取面板</h4>
+                    <h4>NPC数据获取面板</h4>
                 <div class="form-group">
                     <label>选择NPC数据来源面板</label>
                     <select id="npc-source-panel-select" class="setting-select" style="width: 100%; padding: 8px; border-radius: 4px;">
@@ -12052,11 +12183,91 @@ ${'='.repeat(80)}
                         <!-- 动态面板选项将在初始化时添加 -->
                     </select>
                     <small>选择从哪个面板获取NPC数据。默认从交互对象面板获取，也可以选择自定义面板</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🆕 AI模式设置区域 -->
+            <div class="npc-ai-mode-settings" style="display: none;">
+            <div class="settings-group">
+                    <h4>AI模式设置</h4>
+                    
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="npc-ai-use-regex" checked>
+                            <label for="npc-ai-use-regex" class="checkbox-label">使用正则表达式过滤</label>
+                        </div>
+                        <small>启用后，在获取消息时应用OUTPUT正则表达式过滤标签内容（默认启用）</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>数据更新楼层</label>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="number" id="npc-ai-update-floor" min="5" max="100" value="20" style="
+                                flex: 1;
+                                padding: 8px 12px;
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                background: var(--theme-bg-primary, #1a1a1a);
+                                color: var(--theme-text-primary, #e0e0e0);
+                            ">
+                            <span style="color: var(--theme-text-secondary, #888);">条消息</span>
+                        </div>
+                        <small>每隔多少条消息自动调用AI更新NPC数据</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="button" id="npc-ai-update-now-btn" class="btn btn-primary" style="
+                            width: 100%;
+                            padding: 10px 16px;
+                            background: var(--theme-primary-color, #4CAF50);
+                            color: white;
+                            border: none;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                        " onmouseover="this.style.background='#45a049'" onmouseout="this.style.background='var(--theme-primary-color, #4CAF50)'">
+                            🤖 立即更新NPC数据
+                        </button>
+                        <small>手动触发AI分析并更新NPC数据</small>
+                    </div>
+                    
+                    <!-- 🆕 变更状态显示栏 -->
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <h5 style="margin: 0; color: var(--theme-text-primary, #e0e0e0);">📊 变更状态</h5>
+                            <button type="button" id="npc-clear-change-log-btn" class="btn btn-small" style="
+                                padding: 4px 10px;
+                                font-size: 12px;
+                                background: var(--theme-bg-secondary, #2a2a2a);
+                                color: var(--theme-text-secondary, #888);
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                cursor: pointer;
+                            " onmouseover="this.style.color='var(--theme-text-primary, #e0e0e0)'" onmouseout="this.style.color='var(--theme-text-secondary, #888)'">
+                                🗑️ 清除
+                            </button>
+                        </div>
+                        <div id="npc-change-log" style="
+                            max-height: 200px;
+                            overflow-y: auto;
+                            padding: 12px;
+                            background: var(--theme-bg-primary, #1a1a1a);
+                            border: 1px solid var(--theme-border-color, #333);
+                            border-radius: 6px;
+                            font-size: 13px;
+                            color: var(--theme-text-secondary, #888);
+                            -webkit-overflow-scrolling: touch;
+                        ">
+                            <div class="npc-change-empty">暂无变更记录</div>
+                        </div>
+                        <small>显示最近的NPC数据变更记录（最多50条）</small>
+                    </div>
                 </div>
             </div>
 
             <div class="settings-group">
-                <h4>3. 世界书同步</h4>
+                <h4>世界书同步</h4>
                 <div class="form-group">
                     <div class="checkbox-wrapper">
                         <input type="checkbox" id="npc-worldbook-sync-enabled" ${this.getNPCWorldBookSyncEnabled() ? 'checked' : ''}>
@@ -12075,15 +12286,16 @@ ${'='.repeat(80)}
                 </div>
             </div>
 
-            <div class="settings-group">
-                <h4>4. 手动操作</h4>
+            <div class="settings-group npc-panel-mode-settings">
+                <h4>手动操作</h4>
                 <div class="form-group">
-                    <div class="button-group">
+                    <div class="button-group" style="display: flex; gap: 10px;">
                         <button type="button" id="npc-sync-now-btn" class="btn btn-sm" style="
+                            flex: 1;
                             background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a));
                             color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
                             border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #444));
-                            padding: 6px 12px;
+                            padding: 8px 12px;
                             border-radius: 4px;
                             cursor: pointer;
                             transition: all 0.2s ease;
@@ -12091,14 +12303,14 @@ ${'='.repeat(80)}
                             🔄 立即同步NPC数据
                         </button>
                         <button type="button" id="npc-worldbook-sync-now-btn" class="btn btn-sm" style="
+                            flex: 1;
                             background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a));
                             color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
                             border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #444));
-                            padding: 6px 12px;
+                            padding: 8px 12px;
                             border-radius: 4px;
                             cursor: pointer;
                             transition: all 0.2s ease;
-                            margin-left: 8px;
                         " onmouseover="this.style.background='var(--theme-success-color, var(--SmartThemeQuoteColor, #28a745))'" onmouseout="this.style.background='var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a))'">
                             🌍 同步到世界书
                         </button>
@@ -12108,15 +12320,28 @@ ${'='.repeat(80)}
             </div>
 
             <div class="settings-group">
-                <h4>5. NPC列表</h4>
+                <h4>NPC列表</h4>
                 <div class="npc-list-container">
-                    <div class="npc-search-bar">
-                        <input type="text" id="npc-search-input" placeholder="搜索NPC..." class="form-control">
+                    <div class="npc-search-bar" style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center;">
+                        <input type="text" id="npc-search-input" placeholder="搜索NPC..." class="form-control" style="flex: 1;">
+                        <!-- 🆕 AI模式下显示新增NPC按钮 -->
+                        <button type="button" id="npc-add-new-btn" class="btn npc-ai-mode-only" style="
+                            display: none;
+                            background: var(--theme-primary-color, #4CAF50);
+                            color: white;
+                            border: none;
+                            padding: 8px 16px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            transition: all 0.2s ease;
+                        " onmouseover="this.style.background='#45a049'" onmouseout="this.style.background='var(--theme-primary-color, #4CAF50)'">
+                            ➕ 新增NPC
+                        </button>
                         <button type="button" id="npc-refresh-btn" class="btn" style="
                             background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a));
                             color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
                             border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #444));
-                            padding: 6px 12px;
+                            padding: 8px 12px;
                             border-radius: 4px;
                             cursor: pointer;
                             transition: all 0.2s ease;
@@ -19280,14 +19505,30 @@ ${'='.repeat(80)}
 
             console.log('[InfoBarSettings] ✅ AI消息长度验证通过，内容长度充足');
 
+            // 🆕 关键修复：在发送给自定义API之前，应用OUTPUT正则表达式过滤主API返回的标签
+            let cleanedMessage = latestAIMessage.mes;
+            
+            try {
+                const regexScriptManager = window.SillyTavernInfobar?.modules?.regexScriptManager;
+                if (regexScriptManager) {
+                    const originalLength = cleanedMessage.length;
+                    // 应用OUTPUT placement的正则表达式（过滤主API返回的标签）
+                    cleanedMessage = regexScriptManager.applyAllScripts(cleanedMessage, 'OUTPUT', 'AI_OUTPUT');
+                    if (cleanedMessage.length !== originalLength) {
+                        console.log('[InfoBarSettings] 📝 OUTPUT正则表达式已应用（过滤主API标签），内容长度:', originalLength, '->', cleanedMessage.length);
+                    }
+                }
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 应用OUTPUT正则表达式失败:', error);
+            }
+
             // 在双API协作模式下，主API不应该包含infobar_data
             // 如果包含了，说明主API Hook没有生效，需要清理
-            if (latestAIMessage.mes && latestAIMessage.mes.includes('<infobar_data>')) {
+            if (cleanedMessage && cleanedMessage.includes('<infobar_data>')) {
                 console.log('[InfoBarSettings] ⚠️ 检测到主API返回了infobar_data，清理并重新处理...');
 
                 // 清理主API返回的infobar_data
-                const cleanedMessage = latestAIMessage.mes.replace(/<infobar_data>[\s\S]*?<\/infobar_data>/g, '').trim();
-                latestAIMessage.mes = cleanedMessage;
+                cleanedMessage = cleanedMessage.replace(/<infobar_data>[\s\S]*?<\/infobar_data>/g, '').trim();
 
                 console.log('[InfoBarSettings] 🧹 已清理主API返回的infobar_data');
             }
@@ -19299,13 +19540,13 @@ ${'='.repeat(80)}
                 console.log('[InfoBarSettings] 📋 使用任务队列处理信息栏数据生成');
                 this.customAPITaskQueue.addTask({
                     type: 'INFOBAR_DATA',
-                    data: { content: latestAIMessage.mes },
+                    data: { content: cleanedMessage },
                     source: 'generation_ended'
                 });
             } else {
                 // 回退到原有逻辑
                 console.log('[InfoBarSettings] ⚠️ 任务队列不可用，使用原有逻辑');
-                await this.processWithCustomAPI(latestAIMessage.mes);
+                await this.processWithCustomAPI(cleanedMessage);
             }
 
         } catch (error) {
@@ -19505,8 +19746,25 @@ ${'='.repeat(80)}
 
             console.log('[InfoBarSettings] ✅ AI消息长度验证通过，内容长度充足');
 
+            // 🆕 关键修复：在发送给自定义API之前，应用OUTPUT正则表达式过滤主API返回的标签
+            let cleanedMessage = latestAIMessage.mes;
+            
+            try {
+                const regexScriptManager = window.SillyTavernInfobar?.modules?.regexScriptManager;
+                if (regexScriptManager) {
+                    const originalLength = cleanedMessage.length;
+                    // 应用OUTPUT placement的正则表达式（过滤主API返回的标签）
+                    cleanedMessage = regexScriptManager.applyAllScripts(cleanedMessage, 'OUTPUT', 'AI_OUTPUT');
+                    if (cleanedMessage.length !== originalLength) {
+                        console.log('[InfoBarSettings] 📝 OUTPUT正则表达式已应用（过滤主API标签），内容长度:', originalLength, '->', cleanedMessage.length);
+                    }
+                }
+            } catch (error) {
+                console.error('[InfoBarSettings] ❌ 应用OUTPUT正则表达式失败:', error);
+            }
+
             // 检查消息是否已经包含infobar_data
-            if (latestAIMessage.mes && latestAIMessage.mes.includes('<infobar_data>')) {
+            if (cleanedMessage && cleanedMessage.includes('<infobar_data>')) {
                 console.log('[InfoBarSettings] ℹ️ 消息已包含infobar_data，跳过处理');
                 return;
             }
@@ -19518,13 +19776,13 @@ ${'='.repeat(80)}
                 console.log('[InfoBarSettings] 📋 使用任务队列处理信息栏数据生成');
                 this.customAPITaskQueue.addTask({
                     type: 'INFOBAR_DATA',
-                    data: { content: latestAIMessage.mes },
+                    data: { content: cleanedMessage },
                     source: 'message_received'
                 });
             } else {
                 // 回退到原有逻辑
                 console.log('[InfoBarSettings] ⚠️ 任务队列不可用，使用原有逻辑');
-                await this.processWithCustomAPI(latestAIMessage.mes);
+                await this.processWithCustomAPI(cleanedMessage);
             }
 
         } catch (error) {
@@ -19867,6 +20125,11 @@ ${'='.repeat(80)}
             if (worldBookContent) {
                 fullSystemPrompt = fullSystemPrompt + '\n\n## 📚 世界书信息\n\n' + worldBookContent;
             }
+
+            // 🔧 修复：不要在这里应用INPUT正则！
+            // INPUT正则是用于过滤发送给主API的用户输入
+            // 这里是发送给自定义API，不应该应用INPUT正则
+            // plotContent已经通过OUTPUT正则在获取主API消息时过滤过了
 
             // 准备API请求
             console.log('[InfoBarSettings] 📡 准备发送自定义API请求...');
@@ -21442,7 +21705,7 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             }
 
             // 🚀 关键：调用generateSmartPrompt获取完整的智能提示词
-            const fullSmartPrompt = await smartPromptSystem.generateSmartPrompt();
+            let fullSmartPrompt = await smartPromptSystem.generateSmartPrompt();
             if (!fullSmartPrompt || fullSmartPrompt.length === 0) {
                 console.warn('[InfoBarSettings] ⚠️ SmartPromptSystem返回空的智能提示词');
                 return '请根据用户设置的面板生成对应数据';
@@ -21450,8 +21713,12 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
             console.log(`[InfoBarSettings] ✅ 成功获取完整智能提示词，长度: ${fullSmartPrompt.length} 字符`);
 
+            // 🔧 修复：不要对智能提示词应用正则过滤！
+            // 智能提示词是格式说明和要求，里面的<aiThinkProcess>等是示例，不应该被过滤
+            // 正则表达式只应该应用于主API返回的实际消息内容
+
             // 🔧 新增：强化智能提示词日志，确保可以看到智能提示词是否正确获取
-            console.log('[InfoBarSettings] 🧠 获取到智能提示词，长度:', fullSmartPrompt.length);
+            console.log('[InfoBarSettings] 🧠 获取到智能提示词（保持原样，不过滤），长度:', fullSmartPrompt.length);
             console.log('[InfoBarSettings] 🧠 智能提示词前200字符预览:', fullSmartPrompt.substring(0, 200));
 
             return fullSmartPrompt;
@@ -22029,6 +22296,10 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             console.log('[InfoBarSettings] 🔍 开始处理API结果...');
             console.log('[InfoBarSettings] 📝 结果前500字符:', resultText.substring(0, 500));
 
+            // 🔧 注意：不在这里应用OUTPUT正则表达式
+            // OUTPUT正则已在获取主API消息时应用（过滤主API的标签）
+            // 这里的resultText是自定义API返回的新内容，不应该被过滤
+
             // 获取API配置，检查是否启用合并消息
             const context = SillyTavern.getContext();
             const extensionSettings = context.extensionSettings;
@@ -22278,7 +22549,17 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 return;
             }
 
-            const settings = summaryManager.settings;
+            // 🔧 修复：从extensionSettings读取保存的设置，而不是从summaryManager.settings
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+            
+            // 合并summaryManager的默认设置和保存的设置
+            const settings = {
+                ...summaryManager.settings,  // 默认值
+                ...extensionSettings         // 保存的值（优先级更高）
+            };
+            
+            console.log('[InfoBarSettings] 📊 加载的设置:', settings);
 
             // 应用设置到UI
             const autoSummaryEnabled = this.modal.querySelector('#content-auto-summary-enabled');
@@ -22291,6 +22572,15 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             if (injectSummaryEnabled) {
                 injectSummaryEnabled.checked = settings.injectSummaryEnabled || false;
             }
+
+            // 🆕 新增：正则表达式过滤设置
+            const useRegexFilter = this.modal.querySelector('#content-summary-use-regex');
+            if (useRegexFilter) {
+                useRegexFilter.checked = settings.useRegexFilter !== false; // 默认启用
+            }
+
+            // 🔧 修复：NPC设置的恢复移到了 initNPCManagementPanelContent() 中
+            // 因为NPC管理面板的DOM只有在切换到该标签时才会被创建
 
             const summaryFloorCount = this.modal.querySelector('#content-summary-floor-count');
             if (summaryFloorCount) {
@@ -22501,7 +22791,8 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             // 📚 新增：世界书上传持久化设置回填
             const wbAutoEl = this.modal.querySelector('#worldbook-auto-upload');
             if (wbAutoEl) {
-                wbAutoEl.checked = settings.autoUploadNewSummary || false;
+                wbAutoEl.checked = settings.autoUploadNewSummary === true; // 🔧 修复：明确检查true值
+                console.log('[InfoBarSettings] 📚 自动上传新总结设置已加载:', wbAutoEl.checked);
             }
 
             const entryFormatEl = this.modal.querySelector('#worldbook-entry-format');
@@ -23767,6 +24058,28 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 settings.injectSummaryEnabled = injectSummaryEnabled.checked;
             }
 
+            // 🆕 新增：获取正则表达式过滤设置
+            const useRegexFilter = this.modal.querySelector('#content-summary-use-regex');
+            if (useRegexFilter) {
+                settings.useRegexFilter = useRegexFilter.checked;
+            }
+
+            // 🆕 NPC AI模式设置
+            const npcModeTab = this.modal.querySelector('.npc-mode-tab.active');
+            if (npcModeTab) {
+                settings.npcMode = npcModeTab.dataset.mode || 'panel';
+            }
+            
+            const npcAiUpdateFloor = this.modal.querySelector('#npc-ai-update-floor');
+            if (npcAiUpdateFloor) {
+                settings.npcAiUpdateFloor = parseInt(npcAiUpdateFloor.value) || 20;
+            }
+            
+            const npcAiUseRegex = this.modal.querySelector('#npc-ai-use-regex');
+            if (npcAiUseRegex) {
+                settings.npcAiUseRegex = npcAiUseRegex.checked;
+            }
+
             // 🔧 新增：获取自动隐藏楼层设置
             const autoHideEnabled = this.modal.querySelector('#content-auto-hide-enabled');
             if (autoHideEnabled) {
@@ -23789,10 +24102,11 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 settings.autoHideThreshold = parseInt(autoHideThreshold.value) || 30;
             }
 
-            // 📚 新增：获取“自动上传新总结”与“条目命名格式”等世界书上传设置
+            // 📚 新增：获取"自动上传新总结"与"条目命名格式"等世界书上传设置
             const wbAuto = this.modal.querySelector('#worldbook-auto-upload');
             if (wbAuto) {
                 settings.autoUploadNewSummary = wbAuto.checked;
+                console.log('[InfoBarSettings] 📚 保存自动上传新总结设置:', wbAuto.checked);
             }
 
             const entryFormatEl = this.modal.querySelector('#worldbook-entry-format');
@@ -23835,6 +24149,88 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
         const contentSection = this.modal.querySelector('#content-summary-content-section');
         if (contentSection) {
             contentSection.style.display = 'none';
+        }
+    }
+
+    /**
+     * 🔧 修复：收集NPC管理面板的设置
+     * 这些控件没有 name 属性，需要单独收集
+     */
+    collectNPCManagementSettings() {
+        const settings = {};
+
+        try {
+            // 1. 收集NPC模式设置（面板模式/AI模式）
+            const npcModeTab = this.modal?.querySelector('.npc-mode-tab.active');
+            if (npcModeTab) {
+                settings.npcMode = npcModeTab.dataset.mode || 'panel';
+            }
+
+            // 2. 收集AI模式的更新阈值
+            const npcAiUpdateFloor = this.modal?.querySelector('#npc-ai-update-floor');
+            if (npcAiUpdateFloor) {
+                settings.npcAiUpdateFloor = parseInt(npcAiUpdateFloor.value) || 20;
+            }
+
+            // 3. 收集AI模式的正则过滤开关
+            const npcAiUseRegex = this.modal?.querySelector('#npc-ai-use-regex');
+            if (npcAiUseRegex) {
+                settings.npcAiUseRegex = npcAiUseRegex.checked;
+            }
+
+            console.log('[InfoBarSettings] 🎭 收集到NPC管理设置:', settings);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 收集NPC管理设置失败:', error);
+        }
+
+        return settings;
+    }
+
+    /**
+     * 🔧 修复：恢复NPC管理面板的设置
+     * 在NPC管理面板初始化完成后调用
+     */
+    restoreNPCSettings() {
+        try {
+            // 获取保存的设置
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings?.['Information bar integration tool'];
+
+            if (!extensionSettings) {
+                console.log('[InfoBarSettings] ⚠️ 未找到扩展设置，使用默认值');
+                return;
+            }
+
+            console.log('[InfoBarSettings] 📊 准备恢复NPC设置:', {
+                npcMode: extensionSettings.npcMode,
+                npcAiUpdateFloor: extensionSettings.npcAiUpdateFloor,
+                npcAiUseRegex: extensionSettings.npcAiUseRegex
+            });
+
+            // 1. 恢复NPC模式（面板模式/AI模式）
+            const npcMode = extensionSettings.npcMode || 'panel';
+            this.switchNPCMode(npcMode);
+            console.log('[InfoBarSettings] ✅ NPC模式已恢复:', npcMode);
+
+            // 2. 恢复AI模式的更新阈值
+            const npcAiUpdateFloor = this.modal?.querySelector('#npc-ai-update-floor');
+            if (npcAiUpdateFloor) {
+                npcAiUpdateFloor.value = extensionSettings.npcAiUpdateFloor || 20;
+                console.log('[InfoBarSettings] ✅ NPC更新楼层已恢复:', npcAiUpdateFloor.value);
+            }
+
+            // 3. 恢复AI模式的正则过滤开关
+            const npcAiUseRegex = this.modal?.querySelector('#npc-ai-use-regex');
+            if (npcAiUseRegex) {
+                npcAiUseRegex.checked = extensionSettings.npcAiUseRegex !== false; // 默认启用
+                console.log('[InfoBarSettings] ✅ NPC正则开关已恢复:', npcAiUseRegex.checked);
+            }
+
+            console.log('[InfoBarSettings] ✅ NPC设置恢复完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 恢复NPC设置失败:', error);
         }
     }
 
@@ -36007,6 +36403,9 @@ ${dataExamples}
             // 🆕 填充世界书选项
             this.populateNPCWorldBookOptions();
 
+            // 🔧 修复：初始化完成后，立即恢复NPC设置
+            this.restoreNPCSettings();
+
             // 刷新NPC列表
             this.refreshNPCList();
 
@@ -36286,6 +36685,855 @@ ${dataExamples}
             }
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 更新NPC世界书同步设置失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 切换NPC管理模式
+     */
+    switchNPCMode(mode) {
+        try {
+            console.log('[InfoBarSettings] 🔄 切换NPC模式:', mode);
+            
+            // 更新按钮样式
+            const tabs = this.modal.querySelectorAll('.npc-mode-tab');
+            tabs.forEach(tab => {
+                const isActive = tab.dataset.mode === mode;
+                if (isActive) {
+                    tab.style.background = 'var(--theme-primary-color, #4CAF50)';
+                    tab.style.color = 'white';
+                    tab.style.borderColor = 'var(--theme-primary-color, #4CAF50)';
+                    tab.classList.add('active');
+                } else {
+                    tab.style.background = 'var(--theme-bg-secondary, #2a2a2a)';
+                    tab.style.color = 'var(--theme-text-primary, #e0e0e0)';
+                    tab.style.borderColor = 'var(--theme-border-color, #333)';
+                    tab.classList.remove('active');
+                }
+            });
+            
+            // 切换设置区域显示
+            const panelSettings = this.modal.querySelectorAll('.npc-panel-mode-settings');
+            const aiSettings = this.modal.querySelectorAll('.npc-ai-mode-settings');
+            const aiOnlyElements = this.modal.querySelectorAll('.npc-ai-mode-only');
+            
+            if (mode === 'ai') {
+                // 显示AI模式设置
+                panelSettings.forEach(el => el.style.display = 'none');
+                aiSettings.forEach(el => el.style.display = 'block');
+                aiOnlyElements.forEach(el => el.style.display = 'inline-block');
+            } else {
+                // 显示面板模式设置
+                panelSettings.forEach(el => el.style.display = 'block');
+                aiSettings.forEach(el => el.style.display = 'none');
+                aiOnlyElements.forEach(el => el.style.display = 'none');
+            }
+            
+            console.log('[InfoBarSettings] ✅ NPC模式切换完成');
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换NPC模式失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 NPC AI模式：自动更新NPC数据
+     */
+    async updateNPCWithAI() {
+        try {
+            console.log('[InfoBarSettings] 🤖 开始NPC AI模式更新...');
+            
+            // 获取配置
+            const updateFloor = parseInt(this.modal.querySelector('#npc-ai-update-floor')?.value || 20);
+            
+            // 获取最近N条消息
+            const context = SillyTavern.getContext();
+            if (!context || !context.chat || context.chat.length === 0) {
+                console.log('[InfoBarSettings] ⚠️ 没有可用的聊天消息');
+                return;
+            }
+            
+            const messages = context.chat.slice(-updateFloor);
+            console.log(`[InfoBarSettings] 📝 获取最近 ${updateFloor} 条消息，实际获取: ${messages.length} 条`);
+            
+            // 🆕 检查是否启用正则表达式过滤
+            const useRegex = this.modal.querySelector('#npc-ai-use-regex')?.checked !== false;
+            
+            // 🆕 应用正则表达式过滤消息
+            let filteredMessages = messages;
+            if (useRegex) {
+                const regexScriptManager = window.SillyTavernInfobar?.modules?.regexScriptManager;
+                if (regexScriptManager) {
+                    filteredMessages = messages.map(msg => {
+                        if (msg.mes) {
+                            const filtered = regexScriptManager.applyAllScripts(msg.mes, 'OUTPUT', 'AI_OUTPUT');
+                            return { ...msg, mes: filtered };
+                        }
+                        return msg;
+                    });
+                    console.log('[InfoBarSettings] 📝 消息已应用正则过滤');
+                } else {
+                    console.warn('[InfoBarSettings] ⚠️ RegexScriptManager不可用');
+                }
+            } else {
+                console.log('[InfoBarSettings] ℹ️ 正则表达式过滤已禁用');
+            }
+            
+            // 生成消息文本
+            const messageText = filteredMessages.map((msg, index) => {
+                const role = msg.is_user ? '用户' : 'AI';
+                return `[${index + 1}] ${role}: ${msg.mes}`;
+            }).join('\n\n');
+            
+            // 生成当前NPC列表表格
+            const npcTable = await this.generateNPCListTable();
+            
+            // 读取NPC操作提示词
+            const npcPrompt = await this.loadNPCPrompt();
+            
+            // 构建完整提示词
+            const fullPrompt = `${npcPrompt}
+
+## 当前NPC列表
+
+${npcTable}
+
+## 最近对话内容
+
+${messageText}
+
+## 任务要求
+
+请根据以上对话内容和当前NPC列表，分析哪些NPC的信息需要更新。
+对于需要更新的NPC，使用以下格式输出操作指令：
+
+<npc>
+<!--
+add （"NPC姓名，字段名"，"新值"）；//添加理由
+update （"NPC姓名，字段名"，"新值"）；//变化理由
+-->
+</npc>
+
+注意：
+1. 只输出确实需要更新的NPC数据
+2. 字段名必须与当前NPC列表中的字段名完全一致
+3. 如果NPC不在列表中，使用add添加
+4. 如果NPC已存在，使用update更新
+5. 每个操作必须有合理的理由说明
+`;
+            
+            console.log('[InfoBarSettings] 📡 发送NPC更新请求到自定义API...');
+            
+            // 🆕 使用任务队列处理NPC更新
+            if (this.customAPITaskQueue) {
+                console.log('[InfoBarSettings] 📋 使用任务队列处理NPC AI更新');
+                this.customAPITaskQueue.addTask({
+                    type: 'MANUAL',
+                    data: { 
+                        callback: async () => {
+                            // 调用自定义API
+                            const result = await this.sendCustomAPIRequest([
+                                {
+                                    role: 'system',
+                                    content: fullPrompt
+                                },
+                                {
+                                    role: 'user',
+                                    content: '请分析对话内容，更新NPC数据。'
+                                }
+                            ], { skipSystemPrompt: true });
+                            
+                            if (result.success && result.text) {
+                                console.log('[InfoBarSettings] ✅ 收到AI响应，长度:', result.text.length);
+                                
+                                // 解析NPC操作指令
+                                await this.parseNPCOperations(result.text);
+                                
+                                // 刷新NPC列表
+                                await this.refreshNPCList();
+                                
+                                this.showNotification('NPC数据更新完成', 'success');
+                            } else {
+                                throw new Error(result.error || 'AI响应失败');
+                            }
+                        }
+                    },
+                    source: 'npc_ai_update'
+                });
+            } else {
+                // 直接调用（降级处理）
+                const result = await this.sendCustomAPIRequest([
+                    {
+                        role: 'system',
+                        content: fullPrompt
+                    },
+                    {
+                        role: 'user',
+                        content: '请分析对话内容，更新NPC数据。'
+                    }
+                ], { skipSystemPrompt: true });
+                
+                if (result.success && result.text) {
+                    console.log('[InfoBarSettings] ✅ 收到AI响应，长度:', result.text.length);
+                    
+                    // 解析NPC操作指令
+                    await this.parseNPCOperations(result.text);
+                    
+                    // 刷新NPC列表
+                    await this.refreshNPCList();
+                    
+                    this.showNotification('NPC数据更新完成', 'success');
+                } else {
+                    throw new Error(result.error || 'AI响应失败');
+                }
+            }
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ NPC AI更新失败:', error);
+            this.showNotification('NPC AI更新失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 生成NPC列表表格
+     */
+    async generateNPCListTable() {
+        try {
+            const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+            if (!npcDB || !npcDB.db || !npcDB.db.npcs) {
+                return '当前无NPC数据';
+            }
+            
+            const npcs = Object.values(npcDB.db.npcs);
+            
+            if (npcs.length === 0) {
+                return '当前无NPC数据';
+            }
+            
+            // 收集所有字段名
+            const allFields = new Set();
+            npcs.forEach(npc => {
+                if (npc.fields) {
+                    Object.keys(npc.fields).forEach(key => {
+                        if (!this.isTechnicalField(key) && !key.startsWith('_')) {
+                            allFields.add(key);
+                        }
+                    });
+                }
+            });
+            
+            const fieldList = Array.from(allFields);
+            
+            // 生成表格
+            let table = '| NPC姓名 | ' + fieldList.join(' | ') + ' |\n';
+            table += '|' + '-'.repeat(10) + '|' + fieldList.map(() => '-'.repeat(10)).join('|') + '|\n';
+            
+            npcs.forEach(npc => {
+                const row = [npc.name];
+                fieldList.forEach(field => {
+                    const value = npc.fields?.[field] || '-';
+                    row.push(String(value));
+                });
+                table += '| ' + row.join(' | ') + ' |\n';
+            });
+            
+            return table;
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 生成NPC列表表格失败:', error);
+            return '生成NPC列表失败';
+        }
+    }
+
+    /**
+     * 🆕 读取NPC操作提示词
+     */
+    async loadNPCPrompt() {
+        try {
+            // 从文件读取NPC操作提示词
+            const response = await fetch('./scripts/extensions/third-party/Information bar integration tool/NPC操作提示词');
+            if (response.ok) {
+                const text = await response.text();
+                console.log('[InfoBarSettings] ✅ NPC操作提示词加载成功');
+                return text;
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ NPC操作提示词文件未找到，使用默认提示词');
+                return this.getDefaultNPCPrompt();
+            }
+        } catch (error) {
+            console.warn('[InfoBarSettings] ⚠️ 读取NPC操作提示词失败:', error);
+            return this.getDefaultNPCPrompt();
+        }
+    }
+
+    /**
+     * 🆕 获取默认NPC操作提示词
+     */
+    getDefaultNPCPrompt() {
+        return `你的职业是小说作者助理，名字是："Guhan 2号"
+负责小说内的角色人设、个性化等数据的收集、优化和修正工作。
+
+## 操作指令格式（严格遵守）
+
+**格式要求：**
+- add （"NPC姓名，字段名"，"字段值"）；//添加理由
+- update （"NPC姓名，字段名"，"新值"）；//更新理由
+
+**重要说明：**
+1. 必须使用中文全角括号 （）
+2. 第一个参数："NPC姓名，字段名" - 用逗号分隔
+3. 第二个参数："字段值" - 具体的值
+4. 以中文分号结尾 ；
+5. 理由前用双斜杠 //
+
+**正确示例：**
+add （"林凡，好感度"，"15"）；//因为对话中的赞美增加了好感
+update （"张三，状态"，"愤怒"）；//因为发生了冲突
+add （"李四，职业"，"商人"）；//剧情中出现的新NPC
+
+**错误示例（禁止）：**
+❌ update （"书记官", "NPC状态"） - 缺少值参数
+❌ add ("林凡", "好感度", "15") - 格式错误
+❌ update 林凡 好感度 15 - 缺少括号和引号
+
+## 输出格式
+
+<npc>
+<!--
+add （"林凡，好感度"，"15"）；//因为对话中的赞美增加了好感
+update （"张三，状态"，"愤怒"）；//因为发生了冲突
+-->
+</npc>
+
+**注意：只输出确实需要更新的NPC数据，不要输出所有NPC。**`;
+    }
+
+    /**
+     * 🆕 解析NPC操作指令
+     */
+    async parseNPCOperations(text) {
+        try {
+            console.log('[InfoBarSettings] 🔍 解析NPC操作指令...');
+            console.log('[InfoBarSettings] 📄 AI原始响应（前500字符）:', text.substring(0, 500));
+            
+            // 提取<npc>标签内容
+            const npcMatch = text.match(/<npc>([\s\S]*?)<\/npc>/);
+            if (!npcMatch) {
+                console.log('[InfoBarSettings] ℹ️ 未找到NPC操作指令');
+                console.log('[InfoBarSettings] 📄 完整响应:', text);
+                return;
+            }
+            
+            const npcContent = npcMatch[1];
+            console.log('[InfoBarSettings] 📄 NPC标签内容:', npcContent);
+            
+            // 提取注释中的操作指令
+            const commentMatch = npcContent.match(/<!--([\s\S]*?)-->/);
+            if (!commentMatch) {
+                console.log('[InfoBarSettings] ℹ️ 未找到操作指令注释');
+                console.log('[InfoBarSettings] 📄 NPC内容:', npcContent);
+                return;
+            }
+            
+            const operations = commentMatch[1].trim().split('\n');
+            console.log('[InfoBarSettings] 📊 找到 ', operations.length, ' 条操作指令');
+            console.log('[InfoBarSettings] 📄 操作指令列表:', operations);
+            
+            const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+            if (!npcDB) {
+                throw new Error('NPC数据库管理器未找到');
+            }
+            
+            let successCount = 0;
+            let failCount = 0;
+            const changeLogs = []; // 🆕 变更日志
+            
+            for (const op of operations) {
+                const trimmed = op.trim();
+                if (!trimmed || trimmed.startsWith('//')) continue;
+                
+                console.log('[InfoBarSettings] 🔍 尝试解析:', trimmed);
+                
+                try {
+                    // 🔧 超宽容的解析逻辑：支持各种格式变体
+                    let operation, npcName, fieldName, value, reason;
+                    
+                    // 步骤1：提取操作类型
+                    if (trimmed.startsWith('add')) {
+                        operation = 'add';
+                    } else if (trimmed.startsWith('update')) {
+                        operation = 'update';
+                    } else {
+                        console.warn('[InfoBarSettings] ⚠️ 未识别的操作类型:', trimmed);
+                        continue;
+                    }
+                    
+                    // 步骤2：提取所有引号内的内容
+                    const quotedParts = [];
+                    const quoteRegex = /["""]([^"""]+)["""]/g;
+                    let quoteMatch;
+                    while ((quoteMatch = quoteRegex.exec(trimmed)) !== null) {
+                        quotedParts.push(quoteMatch[1]);
+                    }
+                    
+                    console.log('[InfoBarSettings] 📋 提取的引号内容:', quotedParts);
+                    
+                    if (quotedParts.length < 2) {
+                        console.warn('[InfoBarSettings] ⚠️ 引号内容不足2个:', quotedParts);
+                        continue;
+                    }
+                    
+                    // 步骤3：解析第一个参数（NPC姓名，字段名）
+                    const firstParam = quotedParts[0];
+                    const parts = firstParam.split(/[，,]/).map(s => s.trim());
+                    
+                    if (parts.length < 2) {
+                        console.warn('[InfoBarSettings] ⚠️ 第一个参数格式错误:', firstParam);
+                        continue;
+                    }
+                    
+                    npcName = parts[0];
+                    fieldName = parts[1];
+                    
+                    // 步骤4：第二个参数就是值
+                    value = quotedParts[1];
+                    
+                    // 步骤5：提取理由（在//之后）
+                    const reasonMatch = trimmed.match(/\/\/(.*)$/);
+                    reason = reasonMatch ? reasonMatch[1].trim() : '无说明';
+                    
+                    if (!npcName || !fieldName || !value) {
+                        console.warn('[InfoBarSettings] ⚠️ 必要参数缺失:', { npcName, fieldName, value });
+                        continue;
+                    }
+                    
+                    console.log(`[InfoBarSettings] 📝 ${operation}: ${npcName}.${fieldName} = ${value}`);
+                    
+                    // 获取旧值（用于显示变化）
+                    const oldValue = npcDB.db?.npcs?.[npcDB.db?.nameToId?.[npcName]]?.fields?.[fieldName] || '-';
+                    
+                    // 执行操作
+                    const npcData = { 
+                        name: npcName,
+                        [fieldName]: value
+                    };
+                    
+                    await npcDB.addNPC(npcData);
+                    successCount++;
+                    
+                    // 🆕 记录变更
+                    const changeType = operation === 'add' ? '新增' : '更新';
+                    const changeDesc = operation === 'add' 
+                        ? `${value}` 
+                        : `${oldValue} → ${value}`;
+                    
+                    changeLogs.push({
+                        npcName,
+                        fieldName,
+                        changeType,
+                        changeDesc,
+                        reason: reason?.trim() || '无说明',
+                        timestamp: Date.now()
+                    });
+                    
+                } catch (error) {
+                    console.error('[InfoBarSettings] ❌ 执行操作失败:', trimmed, error);
+                    failCount++;
+                }
+            }
+            
+            console.log(`[InfoBarSettings] ✅ NPC操作完成: 成功${successCount}条, 失败${failCount}条`);
+            
+            // 🆕 显示变更日志
+            if (changeLogs.length > 0) {
+                this.displayNPCChangeLogs(changeLogs);
+            }
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 解析NPC操作指令失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🆕 显示NPC变更日志
+     */
+    displayNPCChangeLogs(changeLogs) {
+        try {
+            const changeLogContainer = this.modal.querySelector('#npc-change-log');
+            if (!changeLogContainer) {
+                console.warn('[InfoBarSettings] ⚠️ 变更日志容器未找到');
+                return;
+            }
+            
+            console.log('[InfoBarSettings] 📊 显示NPC变更日志，新增', changeLogs.length, '条');
+            
+            // 🆕 只在有新日志时才追加保存
+            let recentLogs;
+            if (changeLogs.length > 0) {
+                const existingLogs = this.loadNPCChangeLogs();
+                const allLogs = [...existingLogs, ...changeLogs];
+                // 只保留最近50条
+                recentLogs = allLogs.slice(-50);
+                this.saveNPCChangeLogs(recentLogs);
+            } else {
+                // 没有新日志，只显示现有日志
+                recentLogs = this.loadNPCChangeLogs();
+            }
+            
+            // 生成变更日志HTML
+            const logsHTML = recentLogs.map((log, index) => {
+                const icon = log.changeType === '新增' ? '➕' : '🔄';
+                const color = log.changeType === '新增' ? '#4CAF50' : '#2196F3';
+                
+                return `
+                    <div style="
+                        padding: 10px 12px;
+                        margin-bottom: 8px;
+                        background: var(--theme-bg-secondary, #2a2a2a);
+                        border-left: 3px solid ${color};
+                        border-radius: 4px;
+                    ">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <span style="font-size: 14px;">${icon}</span>
+                            <strong style="color: var(--theme-text-primary, #e0e0e0);">${this.escapeHtml(log.npcName)}</strong>
+                            <span style="color: var(--theme-text-secondary, #888); font-size: 12px;">${log.changeType}</span>
+                        </div>
+                        <div style="color: var(--theme-text-primary, #e0e0e0); font-size: 13px; margin-bottom: 4px;">
+                            <strong>${this.escapeHtml(log.fieldName)}:</strong> ${this.escapeHtml(log.changeDesc)}
+                        </div>
+                        <div style="color: var(--theme-text-secondary, #888); font-size: 12px; font-style: italic;">
+                            原因：${this.escapeHtml(log.reason)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // 更新容器内容
+            changeLogContainer.innerHTML = logsHTML || '<div class="npc-change-empty">暂无变更记录</div>';
+            
+            // 滚动到最新的日志
+            changeLogContainer.scrollTop = changeLogContainer.scrollHeight;
+            
+            console.log('[InfoBarSettings] ✅ 变更日志已显示');
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示变更日志失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 保存NPC变更日志
+     */
+    saveNPCChangeLogs(logs) {
+        try {
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            
+            if (!extensionSettings['Information bar integration tool']) {
+                extensionSettings['Information bar integration tool'] = {};
+            }
+            
+            if (!extensionSettings['Information bar integration tool'].npcSettings) {
+                extensionSettings['Information bar integration tool'].npcSettings = {};
+            }
+            
+            extensionSettings['Information bar integration tool'].npcSettings.changeLogs = logs;
+            context.saveSettingsDebounced();
+            
+            console.log('[InfoBarSettings] 💾 NPC变更日志已保存，共', logs.length, '条');
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 保存NPC变更日志失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 加载NPC变更日志
+     */
+    loadNPCChangeLogs() {
+        try {
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const logs = extensionSettings['Information bar integration tool']?.npcSettings?.changeLogs || [];
+            
+            console.log('[InfoBarSettings] 📥 加载NPC变更日志，共', logs.length, '条');
+            return logs;
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载NPC变更日志失败:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 🆕 恢复NPC变更日志显示
+     */
+    restoreNPCChangeLogs() {
+        try {
+            // 直接调用displayNPCChangeLogs，传入空数组表示只显示现有日志
+            this.displayNPCChangeLogs([]);
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 恢复NPC变更日志失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 清除NPC变更日志
+     */
+    clearNPCChangeLogs() {
+        try {
+            if (!confirm('确定要清除所有NPC变更记录吗？')) {
+                return;
+            }
+            
+            // 清空日志
+            this.saveNPCChangeLogs([]);
+            
+            // 更新显示
+            const changeLogContainer = this.modal.querySelector('#npc-change-log');
+            if (changeLogContainer) {
+                changeLogContainer.innerHTML = '<div class="npc-change-empty">暂无变更记录</div>';
+            }
+            
+            console.log('[InfoBarSettings] 🗑️ NPC变更日志已清除');
+            this.showNotification('变更记录已清除', 'success');
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 清除NPC变更日志失败:', error);
+            this.showNotification('清除变更记录失败', 'error');
+        }
+    }
+
+    /**
+     * 🆕 显示新增NPC对话框
+     */
+    async showAddNPCDialog() {
+        try {
+            console.log('[InfoBarSettings] ➕ 显示新增NPC对话框');
+            
+            // 创建对话框HTML
+            const dialogHTML = `
+                <div class="regex-script-overlay" id="add-npc-overlay" style="z-index: 20001;">
+                    <div class="regex-script-modal" style="width: 700px; max-width: 95vw; height: auto; max-height: 90vh;">
+                        <div class="regex-script-header">
+                            <h3>➕ 新增NPC</h3>
+                            <button class="regex-btn regex-btn-small" data-action="close-add-npc">关闭</button>
+                        </div>
+                        
+                        <div class="regex-script-body">
+                            <form id="add-npc-form">
+                                <!-- 固定字段：NPC姓名 -->
+                                <div class="regex-form-group">
+                                    <label class="regex-form-label">NPC姓名 *</label>
+                                    <input type="text" class="regex-form-input" name="npcName" placeholder="输入NPC姓名" required>
+                                </div>
+                                
+                                <!-- 动态字段容器 -->
+                                <div id="npc-dynamic-fields">
+                                    <div class="npc-field-item regex-form-group" data-field-id="1">
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                            <label class="regex-form-label" style="flex: 1; margin: 0;">NPC类型</label>
+                                            <button type="button" class="npc-field-delete-btn" style="
+                                                background: #f44336;
+                                                color: white;
+                                                border: none;
+                                                border-radius: 4px;
+                                                padding: 4px 8px;
+                                                font-size: 12px;
+                                                cursor: pointer;
+                                            " title="删除此字段">🗑️</button>
+                                        </div>
+                                        <input type="text" class="regex-form-input npc-field-value" data-field-name="类型" placeholder="例如：朋友、敌人、路人等">
+                                    </div>
+                                    
+                                    <div class="npc-field-item regex-form-group" data-field-id="2">
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                            <label class="regex-form-label" style="flex: 1; margin: 0;">性别</label>
+                                            <button type="button" class="npc-field-delete-btn" style="
+                                                background: #f44336;
+                                                color: white;
+                                                border: none;
+                                                border-radius: 4px;
+                                                padding: 4px 8px;
+                                                font-size: 12px;
+                                                cursor: pointer;
+                                            " title="删除此字段">🗑️</button>
+                                        </div>
+                                        <input type="text" class="regex-form-input npc-field-value" data-field-name="性别" placeholder="男/女/未知">
+                                    </div>
+                                    
+                                    <div class="npc-field-item regex-form-group" data-field-id="3">
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                            <label class="regex-form-label" style="flex: 1; margin: 0;">年龄</label>
+                                            <button type="button" class="npc-field-delete-btn" style="
+                                                background: #f44336;
+                                                color: white;
+                                                border: none;
+                                                border-radius: 4px;
+                                                padding: 4px 8px;
+                                                font-size: 12px;
+                                                cursor: pointer;
+                                            " title="删除此字段">🗑️</button>
+                                        </div>
+                                        <input type="text" class="regex-form-input npc-field-value" data-field-name="年龄" placeholder="例如：25、约30岁等">
+                                    </div>
+                                </div>
+                                
+                                <!-- 添加新字段按钮 -->
+                                <div style="margin: 16px 0;">
+                                    <button type="button" id="npc-add-field-btn" class="regex-btn" style="width: 100%;">
+                                        ➕ 添加新字段
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <div class="regex-script-footer" style="display: flex; gap: 10px; justify-content: flex-end; padding: 16px 20px; border-top: 1px solid var(--theme-border-color, #333);">
+                            <button type="button" class="regex-btn" data-action="cancel-add-npc">取消</button>
+                            <button type="button" class="regex-btn regex-btn-primary" data-action="confirm-add-npc">
+                                ➕ 创建NPC
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // 添加到页面
+            const container = document.createElement('div');
+            container.innerHTML = dialogHTML;
+            document.body.appendChild(container.firstElementChild);
+            
+            const overlay = document.getElementById('add-npc-overlay');
+            const form = document.getElementById('add-npc-form');
+            
+            // 关闭对话框
+            const closeDialog = () => {
+                if (overlay && overlay.parentNode) {
+                    overlay.parentNode.removeChild(overlay);
+                }
+            };
+            
+            // 绑定事件
+            overlay.querySelector('[data-action="close-add-npc"]').addEventListener('click', closeDialog);
+            overlay.querySelector('[data-action="cancel-add-npc"]').addEventListener('click', closeDialog);
+            
+            // 点击遮罩层关闭
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    closeDialog();
+                }
+            });
+            
+            // 添加新字段按钮
+            let fieldCounter = 3; // 已有3个默认字段
+            overlay.querySelector('#npc-add-field-btn').addEventListener('click', () => {
+                fieldCounter++;
+                const fieldsContainer = overlay.querySelector('#npc-dynamic-fields');
+                
+                const newField = document.createElement('div');
+                newField.className = 'npc-field-item regex-form-group';
+                newField.dataset.fieldId = fieldCounter;
+                newField.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <input type="text" class="regex-form-input npc-field-label" placeholder="字段名称（如：职业、爱好等）" style="flex: 1;">
+                        <button type="button" class="npc-field-delete-btn" style="
+                            background: #f44336;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            padding: 4px 8px;
+                            font-size: 12px;
+                            cursor: pointer;
+                        " title="删除此字段">🗑️</button>
+                    </div>
+                    <input type="text" class="regex-form-input npc-field-value" placeholder="字段值">
+                `;
+                
+                fieldsContainer.appendChild(newField);
+                
+                // 绑定删除按钮
+                newField.querySelector('.npc-field-delete-btn').addEventListener('click', () => {
+                    newField.remove();
+                });
+                
+                console.log('[InfoBarSettings] ➕ 添加新字段:', fieldCounter);
+            });
+            
+            // 绑定默认字段的删除按钮
+            overlay.querySelectorAll('.npc-field-delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const fieldItem = e.target.closest('.npc-field-item');
+                    if (fieldItem) {
+                        fieldItem.remove();
+                        console.log('[InfoBarSettings] 🗑️ 删除字段');
+                    }
+                });
+            });
+            
+            // 确认创建NPC
+            overlay.querySelector('[data-action="confirm-add-npc"]').addEventListener('click', async () => {
+                try {
+                    // 收集NPC姓名
+                    const npcName = form.querySelector('[name="npcName"]').value;
+                    
+                    if (!npcName || npcName.trim() === '') {
+                        alert('NPC姓名不能为空');
+                        return;
+                    }
+                    
+                    // 收集所有动态字段
+                    const npcData = { name: npcName };
+                    const fieldItems = overlay.querySelectorAll('.npc-field-item');
+                    
+                    fieldItems.forEach(item => {
+                        const labelInput = item.querySelector('.npc-field-label');
+                        const valueInput = item.querySelector('.npc-field-value');
+                        
+                        let fieldName;
+                        let fieldValue;
+                        
+                        if (labelInput) {
+                            // 自定义字段（用户输入的字段名）
+                            fieldName = labelInput.value.trim();
+                            fieldValue = valueInput.value.trim();
+                        } else {
+                            // 预设字段（有data-field-name）
+                            fieldName = valueInput.dataset.fieldName;
+                            fieldValue = valueInput.value.trim();
+                        }
+                        
+                        if (fieldName && fieldValue) {
+                            npcData[fieldName] = fieldValue;
+                        }
+                    });
+                    
+                    console.log('[InfoBarSettings] 📊 收集到的NPC数据:', npcData);
+                    
+                    // 保存NPC数据到数据库
+                    const npcDatabaseManager = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+                    if (npcDatabaseManager) {
+                        await npcDatabaseManager.addNPC(npcData);
+                        console.log('[InfoBarSettings] ✅ NPC创建成功:', npcData.name);
+                        alert(`✅ NPC "${npcData.name}" 创建成功！`);
+                        
+                        // 刷新NPC列表
+                        await this.refreshNPCList();
+                        
+                        closeDialog();
+                    } else {
+                        throw new Error('NPC数据库管理器未找到');
+                    }
+                    
+                } catch (error) {
+                    console.error('[InfoBarSettings] ❌ 创建NPC失败:', error);
+                    alert(`创建NPC失败: ${error.message}`);
+                }
+            });
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示新增NPC对话框失败:', error);
+            alert(`显示新增NPC对话框失败: ${error.message}`);
         }
     }
 
@@ -36787,7 +38035,7 @@ ${dataExamples}
     }
 
     /**
-     * 显示NPC详情
+     * 显示NPC详情（支持编辑模式）
      */
     async showNPCDetails(npcId) {
         try {
@@ -36803,43 +38051,11 @@ ${dataExamples}
                 return;
             }
 
-            const modal = this.modal.querySelector('#npc-detail-modal');
-            const nameEl = modal.querySelector('#npc-detail-name');
-            const infoEl = modal.querySelector('#npc-detail-info');
+            // 🆕 检查是否为AI模式
+            const isAIMode = this.modal.querySelector('.npc-mode-tab.active')?.dataset.mode === 'ai';
 
-            nameEl.textContent = npc.name;
-            infoEl.innerHTML = this.createNPCDetailHTML(npc);
-
-            modal.style.display = 'flex';
-            modal.style.zIndex = '1000000'; // 🔧 修复：确保在NPC管理面板（999999）之上
-
-            console.log('[InfoBarSettings] 📱 显示NPC详情模态框:', npc.name);
-
-            // 🔧 修复：使用简单的onclick，每次都会覆盖旧的事件
-            const closeModal = () => {
-                console.log('[InfoBarSettings] 🔒 关闭NPC详情模态框');
-                modal.style.display = 'none';
-            };
-
-            // 🔧 修复：直接使用onclick覆盖，简单可靠
-            const closeBtn = modal.querySelector('.npc-detail-close');
-            if (closeBtn) {
-                closeBtn.onclick = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('[InfoBarSettings] 🖱️ 关闭按钮被点击');
-                    closeModal();
-                };
-                console.log('[InfoBarSettings] 🔗 已绑定关闭按钮事件');
-            }
-
-            // 🔧 修复：点击背景关闭，使用onclick
-            modal.onclick = (e) => {
-                if (e.target === modal) {
-                    console.log('[InfoBarSettings] 🖱️ 背景被点击');
-                    closeModal();
-                }
-            };
+            // 使用可编辑的NPC详情界面（类似新增NPC）
+            this.showEditableNPCDialog(npc, isAIMode);
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 显示NPC详情失败:', error);
@@ -36848,7 +38064,213 @@ ${dataExamples}
     }
 
     /**
-     * 创建NPC详情HTML
+     * 🆕 显示可编辑的NPC详情对话框
+     */
+    async showEditableNPCDialog(npc, isEditMode = true) {
+        try {
+            console.log('[InfoBarSettings] 📝 显示NPC详情对话框（编辑模式:' + isEditMode + '）');
+            
+            // 提取NPC字段
+            const npcFields = {};
+            if (npc.fields && npc.fields._原始数据) {
+                Object.assign(npcFields, npc.fields._原始数据);
+            }
+            Object.entries(npc.fields || {}).forEach(([key, value]) => {
+                if (!this.isTechnicalField(key) && !key.startsWith('_')) {
+                    npcFields[key] = value;
+                }
+            });
+            
+            // 创建对话框
+            const dialogHTML = `
+                <div class="regex-script-overlay" id="edit-npc-overlay" style="z-index: 20001;">
+                    <div class="regex-script-modal" style="width: 700px; max-width: 95vw; height: auto; max-height: 90vh;">
+                        <div class="regex-script-header">
+                            <h3>${isEditMode ? '✏️ 编辑NPC' : '👁️ 查看NPC'} - ${this.escapeHtml(npc.name)}</h3>
+                            <button class="regex-btn regex-btn-small" data-action="close-edit-npc">关闭</button>
+                        </div>
+                        
+                        <div class="regex-script-body">
+                            <form id="edit-npc-form">
+                                <!-- 动态字段容器 -->
+                                <div id="edit-npc-dynamic-fields">
+                                    ${Object.entries(npcFields).map(([key, value], index) => `
+                                        <div class="npc-field-item regex-form-group" data-field-id="${index}">
+                                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                                <label class="regex-form-label" style="flex: 1; margin: 0;">${this.escapeHtml(key)}</label>
+                                                ${isEditMode ? `
+                                                <button type="button" class="npc-field-delete-btn" style="
+                                                    background: #f44336;
+                                                    color: white;
+                                                    border: none;
+                                                    border-radius: 4px;
+                                                    padding: 4px 8px;
+                                                    font-size: 12px;
+                                                    cursor: pointer;
+                                                " title="删除此字段">🗑️</button>
+                                                ` : ''}
+                                            </div>
+                                            <input type="text" class="regex-form-input npc-field-value" 
+                                                   data-field-name="${this.escapeHtml(key)}" 
+                                                   value="${this.escapeHtml(String(value))}"
+                                                   ${!isEditMode ? 'readonly' : ''}>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                
+                                ${isEditMode ? `
+                                <!-- 添加新字段按钮 -->
+                                <div style="margin: 16px 0;">
+                                    <button type="button" id="edit-npc-add-field-btn" class="regex-btn" style="width: 100%;">
+                                        ➕ 添加新字段
+                                    </button>
+                                </div>
+                                ` : ''}
+                            </form>
+                        </div>
+                        
+                        <div class="regex-script-footer" style="display: flex; gap: 10px; justify-content: flex-end; padding: 16px 20px; border-top: 1px solid var(--theme-border-color, #333);">
+                            <button type="button" class="regex-btn" data-action="cancel-edit-npc">关闭</button>
+                            ${isEditMode ? `
+                            <button type="button" class="regex-btn regex-btn-primary" data-action="confirm-edit-npc">
+                                💾 保存修改
+                            </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // 添加到页面
+            const container = document.createElement('div');
+            container.innerHTML = dialogHTML;
+            document.body.appendChild(container.firstElementChild);
+            
+            const overlay = document.getElementById('edit-npc-overlay');
+            const form = document.getElementById('edit-npc-form');
+            
+            // 关闭对话框
+            const closeDialog = () => {
+                if (overlay && overlay.parentNode) {
+                    overlay.parentNode.removeChild(overlay);
+                }
+            };
+            
+            // 绑定事件
+            overlay.querySelector('[data-action="close-edit-npc"]').addEventListener('click', closeDialog);
+            overlay.querySelector('[data-action="cancel-edit-npc"]').addEventListener('click', closeDialog);
+            
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    closeDialog();
+                }
+            });
+            
+            if (isEditMode) {
+                // 添加新字段按钮
+                let fieldCounter = Object.keys(npcFields).length;
+                const addFieldBtn = overlay.querySelector('#edit-npc-add-field-btn');
+                if (addFieldBtn) {
+                    addFieldBtn.addEventListener('click', () => {
+                        fieldCounter++;
+                        const fieldsContainer = overlay.querySelector('#edit-npc-dynamic-fields');
+                        
+                        const newField = document.createElement('div');
+                        newField.className = 'npc-field-item regex-form-group';
+                        newField.dataset.fieldId = fieldCounter;
+                        newField.innerHTML = `
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                <input type="text" class="regex-form-input npc-field-label" placeholder="字段名称" style="flex: 1;">
+                                <button type="button" class="npc-field-delete-btn" style="
+                                    background: #f44336;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    padding: 4px 8px;
+                                    font-size: 12px;
+                                    cursor: pointer;
+                                " title="删除此字段">🗑️</button>
+                            </div>
+                            <input type="text" class="regex-form-input npc-field-value" placeholder="字段值">
+                        `;
+                        
+                        fieldsContainer.appendChild(newField);
+                        
+                        // 绑定删除按钮
+                        newField.querySelector('.npc-field-delete-btn').addEventListener('click', () => {
+                            newField.remove();
+                        });
+                    });
+                }
+                
+                // 绑定删除按钮
+                overlay.querySelectorAll('.npc-field-delete-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const fieldItem = e.target.closest('.npc-field-item');
+                        if (fieldItem) {
+                            fieldItem.remove();
+                        }
+                    });
+                });
+                
+                // 保存修改
+                const confirmBtn = overlay.querySelector('[data-action="confirm-edit-npc"]');
+                if (confirmBtn) {
+                    confirmBtn.addEventListener('click', async () => {
+                        try {
+                            // 收集所有字段
+                            const updatedData = { name: npc.name };
+                            const fieldItems = overlay.querySelectorAll('.npc-field-item');
+                            
+                            fieldItems.forEach(item => {
+                                const labelInput = item.querySelector('.npc-field-label');
+                                const valueInput = item.querySelector('.npc-field-value');
+                                
+                                let fieldName;
+                                let fieldValue;
+                                
+                                if (labelInput) {
+                                    fieldName = labelInput.value.trim();
+                                    fieldValue = valueInput.value.trim();
+                                } else {
+                                    fieldName = valueInput.dataset.fieldName;
+                                    fieldValue = valueInput.value.trim();
+                                }
+                                
+                                if (fieldName && fieldValue) {
+                                    updatedData[fieldName] = fieldValue;
+                                }
+                            });
+                            
+                            // 更新NPC数据
+                            const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+                            if (npcDB) {
+                                await npcDB.addNPC(updatedData);
+                                console.log('[InfoBarSettings] ✅ NPC更新成功:', updatedData.name);
+                                alert(`✅ NPC "${updatedData.name}" 更新成功！`);
+                                
+                                // 刷新NPC列表
+                                await this.refreshNPCList();
+                                
+                                closeDialog();
+                            }
+
+        } catch (error) {
+                            console.error('[InfoBarSettings] ❌ 更新NPC失败:', error);
+                            alert(`更新NPC失败: ${error.message}`);
+                        }
+                    });
+                }
+            }
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示NPC详情对话框失败:', error);
+            alert(`显示NPC详情对话框失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 创建NPC详情HTML（已弃用，改用showEditableNPCDialog）
      */
     createNPCDetailHTML(npc) {
         // 获取剧情世界时间（如果可用）

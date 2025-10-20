@@ -2383,12 +2383,26 @@ export class DataTable {
 
                 try {
                     // 🔧 获取最新的AI消息内容
-                    const latestAIMessage = this.getLatestAIMessage();
+                    let latestAIMessage = this.getLatestAIMessage();
                     if (!latestAIMessage) {
                         throw new Error('未找到AI消息，无法重新生成数据');
                     }
 
                     console.log('[DataTable] 📝 获取到AI消息，长度:', latestAIMessage.length);
+
+                    // 🆕 关键修复：应用OUTPUT正则表达式过滤主API消息中的标签
+                    try {
+                        const regexScriptManager = window.SillyTavernInfobar?.modules?.regexScriptManager;
+                        if (regexScriptManager) {
+                            const originalLength = latestAIMessage.length;
+                            latestAIMessage = regexScriptManager.applyAllScripts(latestAIMessage, 'OUTPUT', 'AI_OUTPUT');
+                            if (latestAIMessage.length !== originalLength) {
+                                console.log('[DataTable] 📝 OUTPUT正则表达式已应用（过滤主API标签），长度:', originalLength, '->', latestAIMessage.length);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('[DataTable] ❌ 应用OUTPUT正则表达式失败:', error);
+                    }
 
                     // 🔧 获取InfoBarSettings实例并调用processWithCustomAPI
                     const infoBarSettings = window.SillyTavernInfobar?.modules?.settings;
@@ -4581,6 +4595,10 @@ export class DataTable {
             const dataRows = groupElement.querySelectorAll('tbody tr.data-row');
             const fieldMapping = this.getFieldMapping(panelId);
 
+            // 🔧 修复：不再清除所有旧的高亮状态，而是在值发生变化时才清除
+            // 这样可以避免因多次数据刷新导致高亮状态被错误清除
+            console.log(`[DataTable] 🔄 开始更新${panelId}表格数据（保留未变化单元格的高亮状态）`);
+
             panelDataItems.forEach((dataItem, index) => {
                 if (index >= dataRows.length) return;
 
@@ -4592,6 +4610,13 @@ export class DataTable {
                 // 更新每个单元格
                 cells.forEach((cell, cellIndex) => {
                     const property = cell.getAttribute('data-property');
+
+                    // 🔧 修复：跳过特殊的"name"列（interaction/organization面板的首列）
+                    if (property === 'name' && cell.classList.contains('special-name-cell')) {
+                        console.log(`[DataTable] ⏭️ 跳过特殊name列: ${panelId}_${index} (该列已在渲染时从col_1获取数据)`);
+                        return; // 跳过这个单元格
+                    }
+
                     let colKey;
                     let value;
                     let updated = false;
@@ -4648,24 +4673,44 @@ export class DataTable {
                         return;
                     }
 
-                    // 执行更新并触发高亮
+                    // 执行更新并触发高亮（基于上次处理值进行判断，避免误判）
                     const currentValue = cell.textContent?.trim() || '';
                     const newValue = String(value);
-                    
+
+                    // 上次处理的值（首次没有则初始化为当前显示值）
+                    let lastProcessed = cell.getAttribute('data-last-value');
+                    if (lastProcessed === null) {
+                        lastProcessed = currentValue;
+                        cell.setAttribute('data-last-value', lastProcessed);
+                    }
+
+                    const shouldHighlight = lastProcessed !== newValue;
+
+                    // 始终同步DOM文本（即使未高亮）
                     if (currentValue !== newValue) {
-                        // 值发生变化，更新并高亮
                         cell.textContent = value;
-                        cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
+                    }
+                    cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
 
-                        // 🎨 添加高亮动画效果
+                    if (shouldHighlight) {
+                        // 🔧 清理该单元格的旧高亮状态和定时器
+                        cell.classList.remove('cell-updated');
+                        cell.removeAttribute('data-updated-at');
+                        cell.removeAttribute('data-updated-value');
+                        const existingTimer = cell.getAttribute('data-highlight-timer');
+                        if (existingTimer) {
+                            clearTimeout(parseInt(existingTimer));
+                            cell.removeAttribute('data-highlight-timer');
+                        }
+                        // 🎨 添加高亮效果
                         this.highlightCell(cell, panelId, property, value);
-
                         console.log(`[DataTable] 🔍 ${panelId}字段更新并高亮: ${property} -> ${colKey} = "${value}"`);
                     } else {
-                        // 值未变化，只更新title
-                        cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
                         console.log(`[DataTable] ✓ ${panelId}值未变化: ${property} = "${value}"`);
                     }
+
+                    // 记录为最新处理值
+                    cell.setAttribute('data-last-value', newValue);
                 });
             });
 
@@ -4769,6 +4814,10 @@ export class DataTable {
 
             const dataRows = groupElement.querySelectorAll('tbody tr.data-row');
 
+            // 🔧 修复：不再清除所有旧的高亮状态，而是在值发生变化时才清除
+            // 这样可以避免因多次数据刷新导致高亮状态被错误清除
+            console.log(`[DataTable] 🎯 开始精确更新${panelId}表格数据（保留未变化单元格的高亮状态）`);
+
             panelDataItems.forEach((dataItem, rowIndex) => {
                 if (rowIndex >= dataRows.length) return;
 
@@ -4780,6 +4829,13 @@ export class DataTable {
                 // 为每个单元格创建唯一标识并精确更新
                 cells.forEach((cell, cellIndex) => {
                     const property = cell.getAttribute('data-property');
+
+                    // 🔧 修复：跳过特殊的"name"列（interaction/organization面板的首列）
+                    if (property === 'name' && cell.classList.contains('special-name-cell')) {
+                        console.log(`[DataTable] ⏭️ 跳过特殊name列: ${panelId}_${rowIndex} (该列已在渲染时从col_1获取数据)`);
+                        return; // 跳过这个单元格
+                    }
+
                     const cellId = `${panelId}_${rowIndex}_${cellIndex}_${property}`;
 
                     // 设置单元格唯一标识
@@ -4827,24 +4883,44 @@ export class DataTable {
                         return;
                     }
 
-                    // 只在值发生变化时更新DOM并触发高亮
+                    // 基于“上次处理值”判断是否需要高亮，避免误判
                     const currentValue = cell.textContent?.trim() || '';
                     const newValue = String(value);
-                    
+
+                    // 首次没有记录则以当前显示值作为基准
+                    let lastProcessed = cell.getAttribute('data-last-value');
+                    if (lastProcessed === null) {
+                        lastProcessed = currentValue;
+                        cell.setAttribute('data-last-value', lastProcessed);
+                    }
+
+                    const shouldHighlight = lastProcessed !== newValue;
+
+                    // 始终同步DOM文本
                     if (currentValue !== newValue) {
-                        // 值发生变化，更新并高亮
                         cell.textContent = value;
-                        cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
+                    }
+                    cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
 
-                        // 🎨 添加高亮动画效果
+                    if (shouldHighlight) {
+                        // 清理旧的高亮痕迹
+                        cell.classList.remove('cell-updated');
+                        cell.removeAttribute('data-updated-at');
+                        cell.removeAttribute('data-updated-value');
+                        const existingTimer = cell.getAttribute('data-highlight-timer');
+                        if (existingTimer) {
+                            clearTimeout(parseInt(existingTimer));
+                            cell.removeAttribute('data-highlight-timer');
+                        }
+                        // 添加高亮
                         this.highlightCell(cell, panelId, property, value);
-
                         console.log(`[DataTable] 🔍 ${panelId}精确更新并高亮: ${property} -> ${colKey} = "${value}" (单元格ID: ${cellId})`);
                     } else {
-                        // 值未变化，只更新title
-                        cell.setAttribute('title', `${property || `列${cellIndex + 1}`}: ${value}`);
                         console.log(`[DataTable] ✓ ${panelId}值未变化: ${property} = "${value}"`);
                     }
+
+                    // 记录“上次处理值”
+                    cell.setAttribute('data-last-value', newValue);
                 });
             });
 
@@ -4862,34 +4938,30 @@ export class DataTable {
      */
     highlightCell(cell, panelId, property, newValue) {
         try {
+            // 🔧 修复：简化高亮逻辑，移除CSS动画，直接高亮显示
+
+            // 清除该单元格之前的高亮定时器（如果存在）
+            const existingTimer = cell.getAttribute('data-highlight-timer');
+            if (existingTimer) {
+                clearTimeout(parseInt(existingTimer));
+                cell.removeAttribute('data-highlight-timer');
+            }
+
             // 移除已存在的高亮类（如果有），准备重新高亮
-            cell.classList.remove('cell-updated', 'cell-highlight-animation');
-            
-            // 强制重绘，确保动画可以重新触发
+            cell.classList.remove('cell-updated');
+
+            // 强制重绘
             void cell.offsetWidth;
-            
-            // 添加高亮类
-            cell.classList.add('cell-updated', 'cell-highlight-animation');
-            
-            // 记录更新时间
+
+            // 添加高亮类（不使用动画类）
+            cell.classList.add('cell-updated');
+
+            // 记录更新时间和值
             cell.setAttribute('data-updated-at', Date.now());
             cell.setAttribute('data-updated-value', String(newValue));
-            
-            // 动画结束后移除动画类（保留基础高亮类一段时间）
-            const handleAnimationEnd = () => {
-                cell.classList.remove('cell-highlight-animation');
-                cell.removeEventListener('animationend', handleAnimationEnd);
-                
-                // 3秒后完全移除高亮，准备下次更新
-                setTimeout(() => {
-                    cell.classList.remove('cell-updated');
-                }, 3000);
-            };
-            
-            cell.addEventListener('animationend', handleAnimationEnd);
-            
+
             console.log(`[DataTable] 🎨 单元格高亮: ${panelId}.${property} = "${newValue}"`);
-            
+
         } catch (error) {
             console.error('[DataTable] ❌ 单元格高亮失败:', error);
         }

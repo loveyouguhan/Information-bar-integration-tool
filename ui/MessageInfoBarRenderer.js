@@ -26,6 +26,10 @@ export class MessageInfoBarRenderer {
         this.frontendDisplayMode = false; // 前端显示模式标志
         this.interactiveInitialized = false; // 防止重复绑定全局交互事件
 
+        // 🔧 修复：添加重试计数器，防止无限循环
+        this.retryCounters = new Map(); // messageId -> retryCount
+        this.MAX_RETRY_COUNT = 3; // 最大重试次数
+
         // 🎨 HTML模板相关
         this.htmlTemplateParser = dependencies.htmlTemplateParser || window.SillyTavernInfobar?.modules?.htmlTemplateParser;
         this.customTemplates = new Map(); // 自定义模板缓存
@@ -182,6 +186,9 @@ export class MessageInfoBarRenderer {
             // 加载当前主题
             await this.loadCurrentTheme();
 
+            // 🔧 修复：启动定期清理重试计数器的任务，防止内存泄漏
+            this.startRetryCounterCleanup();
+
             this.initialized = true;
             console.log('[MessageInfoBarRenderer] ✅ 消息信息栏渲染器初始化完成');
 
@@ -189,6 +196,38 @@ export class MessageInfoBarRenderer {
             console.error('[MessageInfoBarRenderer] ❌ 初始化失败:', error);
             this.handleError(error);
         }
+    }
+
+    /**
+     * 🔧 启动定期清理重试计数器的任务
+     */
+    startRetryCounterCleanup() {
+        // 每5分钟清理一次重试计数器
+        setInterval(() => {
+            const now = Date.now();
+            const CLEANUP_THRESHOLD = 5 * 60 * 1000; // 5分钟
+
+            let cleanedCount = 0;
+            // 清理超过5分钟的重试记录
+            for (const [messageId, data] of this.retryCounters.entries()) {
+                if (typeof data === 'object' && now - (data.timestamp || 0) > CLEANUP_THRESHOLD) {
+                    this.retryCounters.delete(messageId);
+                    cleanedCount++;
+                }
+            }
+
+            if (cleanedCount > 0) {
+                console.log(`[MessageInfoBarRenderer] 🧹 清理了 ${cleanedCount} 个过期的重试计数器`);
+            }
+
+            // 如果重试计数器过多（超过100个），强制清理
+            if (this.retryCounters.size > 100) {
+                console.warn(`[MessageInfoBarRenderer] ⚠️ 重试计数器过多 (${this.retryCounters.size})，强制清理`);
+                this.retryCounters.clear();
+            }
+        }, 5 * 60 * 1000); // 每5分钟执行一次
+
+        console.log('[MessageInfoBarRenderer] 🧹 已启动重试计数器定期清理任务');
     }
 
     /**
@@ -354,23 +393,41 @@ export class MessageInfoBarRenderer {
             if (!chatData || !chatData.infobar_data || !chatData.infobar_data.panels) {
         console.info('[MessageInfoBarRenderer] ℹ️ 当前聊天没有infobar_data，可能数据尚未准备好');
 
-                // 🔧 新增：检查消息内容是否包含infobar_data标签
+                // 🔧 修复：检查消息内容是否包含infobar_data标签，并限制重试次数
                 const messageElement = document.querySelector(`[mesid="${messageId}"]`);
                 if (messageElement) {
                     const messageText = messageElement.querySelector('.mes_text')?.textContent || '';
                     if (messageText.includes('<infobar_data>')) {
-                        console.log('[MessageInfoBarRenderer] ⚠️ 消息包含infobar_data但数据核心中无数据，可能存在时序问题');
-                        // 短暂延迟后重试一次
-                        setTimeout(() => {
-                            this.renderInfoBarForLatestMessage();
-                        }, 500);
-                        return;
+                        // 获取当前重试数据
+                        const retryData = this.retryCounters.get(messageId) || { count: 0, timestamp: Date.now() };
+
+                        if (retryData.count < this.MAX_RETRY_COUNT) {
+                            console.log(`[MessageInfoBarRenderer] ⚠️ 消息包含infobar_data但数据核心中无数据，重试 ${retryData.count + 1}/${this.MAX_RETRY_COUNT}`);
+                            // 更新重试次数和时间戳
+                            this.retryCounters.set(messageId, {
+                                count: retryData.count + 1,
+                                timestamp: Date.now()
+                            });
+                            // 短暂延迟后重试
+                            setTimeout(() => {
+                                this.renderInfoBarForLatestMessage();
+                            }, 500);
+                            return;
+                        } else {
+                            console.error(`[MessageInfoBarRenderer] ❌ 消息 ${messageId} 重试次数已达上限 (${this.MAX_RETRY_COUNT})，停止重试`);
+                            // 清除重试计数器
+                            this.retryCounters.delete(messageId);
+                            return;
+                        }
                     }
                 }
 
                 console.log('[MessageInfoBarRenderer] ℹ️ 消息确实不包含infobar_data，跳过渲染');
                 return;
             }
+
+            // 🔧 修复：成功获取数据后，清除该消息的重试计数器
+            this.retryCounters.delete(messageId);
 
             console.log('[MessageInfoBarRenderer] ✅ 数据核心中找到有效的infobar_data，数据面板数量:', Object.keys(chatData.infobar_data.panels).length);
 
@@ -1965,7 +2022,8 @@ export class MessageInfoBarRenderer {
                 const subItem = panelConfig.subItems[colNumber - 1]; // 数字1 对应索引0
                 if (subItem && (subItem.key || subItem.name)) {
                     const resolved = subItem.key || subItem.name;
-                    console.log(`[MessageInfoBarRenderer] ✅ 字段${colNumber} -> ${resolved} (来自面板配置)`);
+                    // 🔧 修复：减少日志输出，避免大量重复日志导致性能问题
+                    // console.log(`[MessageInfoBarRenderer] ✅ 字段${colNumber} -> ${resolved} (来自面板配置)`);
                     return resolved;
                 }
             }
@@ -2043,14 +2101,16 @@ export class MessageInfoBarRenderer {
 
                     if (colNumber !== null) {
                         const enabledSubItems = targetPanel.subItems.filter(item => item.enabled);
-                        console.log(`[MessageInfoBarRenderer] 🔧 启用子项数量: ${enabledSubItems.length}, 查找字段${colNumber}`);
+                        // 🔧 修复：减少日志输出，只在调试模式下输出
+                        // console.log(`[MessageInfoBarRenderer] 🔧 启用子项数量: ${enabledSubItems.length}, 查找字段${colNumber}`);
 
                         if (enabledSubItems[colNumber - 1]) {
                             const realColumnName = enabledSubItems[colNumber - 1].name;
-                            console.log(`[MessageInfoBarRenderer] ✅ ${fieldName} -> "${realColumnName}" (面板: ${panelKey})`);
+                            // 🔧 修复：减少日志输出，只在调试模式下输出
+                            // console.log(`[MessageInfoBarRenderer] ✅ ${fieldName} -> "${realColumnName}" (面板: ${panelKey})`);
                             return realColumnName;
                         } else {
-                            console.log(`[MessageInfoBarRenderer] ⚠️ ${fieldName} 超出启用子项范围 (面板: ${panelKey})`);
+                            console.warn(`[MessageInfoBarRenderer] ⚠️ ${fieldName} 超出启用子项范围 (面板: ${panelKey})`);
                         }
                     }
 
@@ -2059,7 +2119,8 @@ export class MessageInfoBarRenderer {
                         item.key === fieldName || item.name === fieldName
                     );
                     if (matchedSubItem) {
-                        console.log(`[MessageInfoBarRenderer] ✅ ${fieldName} -> "${matchedSubItem.name}" (面板: ${panelKey})`);
+                        // 🔧 修复：减少日志输出，只在调试模式下输出
+                        // console.log(`[MessageInfoBarRenderer] ✅ ${fieldName} -> "${matchedSubItem.name}" (面板: ${panelKey})`);
                         return matchedSubItem.name;
                     }
                 } else {
