@@ -1573,7 +1573,7 @@ export class AIMemoryDatabaseInjector {
     }
 
     /**
-     * 🔧 修复：从消息中提取AI记忆总结（正确解析格式）
+     * 🔧 修复：从消息中提取AI记忆总结（增强版，支持被HTML标签包裹）
      */
     async extractAIMemorySummaryFromMessage(message) {
         try {
@@ -1581,33 +1581,33 @@ export class AIMemoryDatabaseInjector {
                 return null;
             }
 
-            // 🔧 优先尝试新格式（多行）：<AI_MEMORY_SUMMARY>\n<!--\n{...}\n-->\n</AI_MEMORY_SUMMARY>
-            const newFormatMultilineRegex = /<AI_MEMORY_SUMMARY>\s*<!--\s*([\s\S]*?)\s*-->\s*<\/AI_MEMORY_SUMMARY>/;
-            const newMultilineMatch = message.match(newFormatMultilineRegex);
+            // 🔧 修复：使用indexOf方法精确提取，支持被HTML标签包裹的情况
 
-            if (newMultilineMatch && newMultilineMatch[1]) {
-                try {
-                    const jsonContent = newMultilineMatch[1].trim();
-                    const summary = JSON.parse(jsonContent);
-                    console.log('[AIMemoryDatabaseInjector] ✅ 检测到新格式AI记忆总结（多行）');
-                    return summary;
-                } catch (parseError) {
-                    console.error('[AIMemoryDatabaseInjector] ❌ 解析JSON失败:', parseError);
-                }
-            }
+            // 尝试新格式（大写标签）
+            let startTag = '<AI_MEMORY_SUMMARY>';
+            let endTag = '</AI_MEMORY_SUMMARY>';
+            let startIndex = message.indexOf(startTag);
 
-            // 🔧 兼容新格式（单行）：<AI_MEMORY_SUMMARY><!--{...}--></AI_MEMORY_SUMMARY>
-            const newFormatSinglelineRegex = /<AI_MEMORY_SUMMARY><!--([\s\S]*?)--><\/AI_MEMORY_SUMMARY>/;
-            const newSinglelineMatch = message.match(newFormatSinglelineRegex);
+            if (startIndex !== -1) {
+                const endIndex = message.indexOf(endTag, startIndex);
+                if (endIndex !== -1) {
+                    const innerContent = message.substring(startIndex + startTag.length, endIndex).trim();
 
-            if (newSinglelineMatch && newSinglelineMatch[1]) {
-                try {
-                    const jsonContent = newSinglelineMatch[1].trim();
-                    const summary = JSON.parse(jsonContent);
-                    console.log('[AIMemoryDatabaseInjector] ✅ 检测到新格式AI记忆总结（单行）');
-                    return summary;
-                } catch (parseError) {
-                    console.error('[AIMemoryDatabaseInjector] ❌ 解析JSON失败:', parseError);
+                    // 提取注释内容
+                    if (innerContent.startsWith('<!--') && innerContent.includes('-->')) {
+                        const commentStart = innerContent.indexOf('<!--') + 4;
+                        const commentEnd = innerContent.lastIndexOf('-->');
+                        if (commentEnd > commentStart) {
+                            try {
+                                const jsonContent = innerContent.substring(commentStart, commentEnd).trim();
+                                const summary = JSON.parse(jsonContent);
+                                console.log('[AIMemoryDatabaseInjector] ✅ 检测到新格式AI记忆总结（增强提取）');
+                                return summary;
+                            } catch (parseError) {
+                                console.error('[AIMemoryDatabaseInjector] ❌ 解析JSON失败:', parseError);
+                            }
+                        }
+                    }
                 }
             }
 

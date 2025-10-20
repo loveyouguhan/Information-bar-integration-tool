@@ -39,6 +39,7 @@ export class SummaryManager {
             summaryType: 'small',
             summaryWordCount: 300,
             injectSummaryEnabled: false,  // 🔧 新增：总结注入功能开关
+            useRegexFilter: true,  // 🆕 新增：使用正则表达式过滤（默认启用）
             // 🔧 新增：自动隐藏楼层设置
             autoHideEnabled: false,
             autoHideThreshold: 30,
@@ -791,12 +792,38 @@ export class SummaryManager {
             // 获取需要总结的消息
             let messagesToSummarize = messages.slice(summaryRange.start, summaryRange.end + 1);
 
-            // 🔧 关键修复：在生成总结前过滤掉内部标签
+            // 🆕 新增：根据设置决定是否使用正则表达式过滤
+            if (this.settings.useRegexFilter) {
+                console.log('[SummaryManager] 📝 使用正则表达式过滤总结消息...');
+                
+                // 使用RegexScriptManager应用OUTPUT正则过滤
+                const regexScriptManager = window.SillyTavernInfobar?.modules?.regexScriptManager;
+                if (regexScriptManager) {
+                    messagesToSummarize = messagesToSummarize.map(msg => {
+                        if (msg.mes) {
+                            const originalLength = msg.mes.length;
+                            const filtered = regexScriptManager.applyAllScripts(msg.mes, 'OUTPUT', 'AI_OUTPUT');
+                            if (filtered.length !== originalLength) {
+                                console.log('[SummaryManager] 📝 消息已过滤:', originalLength, '->', filtered.length);
+                            }
+                            return { ...msg, mes: filtered };
+                        }
+                        return msg;
+                    });
+                    console.log('[SummaryManager] ✅ 正则表达式过滤完成');
+                } else {
+                    console.warn('[SummaryManager] ⚠️ RegexScriptManager不可用，跳过正则过滤');
+                }
+            } else {
+                console.log('[SummaryManager] ℹ️ 正则表达式过滤已禁用');
+            }
+
+            // 🔧 关键修复：在生成总结前过滤掉内部标签（降级处理）
             // 使用MessageFilterHook过滤消息，避免总结包含AI记忆、思考过程等内部标签
             const messageFilterHook = window.SillyTavernInfobar?.modules?.messageFilterHook;
             if (messageFilterHook && typeof messageFilterHook.filterMessagesForSummary === 'function') {
                 messagesToSummarize = messageFilterHook.filterMessagesForSummary(messagesToSummarize);
-                console.log('[SummaryManager] 🔒 已过滤消息中的内部标签');
+                console.log('[SummaryManager] 🔒 已过滤消息中的内部标签（降级处理）');
             }
 
             // 确定总结字数

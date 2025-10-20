@@ -229,50 +229,34 @@ export class XMLDataParser {
         try {
             console.log('[XMLDataParser] 🔍 开始提取infobar_data标签内容...');
 
-            // 🚀 策略1: 标准格式 - <infobar_data>...</infobar_data>
-            let regex = /<infobar_data>([\s\S]*?)<\/infobar_data>/i;
-            let match = content.match(regex);
+            // 🔧 修复：使用indexOf方法精确提取，支持被HTML标签包裹的情况
+            const startTag = '<infobar_data>';
+            const endTag = '</infobar_data>';
 
-            if (match && match[1]) {
-                const extractedContent = match[1].trim();
-                console.log('[XMLDataParser] ✅ 提取成功（标准格式），长度:', extractedContent.length);
-                return extractedContent;
+            const startIndex = content.indexOf(startTag);
+            if (startIndex === -1) {
+                console.log('[XMLDataParser] ℹ️ 未找到<infobar_data>开始标签');
+                return null;
             }
 
-            // 🚀 策略2: 宽松格式 - 忽略大小写和空格
-            regex = /<\s*infobar_data\s*>([\s\S]*?)<\s*\/\s*infobar_data\s*>/i;
-            match = content.match(regex);
+            const endIndex = content.indexOf(endTag, startIndex);
+            if (endIndex === -1) {
+                console.log('[XMLDataParser] ⚠️ 未找到</infobar_data>结束标签，尝试提取部分内容');
 
-            if (match && match[1]) {
-                const extractedContent = match[1].trim();
-                console.log('[XMLDataParser] ✅ 提取成功（宽松格式），长度:', extractedContent.length);
-                return extractedContent;
-            }
-
-            // � 策略3: 贪婪模式 - 提取最后一个infobar_data标签
-            const allMatches = content.match(/<infobar_data>([\s\S]*?)<\/infobar_data>/gi);
-            if (allMatches && allMatches.length > 0) {
-                const lastMatch = allMatches[allMatches.length - 1];
-                const innerMatch = lastMatch.match(/<infobar_data>([\s\S]*?)<\/infobar_data>/i);
-                if (innerMatch && innerMatch[1]) {
-                    const extractedContent = innerMatch[1].trim();
-                    console.log('[XMLDataParser] ✅ 提取成功（贪婪模式，最后一个），长度:', extractedContent.length);
-                    return extractedContent;
+                // 🚀 策略: 部分标签 - 只有开始标签
+                const partialContent = content.substring(startIndex + startTag.length).trim();
+                if (partialContent.length > 20) {
+                    console.log('[XMLDataParser] ⚠️ 提取成功（部分标签），长度:', partialContent.length);
+                    return partialContent;
                 }
+
+                return null;
             }
 
-            // 🚀 策略4: 部分标签 - 只有开始标签
-            regex = /<infobar_data>([\s\S]*?)$/i;
-            match = content.match(regex);
-
-            if (match && match[1] && match[1].trim().length > 20) {
-                const extractedContent = match[1].trim();
-                console.log('[XMLDataParser] ⚠️ 提取成功（部分标签，缺少结束标签），长度:', extractedContent.length);
-                return extractedContent;
-            }
-
-            console.log('[XMLDataParser] ℹ️ 未找到infobar_data标签');
-            return null;
+            // 提取标签之间的内容
+            const extractedContent = content.substring(startIndex + startTag.length, endIndex).trim();
+            console.log('[XMLDataParser] ✅ 提取成功（增强提取），长度:', extractedContent.length);
+            return extractedContent;
 
         } catch (error) {
             console.error('[XMLDataParser] ❌ 提取infobar_data内容失败:', error);

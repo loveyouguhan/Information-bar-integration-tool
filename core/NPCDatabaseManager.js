@@ -442,6 +442,47 @@ export class NPCDatabaseManager {
         return this.db.npcs[id];
     }
 
+    /**
+     * 🆕 手动添加NPC（用于UI新增NPC功能）
+     * @param {Object} npcData - NPC数据对象 {name: string, ...其他字段}
+     */
+    async addNPC(npcData) {
+        try {
+            console.log('[NPCDB] ➕ 手动添加NPC:', npcData);
+            
+            if (!npcData || !npcData.name) {
+                throw new Error('NPC姓名不能为空');
+            }
+            
+            // 使用ensureNpc确保NPC存在
+            const npc = this.ensureNpc(npcData.name);
+            
+            // 更新NPC字段（排除name字段）
+            const { name, ...fields } = npcData;
+            npc.fields = this.mergeFields(npc.fields, fields);
+            npc.updatedAt = Date.now();
+            
+            // 保存到持久化存储
+            await this.save();
+            
+            console.log('[NPCDB] ✅ NPC添加成功:', npc.name, '字段数:', Object.keys(npc.fields).length);
+            
+            // 触发事件
+            this.eventSystem?.emit('npc:added', { 
+                id: npc.id, 
+                name: npc.name,
+                fields: npc.fields,
+                timestamp: Date.now() 
+            });
+            
+            return npc;
+            
+        } catch (error) {
+            console.error('[NPCDB] ❌ 添加NPC失败:', error);
+            throw error;
+        }
+    }
+
     // 智能合并字段：新值优先，忽略空值
     mergeFields(oldFields, newFields) {
         const merged = { ...(oldFields || {}) };

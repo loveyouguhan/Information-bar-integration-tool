@@ -1001,33 +1001,41 @@ ${panelRulesSection}
 
             // 提取infobar_data标签内容
             extractInfobarData: (content) => {
-                // 🔧 修复：支持多种格式的infobar_data标签
+                // 🔧 修复：支持被HTML标签包裹的infobar_data标签
 
-                // 优先匹配带注释的格式：<infobar_data><!--内容--></infobar_data>
-                let regex = /<infobar_data>\s*<!--\s*([\s\S]*?)\s*-->\s*<\/infobar_data>/i;
-                let match = content.match(regex);
-                if (match && match[1]) {
-                    console.log('[SmartPromptSystem] ✅ 找到带注释的infobar_data格式');
-                    return match[1].trim();
+                // 🚀 策略1: 使用更精确的正则，确保匹配到正确的结束标签
+                // 匹配 <infobar_data> 到 </infobar_data>，中间可以包含任何内容（包括其他HTML标签）
+                const startTag = '<infobar_data>';
+                const endTag = '</infobar_data>';
+
+                const startIndex = content.indexOf(startTag);
+                if (startIndex === -1) {
+                    console.log('[SmartPromptSystem] ⚠️ 未找到<infobar_data>开始标签');
+                    return null;
                 }
 
-                // 备用匹配：直接内容格式：<infobar_data>内容</infobar_data>
-                regex = /<infobar_data>\s*([\s\S]*?)\s*<\/infobar_data>/i;
-                match = content.match(regex);
-                if (match && match[1]) {
-                    const extractedContent = match[1].trim();
-                    // 检查是否是注释格式但没有被正确识别
-                    if (extractedContent.startsWith('<!--') && extractedContent.endsWith('-->')) {
-                        console.log('[SmartPromptSystem] ✅ 找到注释格式的infobar_data内容');
-                        return extractedContent.slice(4, -3).trim(); // 移除注释符号
-                    } else {
-                        console.log('[SmartPromptSystem] ✅ 找到直接内容格式的infobar_data');
+                const endIndex = content.indexOf(endTag, startIndex);
+                if (endIndex === -1) {
+                    console.log('[SmartPromptSystem] ⚠️ 未找到</infobar_data>结束标签');
+                    return null;
+                }
+
+                // 提取标签之间的内容
+                const innerContent = content.substring(startIndex + startTag.length, endIndex).trim();
+
+                // 检查是否是注释格式
+                if (innerContent.startsWith('<!--') && innerContent.includes('-->')) {
+                    const commentStart = innerContent.indexOf('<!--') + 4;
+                    const commentEnd = innerContent.lastIndexOf('-->');
+                    if (commentEnd > commentStart) {
+                        const extractedContent = innerContent.substring(commentStart, commentEnd).trim();
+                        console.log('[SmartPromptSystem] ✅ 找到带注释的infobar_data格式（增强提取）');
                         return extractedContent;
                     }
                 }
 
-                console.log('[SmartPromptSystem] ⚠️ 未找到任何格式的infobar_data标签');
-                return null;
+                console.log('[SmartPromptSystem] ✅ 找到直接内容格式的infobar_data（增强提取）');
+                return innerContent;
             },
 
             // 解析扁平格式数据
@@ -1320,6 +1328,10 @@ ${panelRulesSection}
                 prompt += '\n\n' + summaryInstructions;
                 console.log('[SmartPromptSystem] 📝 已将总结指令添加到智能提示词');
             }
+
+            // 🔧 修复：不要对智能提示词应用正则过滤！
+            // 智能提示词是格式说明和要求，里面的<aiThinkProcess>等是示例，不应该被过滤
+            // 正则表达式只应该应用于主API返回的实际消息内容
 
             console.log(`[SmartPromptSystem] ✅ 智能提示词生成完成，包含 ${enabledPanels.length} 个面板`);
 
@@ -5658,20 +5670,45 @@ infobar_data标签（独立输出，必须后输出）`;
                 let messageContent = messageTextElement.innerHTML;
                 let hasChanges = false;
 
-                // 1. 过滤AI记忆总结标签（支持新旧格式）
-                // 新格式（小写标签）：<ai_memory_summary><!--...--></ai_memory_summary>
+                // 1. 过滤AI记忆总结标签（支持新旧格式，增强版）
+                // 🔧 修复：使用更精确的过滤方法，支持被HTML标签包裹的情况
                 if (messageContent.includes('<ai_memory_summary>') || messageContent.includes('<AI_MEMORY_SUMMARY>')) {
-                    messageContent = messageContent.replace(
-                        /<ai_memory_summary>\s*<!--[\s\S]*?-->\s*<\/ai_memory_summary>/gi,
-                        ''
-                    );
+                    // 使用indexOf方法精确移除
+                    let startTag = '<ai_memory_summary>';
+                    let endTag = '</ai_memory_summary>';
+                    let startIndex = messageContent.indexOf(startTag);
+
+                    while (startIndex !== -1) {
+                        const endIndex = messageContent.indexOf(endTag, startIndex);
+                        if (endIndex !== -1) {
+                            // 移除整个标签及其内容
+                            messageContent = messageContent.substring(0, startIndex) +
+                                           messageContent.substring(endIndex + endTag.length);
+                            hasChanges = true;
+                        } else {
+                            break;
+                        }
+                        startIndex = messageContent.indexOf(startTag);
+                    }
+
                     // 兼容大写标签
-                    messageContent = messageContent.replace(
-                        /<AI_MEMORY_SUMMARY>\s*<!--[\s\S]*?-->\s*<\/AI_MEMORY_SUMMARY>/gi,
-                        ''
-                    );
-                    hasChanges = true;
+                    startTag = '<AI_MEMORY_SUMMARY>';
+                    endTag = '</AI_MEMORY_SUMMARY>';
+                    startIndex = messageContent.indexOf(startTag);
+
+                    while (startIndex !== -1) {
+                        const endIndex = messageContent.indexOf(endTag, startIndex);
+                        if (endIndex !== -1) {
+                            messageContent = messageContent.substring(0, startIndex) +
+                                           messageContent.substring(endIndex + endTag.length);
+                            hasChanges = true;
+                        } else {
+                            break;
+                        }
+                        startIndex = messageContent.indexOf(startTag);
+                    }
                 }
+
                 // 旧格式：[AI_MEMORY_SUMMARY]...[/AI_MEMORY_SUMMARY]（向后兼容）
                 if (messageContent.includes('[AI_MEMORY_SUMMARY]')) {
                     // 移除带代码块的格式
@@ -5687,22 +5724,63 @@ infobar_data标签（独立输出，必须后输出）`;
                     hasChanges = true;
                 }
 
-                // 2. 过滤aiThinkProcess标签
+                // 2. 过滤aiThinkProcess标签（增强版）
+                // 🔧 修复：使用indexOf方法精确移除，支持被HTML标签包裹的情况
                 if (messageContent.includes('<aiThinkProcess>')) {
-                    messageContent = messageContent.replace(
-                        /<aiThinkProcess>[\s\S]*?<\/aiThinkProcess>/g,
-                        ''
-                    );
-                    hasChanges = true;
+                    let startTag = '<aiThinkProcess>';
+                    let endTag = '</aiThinkProcess>';
+                    let startIndex = messageContent.indexOf(startTag);
+
+                    while (startIndex !== -1) {
+                        const endIndex = messageContent.indexOf(endTag, startIndex);
+                        if (endIndex !== -1) {
+                            messageContent = messageContent.substring(0, startIndex) +
+                                           messageContent.substring(endIndex + endTag.length);
+                            hasChanges = true;
+                        } else {
+                            break;
+                        }
+                        startIndex = messageContent.indexOf(startTag);
+                    }
                 }
 
-                // 3. 过滤infobar_data标签
+                // 兼容 <ai_think_process> 标签
+                if (messageContent.includes('<ai_think_process>')) {
+                    let startTag = '<ai_think_process>';
+                    let endTag = '</ai_think_process>';
+                    let startIndex = messageContent.indexOf(startTag);
+
+                    while (startIndex !== -1) {
+                        const endIndex = messageContent.indexOf(endTag, startIndex);
+                        if (endIndex !== -1) {
+                            messageContent = messageContent.substring(0, startIndex) +
+                                           messageContent.substring(endIndex + endTag.length);
+                            hasChanges = true;
+                        } else {
+                            break;
+                        }
+                        startIndex = messageContent.indexOf(startTag);
+                    }
+                }
+
+                // 3. 过滤infobar_data标签（增强版）
+                // 🔧 修复：使用indexOf方法精确移除，支持被HTML标签包裹的情况
                 if (messageContent.includes('<infobar_data>')) {
-                    messageContent = messageContent.replace(
-                        /<infobar_data>[\s\S]*?<\/infobar_data>/g,
-                        ''
-                    );
-                    hasChanges = true;
+                    let startTag = '<infobar_data>';
+                    let endTag = '</infobar_data>';
+                    let startIndex = messageContent.indexOf(startTag);
+
+                    while (startIndex !== -1) {
+                        const endIndex = messageContent.indexOf(endTag, startIndex);
+                        if (endIndex !== -1) {
+                            messageContent = messageContent.substring(0, startIndex) +
+                                           messageContent.substring(endIndex + endTag.length);
+                            hasChanges = true;
+                        } else {
+                            break;
+                        }
+                        startIndex = messageContent.indexOf(startTag);
+                    }
                 }
 
                 // 4. 清理多余的空行和空白
@@ -5796,29 +5874,57 @@ infobar_data标签（独立输出，必须后输出）`;
      */
     extractAIMemorySummary(messageContent) {
         try {
-            // 🔧 优先尝试新格式（小写标签，无花括号）：<ai_memory_summary><!--...--></ai_memory_summary>
-            const newFormatLowercaseRegex = /<ai_memory_summary>\s*<!--\s*([\s\S]*?)\s*-->\s*<\/ai_memory_summary>/i;
-            const newLowercaseMatch = messageContent.match(newFormatLowercaseRegex);
+            // 🔧 修复：使用增强的提取方法，支持被HTML标签包裹的情况
 
-            if (newLowercaseMatch && newLowercaseMatch[1]) {
-                const content = newLowercaseMatch[1].trim();
-                console.log('[SmartPromptSystem] ✅ 检测到新格式AI记忆总结（小写标签）');
-                
-                // 解析新格式（无花括号的键值对）
-                const summary = this.parseNewFormatSummary(content);
-                if (summary) {
-                    return summary;
+            // 🚀 策略1: 新格式（小写标签）- 使用indexOf方法精确提取
+            let startTag = '<ai_memory_summary>';
+            let endTag = '</ai_memory_summary>';
+            let startIndex = messageContent.indexOf(startTag);
+
+            if (startIndex !== -1) {
+                const endIndex = messageContent.indexOf(endTag, startIndex);
+                if (endIndex !== -1) {
+                    const innerContent = messageContent.substring(startIndex + startTag.length, endIndex).trim();
+
+                    // 提取注释内容
+                    if (innerContent.startsWith('<!--') && innerContent.includes('-->')) {
+                        const commentStart = innerContent.indexOf('<!--') + 4;
+                        const commentEnd = innerContent.lastIndexOf('-->');
+                        if (commentEnd > commentStart) {
+                            const content = innerContent.substring(commentStart, commentEnd).trim();
+                            console.log('[SmartPromptSystem] ✅ 检测到新格式AI记忆总结（小写标签，增强提取）');
+
+                            // 解析新格式（无花括号的键值对）
+                            const summary = this.parseNewFormatSummary(content);
+                            if (summary) {
+                                return summary;
+                            }
+                        }
+                    }
                 }
             }
 
-            // 🔧 兼容旧格式（大写标签，有花括号）：<AI_MEMORY_SUMMARY><!--{...}--></AI_MEMORY_SUMMARY>
-            const oldFormatUppercaseRegex = /<AI_MEMORY_SUMMARY>\s*<!--\s*([\s\S]*?)\s*-->\s*<\/AI_MEMORY_SUMMARY>/i;
-            const oldUppercaseMatch = messageContent.match(oldFormatUppercaseRegex);
+            // 🚀 策略2: 旧格式（大写标签）- 使用indexOf方法精确提取
+            startTag = '<AI_MEMORY_SUMMARY>';
+            endTag = '</AI_MEMORY_SUMMARY>';
+            startIndex = messageContent.indexOf(startTag);
 
-            if (oldUppercaseMatch && oldUppercaseMatch[1]) {
-                const jsonContent = oldUppercaseMatch[1].trim();
-                console.log('[SmartPromptSystem] ⚠️ 检测到旧格式AI记忆总结（大写标签）');
-                return JSON.parse(jsonContent);
+            if (startIndex !== -1) {
+                const endIndex = messageContent.indexOf(endTag, startIndex);
+                if (endIndex !== -1) {
+                    const innerContent = messageContent.substring(startIndex + startTag.length, endIndex).trim();
+
+                    // 提取注释内容
+                    if (innerContent.startsWith('<!--') && innerContent.includes('-->')) {
+                        const commentStart = innerContent.indexOf('<!--') + 4;
+                        const commentEnd = innerContent.lastIndexOf('-->');
+                        if (commentEnd > commentStart) {
+                            const jsonContent = innerContent.substring(commentStart, commentEnd).trim();
+                            console.log('[SmartPromptSystem] ⚠️ 检测到旧格式AI记忆总结（大写标签，增强提取）');
+                            return JSON.parse(jsonContent);
+                        }
+                    }
+                }
             }
 
             // 🔧 向后兼容：尝试旧格式 [AI_MEMORY_SUMMARY]...[/AI_MEMORY_SUMMARY]
@@ -5878,18 +5984,62 @@ infobar_data标签（独立输出，必须后输出）`;
     }
 
     /**
-     * 🤔 新增：提取AI思考过程
+     * 🤔 新增：提取AI思考过程（增强版，支持被HTML标签包裹）
      */
     extractAIThinkingProcess(messageContent) {
         try {
-            // 匹配 <ai_think_process>...</ai_think_process>
-            const thinkingRegex = /<ai_think_process>([\s\S]*?)<\/ai_think_process>/i;
-            const match = messageContent.match(thinkingRegex);
+            // 🔧 修复：使用indexOf方法精确提取，支持被HTML标签包裹的情况
 
-            if (match && match[1]) {
-                const thinkingContent = match[1].trim();
-                console.log('[SmartPromptSystem] 🤔 检测到AI思考过程');
-                return thinkingContent;
+            // 尝试 <aiThinkProcess> 标签（标准格式）
+            let startTag = '<aiThinkProcess>';
+            let endTag = '</aiThinkProcess>';
+            let startIndex = messageContent.indexOf(startTag);
+
+            if (startIndex !== -1) {
+                const endIndex = messageContent.indexOf(endTag, startIndex);
+                if (endIndex !== -1) {
+                    const innerContent = messageContent.substring(startIndex + startTag.length, endIndex).trim();
+
+                    // 提取注释内容（如果有）
+                    if (innerContent.startsWith('<!--') && innerContent.includes('-->')) {
+                        const commentStart = innerContent.indexOf('<!--') + 4;
+                        const commentEnd = innerContent.lastIndexOf('-->');
+                        if (commentEnd > commentStart) {
+                            const thinkingContent = innerContent.substring(commentStart, commentEnd).trim();
+                            console.log('[SmartPromptSystem] 🤔 检测到AI思考过程（带注释，增强提取）');
+                            return thinkingContent;
+                        }
+                    }
+
+                    console.log('[SmartPromptSystem] 🤔 检测到AI思考过程（直接内容，增强提取）');
+                    return innerContent;
+                }
+            }
+
+            // 尝试 <ai_think_process> 标签（兼容格式）
+            startTag = '<ai_think_process>';
+            endTag = '</ai_think_process>';
+            startIndex = messageContent.indexOf(startTag);
+
+            if (startIndex !== -1) {
+                const endIndex = messageContent.indexOf(endTag, startIndex);
+                if (endIndex !== -1) {
+                    const innerContent = messageContent.substring(startIndex + startTag.length, endIndex).trim();
+
+                    // 提取注释内容（如果有）
+                    if (innerContent.startsWith('<!--') && innerContent.includes('-->')) {
+                        const commentStart = innerContent.indexOf('<!--') + 4;
+                        const commentEnd = innerContent.lastIndexOf('-->');
+                        if (commentEnd > commentStart) {
+                            const thinkingContent = innerContent.substring(commentStart, commentEnd).trim();
+                            console.log('[SmartPromptSystem] 🤔 检测到AI思考过程（兼容格式，带注释，增强提取）');
+                            return thinkingContent;
+                        }
+                    }
+
+                    console.log('[SmartPromptSystem] 🤔 检测到AI思考过程（兼容格式，直接内容，增强提取）');
+                    return innerContent;
+                }
             }
 
             return null;
