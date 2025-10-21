@@ -58,7 +58,7 @@ export class AIMemoryDatabaseInjector {
         // 注入器配置
         this.injectorConfig = {
             // 核心开关
-            enabled: false,                         // 🔧 修复：默认禁用记忆注入
+            enabled: true,                          // 🔧 修复：默认启用，具体由getUserSettings控制
             mainAPIOnly: true,                      // 只注入给主API
             ignoreCustomAPI: true,                  // 忽略自定义API状态
             
@@ -1296,16 +1296,34 @@ export class AIMemoryDatabaseInjector {
                 importance: memoryData.importance || memoryData.priority || 0.5,
                 timestamp: memoryData.timestamp || Date.now(),
                 source: memoryData.source || type,
+                tags: memoryData.tags || [],
+                category: memoryData.category || '未分类',
                 metadata: memoryData.metadata || {}
             };
             
-            // 根据重要性决定存储位置
+            console.log('[AIMemoryDatabaseInjector] 📝 准备添加记忆:', {
+                id: memoryEntry.id,
+                type: memoryEntry.type,
+                importance: memoryEntry.importance,
+                contentLength: memoryEntry.content?.length,
+                tags: memoryEntry.tags
+            });
+            
+            // 🔧 修复：添加到Injector内部数据库
             if (memoryEntry.importance >= 0.8) {
                 this.memoryDatabase.longTermMemory.set(memoryEntry.id, memoryEntry);
             } else if (memoryEntry.importance >= 0.5) {
                 this.memoryDatabase.shortTermMemory.set(memoryEntry.id, memoryEntry);
             } else {
                 this.memoryDatabase.sensoryMemory.set(memoryEntry.id, memoryEntry);
+            }
+            
+            // 🔧 修复：同时添加到真正的AIMemoryDatabase模块
+            if (this.aiMemoryDatabase && typeof this.aiMemoryDatabase.indexMemory === 'function') {
+                await this.aiMemoryDatabase.indexMemory(memoryEntry.id, memoryEntry, 'ai_memory_summary');
+                console.log('[AIMemoryDatabaseInjector] ✅ 记忆已索引到AIMemoryDatabase');
+            } else {
+                console.warn('[AIMemoryDatabaseInjector] ⚠️ AIMemoryDatabase不可用，无法索引记忆');
             }
             
             // 触发记忆添加事件
@@ -1541,12 +1559,32 @@ export class AIMemoryDatabaseInjector {
      */
     async handleMessageReceived(data) {
         try {
-            if (!data || data.is_user !== false) return;
+            console.log('[AIMemoryDatabaseInjector] 📥 接收到消息接收事件，数据类型:', typeof data, '数据:', data);
+
+            // 🔧 修复：SillyTavern传递的是消息索引，需要从聊天数组中获取消息
+            let message;
+            if (typeof data === 'number') {
+                // data 是消息索引
+                const chat = window.SillyTavern?.getContext?.()?.chat;
+                if (chat && chat[data]) {
+                    message = chat[data];
+                }
+            } else {
+                // data 是消息对象
+                message = data?.message || data;
+            }
+
+            // 检查是否是AI消息
+            if (!message || message.is_user !== false) {
+                console.log('[AIMemoryDatabaseInjector] ℹ️ 跳过用户消息或无效消息');
+                return;
+            }
 
             console.log('[AIMemoryDatabaseInjector] 📥 接收到AI消息，开始提取记忆总结...');
+            console.log('[AIMemoryDatabaseInjector] 📝 消息内容长度:', message.mes?.length);
 
             // 🔧 修复：使用正确的方法提取AI记忆总结
-            const memorySummary = await this.extractAIMemorySummaryFromMessage(data.mes);
+            const memorySummary = await this.extractAIMemorySummaryFromMessage(message.mes);
 
             if (memorySummary) {
                 console.log('[AIMemoryDatabaseInjector] ✅ 成功提取AI记忆总结');
@@ -1558,13 +1596,18 @@ export class AIMemoryDatabaseInjector {
                     tags: memorySummary.tags || [],
                     category: memorySummary.category || '角色互动',
                     source: 'ai_memory_summary',
-                    messageId: data.messageId || Date.now(),
+                    messageId: memorySummary.messageId || message.messageId || Date.now(),
                     timestamp: Date.now()
                 });
 
                 console.log('[AIMemoryDatabaseInjector] ✅ AI记忆总结已添加到数据库');
+                console.log('[AIMemoryDatabaseInjector] 📊 数据库统计:', {
+                    总记忆数: this.aiMemoryDatabase?.stats?.totalMemories,
+                    总关键词数: this.aiMemoryDatabase?.stats?.totalKeywords
+                });
             } else {
                 console.log('[AIMemoryDatabaseInjector] ℹ️ 消息中未找到AI记忆总结标签');
+                console.log('[AIMemoryDatabaseInjector] 📝 消息预览:', message.mes?.substring(0, 200));
             }
 
         } catch (error) {
@@ -1583,9 +1626,9 @@ export class AIMemoryDatabaseInjector {
 
             // 🔧 修复：使用indexOf方法精确提取，支持被HTML标签包裹的情况
 
-            // 尝试新格式（大写标签）
-            let startTag = '<AI_MEMORY_SUMMARY>';
-            let endTag = '</AI_MEMORY_SUMMARY>';
+            // 🔧 优先尝试小写标签（当前AI实际返回的格式）
+            let startTag = '<ai_memory_summary>';
+            let endTag = '</ai_memory_summary>';
             let startIndex = message.indexOf(startTag);
 
             if (startIndex !== -1) {
@@ -1593,20 +1636,77 @@ export class AIMemoryDatabaseInjector {
                 if (endIndex !== -1) {
                     const innerContent = message.substring(startIndex + startTag.length, endIndex).trim();
 
-                    // 提取注释内容
-                    if (innerContent.startsWith('<!--') && innerContent.includes('-->')) {
-                        const commentStart = innerContent.indexOf('<!--') + 4;
-                        const commentEnd = innerContent.lastIndexOf('-->');
-                        if (commentEnd > commentStart) {
-                            try {
-                                const jsonContent = innerContent.substring(commentStart, commentEnd).trim();
-                                const summary = JSON.parse(jsonContent);
-                                console.log('[AIMemoryDatabaseInjector] ✅ 检测到新格式AI记忆总结（增强提取）');
-                                return summary;
-                            } catch (parseError) {
-                                console.error('[AIMemoryDatabaseInjector] ❌ 解析JSON失败:', parseError);
+                    // 🔧 修复：查找包含有效JSON的HTML注释
+                    // 策略：找到所有HTML注释，尝试解析每一个，直到成功
+                    let searchPos = 0;
+                    while (true) {
+                        const commentStart = innerContent.indexOf('<!--', searchPos);
+                        if (commentStart === -1) break;
+                        
+                        const commentEnd = innerContent.indexOf('-->', commentStart);
+                        if (commentEnd === -1) break;
+                        
+                        try {
+                            let jsonContent = innerContent.substring(commentStart + 4, commentEnd).trim();
+                            
+                            // 🔧 修复：如果JSON内容缺少外层大括号，添加它们
+                            if (!jsonContent.startsWith('{') && !jsonContent.startsWith('[')) {
+                                jsonContent = '{' + jsonContent + '}';
                             }
+                            
+                            // 尝试解析为JSON
+                            const summary = JSON.parse(jsonContent);
+                            // 验证是否是AI记忆总结格式
+                            if (summary && (summary.type === 'ai_memory' || summary.content)) {
+                                console.log('[AIMemoryDatabaseInjector] ✅ 检测到AI记忆总结（小写标签）');
+                                return summary;
+                            }
+                        } catch (parseError) {
+                            // 这个注释不是有效的JSON，继续查找下一个
                         }
+                        
+                        searchPos = commentEnd + 3;
+                    }
+                }
+            }
+
+            // 尝试大写标签（向后兼容）
+            startTag = '<AI_MEMORY_SUMMARY>';
+            endTag = '</AI_MEMORY_SUMMARY>';
+            startIndex = message.indexOf(startTag);
+
+            if (startIndex !== -1) {
+                const endIndex = message.indexOf(endTag, startIndex);
+                if (endIndex !== -1) {
+                    const innerContent = message.substring(startIndex + startTag.length, endIndex).trim();
+
+                    // 🔧 修复：查找包含有效JSON的HTML注释
+                    let searchPos = 0;
+                    while (true) {
+                        const commentStart = innerContent.indexOf('<!--', searchPos);
+                        if (commentStart === -1) break;
+                        
+                        const commentEnd = innerContent.indexOf('-->', commentStart);
+                        if (commentEnd === -1) break;
+                        
+                        try {
+                            let jsonContent = innerContent.substring(commentStart + 4, commentEnd).trim();
+                            
+                            // 🔧 修复：如果JSON内容缺少外层大括号，添加它们
+                            if (!jsonContent.startsWith('{') && !jsonContent.startsWith('[')) {
+                                jsonContent = '{' + jsonContent + '}';
+                            }
+                            
+                            const summary = JSON.parse(jsonContent);
+                            if (summary && (summary.type === 'ai_memory' || summary.content)) {
+                                console.log('[AIMemoryDatabaseInjector] ✅ 检测到AI记忆总结（大写标签）');
+                                return summary;
+                            }
+                        } catch (parseError) {
+                            // 这个注释不是有效的JSON，继续查找下一个
+                        }
+                        
+                        searchPos = commentEnd + 3;
                     }
                 }
             }
@@ -1830,43 +1930,48 @@ export class AIMemoryDatabaseInjector {
                 if (memoryEnhancement) {
                     const enhancement = memoryEnhancement.enhancement || {};
                     const semantic = memoryEnhancement.semantic || {};
+                    const deep = memoryEnhancement.deep || {};
+                    const aiDatabase = memoryEnhancement.aiDatabase || {};
 
                     return {
-                        // AI记忆数据库：检查是否有任何记忆增强功能启用
+                        // 🔧 修复：AI记忆数据库注入器启用条件 - 检查深度记忆管理或AI数据库是否启用
                         aiMemoryDatabaseEnabled:
-                            enhancement.deepMemory === true ||
-                            enhancement.intelligentClassifier === true ||
+                            deep.enabled === true ||
+                            aiDatabase.enabled === true ||
                             enhancement.memoryMaintenance === true ||
                             enhancement.contextualRetrieval === true ||
                             enhancement.userProfile === true ||
                             enhancement.knowledgeGraph === true ||
                             enhancement.timeAware === true ||
                             enhancement.stIntegration === true ||
-                            semantic.enabled === true,
+                            semantic?.enabled === true,
 
-                        // AI记忆总结器：跟随总结功能
-                        aiMemorySummarizerEnabled: memoryEnhancement.summary?.aiSummary === true,
+                        // AI记忆总结器：跟随总结功能或AI记忆总结
+                        aiMemorySummarizerEnabled: 
+                            memoryEnhancement.summary?.aiSummary === true ||
+                            memoryEnhancement.summary?.aiMemorySummary === true,
 
                         // 语义搜索：检查向量化记忆检索
-                        semanticSearchEnabled: semantic.enabled === true,
+                        semanticSearchEnabled: semantic?.enabled === true,
 
-                        // 深度记忆管理器
-                        deepMemoryManagerEnabled: enhancement.deepMemory === true,
+                        // 🔧 修复：深度记忆管理器 - 使用deep.enabled
+                        deepMemoryManagerEnabled: deep.enabled === true,
 
-                        // 智能记忆分类器
-                        intelligentMemoryClassifierEnabled: enhancement.intelligentClassifier === true,
+                        // 🔧 修复：智能记忆分类器 - 从classifier读取
+                        intelligentMemoryClassifierEnabled: memoryEnhancement.classifier?.enabled === true,
 
                         // 记忆增强核心：检查是否有任何功能启用
                         memoryEnhancementCoreEnabled:
-                            enhancement.deepMemory === true ||
-                            enhancement.intelligentClassifier === true ||
+                            deep.enabled === true ||
+                            aiDatabase.enabled === true ||
+                            memoryEnhancement.classifier?.enabled === true ||
                             enhancement.memoryMaintenance === true ||
                             enhancement.contextualRetrieval === true ||
                             enhancement.userProfile === true ||
                             enhancement.knowledgeGraph === true ||
                             enhancement.timeAware === true ||
                             enhancement.stIntegration === true ||
-                            semantic.enabled === true
+                            semantic?.enabled === true
                     };
                 }
             } catch (error) {

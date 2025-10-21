@@ -698,6 +698,7 @@ export class KnowledgeGraphManager {
 
         } catch (error) {
             console.error('[KnowledgeGraphManager] ❌ 添加三元组失败:', error);
+            console.error('[KnowledgeGraphManager] 📝 三元组内容:', triple);
             return false;
         }
     }

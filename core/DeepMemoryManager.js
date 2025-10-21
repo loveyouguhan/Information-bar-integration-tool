@@ -298,7 +298,10 @@ export class DeepMemoryManager {
         try {
             console.log('[DeepMemoryManager] 👁️ 添加记忆到感知记忆层...');
 
-            if (!this.settings.enabled) return null;
+            if (!this.settings.enabled) {
+                console.warn('[DeepMemoryManager] ⚠️ 深度记忆管理器未启用，无法添加记忆 (settings.enabled =', this.settings.enabled, ')');
+                return null;
+            }
 
             // 🔧 P1修复：内容过滤 - 排除AI思考过程
             if (!this.shouldStoreMemory(memoryData.content)) {
@@ -350,6 +353,15 @@ export class DeepMemoryManager {
             
             console.log(`[DeepMemoryManager] ✅ 记忆已添加到感知层: ${memory.id}`);
             
+            // 🔧 调试：验证记忆确实被保存
+            console.log('[DeepMemoryManager] 📊 当前记忆层统计:', {
+                sensory: this.memoryLayers.sensory.size,
+                shortTerm: this.memoryLayers.shortTerm.size,
+                longTerm: this.memoryLayers.longTerm.size,
+                deepArchive: this.memoryLayers.deepArchive.size,
+                total: this.stats.totalMemories
+            });
+            
             // 检查是否需要立即迁移到短期记忆
             if (memory.importance >= this.settings.sensoryToShortTermThreshold) {
                 await this.migrateMemory(memory.id, 'sensory', 'shortTerm');
@@ -389,6 +401,13 @@ export class DeepMemoryManager {
             return false;
         }
 
+        // 🔧 修复：如果消息包含AI记忆总结标签，不存储整个消息内容
+        // AI记忆总结会由AIMemoryDatabaseInjector单独提取和处理
+        if (content.includes('<ai_memory_summary>') || content.includes('<AI_MEMORY_SUMMARY>')) {
+            console.log('[DeepMemoryManager] 🚫 消息包含AI记忆总结标签，由AIMemoryDatabase处理，跳过DeepMemory存储');
+            return false;
+        }
+
         // 过滤模式列表
         const filterPatterns = [
             // AI思考过程标记
@@ -396,6 +415,15 @@ export class DeepMemoryManager {
             /^- 当前处于何种情境/,
             /^时间？.*地点？.*社会关系？/,
             /^<interactive_input>/i,
+
+            // 🔧 新增：过滤整个<thinking>...</thinking>块
+            /<thinking>[\s\S]*<\/thinking>/i,
+            
+            // 🔧 新增：过滤剧情创作指导内容
+            /为保证剧情推进.*如何安排剧情/,
+            /创作前检查/i,
+            /满足方式：/,
+            /- 传递了何种核心需求/,
 
             // 系统提示和元指令
             /^System:/i,

@@ -1992,9 +1992,26 @@ export class VectorizedMemoryRetrieval {
             const queryLower = query.toLowerCase();
             const queryWords = queryLower.split(/\s+/).filter(word => word.length > 1);
 
+            // 🔧 调试：检查deepMemoryManager状态
+            console.log('[VectorizedMemoryRetrieval] 🔍 deepMemoryManager状态:', {
+                exists: !!this.deepMemoryManager,
+                initialized: this.deepMemoryManager?.initialized,
+                layersExist: !!this.deepMemoryManager?.memoryLayers
+            });
+
             // 搜索深度记忆管理器中的记忆
             if (this.deepMemoryManager) {
                 const memoryLayers = this.deepMemoryManager.memoryLayers;
+                
+                // 🔧 调试：检查各层记忆数量
+                if (memoryLayers) {
+                    console.log('[VectorizedMemoryRetrieval] 📊 记忆层数据统计:', {
+                        sensory: memoryLayers.sensory?.size || 0,
+                        shortTerm: memoryLayers.shortTerm?.size || 0,
+                        longTerm: memoryLayers.longTerm?.size || 0,
+                        deepArchive: memoryLayers.deepArchive?.size || 0
+                    });
+                }
 
                 // 搜索各个记忆层
                 for (const [layerName, layer] of Object.entries(memoryLayers)) {
