@@ -3024,6 +3024,12 @@ ${'='.repeat(80)}
 
             const panelName = panelContainer.getAttribute('data-content');
 
+            // 🔧 修复：特殊面板不需要更新计数（它们不是配置面板）
+            const specialPanels = ['memoryEnhancement', 'summary', 'npc-management', 'theme', 'frontend-display', 'advanced', 'promptSettings', 'customAPI'];
+            if (specialPanels.includes(panelName)) {
+                return;
+            }
+
             // 根据面板类型更新对应的计数
             if (panelName === 'basic') {
                 this.updateBasicPanelCount();
@@ -3053,7 +3059,8 @@ ${'='.repeat(80)}
         try {
             const countElement = this.modal.querySelector(`#${panelId}-panel-count`);
             if (!countElement) {
-                console.warn(`[InfoBarSettings] ⚠️ 未找到自定义面板计数元素: ${panelId}-panel-count`);
+                // 🔧 修复：某些面板不需要计数元素，降低日志级别避免误导
+                console.debug(`[InfoBarSettings] 未找到面板计数元素（可能是特殊面板）: ${panelId}-panel-count`);
                 return;
             }
 
