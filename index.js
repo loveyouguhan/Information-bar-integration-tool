@@ -56,6 +56,7 @@ import { SillyTavernIntegration } from './core/SillyTavernIntegration.js';
 import { FrontendDisplayManager } from './ui/FrontendDisplayManager.js';
 import { RegexScriptManager } from './core/RegexScriptManager.js';
 import { RegexScriptPanel } from './ui/RegexScriptPanel.js';
+import { StoryPlanningAssistant } from './core/StoryPlanningAssistant.js';
 
 // 🔧 修复：初始化控制台门禁，默认禁用日志收集，避免在配置加载前收集日志
 (function bootstrapInfobarConsoleGate() {
@@ -148,6 +149,7 @@ class InformationBarIntegrationTool {
         this.variableSystemPrompt = null;
         this.contentFilterManager = null;
         this.messageFilterHook = null;
+        this.storyPlanningAssistant = null;
 
         // UI组件
         this.infoBarSettings = null;
@@ -545,6 +547,18 @@ class InformationBarIntegrationTool {
         });
         await this.sillyTavernIntegration.init();
 
+        // 📖 新增：初始化剧情规划助手
+        this.storyPlanningAssistant = new StoryPlanningAssistant({
+            unifiedDataCore: this.dataCore,
+            eventSystem: this.eventSystem,
+            configManager: this.configManager,
+            aiMemoryDatabase: this.aiMemoryDatabase,
+            smartPromptSystem: this.smartPromptSystem,
+            contextualRetrieval: this.contextualRetrieval,
+            deepMemoryManager: this.deepMemoryManager
+        });
+        await this.storyPlanningAssistant.init();
+
         // 🧠 新增：初始化AI记忆数据库注入器
         this.aiMemoryDatabaseInjector = new AIMemoryDatabaseInjector({
             unifiedDataCore: this.dataCore,
@@ -610,7 +624,8 @@ class InformationBarIntegrationTool {
             aiTemplateAssistant: this.aiTemplateAssistant,
             templateManager: this.templateManager,
             npcDatabaseManager: this.npcDatabaseManager,
-            npcManagementPanel: this.npcManagementPanel
+            npcManagementPanel: this.npcManagementPanel,
+            storyPlanningAssistant: this.storyPlanningAssistant // 📖 剧情规划助手
         };
 
         // 🔧 修复：更新全局对象以使用正确初始化的模块
@@ -937,6 +952,7 @@ class InformationBarIntegrationTool {
                 regexScriptPanel: this.regexScriptPanel, // 🆕 新增：正则表达式脚本面板
                 contentFilterManager: this.contentFilterManager, // 🔧 新增：内容过滤管理器
                 messageFilterHook: this.messageFilterHook, // 🔧 新增：消息过滤Hook
+                storyPlanningAssistant: this.storyPlanningAssistant, // 📖 新增：剧情规划助手
                 // 🔧 修复：添加自定义API任务队列模块
                 customAPITaskQueue: this.infoBarSettings?.customAPITaskQueue
             };
