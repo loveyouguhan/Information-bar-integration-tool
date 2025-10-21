@@ -1725,6 +1725,10 @@ ${'='.repeat(80)}
                 if (e.target.id === 'npc-add-new-btn') {
                     this.showAddNPCDialog();
                 }
+                // 🆕 编辑NPC模板按钮
+                if (e.target.id === 'npc-edit-template-btn') {
+                    this.showEditNPCTemplateDialog();
+                }
                 // 🆕 AI模式立即更新按钮
                 if (e.target.id === 'npc-ai-update-now-btn') {
                     this.updateNPCWithAI();
@@ -12198,6 +12202,35 @@ ${'='.repeat(80)}
             <div class="npc-ai-mode-settings" style="display: none;">
             <div class="settings-group">
                     <h4>AI模式设置</h4>
+                    
+                    <!-- 🆕 NPC信息模板 -->
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <label style="margin: 0;">NPC信息模板</label>
+                            <button type="button" id="npc-edit-template-btn" class="btn btn-small" style="
+                                padding: 6px 12px;
+                                font-size: 12px;
+                                background: var(--theme-accent-color, #4CAF50);
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                transition: all 0.2s;
+                            " onmouseover="this.style.background='#45a049'" onmouseout="this.style.background='var(--theme-accent-color, #4CAF50)'">
+                                📝 编辑模板
+                            </button>
+                        </div>
+                        <small>定义NPC信息的标准字段，AI将根据此模板生成和更新NPC数据</small>
+                    </div>
+                    
+                    <!-- 🆕 路人角色过滤 -->
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="npc-ai-filter-minor-roles" checked>
+                            <label for="npc-ai-filter-minor-roles" class="checkbox-label">过滤路人角色</label>
+                        </div>
+                        <small>启用后，AI将自动过滤无关紧要的路人角色（如：清洁工、甲乙丙、路人等）</small>
+                    </div>
                     
                     <div class="form-group">
                         <div class="checkbox-wrapper">
@@ -36729,6 +36762,9 @@ ${dataExamples}
                 panelSettings.forEach(el => el.style.display = 'none');
                 aiSettings.forEach(el => el.style.display = 'block');
                 aiOnlyElements.forEach(el => el.style.display = 'inline-block');
+                
+                // 🆕 恢复NPC变更日志显示
+                this.restoreNPCChangeLogs();
             } else {
                 // 显示面板模式设置
                 panelSettings.forEach(el => el.style.display = 'block');
@@ -36798,21 +36834,36 @@ ${dataExamples}
             // 读取NPC操作提示词
             const npcPrompt = await this.loadNPCPrompt();
             
-            // 构建完整提示词
+            // 🆕 获取NPC模板
+            const npcTemplate = this.loadNPCTemplate();
+            const templateInfo = this.generateTemplateInfo(npcTemplate);
+            
+            // 🆕 检查是否启用路人过滤
+            const filterMinorRoles = this.modal.querySelector('#npc-ai-filter-minor-roles')?.checked !== false;
+            const filterInfo = filterMinorRoles ? this.generateFilterRules() : '';
+            
+            // 🔧 优化：构建适合角色档案格式的提示词
             const fullPrompt = `${npcPrompt}
 
-## 当前NPC列表
+## 📋 当前NPC角色档案
 
 ${npcTable}
 
-## 最近对话内容
+${templateInfo}
+
+${filterInfo}
+
+## 💬 最近对话内容
 
 ${messageText}
 
-## 任务要求
+## 🎯 任务要求
 
-请根据以上对话内容和当前NPC列表，分析哪些NPC的信息需要更新。
-对于需要更新的NPC，使用以下格式输出操作指令：
+请仔细阅读以上**NPC角色档案**、**NPC信息模板**和**对话内容**，分析哪些NPC的信息需要更新或添加新的NPC。
+
+### 📌 输出格式说明
+
+对于需要更新或添加的NPC，请使用以下格式输出操作指令：
 
 <npc>
 <!--
@@ -36821,12 +36872,30 @@ update （"NPC姓名，字段名"，"新值"）；//变化理由
 -->
 </npc>
 
-注意：
-1. 只输出确实需要更新的NPC数据
-2. 字段名必须与当前NPC列表中的字段名完全一致
-3. 如果NPC不在列表中，使用add添加
-4. 如果NPC已存在，使用update更新
-5. 每个操作必须有合理的理由说明
+### ✅ 操作规则
+
+1. **新增NPC**：如果NPC不在当前角色档案列表中，使用 \`add\` 添加
+2. **更新NPC**：如果NPC已存在于档案中，使用 \`update\` 更新其字段信息
+3. **字段名一致性**：字段名必须与当前NPC列表中的字段名**完全一致**
+4. **合理性说明**：每个操作必须提供**合理的理由说明**
+5. **精准更新**：只输出**确实需要更新**的NPC数据，避免不必要的修改
+
+### 📖 角色档案说明
+
+- 每个NPC都以【角色档案 X：姓名】的形式展示
+- ID: NPC的唯一标识符（请勿修改）
+- 出现次数、最后出现：统计信息（系统自动维护）
+- 角色信息：NPC的各个字段数据（可更新或添加）
+
+### 💡 示例
+
+正确示例：
+- \`add ("张三，对象类型"，"朋友"）；//对话中首次提到张三，关系为朋友\`
+- \`update ("李四，当前状态"，"愤怒"）；//对话中李四表现出愤怒情绪\`
+
+错误示例（请避免）：
+- \`add ("张三，type"，"朋友"）；//❌ 字段名应为"对象类型"而不是英文\`
+- \`update ("李四，mood"，"happy"）；//❌ 值应为中文"开心"而不是英文\`
 `;
             
             console.log('[InfoBarSettings] 📡 发送NPC更新请求到自定义API...');
@@ -36859,6 +36928,9 @@ update （"NPC姓名，字段名"，"新值"）；//变化理由
                                 // 刷新NPC列表
                                 await this.refreshNPCList();
                                 
+                                // 🆕 AI模式下：触发世界书同步
+                                await this.handleNPCWorldBookSyncAfterAI();
+                                
                                 this.showNotification('NPC数据更新完成', 'success');
                             } else {
                                 throw new Error(result.error || 'AI响应失败');
@@ -36889,6 +36961,9 @@ update （"NPC姓名，字段名"，"新值"）；//变化理由
                     // 刷新NPC列表
                     await this.refreshNPCList();
                     
+                    // 🆕 AI模式下：触发世界书同步
+                    await this.handleNPCWorldBookSyncAfterAI();
+                    
                     this.showNotification('NPC数据更新完成', 'success');
                 } else {
                     throw new Error(result.error || 'AI响应失败');
@@ -36902,7 +36977,7 @@ update （"NPC姓名，字段名"，"新值"）；//变化理由
     }
 
     /**
-     * 🆕 生成NPC列表表格
+     * 🆕 生成NPC列表（角色信息档案格式）
      */
     async generateNPCListTable() {
         try {
@@ -36917,34 +36992,51 @@ update （"NPC姓名，字段名"，"新值"）；//变化理由
                 return '当前无NPC数据';
             }
             
-            // 收集所有字段名
-            const allFields = new Set();
-            npcs.forEach(npc => {
+            console.log(`[InfoBarSettings] 📝 生成 ${npcs.length} 个NPC的角色信息档案...`);
+            
+            // 🔧 优化：将每个NPC打包成角色信息档案，而不是表格格式
+            const profiles = npcs.map((npc, index) => {
+                // 收集NPC的有效字段（过滤技术字段）
+                const validFields = {};
                 if (npc.fields) {
-                    Object.keys(npc.fields).forEach(key => {
+                    Object.entries(npc.fields).forEach(([key, value]) => {
                         if (!this.isTechnicalField(key) && !key.startsWith('_')) {
-                            allFields.add(key);
+                            validFields[key] = value;
                         }
                     });
                 }
+                
+                // 构建角色信息档案
+                let profile = `【角色档案 ${index + 1}：${npc.name}】\n`;
+                profile += `├ ID: ${npc.id}\n`;
+                
+                // 添加统计信息
+                if (npc.appearCount) {
+                    profile += `├ 出现次数: ${npc.appearCount}\n`;
+                }
+                if (npc.lastSeen) {
+                    const lastSeenDate = new Date(npc.lastSeen).toLocaleString('zh-CN');
+                    profile += `├ 最后出现: ${lastSeenDate}\n`;
+                }
+                
+                // 添加字段信息
+                const fieldEntries = Object.entries(validFields);
+                if (fieldEntries.length > 0) {
+                    profile += `└ 角色信息:\n`;
+                    fieldEntries.forEach(([key, value], idx) => {
+                        const prefix = idx === fieldEntries.length - 1 ? '  └' : '  ├';
+                        profile += `${prefix} ${key}: ${value}\n`;
+                    });
+                }
+                
+                return profile;
             });
             
-            const fieldList = Array.from(allFields);
+            // 将所有角色档案组合起来
+            const result = profiles.join('\n');
+            console.log(`[InfoBarSettings] ✅ 角色档案生成完成，总长度: ${result.length} 字符`);
             
-            // 生成表格
-            let table = '| NPC姓名 | ' + fieldList.join(' | ') + ' |\n';
-            table += '|' + '-'.repeat(10) + '|' + fieldList.map(() => '-'.repeat(10)).join('|') + '|\n';
-            
-            npcs.forEach(npc => {
-                const row = [npc.name];
-                fieldList.forEach(field => {
-                    const value = npc.fields?.[field] || '-';
-                    row.push(String(value));
-                });
-                table += '| ' + row.join(' | ') + ' |\n';
-            });
-            
-            return table;
+            return result;
             
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 生成NPC列表表格失败:', error);
@@ -37319,6 +37411,10 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
         try {
             console.log('[InfoBarSettings] ➕ 显示新增NPC对话框');
             
+            // 🆕 加载模板
+            const npcTemplate = this.loadNPCTemplate();
+            const templateFields = this.generateTemplateFieldsHTML(npcTemplate);
+            
             // 创建对话框HTML
             const dialogHTML = `
                 <div class="regex-script-overlay" id="add-npc-overlay" style="z-index: 20001;">
@@ -37336,55 +37432,9 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
                                     <input type="text" class="regex-form-input" name="npcName" placeholder="输入NPC姓名" required>
                                 </div>
                                 
-                                <!-- 动态字段容器 -->
+                                <!-- 动态字段容器（基于模板生成） -->
                                 <div id="npc-dynamic-fields">
-                                    <div class="npc-field-item regex-form-group" data-field-id="1">
-                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                            <label class="regex-form-label" style="flex: 1; margin: 0;">NPC类型</label>
-                                            <button type="button" class="npc-field-delete-btn" style="
-                                                background: #f44336;
-                                                color: white;
-                                                border: none;
-                                                border-radius: 4px;
-                                                padding: 4px 8px;
-                                                font-size: 12px;
-                                                cursor: pointer;
-                                            " title="删除此字段">🗑️</button>
-                                        </div>
-                                        <input type="text" class="regex-form-input npc-field-value" data-field-name="类型" placeholder="例如：朋友、敌人、路人等">
-                                    </div>
-                                    
-                                    <div class="npc-field-item regex-form-group" data-field-id="2">
-                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                            <label class="regex-form-label" style="flex: 1; margin: 0;">性别</label>
-                                            <button type="button" class="npc-field-delete-btn" style="
-                                                background: #f44336;
-                                                color: white;
-                                                border: none;
-                                                border-radius: 4px;
-                                                padding: 4px 8px;
-                                                font-size: 12px;
-                                                cursor: pointer;
-                                            " title="删除此字段">🗑️</button>
-                                        </div>
-                                        <input type="text" class="regex-form-input npc-field-value" data-field-name="性别" placeholder="男/女/未知">
-                                    </div>
-                                    
-                                    <div class="npc-field-item regex-form-group" data-field-id="3">
-                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                            <label class="regex-form-label" style="flex: 1; margin: 0;">年龄</label>
-                                            <button type="button" class="npc-field-delete-btn" style="
-                                                background: #f44336;
-                                                color: white;
-                                                border: none;
-                                                border-radius: 4px;
-                                                padding: 4px 8px;
-                                                font-size: 12px;
-                                                cursor: pointer;
-                                            " title="删除此字段">🗑️</button>
-                                        </div>
-                                        <input type="text" class="regex-form-input npc-field-value" data-field-name="年龄" placeholder="例如：25、约30岁等">
-                                    </div>
+                                    ${templateFields}
                                 </div>
                                 
                                 <!-- 添加新字段按钮 -->
@@ -37433,7 +37483,7 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
             });
             
             // 添加新字段按钮
-            let fieldCounter = 3; // 已有3个默认字段
+            let fieldCounter = npcTemplate.fields.length; // 基于模板字段数量
             overlay.querySelector('#npc-add-field-btn').addEventListener('click', () => {
                 fieldCounter++;
                 const fieldsContainer = overlay.querySelector('#npc-dynamic-fields');
@@ -37545,6 +37595,401 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
     }
 
     /**
+     * 🆕 显示编辑NPC模板对话框
+     */
+    async showEditNPCTemplateDialog() {
+        try {
+            console.log('[InfoBarSettings] 📝 显示编辑NPC模板对话框');
+            
+            // 加载现有模板
+            const template = this.loadNPCTemplate();
+            
+            // 创建对话框HTML
+            const dialogHTML = `
+                <div class="regex-script-overlay" id="edit-npc-template-overlay" style="z-index: 20001;">
+                    <div class="regex-script-modal" style="width: 700px; max-width: 95vw; height: auto; max-height: 90vh;">
+                        <div class="regex-script-header">
+                            <h3>📝 编辑NPC信息模板</h3>
+                            <button class="regex-btn regex-btn-small" data-action="close-edit-template">关闭</button>
+                        </div>
+                        
+                        <div class="regex-script-body">
+                            <div style="margin-bottom: 16px; padding: 12px; background: var(--theme-bg-secondary, #2a2a2a); border-radius: 6px;">
+                                <p style="margin: 0; color: var(--theme-text-secondary, #888); font-size: 13px;">
+                                    💡 <strong>模板说明：</strong>定义NPC信息的标准字段结构，AI将根据此模板生成和更新NPC数据。<br>
+                                    建议添加常用字段如：年龄、性别、职业、性格、外貌、关系等。
+                                </p>
+                            </div>
+                            
+                            <form id="edit-npc-template-form">
+                                <!-- 动态字段容器 -->
+                                <div id="npc-template-fields">
+                                    ${this.renderTemplateFields(template.fields)}
+                                </div>
+                                
+                                <!-- 添加新字段按钮 -->
+                                <div style="margin: 16px 0;">
+                                    <button type="button" id="npc-template-add-field-btn" class="regex-btn" style="width: 100%;">
+                                        ➕ 添加新字段
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <div class="regex-script-footer" style="display: flex; gap: 10px; justify-content: space-between; padding: 16px 20px; border-top: 1px solid var(--theme-border-color, #333);">
+                            <button type="button" class="regex-btn" data-action="reset-template" style="background: #ff9800;">
+                                🔄 重置为默认
+                            </button>
+                            <div style="display: flex; gap: 10px;">
+                                <button type="button" class="regex-btn" data-action="cancel-edit-template">取消</button>
+                                <button type="button" class="regex-btn regex-btn-primary" data-action="confirm-edit-template">
+                                    ✅ 保存模板
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // 添加到页面
+            const container = document.createElement('div');
+            container.innerHTML = dialogHTML;
+            document.body.appendChild(container.firstElementChild);
+            
+            const overlay = document.getElementById('edit-npc-template-overlay');
+            const form = document.getElementById('edit-npc-template-form');
+            
+            // 关闭对话框
+            const closeDialog = () => {
+                if (overlay && overlay.parentNode) {
+                    overlay.parentNode.removeChild(overlay);
+                }
+            };
+            
+            // 绑定事件
+            overlay.querySelector('[data-action="close-edit-template"]').addEventListener('click', closeDialog);
+            overlay.querySelector('[data-action="cancel-edit-template"]').addEventListener('click', closeDialog);
+            
+            // 点击遮罩层关闭
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    closeDialog();
+                }
+            });
+            
+            // 添加新字段按钮
+            let fieldCounter = template.fields.length;
+            overlay.querySelector('#npc-template-add-field-btn').addEventListener('click', () => {
+                fieldCounter++;
+                const fieldsContainer = overlay.querySelector('#npc-template-fields');
+                
+                const newField = document.createElement('div');
+                newField.className = 'npc-template-field-item regex-form-group';
+                newField.dataset.fieldId = fieldCounter;
+                newField.innerHTML = `
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <div style="flex: 1;">
+                            <label class="regex-form-label" style="font-size: 12px; color: var(--theme-text-secondary, #888);">字段名称</label>
+                            <input type="text" class="regex-form-input npc-template-field-name" placeholder="例如：职业、爱好、背景等">
+                        </div>
+                        <div style="flex: 2;">
+                            <label class="regex-form-label" style="font-size: 12px; color: var(--theme-text-secondary, #888);">示例值（可选）</label>
+                            <input type="text" class="regex-form-input npc-template-field-example" placeholder="例如：医生、阅读、神秘过去等">
+                        </div>
+                        <button type="button" class="npc-template-field-delete-btn" style="
+                            background: #f44336;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            padding: 8px 12px;
+                            font-size: 12px;
+                            cursor: pointer;
+                            margin-top: 24px;
+                        " title="删除此字段">🗑️</button>
+                    </div>
+                `;
+                
+                fieldsContainer.appendChild(newField);
+                
+                // 绑定删除按钮
+                newField.querySelector('.npc-template-field-delete-btn').addEventListener('click', () => {
+                    newField.remove();
+                });
+                
+                console.log('[InfoBarSettings] ➕ 添加新模板字段:', fieldCounter);
+            });
+            
+            // 绑定删除按钮
+            overlay.querySelectorAll('.npc-template-field-delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const fieldItem = e.target.closest('.npc-template-field-item');
+                    if (fieldItem) {
+                        fieldItem.remove();
+                        console.log('[InfoBarSettings] 🗑️ 删除模板字段');
+                    }
+                });
+            });
+            
+            // 重置为默认模板
+            overlay.querySelector('[data-action="reset-template"]').addEventListener('click', () => {
+                if (confirm('确定要重置为默认模板吗？这将清除当前所有自定义字段。')) {
+                    const fieldsContainer = overlay.querySelector('#npc-template-fields');
+                    const defaultTemplate = this.getDefaultNPCTemplate();
+                    fieldsContainer.innerHTML = this.renderTemplateFields(defaultTemplate.fields);
+                    
+                    // 重新绑定删除按钮
+                    fieldsContainer.querySelectorAll('.npc-template-field-delete-btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            const fieldItem = e.target.closest('.npc-template-field-item');
+                            if (fieldItem) {
+                                fieldItem.remove();
+                            }
+                        });
+                    });
+                    
+                    this.showNotification('已重置为默认模板', 'success');
+                }
+            });
+            
+            // 确认保存模板
+            overlay.querySelector('[data-action="confirm-edit-template"]').addEventListener('click', () => {
+                try {
+                    // 收集所有字段
+                    const fields = [];
+                    const fieldItems = overlay.querySelectorAll('.npc-template-field-item');
+                    
+                    fieldItems.forEach(item => {
+                        const nameInput = item.querySelector('.npc-template-field-name');
+                        const exampleInput = item.querySelector('.npc-template-field-example');
+                        
+                        const fieldName = nameInput.value.trim();
+                        const fieldExample = exampleInput.value.trim();
+                        
+                        if (fieldName) {
+                            fields.push({
+                                name: fieldName,
+                                example: fieldExample || ''
+                            });
+                        }
+                    });
+                    
+                    if (fields.length === 0) {
+                        alert('至少需要添加一个字段');
+                        return;
+                    }
+                    
+                    // 保存模板
+                    this.saveNPCTemplate({ fields });
+                    
+                    console.log('[InfoBarSettings] ✅ NPC模板已保存:', fields);
+                    this.showNotification('NPC模板已保存', 'success');
+                    
+                    closeDialog();
+                    
+                } catch (error) {
+                    console.error('[InfoBarSettings] ❌ 保存NPC模板失败:', error);
+                    alert(`保存NPC模板失败: ${error.message}`);
+                }
+            });
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示编辑NPC模板对话框失败:', error);
+            alert(`显示编辑NPC模板对话框失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 🆕 渲染模板字段
+     */
+    renderTemplateFields(fields) {
+        return fields.map((field, index) => `
+            <div class="npc-template-field-item regex-form-group" data-field-id="${index}">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <div style="flex: 1;">
+                        <label class="regex-form-label" style="font-size: 12px; color: var(--theme-text-secondary, #888);">字段名称</label>
+                        <input type="text" class="regex-form-input npc-template-field-name" value="${field.name}" placeholder="例如：职业、爱好、背景等">
+                    </div>
+                    <div style="flex: 2;">
+                        <label class="regex-form-label" style="font-size: 12px; color: var(--theme-text-secondary, #888);">示例值（可选）</label>
+                        <input type="text" class="regex-form-input npc-template-field-example" value="${field.example || ''}" placeholder="例如：医生、阅读、神秘过去等">
+                    </div>
+                    <button type="button" class="npc-template-field-delete-btn" style="
+                        background: #f44336;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        padding: 8px 12px;
+                        font-size: 12px;
+                        cursor: pointer;
+                        margin-top: 24px;
+                    " title="删除此字段">🗑️</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    /**
+     * 🆕 获取默认NPC模板
+     */
+    getDefaultNPCTemplate() {
+        return {
+            fields: [
+                { name: '类型', example: '朋友/敌人/盟友等' },
+                { name: '性别', example: '男/女/未知' },
+                { name: '年龄', example: '25岁/约30岁等' },
+                { name: '职业', example: '医生/教师/商人等' },
+                { name: '性格', example: '开朗/冷静/热情等' },
+                { name: '外貌', example: '高挑/英俊/美丽等' }
+            ]
+        };
+    }
+
+    /**
+     * 🆕 加载NPC模板
+     */
+    loadNPCTemplate() {
+        try {
+            const saved = localStorage.getItem('infobar_npc_template');
+            if (saved) {
+                return JSON.parse(saved);
+            }
+            return this.getDefaultNPCTemplate();
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载NPC模板失败:', error);
+            return this.getDefaultNPCTemplate();
+        }
+    }
+
+    /**
+     * 🆕 保存NPC模板
+     */
+    saveNPCTemplate(template) {
+        try {
+            localStorage.setItem('infobar_npc_template', JSON.stringify(template));
+            console.log('[InfoBarSettings] ✅ NPC模板已保存');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 保存NPC模板失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🆕 生成模板字段HTML（用于新增NPC对话框）
+     */
+    generateTemplateFieldsHTML(template) {
+        if (!template || !template.fields || template.fields.length === 0) {
+            // 如果没有模板，返回默认字段
+            return `
+                <div class="npc-field-item regex-form-group" data-field-id="1">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <label class="regex-form-label" style="flex: 1; margin: 0;">NPC类型</label>
+                        <button type="button" class="npc-field-delete-btn" style="
+                            background: #f44336;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            padding: 4px 8px;
+                            font-size: 12px;
+                            cursor: pointer;
+                        " title="删除此字段">🗑️</button>
+                    </div>
+                    <input type="text" class="regex-form-input npc-field-value" data-field-name="类型" placeholder="例如：朋友、敌人、路人等">
+                </div>
+            `;
+        }
+        
+        return template.fields.map((field, index) => `
+            <div class="npc-field-item regex-form-group" data-field-id="${index + 1}">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <label class="regex-form-label" style="flex: 1; margin: 0;">${field.name}</label>
+                    <button type="button" class="npc-field-delete-btn" style="
+                        background: #f44336;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        padding: 4px 8px;
+                        font-size: 12px;
+                        cursor: pointer;
+                    " title="删除此字段">🗑️</button>
+                </div>
+                <input type="text" class="regex-form-input npc-field-value" data-field-name="${field.name}" placeholder="${field.example || ''}">
+            </div>
+        `).join('');
+    }
+
+    /**
+     * 🆕 生成模板信息（用于AI提示词）
+     */
+    generateTemplateInfo(template) {
+        if (!template || !template.fields || template.fields.length === 0) {
+            return '';
+        }
+        
+        let info = `## 📝 NPC信息模板\n\n`;
+        info += `请根据以下模板字段生成或更新NPC信息：\n\n`;
+        
+        template.fields.forEach((field, index) => {
+            const example = field.example ? ` (示例: ${field.example})` : '';
+            info += `${index + 1}. **${field.name}**${example}\n`;
+        });
+        
+        info += `\n⚠️ **重要提示**：\n`;
+        info += `- 新增NPC时，请尽量按照模板字段填写完整信息\n`;
+        info += `- 字段名必须与模板中的字段名**完全一致**\n`;
+        info += `- 如果对话中未明确提到某个字段，可以留空或使用"未知"\n`;
+        
+        return info;
+    }
+
+    /**
+     * 🆕 生成过滤规则（用于AI提示词）
+     */
+    generateFilterRules() {
+        return `## 🚫 路人角色过滤规则
+
+**请严格遵守以下过滤规则，避免添加无关紧要的路人角色：**
+
+### ❌ 禁止添加的角色类型
+
+1. **泛指角色**：甲、乙、丙、丁、路人A/B/C、某人、众人等
+2. **职业泛称**：清洁工、服务员、售货员、保安、司机等（除非有具体姓名或重要剧情关联）
+3. **群体角色**：人群、观众、路人、群众、围观者等
+4. **背景角色**：只被简单提及一次，没有对话或互动的角色
+5. **功能性角色**：仅用于推动剧情，没有独立人格特征的角色
+
+### ✅ 可以添加的角色标准
+
+**只有满足以下**至少一个**条件的角色才应该被添加：**
+
+1. **有明确姓名**：角色有具体的姓名（非"张三"、"小李"等常见假名）
+2. **重复出现**：在对话中多次出现或提及（至少2次以上）
+3. **有对话互动**：与主要角色有实质性的对话交流
+4. **重要关系**：与主角或其他重要角色有明确的关系（亲人、朋友、敌人等）
+5. **剧情关键**：对剧情发展有重要影响
+6. **独特特征**：有明确的性格、外貌或背景描述
+
+### 💡 判断示例
+
+**❌ 不应添加：**
+- "一个清洁工经过" → 背景角色，无重要性
+- "路人甲对路人乙说" → 泛指角色
+- "服务员端上咖啡" → 功能性角色，无个性
+- "门卫检查了证件" → 职业泛称，无具体特征
+
+**✅ 应该添加：**
+- "张明（咖啡店老板）热情地招呼" → 有姓名+职业+性格特征
+- "李医生再次叮嘱要按时吃药" → 有称呼+重复出现+有对话
+- "艾米莉是主角的青梅竹马" → 有姓名+重要关系
+
+### 🎯 执行要求
+
+- **严格审查**：在添加任何NPC前，必须检查是否符合"可以添加的角色标准"
+- **宁缺毋滥**：如果不确定，选择不添加
+- **优先重要性**：优先添加对剧情和角色关系重要的NPC
+`;
+    }
+
+    /**
      * 处理立即同步NPC数据
      */
     async handleNPCSyncNow() {
@@ -37582,6 +38027,34 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 手动同步NPC到世界书失败:', error);
             this.showNotification('同步到世界书失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 AI模式下：在解析完NPC操作后触发世界书同步
+     */
+    async handleNPCWorldBookSyncAfterAI() {
+        try {
+            // 检查世界书同步是否启用
+            const syncCheckbox = this.modal.querySelector('#npc-worldbook-sync-enabled');
+            if (!syncCheckbox || !syncCheckbox.checked) {
+                console.log('[InfoBarSettings] ℹ️ 世界书同步未启用，跳过');
+                return;
+            }
+
+            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
+            if (!npcPanel) {
+                console.warn('[InfoBarSettings] ⚠️ NPC管理模块未找到');
+                return;
+            }
+
+            console.log('[InfoBarSettings] 🌍 AI模式：NPC数据已存储，触发世界书同步...');
+            await npcPanel.syncToWorldBook();
+            console.log('[InfoBarSettings] ✅ AI模式：世界书同步完成');
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ AI模式世界书同步失败:', error);
+            // 不显示错误通知，避免干扰用户
         }
     }
 
