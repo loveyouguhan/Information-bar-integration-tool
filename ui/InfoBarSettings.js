@@ -6979,6 +6979,25 @@ ${'='.repeat(80)}
                                 </div>
                             </div>
                         </div>
+
+                        <!-- 📖 剧情规划助手状态卡片 -->
+                        <div class="module-status-card" data-module="storyPlanning">
+                            <div class="module-header">
+                                <span class="module-icon">📖</span>
+                                <span class="module-name">剧情规划助手</span>
+                                <span class="module-status" id="story-planning-status">●</span>
+                            </div>
+                            <div class="module-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">规划次数:</span>
+                                    <span class="stat-value" id="story-planning-count">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">建议数:</span>
+                                    <span class="stat-value" id="story-planning-suggestions">-</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -7114,6 +7133,89 @@ ${'='.repeat(80)}
                             <span class="input-unit" id="memory-ai-db-min-importance-value">50%</span>
                         </div>
                         <div class="setting-hint">只索引重要性高于此值的记忆</div>
+                    </div>
+                </div>
+
+                <!-- 📖 剧情规划助手设置 -->
+                <div class="setting-row story-planning-section">
+                    <h5 style="color: #E91E63; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">📖 剧情规划助手</h5>
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-story-planning-enabled" />
+                            <span class="checkbox-text">启用剧情规划助手</span>
+                        </label>
+                        <div class="setting-hint">基于AI记忆数据库的智能剧情规划和建议系统 <span style="color: #FF9800;">⚠️ 需要启用AI记忆数据库</span></div>
+                    </div>
+                </div>
+
+                <div class="setting-row story-planning-options" id="memory-story-planning-options" style="display: none; margin-left: 20px; border-left: 2px solid #E91E63; padding-left: 15px;">
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-sp-auto-activate" checked />
+                            <span class="checkbox-text">自动激活规划</span>
+                        </label>
+                        <div class="setting-hint">在用户发送消息前自动分析并生成剧情规划建议</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-sp-semantic-analysis" checked />
+                            <span class="checkbox-text">启用语义分析</span>
+                        </label>
+                        <div class="setting-hint">深度分析消息内容的语义和情感</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-sp-timeline-aware" checked />
+                            <span class="checkbox-text">启用时间线感知</span>
+                        </label>
+                        <div class="setting-hint">考虑事件的时间顺序和发展趋势</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="memory-sp-plot-continuity" checked />
+                            <span class="checkbox-text">启用剧情连续性检查</span>
+                        </label>
+                        <div class="setting-hint">自动检测剧情不连续或矛盾之处</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-sp-detail-level">建议详细程度</label>
+                        <select id="memory-sp-detail-level" class="setting-select">
+                            <option value="brief">简要</option>
+                            <option value="detailed" selected>详细</option>
+                            <option value="comprehensive">全面</option>
+                        </select>
+                        <div class="setting-hint">控制剧情规划建议的详细程度</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-sp-max-keywords">最大关键词数量</label>
+                        <div class="input-group">
+                            <input type="range" id="memory-sp-max-keywords" min="5" max="20" step="1" value="10" />
+                            <span class="input-unit" id="memory-sp-max-keywords-value">10</span>
+                        </div>
+                        <div class="setting-hint">从消息中提取的最大关键词数量</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-sp-max-memories">最大记忆检索数</label>
+                        <div class="input-group">
+                            <input type="range" id="memory-sp-max-memories" min="5" max="30" step="5" value="15" />
+                            <span class="input-unit" id="memory-sp-max-memories-value">15</span>
+                        </div>
+                        <div class="setting-hint">单次规划检索的最大记忆数量</div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label" for="memory-sp-min-importance">最小记忆重要性</label>
+                        <div class="input-group">
+                            <input type="range" id="memory-sp-min-importance" min="0.0" max="1.0" step="0.1" value="0.5" />
+                            <span class="input-unit" id="memory-sp-min-importance-value">50%</span>
+                        </div>
+                        <div class="setting-hint">只使用重要性高于此值的记忆进行规划</div>
                     </div>
                 </div>
 
@@ -9449,6 +9551,26 @@ ${'='.repeat(80)}
                 }
             }
 
+            // 5. 同步剧情规划助手设置
+            if (memoryEnhancementData.storyPlanning && modules.storyPlanningAssistant) {
+                const spSettings = memoryEnhancementData.storyPlanning;
+                
+                // 更新配置
+                modules.storyPlanningAssistant.config.enabled = spSettings.enabled;
+                modules.storyPlanningAssistant.config.autoActivate = spSettings.autoActivate;
+                modules.storyPlanningAssistant.config.enableSemanticAnalysis = spSettings.enableSemanticAnalysis;
+                modules.storyPlanningAssistant.config.enableTimelineAware = spSettings.enableTimelineAware;
+                modules.storyPlanningAssistant.config.enablePlotContinuity = spSettings.enablePlotContinuity;
+                modules.storyPlanningAssistant.config.suggestionDetailLevel = spSettings.suggestionDetailLevel;
+                modules.storyPlanningAssistant.config.maxKeywords = spSettings.maxKeywords;
+                modules.storyPlanningAssistant.config.maxMemoryResults = spSettings.maxMemoryResults;
+                modules.storyPlanningAssistant.config.minMemoryImportance = spSettings.minMemoryImportance;
+                
+                // 保存配置
+                await modules.storyPlanningAssistant.saveConfig();
+                console.log('[InfoBarSettings] ✅ StoryPlanningAssistant设置已同步');
+            }
+
             console.log('[InfoBarSettings] ✅ 所有记忆增强模块设置同步完成');
 
         } catch (error) {
@@ -9531,6 +9653,17 @@ ${'='.repeat(80)}
                     knowledgeGraph: getBool('knowledge-graph-enabled'),
                     timeAware: getBool('time-aware-enabled'),
                     stIntegration: getBool('st-integration-enabled')
+                },
+                storyPlanning: {
+                    enabled: getBool('memory-story-planning-enabled'),
+                    autoActivate: getBool('memory-sp-auto-activate'),
+                    enableSemanticAnalysis: getBool('memory-sp-semantic-analysis'),
+                    enableTimelineAware: getBool('memory-sp-timeline-aware'),
+                    enablePlotContinuity: getBool('memory-sp-plot-continuity'),
+                    suggestionDetailLevel: getVal('memory-sp-detail-level') || 'detailed',
+                    maxKeywords: getNum('memory-sp-max-keywords') || 10,
+                    maxMemoryResults: getNum('memory-sp-max-memories') || 15,
+                    minMemoryImportance: getNum('memory-sp-min-importance') || 0.5
                 }
             };
 
@@ -33845,6 +33978,47 @@ ${dataExamples}
     }
 
     /**
+     * 📖 新增：处理剧情规划助手启用状态变化
+     */
+    handleStoryPlanningEnabledChange(enabled) {
+        try {
+            console.log('[InfoBarSettings] 📖 剧情规划助手启用状态变化:', enabled);
+
+            // 显示/隐藏剧情规划助手选项
+            const storyPlanningOptions = this.modal.querySelector('#memory-story-planning-options');
+            if (storyPlanningOptions) {
+                storyPlanningOptions.style.display = enabled ? 'block' : 'none';
+            }
+
+            // 更新剧情规划助手设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const storyPlanningAssistant = infoBarTool?.modules?.storyPlanningAssistant;
+            
+            if (storyPlanningAssistant) {
+                storyPlanningAssistant.setEnabled(enabled);
+                console.log('[InfoBarSettings] ✅ 剧情规划助手配置已更新');
+            } else {
+                console.error('[InfoBarSettings] ❌ 剧情规划助手模块未找到！');
+                console.error('[InfoBarSettings] 可用模块列表:', Object.keys(infoBarTool?.modules || {}));
+                
+                this.showMessage(
+                    '⚠️ 剧情规划助手模块未加载，请刷新页面（Ctrl+Shift+R清除缓存）',
+                    'error'
+                );
+                return;
+            }
+
+            this.showMessage(
+                enabled ? '✅ 剧情规划助手已启用' : '⏸️ 剧情规划助手已禁用',
+                enabled ? 'success' : 'info'
+            );
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理剧情规划助手启用状态变化失败:', error);
+        }
+    }
+
+    /**
      * 🚀 处理重要性阈值变化
      */
     handleAIImportanceThresholdChange(value) {
@@ -35146,6 +35320,38 @@ ${dataExamples}
                 });
             }
 
+            // 📖 剧情规划助手事件
+            const memoryStoryPlanningEnabled = this.modal.querySelector('#memory-story-planning-enabled');
+            if (memoryStoryPlanningEnabled) {
+                memoryStoryPlanningEnabled.addEventListener('change', (e) => {
+                    this.handleStoryPlanningEnabledChange(e.target.checked);
+                });
+            }
+
+            const memorySpMaxKeywords = this.modal.querySelector('#memory-sp-max-keywords');
+            const memorySpMaxKeywordsValue = this.modal.querySelector('#memory-sp-max-keywords-value');
+            if (memorySpMaxKeywords && memorySpMaxKeywordsValue) {
+                memorySpMaxKeywords.addEventListener('input', (e) => {
+                    memorySpMaxKeywordsValue.textContent = e.target.value;
+                });
+            }
+
+            const memorySpMaxMemories = this.modal.querySelector('#memory-sp-max-memories');
+            const memorySpMaxMemoriesValue = this.modal.querySelector('#memory-sp-max-memories-value');
+            if (memorySpMaxMemories && memorySpMaxMemoriesValue) {
+                memorySpMaxMemories.addEventListener('input', (e) => {
+                    memorySpMaxMemoriesValue.textContent = e.target.value;
+                });
+            }
+
+            const memorySpMinImportance = this.modal.querySelector('#memory-sp-min-importance');
+            const memorySpMinImportanceValue = this.modal.querySelector('#memory-sp-min-importance-value');
+            if (memorySpMinImportance && memorySpMinImportanceValue) {
+                memorySpMinImportance.addEventListener('input', (e) => {
+                    memorySpMinImportanceValue.textContent = (parseFloat(e.target.value) * 100).toFixed(0) + '%';
+                });
+            }
+
             // 语义搜索事件
             const memoryVectorizedEnabled = this.modal.querySelector('#memory-vectorized-memory-enabled');
             if (memoryVectorizedEnabled) {
@@ -35671,6 +35877,52 @@ ${dataExamples}
                 stIntegrationEnabled.checked = sti?.settings?.enabled ?? enhancementSettings.stIntegration ?? false;
             }
 
+            // 📖 剧情规划助手设置
+            const spSettings = savedMem.storyPlanning || {};
+            const spa = infoBarTool.modules?.storyPlanningAssistant;
+            
+            const spEnabledEl = this.modal.querySelector('#memory-story-planning-enabled');
+            const spAutoActivateEl = this.modal.querySelector('#memory-sp-auto-activate');
+            const spSemanticAnalysisEl = this.modal.querySelector('#memory-sp-semantic-analysis');
+            const spTimelineAwareEl = this.modal.querySelector('#memory-sp-timeline-aware');
+            const spPlotContinuityEl = this.modal.querySelector('#memory-sp-plot-continuity');
+            const spDetailLevelEl = this.modal.querySelector('#memory-sp-detail-level');
+            const spMaxKeywordsEl = this.modal.querySelector('#memory-sp-max-keywords');
+            const spMaxKeywordsVal = this.modal.querySelector('#memory-sp-max-keywords-value');
+            const spMaxMemoriesEl = this.modal.querySelector('#memory-sp-max-memories');
+            const spMaxMemoriesVal = this.modal.querySelector('#memory-sp-max-memories-value');
+            const spMinImportanceEl = this.modal.querySelector('#memory-sp-min-importance');
+            const spMinImportanceVal = this.modal.querySelector('#memory-sp-min-importance-value');
+
+            if (spEnabledEl) spEnabledEl.checked = spa?.config?.enabled ?? spSettings.enabled ?? false;
+            if (spAutoActivateEl) spAutoActivateEl.checked = spa?.config?.autoActivate ?? spSettings.autoActivate ?? true;
+            if (spSemanticAnalysisEl) spSemanticAnalysisEl.checked = spa?.config?.enableSemanticAnalysis ?? spSettings.enableSemanticAnalysis ?? true;
+            if (spTimelineAwareEl) spTimelineAwareEl.checked = spa?.config?.enableTimelineAware ?? spSettings.enableTimelineAware ?? true;
+            if (spPlotContinuityEl) spPlotContinuityEl.checked = spa?.config?.enablePlotContinuity ?? spSettings.enablePlotContinuity ?? true;
+            if (spDetailLevelEl) spDetailLevelEl.value = spa?.config?.suggestionDetailLevel ?? spSettings.suggestionDetailLevel ?? 'detailed';
+            
+            if (spMaxKeywordsEl) {
+                const v = spa?.config?.maxKeywords ?? spSettings.maxKeywords ?? 10;
+                spMaxKeywordsEl.value = v;
+                if (spMaxKeywordsVal) spMaxKeywordsVal.textContent = v;
+            }
+            if (spMaxMemoriesEl) {
+                const v = spa?.config?.maxMemoryResults ?? spSettings.maxMemoryResults ?? 15;
+                spMaxMemoriesEl.value = v;
+                if (spMaxMemoriesVal) spMaxMemoriesVal.textContent = v;
+            }
+            if (spMinImportanceEl) {
+                const v = spa?.config?.minMemoryImportance ?? spSettings.minMemoryImportance ?? 0.5;
+                spMinImportanceEl.value = v;
+                if (spMinImportanceVal) spMinImportanceVal.textContent = (v * 100).toFixed(0) + '%';
+            }
+
+            // 显示/隐藏剧情规划助手选项
+            const spOptions = this.modal.querySelector('#memory-story-planning-options');
+            if (spOptions) {
+                spOptions.style.display = (spa?.config?.enabled ?? spSettings.enabled) ? 'block' : 'none';
+            }
+
             console.log('[InfoBarSettings] ✅ 记忆增强设置加载完成');
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 加载记忆增强设置失败:', error);
@@ -35798,6 +36050,13 @@ ${dataExamples}
             if (aiMemoryDatabase) {
                 const status = aiMemoryDatabase.getStatus();
                 this.updateAIMemoryDatabaseStatus(status);
+            }
+
+            // 📖 更新剧情规划助手状态
+            const storyPlanningAssistant = infoBarTool.modules?.storyPlanningAssistant;
+            if (storyPlanningAssistant) {
+                const status = storyPlanningAssistant.getStatus();
+                this.updateStoryPlanningStatus(status);
             }
 
             console.log('[InfoBarSettings] ✅ 记忆系统状态刷新完成');
@@ -35950,6 +36209,30 @@ ${dataExamples}
 
         } catch (error) {
             console.error(`[InfoBarSettings] ❌ 更新增强模块状态失败 (${moduleName}):`, error);
+        }
+    }
+
+    /**
+     * 📖 更新剧情规划助手状态
+     */
+    updateStoryPlanningStatus(status) {
+        try {
+            console.log('[InfoBarSettings] 📖 更新剧情规划助手状态:', status);
+
+            // 更新状态指示器
+            const statusElement = this.modal.querySelector('#story-planning-status');
+            if (statusElement) {
+                const isActive = status.initialized && status.enabled;
+                statusElement.className = `module-status ${isActive ? 'active' : status.errorCount > 0 ? 'error' : 'inactive'}`;
+            }
+
+            // 更新统计数据
+            const stats = status.stats || {};
+            this.updateElement('#story-planning-count', stats.totalPlannings || 0);
+            this.updateElement('#story-planning-suggestions', stats.totalSuggestionsGenerated || 0);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新剧情规划助手状态失败:', error);
         }
     }
 
