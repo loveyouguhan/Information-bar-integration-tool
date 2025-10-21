@@ -616,43 +616,67 @@ export class AIMemoryDatabaseInjector {
                         // 1. 感知层记忆（最新的）
                         if (deepMemoryLayers.sensory && deepMemoryLayers.sensory.size > 0) {
                             for (const [id, memory] of deepMemoryLayers.sensory) {
+                                const content = memory.content || memory.summary || String(memory);
+                                
+                                // 🔧 严重修复：过滤原始AI消息（包含update指令的）
+                                if (this.isRawAIMessage(content)) {
+                                    console.log('[AIMemoryDatabaseInjector] 🚫 跳过感知层的原始AI消息片段');
+                                    continue;
+                                }
+                                
                                 memoryEntries.push({
                                     type: 'sensory',
-                                    content: memory.content || memory.summary || String(memory),
+                                    content: content,
                                     importance: memory.importance || 0.9,
                                     timestamp: memory.timestamp || Date.now(),
                                     source: 'deep_memory_sensory'
                                 });
                             }
-                            console.log(`[AIMemoryDatabaseInjector] ✅ 获取感知层记忆: ${deepMemoryLayers.sensory.size} 条`);
+                            console.log(`[AIMemoryDatabaseInjector] ✅ 获取感知层记忆: ${memoryEntries.filter(m => m.type === 'sensory').length} 条（已过滤）`);
                         }
 
                         // 2. 短期记忆
                         if (deepMemoryLayers.shortTerm && deepMemoryLayers.shortTerm.size > 0) {
                             for (const [id, memory] of deepMemoryLayers.shortTerm) {
+                                const content = memory.content || memory.summary || String(memory);
+                                
+                                // 🔧 严重修复：过滤原始AI消息
+                                if (this.isRawAIMessage(content)) {
+                                    console.log('[AIMemoryDatabaseInjector] 🚫 跳过短期层的原始AI消息片段');
+                                    continue;
+                                }
+                                
                                 memoryEntries.push({
                                     type: 'short_term',
-                                    content: memory.content || memory.summary || String(memory),
+                                    content: content,
                                     importance: memory.importance || 0.7,
                                     timestamp: memory.timestamp || Date.now(),
                                     source: 'deep_memory_short_term'
                                 });
                             }
-                            console.log(`[AIMemoryDatabaseInjector] ✅ 获取短期记忆: ${deepMemoryLayers.shortTerm.size} 条`);
+                            console.log(`[AIMemoryDatabaseInjector] ✅ 获取短期记忆: ${memoryEntries.filter(m => m.type === 'short_term').length} 条（已过滤）`);
                         }
 
                         // 3. 长期记忆（最重要的）
                         if (deepMemoryLayers.longTerm && deepMemoryLayers.longTerm.size > 0) {
                             for (const [id, memory] of deepMemoryLayers.longTerm) {
+                                const content = memory.content || memory.summary || String(memory);
+                                
+                                // 🔧 严重修复：过滤原始AI消息
+                                if (this.isRawAIMessage(content)) {
+                                    console.log('[AIMemoryDatabaseInjector] 🚫 跳过长期层的原始AI消息片段');
+                                    continue;
+                                }
+                                
                                 memoryEntries.push({
                                     type: 'long_term',
-                                    content: memory.content || memory.summary || String(memory),
+                                    content: content,
                                     importance: memory.importance || 0.8,
                                     timestamp: memory.timestamp || Date.now(),
                                     source: 'deep_memory_long_term'
                                 });
                             }
-                            console.log(`[AIMemoryDatabaseInjector] ✅ 获取长期记忆: ${deepMemoryLayers.longTerm.size} 条`);
+                            console.log(`[AIMemoryDatabaseInjector] ✅ 获取长期记忆: ${memoryEntries.filter(m => m.type === 'long_term').length} 条（已过滤）`);
                         }
                     }
                 } catch (deepMemoryError) {
@@ -1105,6 +1129,7 @@ export class AIMemoryDatabaseInjector {
     /**
      * 格式化记忆内容用于注入
      * 🎯 RAG优化：采用SillyTavern最佳实践的注入模板
+     * 🔧 严重BUG修复：去重 + 过滤原始AI消息 + 限制长度
      */
     formatMemoryForInjection(memoryData) {
         try {
@@ -1116,8 +1141,50 @@ export class AIMemoryDatabaseInjector {
                 '环境信息': []
             };
             
+            // 🔧 新增：去重Set（基于内容哈希）
+            const seenContents = new Set();
+            
+            // 🔧 新增：过滤和限制记忆
+            let processedCount = 0;
+            const maxMemories = 10; // 最多10条记忆，防止过多重复
+            
             // 分类记忆内容
             for (const memory of memoryData) {
+                // 🔧 新增：跳过已达到限制
+                if (processedCount >= maxMemories) {
+                    console.log(`[AIMemoryDatabaseInjector] ⚠️ 已达到记忆数量限制 (${maxMemories}条)，跳过剩余记忆`);
+                    break;
+                }
+                
+                // 🔧 新增：验证记忆内容质量
+                if (!memory.content || typeof memory.content !== 'string') {
+                    console.log('[AIMemoryDatabaseInjector] ⚠️ 跳过无效记忆（无content）');
+                    continue;
+                }
+                
+                // 🔧 严重修复：过滤掉原始AI消息片段
+                // 如果记忆内容包含"update personal"等信息栏指令，说明这是原始AI消息，不是总结
+                if (memory.content.includes('update personal') || 
+                    memory.content.includes('update organization') ||
+                    memory.content.includes('update ') && memory.content.length > 500) {
+                    console.log('[AIMemoryDatabaseInjector] 🚫 跳过原始AI消息片段（包含update指令或过长）');
+                    continue;
+                }
+                
+                // 🔧 新增：过滤过长的内容（超过800字符的可能是原始消息）
+                if (memory.content.length > 800) {
+                    console.log(`[AIMemoryDatabaseInjector] 🚫 跳过过长内容 (${memory.content.length}字符 > 800)`);
+                    continue;
+                }
+                
+                // 🔧 新增：内容去重
+                const contentHash = memory.content.substring(0, 100); // 使用前100字符作为哈希
+                if (seenContents.has(contentHash)) {
+                    console.log('[AIMemoryDatabaseInjector] 🚫 跳过重复记忆');
+                    continue;
+                }
+                seenContents.add(contentHash);
+                
                 const category = this.categorizeMemory(memory);
                 
                 // 🗄️ 优化：如果记忆来自AI记忆数据库，包含关键词和重要性信息
@@ -1133,7 +1200,11 @@ export class AIMemoryDatabaseInjector {
                 } else {
                     sections['重要记忆'].push(formattedContent);
                 }
+                
+                processedCount++;
             }
+            
+            console.log(`[AIMemoryDatabaseInjector] 📊 格式化完成: 总共${memoryData.length}条，处理${processedCount}条，去重${memoryData.length - processedCount}条`);
             
             // 构建最终格式
             const formattedSections = [];
@@ -1172,6 +1243,36 @@ export class AIMemoryDatabaseInjector {
             console.error('[AIMemoryDatabaseInjector] ❌ 格式化记忆内容失败:', error);
             return memoryData.map(m => m.content).join('\n\n');
         }
+    }
+
+    /**
+     * 🔧 新增：判断是否为原始AI消息（而非记忆总结）
+     */
+    isRawAIMessage(content) {
+        if (!content || typeof content !== 'string') {
+            return true; // 无效内容视为需要过滤
+        }
+        
+        // 检测特征：原始AI消息通常包含以下特征
+        const rawMessageIndicators = [
+            content.includes('update personal'),
+            content.includes('update organization'),
+            content.includes('update world'),
+            content.includes('update tasks'),
+            content.length > 800, // 记忆总结通常不超过800字符
+            content.split('\n').length > 15, // 记忆总结通常不超过15行
+            // 🔧 新增：检测是否包含大量叙事性内容（可能是原始消息）
+            /他.*走.*过去|她.*说.*道|张.*凡.*想|陈.*希.*感觉/.test(content) && content.length > 200
+        ];
+        
+        // 如果匹配任何一个指标，认为是原始消息
+        const isRaw = rawMessageIndicators.filter(Boolean).length >= 1;
+        
+        if (isRaw) {
+            console.log('[AIMemoryDatabaseInjector] 🚫 检测到原始AI消息特征，准备过滤');
+        }
+        
+        return isRaw;
     }
 
     /**
@@ -2078,6 +2179,73 @@ export class AIMemoryDatabaseInjector {
         } catch (error) {
             console.error('[AIMemoryDatabaseInjector] ❌ 清空记忆数据库失败:', error);
             return false;
+        }
+    }
+
+    /**
+     * 🔧 新增：清理DeepMemoryManager中的脏数据（原始AI消息）
+     */
+    async cleanupDirtyMemories() {
+        try {
+            console.log('[AIMemoryDatabaseInjector] 🧹 开始清理DeepMemoryManager中的脏数据...');
+            
+            if (!this.deepMemoryManager || !this.deepMemoryManager.initialized) {
+                console.warn('[AIMemoryDatabaseInjector] ⚠️ DeepMemoryManager不可用');
+                return { success: false, cleaned: 0 };
+            }
+            
+            let totalCleaned = 0;
+            const layers = ['sensory', 'shortTerm', 'longTerm', 'deepArchive'];
+            
+            for (const layerName of layers) {
+                const layer = this.deepMemoryManager.memoryLayers[layerName];
+                if (!layer || layer.size === 0) continue;
+                
+                console.log(`[AIMemoryDatabaseInjector] 🔍 检查${layerName}层，共${layer.size}条记忆`);
+                
+                const toDelete = [];
+                for (const [id, memory] of layer) {
+                    const content = memory.content || memory.summary || '';
+                    
+                    // 检测是否为原始AI消息
+                    if (this.isRawAIMessage(content)) {
+                        toDelete.push(id);
+                    }
+                }
+                
+                // 删除脏数据
+                for (const id of toDelete) {
+                    layer.delete(id);
+                    if (this.deepMemoryManager.memoryIndex) {
+                        this.deepMemoryManager.memoryIndex.delete(id);
+                    }
+                    totalCleaned++;
+                }
+                
+                console.log(`[AIMemoryDatabaseInjector] 🗑️ ${layerName}层清理了${toDelete.length}条脏数据`);
+            }
+            
+            // 更新DeepMemoryManager统计
+            if (this.deepMemoryManager.stats) {
+                this.deepMemoryManager.stats.totalMemories = 
+                    this.deepMemoryManager.memoryLayers.sensory.size +
+                    this.deepMemoryManager.memoryLayers.shortTerm.size +
+                    this.deepMemoryManager.memoryLayers.longTerm.size +
+                    this.deepMemoryManager.memoryLayers.deepArchive.size;
+            }
+            
+            // 保存清理后的数据
+            if (this.deepMemoryManager.saveMemoryData) {
+                await this.deepMemoryManager.saveMemoryData();
+            }
+            
+            console.log(`[AIMemoryDatabaseInjector] ✅ 清理完成，共删除${totalCleaned}条脏数据`);
+            
+            return { success: true, cleaned: totalCleaned };
+            
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 清理脏数据失败:', error);
+            return { success: false, error: error.message, cleaned: 0 };
         }
     }
 

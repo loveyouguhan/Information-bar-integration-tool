@@ -537,7 +537,8 @@ export class SillyTavernIntegration {
 
             memories.forEach((memory, index) => {
                 const content = memory.content || '';
-                const importance = memory.metadata?.importance || 0;
+                // 🔧 修复：正确获取重要性 - 应该从memory.importance而不是metadata.importance
+                const importance = memory.importance || memory.metadata?.importance || 0;
                 const timestamp = memory.timestamp ? new Date(memory.timestamp).toLocaleString() : '';
 
                 parts.push(`${index + 1}. [重要性: ${importance.toFixed(2)}] ${content}`);

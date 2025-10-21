@@ -45,6 +45,9 @@ export class SmartPromptSystem {
         // 🔧 新增：内容过滤管理器引用（将在init时设置）
         this.contentFilterManager = null;
 
+        // 📖 新增：剧情规划建议缓存
+        this.storyPlanningCache = null;
+
         // 初始化状态
         this.initialized = false;
         this.errorCount = 0;
@@ -1228,9 +1231,37 @@ ${panelRulesSection}
             this.eventSystem.on('message:regenerated', async (data) => {
                 await this.handleMessageRegenerated(data);
             });
+
+            // 📖 新增：监听剧情规划建议事件
+            this.eventSystem.on('storyPlanning:suggestionsReady', (data) => {
+                this.handleStoryPlanningSuggestions(data);
+            });
         }
 
         console.log('[SmartPromptSystem] ✅ 事件监听器绑定完成');
+    }
+
+    /**
+     * 📖 处理剧情规划建议
+     */
+    handleStoryPlanningSuggestions(data) {
+        try {
+            console.log('[SmartPromptSystem] 📖 接收到剧情规划建议');
+            
+            // 缓存剧情规划数据
+            this.storyPlanningCache = {
+                prompt: data.prompt || '',
+                suggestions: data.suggestions || [],
+                memories: data.memories || [],
+                context: data.context || {},
+                timestamp: Date.now()
+            };
+
+            console.log('[SmartPromptSystem] ✅ 剧情规划建议已缓存');
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 处理剧情规划建议失败:', error);
+        }
     }
 
     /**
@@ -1327,6 +1358,34 @@ ${panelRulesSection}
             if (summaryInstructions) {
                 prompt += '\n\n' + summaryInstructions;
                 console.log('[SmartPromptSystem] 📝 已将总结指令添加到智能提示词');
+            }
+
+            // 📖 新增：将剧情规划建议添加到提示词
+            if (this.storyPlanningCache && this.storyPlanningCache.prompt) {
+                // 检查缓存是否过期（5分钟）
+                const cacheAge = Date.now() - this.storyPlanningCache.timestamp;
+                if (cacheAge < 300000) {
+                    // 🔧 修复：检查提示词长度，防止重复内容导致过长
+                    const planningPrompt = this.storyPlanningCache.prompt;
+                    
+                    // 🔧 新增：限制剧情规划提示词的最大长度（防止重复）
+                    const maxPlanningPromptLength = 2000; // 2000字符限制
+                    if (planningPrompt.length > maxPlanningPromptLength) {
+                        console.warn(`[SmartPromptSystem] ⚠️ 剧情规划提示词过长 (${planningPrompt.length}字符)，截断为${maxPlanningPromptLength}字符`);
+                        const truncatedPrompt = planningPrompt.substring(0, maxPlanningPromptLength) + '\n... (内容过长已截断)';
+                        prompt = truncatedPrompt + '\n\n' + prompt;
+                    } else {
+                        prompt = planningPrompt + '\n\n' + prompt;
+                    }
+                    
+                    console.log('[SmartPromptSystem] 📖 已将剧情规划建议添加到智能提示词 (长度:', planningPrompt.length, '字符)');
+                    
+                    // 使用后清除缓存
+                    this.storyPlanningCache = null;
+                } else {
+                    console.log('[SmartPromptSystem] ⏰ 剧情规划建议缓存已过期，跳过');
+                    this.storyPlanningCache = null;
+                }
             }
 
             // 🔧 修复：不要对智能提示词应用正则过滤！

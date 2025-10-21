@@ -236,8 +236,18 @@ export class AIMemoryDatabase {
 
             // 监听聊天切换事件
             this.eventSystem.on('chat:switched', (data) => this.handleChatSwitched(data));
+            this.eventSystem.on('chat:changed', (data) => this.handleChatSwitched(data));  // 🔧 新增：兼容chat:changed事件
+            this.eventSystem.on('CHAT_CHANGED', (data) => this.handleChatSwitched(data));  // 🔧 新增：兼容SillyTavern官方事件
 
-            console.log('[AIMemoryDatabase] ✅ 事件监听器绑定完成');
+            // 🔧 新增：监听消息删除事件（及时清理作废的记忆）
+            this.eventSystem.on('message:deleted', (data) => this.handleMessageDeleted(data));
+            this.eventSystem.on('MESSAGE_DELETED', (data) => this.handleMessageDeleted(data));
+
+            // 🔧 新增：监听消息重新生成事件（及时清理旧记忆）
+            this.eventSystem.on('message:regenerated', (data) => this.handleMessageRegenerated(data));
+            this.eventSystem.on('MESSAGE_REGENERATED', (data) => this.handleMessageRegenerated(data));
+
+            console.log('[AIMemoryDatabase] ✅ 事件监听器绑定完成（包含消息删除/重生成）');
 
         } catch (error) {
             console.error('[AIMemoryDatabase] ❌ 绑定事件监听器失败:', error);
@@ -1376,6 +1386,157 @@ export class AIMemoryDatabase {
         this.saveDatabaseIndex().catch(err => {
             console.warn('[AIMemoryDatabase] ⚠️ 保存清空状态失败:', err);
         });
+    }
+
+    /**
+     * 🔧 新增：处理消息删除事件
+     */
+    async handleMessageDeleted(data) {
+        try {
+            console.log('[AIMemoryDatabase] 🗑️ 处理消息删除事件');
+
+            if (!this.config.enabled) {
+                console.log('[AIMemoryDatabase] ⏸️ AI记忆数据库已禁用，跳过处理');
+                return;
+            }
+
+            // 🔧 关键：检查是否需要跳过回溯（用户消息删除）
+            if (data && data.skipRollback === true) {
+                console.log('[AIMemoryDatabase] ℹ️ 跳过记忆回溯（删除的是用户消息）');
+                return;
+            }
+
+            console.log('[AIMemoryDatabase] 🔄 开始清理作废的AI记忆...');
+
+            // 获取当前记忆数量（清理前）
+            const beforeCount = this.database.memories.size;
+
+            // 🔧 策略：清理最近的记忆（5分钟内的）
+            const now = Date.now();
+            const recentThreshold = 5 * 60 * 1000; // 5分钟
+
+            const memoriesToDelete = [];
+            for (const [memoryId, memory] of this.database.memories) {
+                if (now - memory.timestamp < recentThreshold) {
+                    memoriesToDelete.push(memoryId);
+                }
+            }
+
+            // 删除记忆
+            for (const memoryId of memoriesToDelete) {
+                await this.deleteMemory(memoryId);
+            }
+
+            const afterCount = this.database.memories.size;
+            console.log(`[AIMemoryDatabase] ✅ 已清理 ${beforeCount - afterCount} 个作废记忆 (从${beforeCount}减少到${afterCount})`);
+
+            // 保存更新后的索引
+            await this.saveDatabaseIndex();
+
+        } catch (error) {
+            console.error('[AIMemoryDatabase] ❌ 处理消息删除事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：处理消息重新生成事件
+     */
+    async handleMessageRegenerated(data) {
+        try {
+            console.log('[AIMemoryDatabase] 🔄 处理消息重新生成事件');
+
+            if (!this.config.enabled) {
+                console.log('[AIMemoryDatabase] ⏸️ AI记忆数据库已禁用，跳过处理');
+                return;
+            }
+
+            console.log('[AIMemoryDatabase] 🔄 开始清理作废的AI记忆（重新生成）...');
+
+            // 获取当前记忆数量（清理前）
+            const beforeCount = this.database.memories.size;
+
+            // 🔧 策略：清理最近的记忆（5分钟内的）
+            const now = Date.now();
+            const recentThreshold = 5 * 60 * 1000; // 5分钟
+
+            const memoriesToDelete = [];
+            for (const [memoryId, memory] of this.database.memories) {
+                if (now - memory.timestamp < recentThreshold) {
+                    memoriesToDelete.push(memoryId);
+                }
+            }
+
+            // 删除记忆
+            for (const memoryId of memoriesToDelete) {
+                await this.deleteMemory(memoryId);
+            }
+
+            const afterCount = this.database.memories.size;
+            console.log(`[AIMemoryDatabase] ✅ 已清理 ${beforeCount - afterCount} 个作废记忆 (从${beforeCount}减少到${afterCount})`);
+
+            // 保存更新后的索引
+            await this.saveDatabaseIndex();
+
+        } catch (error) {
+            console.error('[AIMemoryDatabase] ❌ 处理消息重新生成事件失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：删除单个记忆
+     */
+    async deleteMemory(memoryId) {
+        try {
+            const memory = this.database.memories.get(memoryId);
+            if (!memory) return;
+
+            console.log(`[AIMemoryDatabase] 🗑️ 删除记忆: ${memoryId.substring(0, 20)}...`);
+
+            // 1. 从memories中删除
+            this.database.memories.delete(memoryId);
+
+            // 2. 从关键词索引中删除
+            if (memory.keywords) {
+                for (const keyword of memory.keywords) {
+                    const keywordSet = this.database.keywordIndex.get(keyword);
+                    if (keywordSet) {
+                        keywordSet.delete(memoryId);
+                        // 如果这个关键词没有其他记忆了，删除这个关键词
+                        if (keywordSet.size === 0) {
+                            this.database.keywordIndex.delete(keyword);
+                        }
+                    }
+                }
+            }
+
+            // 3. 从重要性索引中删除
+            this.database.importanceIndex.critical.delete(memoryId);
+            this.database.importanceIndex.high.delete(memoryId);
+            this.database.importanceIndex.medium.delete(memoryId);
+            this.database.importanceIndex.low.delete(memoryId);
+
+            // 4. 从分类索引中删除
+            if (memory.category) {
+                const categorySet = this.database.categoryIndex.get(memory.category);
+                if (categorySet) {
+                    categorySet.delete(memoryId);
+                    if (categorySet.size === 0) {
+                        this.database.categoryIndex.delete(memory.category);
+                    }
+                }
+            }
+
+            // 5. 从时间线索引中删除
+            this.database.timelineIndex = this.database.timelineIndex.filter(entry => entry.id !== memoryId);
+
+            // 6. 更新统计
+            this.updateStats();
+
+            console.log(`[AIMemoryDatabase] ✅ 记忆已删除: ${memoryId.substring(0, 20)}...`);
+
+        } catch (error) {
+            console.error('[AIMemoryDatabase] ❌ 删除记忆失败:', error);
+        }
     }
 
     /**

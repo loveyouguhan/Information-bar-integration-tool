@@ -1145,7 +1145,8 @@ export class DeepMemoryManager {
             if (this.boundHandlers) {
                 console.log('[DeepMemoryManager] 🔓 解绑旧的事件监听器...');
                 this.eventSystem.off('ai-summary:created', this.boundHandlers.aiSummaryCreated);
-                this.eventSystem.off('message:received', this.boundHandlers.messageReceived);
+                // 🚫 已移除：message:received 解绑
+                // this.eventSystem.off('message:received', this.boundHandlers.messageReceived);
                 // 🔧 P0+修复：解绑所有聊天切换事件
                 this.eventSystem.off('chat:changed', this.boundHandlers.chatChanged);
                 this.eventSystem.off('CHAT_CHANGED', this.boundHandlers.chatChanged);
@@ -1163,18 +1164,20 @@ export class DeepMemoryManager {
             // 创建绑定的处理函数引用（用于后续解绑）
             this.boundHandlers = {
                 aiSummaryCreated: (data) => this.handleAISummaryCreated(data),
-                messageReceived: (data) => this.handleMessageReceived(data),
+                // 🚫 已移除：messageReceived - 不应该直接监听消息！
                 chatChanged: (data) => this.handleChatChanged(data),
                 memoryIndexed: (data) => this.handleVectorizedMemoryIndexed(data),
                 messageDeleted: (data) => this.handleMessageDeleted(data),
                 messageRegenerated: (data) => this.handleMessageRegenerated(data)
             };
 
-            // 监听AI总结创建事件
+            // 监听AI总结创建事件 ✅ 正确：从AI总结获取记忆
             this.eventSystem.on('ai-summary:created', this.boundHandlers.aiSummaryCreated);
 
-            // 监听消息接收事件
-            this.eventSystem.on('message:received', this.boundHandlers.messageReceived);
+            // 🚫 已禁用：不再监听消息接收事件
+            // 原因：DeepMemoryManager不应该直接存储AI/用户消息
+            // 正确流程：消息 → AI总结器 → AI总结 → handleAISummaryCreated
+            // this.eventSystem.on('message:received', this.boundHandlers.messageReceived);
 
             // 🔧 P0+修复：监听聊天切换事件（兼容多种事件名）
             this.eventSystem.on('chat:changed', this.boundHandlers.chatChanged);
@@ -1229,9 +1232,28 @@ export class DeepMemoryManager {
     }
 
     /**
-     * 处理消息接收事件
+     * 🚫 禁用：处理消息接收事件
+     * 
+     * ⚠️ 严重问题修复：DeepMemoryManager不应该直接监听和存储AI/用户消息！
+     * 
+     * 问题原因：
+     * - 直接复制AI/用户消息会导致AI把记忆内容直接输出
+     * - 会导致token占用异常
+     * - 违反记忆增强设计原则
+     * 
+     * 正确流程：
+     * - 用户/AI消息 → AI记忆总结器 → 生成总结 → 存储到记忆系统 ✅
+     * - 而不是：用户/AI消息 → 直接存储到记忆系统 ❌
+     * 
+     * DeepMemoryManager应该只从AI总结获取记忆数据！
      */
     async handleMessageReceived(data) {
+        // 🚫 完全禁用此功能
+        console.log('[DeepMemoryManager] 🚫 已禁用直接消息处理 - DeepMemoryManager只应从AI总结获取记忆');
+        console.log('[DeepMemoryManager] ℹ️ 正确流程：消息 → AI总结器 → AI总结 → 记忆存储');
+        return;
+        
+        /* ❌ 以下代码已废弃，不应该直接存储原始消息
         try {
             console.log('[DeepMemoryManager] 📝 处理消息接收事件', data);
 
@@ -1240,93 +1262,12 @@ export class DeepMemoryManager {
                 return;
             }
 
-            // 🔧 修复：防止重复处理同一条消息
-            const messageId = data.messageId || data.timestamp || Date.now();
-            const messageKey = `${messageId}_${data.message || data.mes || ''}`.substring(0, 100);
-
-            if (!this.processedMessages) {
-                this.processedMessages = new Set();
-            }
-
-            if (this.processedMessages.has(messageKey)) {
-                console.log('[DeepMemoryManager] ⚠️ 消息已处理，跳过重复处理');
-                return;
-            }
-
-            // 标记消息已处理
-            this.processedMessages.add(messageKey);
-
-            // 限制Set大小，防止内存泄漏
-            if (this.processedMessages.size > 1000) {
-                const firstKey = this.processedMessages.values().next().value;
-                this.processedMessages.delete(firstKey);
-            }
-
-            // 🔧 修复：更强大的消息内容提取逻辑
-            let messageContent = '';
-            let isUser = false;
-
-            // 尝试多种方式提取消息内容
-            if (data.message) {
-                messageContent = data.message;
-                isUser = data.isUser || false;
-            } else if (data.mes) {
-                messageContent = data.mes;
-                isUser = data.is_user || false;
-            } else if (typeof data === 'string') {
-                messageContent = data;
-                isUser = false;
-            } else if (data.content) {
-                messageContent = data.content;
-                isUser = data.isUser || false;
-            }
-
-            // 清理HTML标签和特殊标记
-            if (messageContent) {
-                messageContent = messageContent.replace(/<[^>]*>/g, '').replace(/<!--[\s\S]*?-->/g, '').trim();
-            }
-
-            console.log('[DeepMemoryManager] 🔍 提取的消息内容长度:', messageContent.length);
-            console.log('[DeepMemoryManager] 🔍 消息内容预览:', messageContent.substring(0, 100) + '...');
-
-            // 🔧 修复：降低消息长度要求，处理更多消息
-            if (messageContent && messageContent.length > 10) {
-                console.log('[DeepMemoryManager] 📝 处理消息:', messageContent.substring(0, 50) + '...');
-
-                // 🔧 P1修复：确保chatId被正确提取和记录
-                const currentChatId = this.unifiedDataCore?.getCurrentChatId?.() ||
-                                     data.chatId ||
-                                     data.metadata?.chatId ||
-                                     'unknown';
-
-                console.log('[DeepMemoryManager] 🆔 当前聊天ID:', currentChatId);
-
-                const memoryData = {
-                    content: messageContent,
-                    type: isUser ? 'user_message' : 'assistant_message',
-                    source: 'chat_message',
-                    metadata: {
-                        isUser: isUser,
-                        timestamp: data.timestamp || Date.now(),
-                        chatId: currentChatId,  // 🔧 P1修复：明确记录chatId
-                        originalData: {
-                            ...data,
-                            chatId: currentChatId  // 🔧 P1修复：在originalData中也记录chatId
-                        }
-                    }
-                };
-
-                console.log('[DeepMemoryManager] 🧠 添加记忆到感知层...');
-                await this.addMemoryToSensoryLayer(memoryData);
-                console.log('[DeepMemoryManager] ✅ 记忆处理完成');
-            } else {
-                console.log('[DeepMemoryManager] ⚠️ 消息太短或无效，跳过处理:', messageContent?.length || 0, '字符');
-                console.log('[DeepMemoryManager] 🔍 原始数据结构:', Object.keys(data || {}));
-            }
+            // ... [已废弃的代码]
 
         } catch (error) {
             console.error('[DeepMemoryManager] ❌ 处理消息接收事件失败:', error);
         }
+        */
     }
 
     /**
