@@ -444,6 +444,10 @@ class InformationBarIntegrationTool {
         );
         await this.deepMemoryManager.init();
 
+        // 🔧 修复：设置deepMemoryManager到vectorizedMemoryRetrieval（解决循环依赖）
+        this.vectorizedMemoryRetrieval.deepMemoryManager = this.deepMemoryManager;
+        console.log('[InfoBarTool] 🔗 已将deepMemoryManager设置到vectorizedMemoryRetrieval');
+
         // 🗄️ 新增：初始化AI记忆数据库
         this.aiMemoryDatabase = new AIMemoryDatabase({
             unifiedDataCore: this.dataCore,
