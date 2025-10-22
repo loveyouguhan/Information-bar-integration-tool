@@ -139,22 +139,23 @@ export class AIMemoryDatabaseInjector {
                 console.log('[AIMemoryDatabaseInjector] ✅ 已获取SillyTavern原生事件系统');
             }
 
-            // 🔧 修复：检查用户设置，如果所有记忆功能都禁用，跳过初始化
+            // 🔧 修复：延迟获取当前聊天ID（确保SillyTavern已完全初始化）
+            await this.initCurrentChatId();
+
+            // 🔧 修复：始终绑定事件监听器，即使功能禁用（在事件处理时再检查设置）
+            // 这样可以确保用户在运行时启用功能后，事件监听器已经就绪
+            this.bindEventListeners();
+
+            // 🔧 修复：检查用户设置，如果所有记忆功能都禁用，跳过数据库初始化
             const userSettings = await this.getUserSettings();
             if (!userSettings.aiMemoryDatabaseEnabled) {
-                console.log('[AIMemoryDatabaseInjector] ⏸️ AI记忆数据库功能已禁用，跳过初始化');
+                console.log('[AIMemoryDatabaseInjector] ⏸️ AI记忆数据库功能已禁用，跳过数据库初始化（事件监听器已绑定）');
                 this.initialized = true;
                 return;
             }
 
-            // 🔧 修复：延迟获取当前聊天ID（确保SillyTavern已完全初始化）
-            await this.initCurrentChatId();
-
             // 初始化记忆数据库
             await this.initMemoryDatabase();
-
-            // 绑定事件监听器
-            this.bindEventListeners();
 
             // 启动记忆管理器
             await this.startMemoryManager();
@@ -1690,6 +1691,22 @@ export class AIMemoryDatabaseInjector {
             if (memorySummary) {
                 console.log('[AIMemoryDatabaseInjector] ✅ 成功提取AI记忆总结');
 
+                // 🔧 新增：自动检测当前消息的楼层号
+                const chat = window.SillyTavern?.getContext?.()?.chat;
+                let floorNumber = 0;
+                if (chat && Array.isArray(chat)) {
+                    // 找到当前消息在聊天数组中的索引
+                    const messageIndex = chat.findIndex(msg => msg === message);
+                    if (messageIndex !== -1) {
+                        floorNumber = messageIndex + 1; // 楼层号从1开始
+                    } else {
+                        // 如果找不到，使用聊天长度作为楼层号
+                        floorNumber = chat.length;
+                    }
+                }
+
+                console.log('[AIMemoryDatabaseInjector] 📍 当前消息楼层号:', floorNumber);
+
                 // 将记忆总结添加到数据库
                 await this.addToMemoryDatabase('ai_memory_summary', {
                     content: memorySummary.content,
@@ -1697,7 +1714,7 @@ export class AIMemoryDatabaseInjector {
                     tags: memorySummary.tags || [],
                     category: memorySummary.category || '角色互动',
                     source: 'ai_memory_summary',
-                    messageId: memorySummary.messageId || message.messageId || Date.now(),
+                    floorNumber: floorNumber, // 🔧 新增：楼层号
                     timestamp: Date.now()
                 });
 
@@ -1706,6 +1723,25 @@ export class AIMemoryDatabaseInjector {
                     总记忆数: this.aiMemoryDatabase?.stats?.totalMemories,
                     总关键词数: this.aiMemoryDatabase?.stats?.totalKeywords
                 });
+
+                // 🔮 新增：触发AI记忆总结创建事件，供向量化总结管理器使用
+                if (this.eventSystem) {
+                    this.eventSystem.emit('ai-summary:created', {
+                        summary: {
+                            content: memorySummary.content,
+                            importance: memorySummary.importance || 0.8,
+                            tags: memorySummary.tags || [],
+                            category: memorySummary.category || '角色互动',
+                            floorNumber: floorNumber // 🔧 新增：楼层号
+                        },
+                        floorNumber: floorNumber, // 🔧 新增：楼层号
+                        messageCount: 1,
+                        importantCount: 1,
+                        timestamp: Date.now(),
+                        source: 'ai_memory_database_injector'
+                    });
+                    console.log('[AIMemoryDatabaseInjector] ✅ AI记忆总结事件已触发，楼层号:', floorNumber);
+                }
             } else {
                 console.log('[AIMemoryDatabaseInjector] ℹ️ 消息中未找到AI记忆总结标签');
                 console.log('[AIMemoryDatabaseInjector] 📝 消息预览:', message.mes?.substring(0, 200));
@@ -2035,7 +2071,7 @@ export class AIMemoryDatabaseInjector {
                     const aiDatabase = memoryEnhancement.aiDatabase || {};
 
                     return {
-                        // 🔧 修复：AI记忆数据库注入器启用条件 - 检查深度记忆管理或AI数据库是否启用
+                        // 🔧 修复：AI记忆数据库注入器启用条件 - 检查深度记忆管理、AI数据库或AI记忆总结是否启用
                         aiMemoryDatabaseEnabled:
                             deep.enabled === true ||
                             aiDatabase.enabled === true ||
@@ -2045,12 +2081,16 @@ export class AIMemoryDatabaseInjector {
                             enhancement.knowledgeGraph === true ||
                             enhancement.timeAware === true ||
                             enhancement.stIntegration === true ||
-                            semantic?.enabled === true,
-
-                        // AI记忆总结器：跟随总结功能或AI记忆总结
-                        aiMemorySummarizerEnabled: 
+                            semantic?.enabled === true ||
+                            memoryEnhancement.ai?.enabled === true || // 🔧 新增：AI记忆总结功能
                             memoryEnhancement.summary?.aiSummary === true ||
                             memoryEnhancement.summary?.aiMemorySummary === true,
+
+                        // AI记忆总结器：跟随总结功能或AI记忆总结
+                        aiMemorySummarizerEnabled:
+                            memoryEnhancement.summary?.aiSummary === true ||
+                            memoryEnhancement.summary?.aiMemorySummary === true ||
+                            memoryEnhancement.ai?.enabled === true, // 🔧 新增：AI记忆总结功能
 
                         // 语义搜索：检查向量化记忆检索
                         semanticSearchEnabled: semantic?.enabled === true,

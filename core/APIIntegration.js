@@ -157,22 +157,29 @@ export class APIIntegration {
                 console.log('[APIIntegration] ⚠️ API功能未启用');
                 return;
             }
-            
+
             const providerName = this.apiConfig.provider;
-            this.currentProvider = this.providers[providerName];
-            
-            if (!this.currentProvider) {
-                throw new Error(`不支持的API提供商: ${providerName}`);
+
+            // 🔧 修复：检查提供商是否支持
+            if (!providerName || !this.providers[providerName]) {
+                console.warn(`[APIIntegration] ⚠️ 不支持的API提供商: ${providerName}，跳过初始化`);
+                console.log('[APIIntegration] 📋 支持的提供商:', Object.keys(this.providers).join(', '));
+                this.currentProvider = null;
+                return;
             }
-            
+
+            this.currentProvider = this.providers[providerName];
+
             // 初始化提供商
             await this.currentProvider.init(this.apiConfig);
-            
+
             console.log(`[APIIntegration] ✅ 当前提供商: ${providerName}`);
-            
+
         } catch (error) {
             console.error('[APIIntegration] ❌ 初始化提供商失败:', error);
-            throw error;
+            // 🔧 修复：不抛出错误，只记录警告
+            console.warn('[APIIntegration] ⚠️ 提供商初始化失败，API功能可能不可用');
+            this.currentProvider = null;
         }
     }
 

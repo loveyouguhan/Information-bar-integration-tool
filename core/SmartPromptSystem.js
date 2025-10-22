@@ -744,9 +744,7 @@ ${panelRulesSection}
 "content": "简洁的剧情总结内容（100-200字）",
 "importance": 0.8,
 "tags": ["关键词1", "关键词2"],
-"category": "剧情发展",
-"timestamp": ${Date.now()},
-"messageId": "msg_xxx"
+"category": "剧情发展"
 -->
 </ai_memory_summary>
 
@@ -827,11 +825,19 @@ ${panelRulesSection}
      * 构建全量更新提示词
      */
     async buildFullUpdatePrompt(enabledPanels, memoryEnhancedData, updateStrategy) {
+        // 🔧 检查是否启用表格记录
+        const context = SillyTavern?.getContext?.();
+        const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+        const basicSettings = extensionSettings.basic || {};
+        const tableRecordsEnabled = basicSettings.tableRecords?.enabled !== false;
+
         const coreTemplate = this.getCorePromptTemplate();
-        const fullTemplate = this.getFullUpdateTemplate();
+
+        // 🔧 修复：只有在启用表格记录时才使用全量更新模板
+        const fullTemplate = tableRecordsEnabled ? this.getFullUpdateTemplate() : '';
 
         // 生成面板数据模板
-        const panelDataTemplate = this.generatePanelDataTemplate(enabledPanels);
+        const panelDataTemplate = tableRecordsEnabled ? this.generatePanelDataTemplate(enabledPanels) : '';
 
         // 🔧 修复：检查是否为自定义API模式，决定使用哪种数据信息生成方法
         const isCustomAPIMode = this.getOutputMode() === '自定义API';
@@ -847,17 +853,20 @@ ${panelRulesSection}
             currentDataInfo = await this.generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy);
         }
 
-        // 生成字段约束（简化版）
-        const fieldConstraints = this.generateSimplifiedFieldConstraints(enabledPanels);
+        // 🔧 修复：只有在启用表格记录时才生成字段约束
+        const fieldConstraints = tableRecordsEnabled ? this.generateSimplifiedFieldConstraints(enabledPanels) : '';
 
         // 组合模板
-        let prompt = coreTemplate + '\n\n' + fullTemplate;
-        prompt = prompt.replace('{PANEL_DATA_TEMPLATE}', panelDataTemplate);
-        prompt = prompt.replace('{CURRENT_DATA_INFO}', currentDataInfo);
-        prompt = prompt.replace('{FIELD_CONSTRAINTS}', fieldConstraints);
+        let prompt = coreTemplate;
+        if (tableRecordsEnabled && fullTemplate) {
+            prompt += '\n\n' + fullTemplate;
+            prompt = prompt.replace('{PANEL_DATA_TEMPLATE}', panelDataTemplate);
+            prompt = prompt.replace('{CURRENT_DATA_INFO}', currentDataInfo);
+            prompt = prompt.replace('{FIELD_CONSTRAINTS}', fieldConstraints);
 
-        // 添加最终检查清单
-        prompt += this.generatePanelCheckList(enabledPanels);
+            // 添加最终检查清单
+            prompt += this.generatePanelCheckList(enabledPanels);
+        }
 
         return prompt;
     }
@@ -866,8 +875,16 @@ ${panelRulesSection}
      * 构建增量更新提示词
      */
     async buildIncrementalPrompt(enabledPanels, memoryEnhancedData, updateStrategy, missingDataFields) {
+        // 🔧 检查是否启用表格记录
+        const context = SillyTavern?.getContext?.();
+        const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+        const basicSettings = extensionSettings.basic || {};
+        const tableRecordsEnabled = basicSettings.tableRecords?.enabled !== false;
+
         const coreTemplate = this.getCorePromptTemplate();
-        const incrementalTemplate = this.getIncrementalUpdateTemplate();
+
+        // 🔧 修复：只有在启用表格记录时才使用增量更新模板
+        const incrementalTemplate = tableRecordsEnabled ? this.getIncrementalUpdateTemplate() : '';
 
         // 🔧 修复：检查是否为自定义API模式，决定使用哪种数据信息生成方法
         const isCustomAPIMode = this.getOutputMode() === '自定义API';
@@ -883,25 +900,30 @@ ${panelRulesSection}
             currentDataInfo = await this.generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy);
         }
 
-        // 🔧 修复：生成详细的增量指令，强调缺失字段补充
+        // 🔧 修复：只有在启用表格记录时才生成增量指令
         let incrementalInstructions = '';
-        if (missingDataFields.length > 0) {
-            incrementalInstructions = this.generateIncrementalInstructions(missingDataFields, enabledPanels);
-            incrementalInstructions += `
+        if (tableRecordsEnabled) {
+            if (missingDataFields.length > 0) {
+                incrementalInstructions = this.generateIncrementalInstructions(missingDataFields, enabledPanels);
+                incrementalInstructions += `
 
 🚨🚨🚨 **重要提醒：检测到 ${missingDataFields.length} 个面板有缺失字段需要补充！** 🚨🚨🚨
 
 ⚠️ 即使是增量更新模式，也必须补充这些缺失字段！
 ⚠️ 请为每个缺失字段生成符合当前剧情的具体内容！
 ⚠️ 不要输出"未知"、"待定"等占位符！`;
-        } else {
-            incrementalInstructions = '✅ 无缺失字段检测到，仅输出有变化的数据';
+            } else {
+                incrementalInstructions = '✅ 无缺失字段检测到，仅输出有变化的数据';
+            }
         }
 
         // 组合模板
-        let prompt = coreTemplate + '\n\n' + incrementalTemplate;
-        prompt = prompt.replace('{CURRENT_DATA_INFO}', currentDataInfo);
-        prompt = prompt.replace('{INCREMENTAL_INSTRUCTIONS}', incrementalInstructions);
+        let prompt = coreTemplate;
+        if (tableRecordsEnabled && incrementalTemplate) {
+            prompt += '\n\n' + incrementalTemplate;
+            prompt = prompt.replace('{CURRENT_DATA_INFO}', currentDataInfo);
+            prompt = prompt.replace('{INCREMENTAL_INSTRUCTIONS}', incrementalInstructions);
+        }
 
         return prompt;
     }
@@ -1497,9 +1519,6 @@ ${aiMemoryInstruction}
      * 🔧 新增：创建AI记忆总结指令（新格式：小写标签）
      */
     createAIMemorySummaryInstruction() {
-        // 获取当前消息ID
-        const currentMessageId = this.getCurrentMessageId();
-
         return `### AI记忆总结输出
 
 请在回复后输出AI记忆总结，使用以下格式：
@@ -1510,9 +1529,7 @@ ${aiMemoryInstruction}
 "content": "简洁的记忆总结内容",
 "importance": 0.8,
 "tags": ["基因解锁", "归途之旅"],
-"category": "剧情发展",
-"timestamp": ${Date.now()},
-"messageId": "${currentMessageId}"
+"category": "剧情发展"
 -->
 </ai_memory_summary>
 
@@ -1523,9 +1540,7 @@ ${aiMemoryInstruction}
 - content: 总结核心剧情（20-200字）
 - importance: 重要性评分（0.0-1.0）
 - tags: 关键词标签数组
-- category: 分类（剧情发展/角色互动/情感变化/场景描述/决定转折）
-- timestamp: 时间戳
-- messageId: 消息ID`;
+- category: 分类（剧情发展/角色互动/情感变化/场景描述/决定转折）`;
     }
 
     /**
@@ -2432,12 +2447,20 @@ ${aiMemoryInstruction}
         try {
             console.log('[SmartPromptSystem] 🧠 生成记忆增强数据对照信息...');
 
+            // 🔧 检查是否启用表格记录
+            const context = SillyTavern?.getContext?.();
+            const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const basicSettings = extensionSettings.basic || {};
+            const tableRecordsEnabled = basicSettings.tableRecords?.enabled !== false;
+
+            console.log('[SmartPromptSystem] 🔧 表格记录启用状态:', tableRecordsEnabled);
+
             // 安全解构，提供默认值
             const {
                 current = {},
                 historical = {},
                 persistent = {},
-                context = {},
+                context: contextData = {},
                 metadata = {}
             } = memoryEnhancedData || {};
 
@@ -2450,30 +2473,38 @@ ${aiMemoryInstruction}
 
             const dataInfoParts = ['【AI记忆增强数据 - 永不遗忘的剧情记忆】'];
             dataInfoParts.push(`聊天ID: ${metadata.chatId || 'unknown'}`);
-            dataInfoParts.push(`数据覆盖率: ${updateStrategy?.dataPercentage || 0}% (${updateStrategy?.existingFields || 0}/${updateStrategy?.totalFields || 0}个字段)`);
-            dataInfoParts.push(`更新策略: ${updateStrategy?.type === 'full' ? '全量更新' : '增量更新'} - ${updateStrategy?.reason || 'unknown'}`);
+
+            // 🔧 修复：只有在启用表格记录时才显示数据覆盖率和更新策略
+            if (tableRecordsEnabled) {
+                dataInfoParts.push(`数据覆盖率: ${updateStrategy?.dataPercentage || 0}% (${updateStrategy?.existingFields || 0}/${updateStrategy?.totalFields || 0}个字段)`);
+                dataInfoParts.push(`更新策略: ${updateStrategy?.type === 'full' ? '全量更新' : '增量更新'} - ${updateStrategy?.reason || 'unknown'}`);
+            }
+
             dataInfoParts.push(`记忆深度: ${metadata.memoryDepth || 0}个历史记录`);
             dataInfoParts.push('');
 
-            // 1. 当前数据状态（统一按新架构行视图展示，避免旧架构误导AI）
-            dataInfoParts.push('【📊 当前数据状态（统一行视图）】');
-            for (const panel of enabledPanels) {
-                const panelId = panel.id;
-                const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
-                const panelName = this.getBasicPanelDisplayName(panelId);
-                const panelData = current[panelKey] || current[panelId] || {};
+            // 🔧 修复：只有在启用表格记录时才显示当前数据状态
+            if (tableRecordsEnabled) {
+                // 1. 当前数据状态（统一按新架构行视图展示，避免旧架构误导AI）
+                dataInfoParts.push('【📊 当前数据状态（统一行视图）】');
+                for (const panel of enabledPanels) {
+                    const panelId = panel.id;
+                    const panelKey = panel.type === 'custom' && panel.key ? panel.key : panel.id;
+                    const panelName = this.getBasicPanelDisplayName(panelId);
+                    const panelData = current[panelKey] || current[panelId] || {};
 
-                dataInfoParts.push(`${panelName}面板 (${panelId}): ${Object.keys(panelData).length > 0 ? '有数据' : '待生成'}`);
+                    dataInfoParts.push(`${panelName}面板 (${panelId}): ${Object.keys(panelData).length > 0 ? '有数据' : '待生成'}`);
 
-                if (Object.keys(panelData).length > 0) {
-                    // 使用统一的新架构行格式展示
-                    const normalizedRows = this.formatPanelRowsForPrompt(panel, panelData);
-                    if (normalizedRows.length > 0) {
-                        normalizedRows.forEach(line => dataInfoParts.push(`  ${line}`));
+                    if (Object.keys(panelData).length > 0) {
+                        // 使用统一的新架构行格式展示
+                        const normalizedRows = this.formatPanelRowsForPrompt(panel, panelData);
+                        if (normalizedRows.length > 0) {
+                            normalizedRows.forEach(line => dataInfoParts.push(`  ${line}`));
+                        }
                     }
                 }
+                dataInfoParts.push('');
             }
-            dataInfoParts.push('');
 
             // 2. 历史记忆数据
             if (Object.keys(historical).length > 0) {
@@ -2555,39 +2586,17 @@ ${aiMemoryInstruction}
                 dataInfoParts.push('');
             }
 
-            // 4. 上下文信息
-            if (Object.keys(context).length > 0) {
-                dataInfoParts.push('【🌐 上下文信息】');
-
-                if (context.character) {
-                    dataInfoParts.push(`角色: ${context.character.name}`);
-                    if (context.character.personality) {
-                        dataInfoParts.push(`性格: ${context.character.personality.substring(0, 100)}...`);
-                    }
-                }
-
-                if (context.recentMessages && context.recentMessages.length > 0) {
-                    dataInfoParts.push('最近对话:');
-                    context.recentMessages.slice(-2).forEach((msg, index) => {
-                        const role = msg.role === 'user' ? '用户' : 'AI';
-                        dataInfoParts.push(`  ${role}: ${msg.content.substring(0, 80)}...`);
-                    });
-                }
-
-                if (context.worldInfo && context.worldInfo.length > 0) {
-                    dataInfoParts.push(`世界书条目: ${context.worldInfo.length}个`);
-                }
-                dataInfoParts.push('');
+            // 🔧 修复：只有在启用表格记录时才显示AI生成指导
+            if (tableRecordsEnabled) {
+                // 5. AI指导说明
+                dataInfoParts.push('【🤖 AI生成指导】');
+                dataInfoParts.push('基于以上完整记忆数据，请：');
+                dataInfoParts.push('1. 参考历史记忆，保持剧情连贯性');
+                dataInfoParts.push('2. 尊重持久化记忆，确保角色设定一致');
+                dataInfoParts.push('3. 结合上下文信息，生成符合当前情境的数据');
+                dataInfoParts.push('4. 如果是增量更新，只修改确实需要变化的字段');
+                dataInfoParts.push('5. 确保生成的数据与历史记忆逻辑一致');
             }
-
-            // 5. AI指导说明
-            dataInfoParts.push('【🤖 AI生成指导】');
-            dataInfoParts.push('基于以上完整记忆数据，请：');
-            dataInfoParts.push('1. 参考历史记忆，保持剧情连贯性');
-            dataInfoParts.push('2. 尊重持久化记忆，确保角色设定一致');
-            dataInfoParts.push('3. 结合上下文信息，生成符合当前情境的数据');
-            dataInfoParts.push('4. 如果是增量更新，只修改确实需要变化的字段');
-            dataInfoParts.push('5. 确保生成的数据与历史记忆逻辑一致');
 
             const result = dataInfoParts.join('\n');
             console.log(`[SmartPromptSystem] 🧠 记忆增强数据对照信息生成完成，长度: ${result.length}`);
@@ -5372,9 +5381,7 @@ infobar_data标签（独立输出，必须后输出）`;
 "content": "简洁的剧情总结内容（100-200字）",
 "importance": 0.8,
 "tags": ["关键词1", "关键词2"],
-"category": "剧情发展",
-"timestamp": ${Date.now()},
-"messageId": "msg_xxx"
+"category": "剧情发展"
 -->
 </ai_memory_summary>
 

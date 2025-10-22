@@ -110,19 +110,19 @@ export class CustomVectorAPIAdapter {
             let requestBody = null;
 
             // 检测API类型
-            if (baseUrl.includes('openai.com') || baseUrl.includes('/v1')) {
-                // OpenAI兼容格式
-                modelsUrl = `${baseUrl}/v1/models`;
-            } else if (baseUrl.includes('ollama') || baseUrl.includes(':11434')) {
+            if (baseUrl.includes('ollama') || baseUrl.includes(':11434')) {
                 // Ollama格式
                 modelsUrl = `${baseUrl}/api/tags`;
             } else if (baseUrl.includes('huggingface')) {
                 // HuggingFace格式 - 通常不提供模型列表API
                 console.warn('[CustomVectorAPIAdapter] ⚠️ HuggingFace API通常不提供模型列表');
                 return [];
-            } else {
-                // 默认尝试OpenAI格式
+            } else if (baseUrl.includes('openai.com') || baseUrl.endsWith('/v1')) {
+                // OpenAI兼容格式 - baseUrl已经包含/v1
                 modelsUrl = `${baseUrl}/models`;
+            } else {
+                // 默认尝试OpenAI格式 - baseUrl不包含/v1，需要添加
+                modelsUrl = `${baseUrl}/v1/models`;
             }
 
             // 🔧 使用智能代理策略（参考APIIntegration的实现）
@@ -292,21 +292,7 @@ export class CustomVectorAPIAdapter {
             let requestBody;
 
             // 检测API类型
-            if (baseUrl.includes('openai.com') || baseUrl.includes('/v1')) {
-                // OpenAI兼容格式
-                embeddingsUrl = `${baseUrl}/v1/embeddings`;
-                requestBody = {
-                    input: text,
-                    model: this.config.model || 'text-embedding-ada-002'
-                };
-            } else if (baseUrl.includes('gemini') || baseUrl.includes('google')) {
-                // Google/Gemini格式
-                embeddingsUrl = `${baseUrl}/v1/embeddings`;
-                requestBody = {
-                    input: text,
-                    model: this.config.model || 'embedding-001'
-                };
-            } else if (baseUrl.includes('ollama') || baseUrl.includes(':11434')) {
+            if (baseUrl.includes('ollama') || baseUrl.includes(':11434')) {
                 // Ollama格式
                 embeddingsUrl = `${baseUrl}/api/embeddings`;
                 requestBody = {
@@ -326,9 +312,23 @@ export class CustomVectorAPIAdapter {
                     input: text,
                     model: this.config.model
                 };
-            } else {
-                // 默认OpenAI格式
+            } else if (baseUrl.includes('openai.com') || baseUrl.endsWith('/v1')) {
+                // OpenAI兼容格式 - baseUrl已经包含/v1
                 embeddingsUrl = `${baseUrl}/embeddings`;
+                requestBody = {
+                    input: text,
+                    model: this.config.model || 'text-embedding-ada-002'
+                };
+            } else if (baseUrl.includes('gemini') || baseUrl.includes('google')) {
+                // Google/Gemini格式
+                embeddingsUrl = `${baseUrl}/v1/embeddings`;
+                requestBody = {
+                    input: text,
+                    model: this.config.model || 'embedding-001'
+                };
+            } else {
+                // 默认OpenAI格式 - baseUrl不包含/v1，需要添加
+                embeddingsUrl = `${baseUrl}/v1/embeddings`;
                 requestBody = {
                     input: text,
                     model: this.config.model
