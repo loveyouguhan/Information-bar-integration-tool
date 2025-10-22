@@ -28,7 +28,6 @@ import { AITemplateAssistant } from './core/AITemplateAssistant.js';
 import { TemplateManager } from './core/TemplateManager.js';
 import { VariableSystemPrompt } from './core/VariableSystemPrompt.js';
 import { NPCDatabaseManager } from './core/NPCDatabaseManager.js';
-import { NPCManagementPanel } from './ui/NPCManagementPanel.js';
 import { WorldBookManager } from './core/WorldBookManager.js';
 import { WorldBookConfigPanel } from './ui/WorldBookConfigPanel.js';
 import { AIMemoryDatabaseInjector } from './core/AIMemoryDatabaseInjector.js';
@@ -584,14 +583,6 @@ class InformationBarIntegrationTool {
         // 启动前端显示管理器
         await this.frontendDisplayManager.init();
 
-        // 初始化NPC管理面板（懒显示）
-        this.npcManagementPanel = new NPCManagementPanel({
-            npcDatabaseManager: this.npcDatabaseManager,
-            unifiedDataCore: this.dataCore,
-            eventSystem: this.eventSystem,
-        });
-
-
         // 🔧 新增：应用已保存主题到全局（无需打开设置界面）
         await this.applySavedThemeAtStartup();
 
@@ -624,7 +615,6 @@ class InformationBarIntegrationTool {
             aiTemplateAssistant: this.aiTemplateAssistant,
             templateManager: this.templateManager,
             npcDatabaseManager: this.npcDatabaseManager,
-            npcManagementPanel: this.npcManagementPanel,
             storyPlanningAssistant: this.storyPlanningAssistant // 📖 剧情规划助手
         };
 
@@ -945,7 +935,6 @@ class InformationBarIntegrationTool {
                 templateManager: this.templateManager,
                 variableSystemPrompt: this.variableSystemPrompt,
                 npcDatabaseManager: this.npcDatabaseManager,
-                npcManagementPanel: this.npcManagementPanel,
                 worldBookManager: this.worldBookManager,
                 worldBookConfigPanel: this.worldBookConfigPanel,
                 regexScriptManager: this.regexScriptManager, // 🆕 新增：正则表达式脚本管理器
