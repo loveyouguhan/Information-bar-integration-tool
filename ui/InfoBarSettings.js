@@ -55,6 +55,12 @@ export class InfoBarSettings {
         this.selectedNpcIds = new Set();
         this.batchDeleteInProgress = false;
 
+        // 🎯 新增：NPC AI模式楼层检测状态
+        this.npcAiUpdateFloorCount = 20; // 默认20楼触发更新
+        this.lastNpcAiMessageCount = 0;
+        this.lastNpcAiUpdateMessageId = 0;
+        this.npcAiUpdateInProgress = false;
+
         // 初始化状态
         this.initialized = false;
         this.visible = false;
@@ -139,9 +145,17 @@ export class InfoBarSettings {
                 // 🔧 新增：监听聊天切换事件，刷新NPC列表
                 this.eventSystem.on('chat:changed', async () => {
                     console.log('[InfoBarSettings] 🔄 收到聊天切换事件，刷新NPC列表');
+                    
+                    // 🎯 新增：重置NPC AI模式楼层检测状态
+                    this.lastNpcAiMessageCount = 0;
+                    this.lastNpcAiUpdateMessageId = 0;
+                    console.log('[InfoBarSettings] 🎯 重置NPC AI楼层检测状态');
+                    
                     // 延迟刷新，确保NPC数据库已切换完成
                     setTimeout(async () => {
                         await this.refreshNPCList();
+                        // 🎯 重新初始化消息计数
+                        this.initNpcAiMessageCount();
                     }, 500);
                 });
 
@@ -151,7 +165,12 @@ export class InfoBarSettings {
                     await this.refreshNPCList();
                 });
 
-                console.log('[InfoBarSettings] ✅ 聊天切换事件监听器已绑定');
+                // 🎯 新增：监听消息接收事件（楼层检测）
+                this.eventSystem.on('message:received', (data) => {
+                    this.handleNpcAiMessageReceived(data);
+                });
+
+                console.log('[InfoBarSettings] ✅ 聊天切换事件监听器已绑定（包括NPC AI楼层检测）');
             }
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 绑定聊天切换事件监听器失败:', error);
@@ -36729,6 +36748,9 @@ ${dataExamples}
             // 🔧 修复：初始化完成后，立即恢复NPC设置
             this.restoreNPCSettings();
 
+            // 🎯 新增：初始化NPC AI消息计数
+            this.initNpcAiMessageCount();
+
             // 刷新NPC列表
             this.refreshNPCList();
 
@@ -36913,13 +36935,7 @@ ${dataExamples}
 
             // 保存设置
             localStorage.setItem('npcPanel_targetWorldBook', worldBookName);
-
-            // 通知NPC管理面板更新目标世界书
-            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
-            if (npcPanel && typeof npcPanel.setTargetWorldBook === 'function') {
-                npcPanel.setTargetWorldBook(worldBookName);
-                console.log('[InfoBarSettings] ✅ NPC管理面板目标世界书已更新');
-            }
+            console.log('[InfoBarSettings] ✅ NPC目标世界书设置已保存');
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理世界书选择变更失败:', error);
@@ -36935,13 +36951,7 @@ ${dataExamples}
 
             // 保存设置
             localStorage.setItem('npcPanel_sourcePanel', panelId);
-
-            // 通知NPC管理面板更新数据源
-            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
-            if (npcPanel && typeof npcPanel.setDataSourcePanel === 'function') {
-                npcPanel.setDataSourcePanel(panelId);
-                console.log('[InfoBarSettings] ✅ NPC管理面板数据源已更新');
-            }
+            console.log('[InfoBarSettings] ✅ NPC数据源面板设置已保存');
 
             // 刷新NPC列表
             this.refreshNPCList();
@@ -36980,13 +36990,6 @@ ${dataExamples}
         try {
             localStorage.setItem('npcPanel_autoSync', enabled.toString());
             console.log('[InfoBarSettings] 🔄 NPC自动同步设置已更新:', enabled ? '开启' : '关闭');
-
-            // 通知NPC管理面板更新状态
-            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
-            if (npcPanel) {
-                npcPanel.autoSyncEnabled = enabled;
-                npcPanel.updateSyncUI?.();
-            }
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 更新NPC自动同步设置失败:', error);
         }
@@ -36999,13 +37002,6 @@ ${dataExamples}
         try {
             localStorage.setItem('npcPanel_worldBookSync', enabled.toString());
             console.log('[InfoBarSettings] 🌍 NPC世界书同步设置已更新:', enabled ? '开启' : '关闭');
-
-            // 通知NPC管理面板更新状态
-            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
-            if (npcPanel) {
-                npcPanel.worldBookSyncEnabled = enabled;
-                npcPanel.updateWorldBookSyncUI?.();
-            }
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 更新NPC世界书同步设置失败:', error);
         }
@@ -37063,11 +37059,136 @@ ${dataExamples}
     }
 
     /**
+     * 🎯 新增：初始化NPC AI消息计数
+     */
+    initNpcAiMessageCount() {
+        try {
+            console.log('[InfoBarSettings] 🔢 初始化NPC AI消息计数...');
+
+            const context = SillyTavern?.getContext?.();
+            if (context && context.chat) {
+                this.lastNpcAiMessageCount = context.chat.length;
+                console.log('[InfoBarSettings] 📊 NPC AI消息计数初始化完成:', {
+                    currentMessageCount: this.lastNpcAiMessageCount,
+                    lastUpdateMessageId: this.lastNpcAiUpdateMessageId,
+                    messagesSinceLastUpdate: this.lastNpcAiMessageCount - this.lastNpcAiUpdateMessageId
+                });
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化NPC AI消息计数失败:', error);
+        }
+    }
+
+    /**
+     * 🎯 新增：判断是否应该触发NPC AI更新（楼层检测）
+     */
+    shouldTriggerNpcAiUpdate(currentMessageCount) {
+        try {
+            // 从UI获取楼层设置
+            const updateFloor = parseInt(this.modal?.querySelector('#npc-ai-update-floor')?.value || this.npcAiUpdateFloorCount);
+            
+            // 检查是否达到更新楼层数
+            const messagesSinceLastUpdate = currentMessageCount - this.lastNpcAiUpdateMessageId;
+            const shouldTrigger = messagesSinceLastUpdate >= updateFloor;
+
+            console.log('[InfoBarSettings] 🤔 NPC AI更新触发检查:', {
+                currentMessageCount,
+                lastUpdateMessageId: this.lastNpcAiUpdateMessageId,
+                messagesSinceLastUpdate,
+                updateFloor,
+                shouldTrigger
+            });
+
+            return shouldTrigger;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 判断NPC AI更新触发失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 🎯 新增：处理消息接收事件（楼层检测）
+     */
+    async handleNpcAiMessageReceived(data) {
+        try {
+            // 检查是否在NPC AI模式下
+            const currentMode = this.modal?.querySelector('.npc-mode-tab.active')?.dataset?.mode;
+            if (currentMode !== 'ai') {
+                return; // 不在AI模式下，跳过
+            }
+
+            if (this.npcAiUpdateInProgress) {
+                return; // 更新正在进行中
+            }
+
+            // 更新消息计数
+            const context = SillyTavern?.getContext?.();
+            if (!context || !context.chat) return;
+
+            const currentMessageCount = context.chat.length;
+            const newMessages = currentMessageCount - this.lastNpcAiMessageCount;
+
+            console.log('[InfoBarSettings] 📊 NPC AI消息计数更新:', {
+                previous: this.lastNpcAiMessageCount,
+                current: currentMessageCount,
+                new: newMessages
+            });
+
+            this.lastNpcAiMessageCount = currentMessageCount;
+
+            // 检查是否需要触发更新
+            if (this.shouldTriggerNpcAiUpdate(currentMessageCount)) {
+                console.log('[InfoBarSettings] 🎯 触发楼层检测更新，当前消息数:', currentMessageCount);
+                
+                this.npcAiUpdateInProgress = true;
+                await this.updateNPCWithAI();
+                this.npcAiUpdateInProgress = false;
+
+                // 更新最后更新的消息ID
+                this.lastNpcAiUpdateMessageId = currentMessageCount;
+                console.log('[InfoBarSettings] ✅ 楼层检测更新完成，更新lastNpcAiUpdateMessageId:', this.lastNpcAiUpdateMessageId);
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理NPC AI消息接收事件失败:', error);
+            this.npcAiUpdateInProgress = false;
+        }
+    }
+
+    /**
      * 🆕 NPC AI模式：自动更新NPC数据
      */
     async updateNPCWithAI() {
+        // 🎯 提升到方法作用域，便于在finally块中访问
+        const updateBtn = this.modal?.querySelector('#npc-ai-update-now-btn');
+        let updateInterval = null;
+        
         try {
             console.log('[InfoBarSettings] 🤖 开始NPC AI模式更新...');
+            
+            // 🎯 新增：更新按钮状态为"正在更新中"
+            if (updateBtn) {
+                updateBtn.disabled = true;
+                updateBtn.innerHTML = '⏳ 正在更新NPC数据中...';
+                updateBtn.style.opacity = '0.6';
+                updateBtn.style.cursor = 'not-allowed';
+            }
+            
+            // 🎯 新增：记录开始时间，用于显示经过时间
+            const updateStartTime = Date.now();
+            
+            // 🎯 新增：定期更新按钮状态显示经过时间
+            updateInterval = setInterval(() => {
+                if (updateBtn && updateBtn.disabled) {
+                    const elapsed = Math.floor((Date.now() - updateStartTime) / 1000);
+                    if (elapsed > 2) {
+                        updateBtn.innerHTML = `⏳ 正在更新NPC数据中...${elapsed}秒`;
+                    }
+                } else {
+                    clearInterval(updateInterval);
+                }
+            }, 1000);
             
             // 获取配置
             const updateFloor = parseInt(this.modal.querySelector('#npc-ai-update-floor')?.value || 20);
@@ -37076,6 +37197,14 @@ ${dataExamples}
             const context = SillyTavern.getContext();
             if (!context || !context.chat || context.chat.length === 0) {
                 console.log('[InfoBarSettings] ⚠️ 没有可用的聊天消息');
+                // 🎯 恢复按钮状态
+                if (updateBtn) {
+                    clearInterval(updateInterval);
+                    updateBtn.disabled = false;
+                    updateBtn.innerHTML = '🤖 立即更新NPC数据';
+                    updateBtn.style.opacity = '1';
+                    updateBtn.style.cursor = 'pointer';
+                }
                 return;
             }
             
@@ -37256,6 +37385,17 @@ update （"NPC姓名，字段名"，"新值"）；//变化理由
         } catch (error) {
             console.error('[InfoBarSettings] ❌ NPC AI更新失败:', error);
             this.showNotification('NPC AI更新失败: ' + error.message, 'error');
+        } finally {
+            // 🎯 新增：统一恢复按钮状态（无论成功或失败）
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+            if (updateBtn) {
+                updateBtn.disabled = false;
+                updateBtn.innerHTML = '🤖 立即更新NPC数据';
+                updateBtn.style.opacity = '1';
+                updateBtn.style.cursor = 'pointer';
+            }
         }
     }
 
@@ -38273,40 +38413,99 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
     }
 
     /**
-     * 处理立即同步NPC数据
+     * 处理立即同步NPC数据（面板模式）
+     * 🔧 修复：不再依赖已删除的NPCManagementPanel，直接刷新列表
      */
     async handleNPCSyncNow() {
         try {
-            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
-            if (!npcPanel) {
-                this.showNotification('NPC管理模块未找到', 'error');
-                return;
-            }
-
-            console.log('[InfoBarSettings] 🔄 开始手动同步NPC数据...');
-            await npcPanel.syncNow();
-            this.refreshNPCList();
-            this.showNotification('NPC数据同步完成', 'success');
+            console.log('[InfoBarSettings] 🔄 刷新NPC列表...');
+            
+            // 面板模式下，NPC数据由NPCDatabaseManager自动管理（监听data:updated事件）
+            // 这里只需要刷新显示的列表即可
+            await this.refreshNPCList();
+            
+            this.showNotification('NPC列表已刷新', 'success');
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 手动同步NPC数据失败:', error);
-            this.showNotification('NPC数据同步失败: ' + error.message, 'error');
+            console.error('[InfoBarSettings] ❌ 刷新NPC列表失败:', error);
+            this.showNotification('刷新NPC列表失败: ' + error.message, 'error');
         }
     }
 
     /**
      * 处理同步NPC到世界书
+     * 🔧 修复：不再依赖已删除的NPCManagementPanel，直接调用WorldBookManager
      */
     async handleNPCWorldBookSyncNow() {
         try {
-            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
-            if (!npcPanel) {
-                this.showNotification('NPC管理模块未找到', 'error');
+            console.log('[InfoBarSettings] 🌍 开始手动同步NPC到世界书...');
+            
+            // 获取WorldBookManager和NPCDatabaseManager
+            const worldBookManager = window.SillyTavernInfobar?.modules?.worldBookManager;
+            const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+            
+            if (!worldBookManager) {
+                this.showNotification('世界书管理器未找到', 'error');
+                return;
+            }
+            
+            if (!npcDB) {
+                this.showNotification('NPC数据库管理器未找到', 'error');
                 return;
             }
 
-            console.log('[InfoBarSettings] 🌍 开始手动同步NPC到世界书...');
-            await npcPanel.syncToWorldBook();
-            this.showNotification('NPC数据已同步到世界书', 'success');
+            // 获取当前聊天的所有NPC
+            const npcs = await npcDB.getAllNpcsForCurrentChat();
+            if (!npcs || npcs.length === 0) {
+                this.showNotification('当前没有NPC数据可同步', 'info');
+                return;
+            }
+
+            console.log(`[InfoBarSettings] 🌍 找到 ${npcs.length} 个NPC，开始同步到世界书...`);
+
+            // 获取或创建目标世界书
+            const worldBookResult = await worldBookManager.getOrCreateTargetWorldBook(true);
+            if (!worldBookResult.success) {
+                throw new Error(`获取目标世界书失败: ${worldBookResult.error}`);
+            }
+
+            const { worldBookName, worldBookData, isNewWorldBook } = worldBookResult;
+            let syncedCount = 0;
+
+            // 为每个NPC创建或更新世界书条目
+            for (const npc of npcs) {
+                try {
+                    // 格式化NPC数据为世界书条目
+                    const entryData = this.formatNPCAsWorldBookEntry(npc);
+                    
+                    // 创建或更新世界书条目
+                    const entryResult = await worldBookManager.createOrUpdateWorldBookEntry(
+                        worldBookName, 
+                        worldBookData, 
+                        entryData
+                    );
+                    
+                    if (entryResult.success) {
+                        syncedCount++;
+                        console.log(`[InfoBarSettings] ✅ NPC "${npc.name}" 已同步到世界书`);
+                    }
+                } catch (error) {
+                    console.error(`[InfoBarSettings] ❌ 处理NPC "${npc.name}" 失败:`, error);
+                }
+            }
+
+            // 去重
+            await worldBookManager.deduplicateWorldBookEntries(worldBookName, worldBookData);
+
+            // 绑定世界书（如果是新创建的）
+            if (isNewWorldBook) {
+                await worldBookManager.bindWorldBookToChatLore(worldBookName);
+            }
+
+            // 刷新缓存
+            await worldBookManager.refreshCache();
+
+            this.showNotification(`NPC数据已同步到世界书 (${syncedCount}/${npcs.length})`, 'success');
+            
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 手动同步NPC到世界书失败:', error);
             this.showNotification('同步到世界书失败: ' + error.message, 'error');
@@ -38314,7 +38513,62 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
     }
 
     /**
+     * 🔧 格式化NPC数据为世界书条目
+     */
+    formatNPCAsWorldBookEntry(npc) {
+        const entryName = npc.name;
+        const keywords = [npc.name];
+        
+        if (npc.alias && npc.alias.length > 0) {
+            keywords.push(...npc.alias);
+        }
+        
+        let content = `# ${npc.name}\n\n`;
+        
+        if (npc.appearCount) {
+            content += `**出现次数**: ${npc.appearCount}\n`;
+        }
+        
+        if (npc.lastSeen) {
+            const lastSeenDate = new Date(npc.lastSeen).toLocaleString('zh-CN');
+            content += `**最后出现**: ${lastSeenDate}\n`;
+        }
+        
+        content += '\n';
+        
+        if (npc.fields && Object.keys(npc.fields).length > 0) {
+            content += '## 角色信息\n\n';
+            Object.entries(npc.fields).forEach(([fieldName, value]) => {
+                if (fieldName === 'index' || fieldName === 'source' || fieldName.startsWith('_')) {
+                    return;
+                }
+                if (!value || value.toString().trim() === '') {
+                    return;
+                }
+                content += `**${fieldName}**: ${value}\n`;
+            });
+        }
+        
+        content += '\n---\n';
+        content += `*数据来源: NPC数据库 | 最后更新: ${new Date().toLocaleString('zh-CN')}*`;
+        
+        return {
+            entryName: entryName,
+            content: content,
+            keywords: keywords,
+            order: 100,
+            summaryId: `npc_${npc.id}`,
+            summaryType: 'npc',
+            summarySource: 'npc_database',
+            npcId: npc.id,
+            npcName: npc.name,
+            sourceType: 'npc_database'
+        };
+    }
+
+    /**
      * 🆕 AI模式下：在解析完NPC操作后触发世界书同步
+     * 🔧 修复：不再依赖已删除的NPCManagementPanel，直接调用同步逻辑
      */
     async handleNPCWorldBookSyncAfterAI() {
         try {
@@ -38325,14 +38579,11 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
                 return;
             }
 
-            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
-            if (!npcPanel) {
-                console.warn('[InfoBarSettings] ⚠️ NPC管理模块未找到');
-                return;
-            }
-
             console.log('[InfoBarSettings] 🌍 AI模式：NPC数据已存储，触发世界书同步...');
-            await npcPanel.syncToWorldBook();
+            
+            // 直接调用handleNPCWorldBookSyncNow方法
+            await this.handleNPCWorldBookSyncNow();
+            
             console.log('[InfoBarSettings] ✅ AI模式：世界书同步完成');
             
         } catch (error) {
