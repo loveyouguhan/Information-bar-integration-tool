@@ -56,6 +56,9 @@ import { FrontendDisplayManager } from './ui/FrontendDisplayManager.js';
 import { RegexScriptManager } from './core/RegexScriptManager.js';
 import { RegexScriptPanel } from './ui/RegexScriptPanel.js';
 import { StoryPlanningAssistant } from './core/StoryPlanningAssistant.js';
+import { NovelAnalyzer } from './core/NovelAnalyzer.js';
+import { CorpusRetrieval } from './core/CorpusRetrieval.js';
+import { VectorizedSummaryManager } from './core/VectorizedSummaryManager.js';
 
 // 🔧 修复：初始化控制台门禁，默认禁用日志收集，避免在配置加载前收集日志
 (function bootstrapInfobarConsoleGate() {
@@ -166,6 +169,10 @@ class InformationBarIntegrationTool {
         // 🆕 正则表达式脚本管理
         this.regexScriptManager = null;
         this.regexScriptPanel = null;
+
+        // 🆕 小说分析和语料库检索
+        this.novelAnalyzer = null;
+        this.corpusRetrieval = null;
 
         // 功能模块 (将在后续版本中添加)
         // this.contentManager = null;
@@ -586,6 +593,29 @@ class InformationBarIntegrationTool {
         // 🔧 新增：应用已保存主题到全局（无需打开设置界面）
         await this.applySavedThemeAtStartup();
 
+        // 📚 新增：初始化小说分析器
+        this.novelAnalyzer = new NovelAnalyzer({
+            customAPI: this.infoBarSettings?.customAPIManager,
+            eventSystem: this.eventSystem
+        });
+        console.log('[InfoBarTool] ✅ 小说分析器初始化完成');
+
+        // 🔍 新增：初始化语料库检索系统
+        this.corpusRetrieval = new CorpusRetrieval({
+            vectorRetrieval: this.vectorizedMemoryRetrieval,
+            eventSystem: this.eventSystem
+        });
+        console.log('[InfoBarTool] ✅ 语料库检索系统初始化完成');
+
+        // 🔮 新增：初始化向量化总结管理器
+        this.vectorizedSummaryManager = new VectorizedSummaryManager({
+            unifiedDataCore: this.dataCore,
+            eventSystem: this.eventSystem,
+            customVectorAPI: this.customVectorAPI
+        });
+        await this.vectorizedSummaryManager.init();
+        console.log('[InfoBarTool] ✅ 向量化总结管理器初始化完成');
+
         // 创建modules对象以便外部访问
         this.modules = {
             settings: this.infoBarSettings,
@@ -615,7 +645,10 @@ class InformationBarIntegrationTool {
             aiTemplateAssistant: this.aiTemplateAssistant,
             templateManager: this.templateManager,
             npcDatabaseManager: this.npcDatabaseManager,
-            storyPlanningAssistant: this.storyPlanningAssistant // 📖 剧情规划助手
+            storyPlanningAssistant: this.storyPlanningAssistant, // 📖 剧情规划助手
+            novelAnalyzer: this.novelAnalyzer, // 📚 小说分析器
+            corpusRetrieval: this.corpusRetrieval, // 🔍 语料库检索系统
+            vectorizedSummaryManager: this.vectorizedSummaryManager // 🔮 向量化总结管理器
         };
 
         // 🔧 修复：更新全局对象以使用正确初始化的模块
@@ -942,6 +975,9 @@ class InformationBarIntegrationTool {
                 contentFilterManager: this.contentFilterManager, // 🔧 新增：内容过滤管理器
                 messageFilterHook: this.messageFilterHook, // 🔧 新增：消息过滤Hook
                 storyPlanningAssistant: this.storyPlanningAssistant, // 📖 新增：剧情规划助手
+                novelAnalyzer: this.novelAnalyzer, // 📚 新增：小说分析器
+                corpusRetrieval: this.corpusRetrieval, // 🔍 新增：语料库检索系统
+                vectorizedSummaryManager: this.vectorizedSummaryManager, // 🔮 新增：向量化总结管理器
                 // 🔧 修复：添加自定义API任务队列模块
                 customAPITaskQueue: this.infoBarSettings?.customAPITaskQueue
             };
