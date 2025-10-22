@@ -876,6 +876,9 @@ ${'='.repeat(80)}
                             <div class="nav-item" data-nav="memoryEnhancement">
                                 记忆增强
                             </div>
+                            <div class="nav-item" data-nav="vectorFunction">
+                                向量功能
+                            </div>
                             <div class="nav-item" data-nav="panelManagement">
                                 面板管理
                             </div>
@@ -916,6 +919,9 @@ ${'='.repeat(80)}
                             </div>
                             <div class="content-panel" data-content="memoryEnhancement">
                                 ${this.createMemoryEnhancementPanel()}
+                            </div>
+                            <div class="content-panel" data-content="vectorFunction">
+                                ${this.createVectorFunctionPanel()}
                             </div>
                             <div class="content-panel" data-content="panelManagement">
                                 ${this.createPanelManagementPanel()}
@@ -1763,6 +1769,21 @@ ${'='.repeat(80)}
                     this.switchNPCMode(mode);
                 }
 
+                // 🆕 API类型切换
+                const apiTypeBtn = e.target.closest('.api-type-switch-btn');
+                if (apiTypeBtn) {
+                    const apiType = apiTypeBtn.dataset.apiType;
+                    this.switchAPIType(apiType);
+                }
+
+                // 🆕 向量化API相关按钮
+                if (e.target.id === 'load-vector-models-btn') {
+                    this.loadVectorModelList();
+                }
+                if (e.target.id === 'test-vector-connection-btn') {
+                    this.testVectorConnection();
+                }
+
             // 🆕 破甲提示词文本框字符统计
             if (e.target.id === 'armor-breaking-prompt') {
                 this.updateArmorBreakingStats();
@@ -1825,6 +1846,11 @@ ${'='.repeat(80)}
                 // 接口类型变更
                 if (e.target.id === 'interface-type') {
                     this.handleInterfaceTypeChange(e.target.value);
+                }
+
+                // 🆕 向量化API提供商变更
+                if (e.target.id === 'vector-api-provider') {
+                    this.handleVectorProviderChange(e.target.value);
                 }
             });
 
@@ -3048,7 +3074,7 @@ ${'='.repeat(80)}
             const panelName = panelContainer.getAttribute('data-content');
 
             // 🔧 修复：特殊面板不需要更新计数（它们不是配置面板）
-            const specialPanels = ['memoryEnhancement', 'summary', 'npc-management', 'theme', 'frontend-display', 'advanced', 'promptSettings', 'customAPI'];
+            const specialPanels = ['memoryEnhancement', 'vectorFunction', 'summary', 'npc-management', 'theme', 'frontend-display', 'advanced', 'promptSettings', 'customAPI'];
             if (specialPanels.includes(panelName)) {
                 return;
             }
@@ -6197,6 +6223,11 @@ ${'='.repeat(80)}
                 this.initNPCManagementPanelContent();
             }
 
+            // 🔮 新增：向量功能面板特殊处理
+            if (contentType === 'vectorFunction') {
+                this.initVectorFunctionPanelContent();
+            }
+
             console.log(`[InfoBarSettings] 📑 切换到内容: ${contentType}`);
 
         } catch (error) {
@@ -6230,11 +6261,53 @@ ${'='.repeat(80)}
             // 绑定总结面板事件
             this.bindSummaryPanelEvents();
 
+            // 🆕 绑定向量化总结事件监听器
+            this.bindVectorizedSummaryEvents();
+
             console.log('[InfoBarSettings] ✅ 总结面板内容初始化完成');
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 初始化总结面板内容失败:', error);
             this.showMessage('初始化总结面板失败', 'error');
+        }
+    }
+
+    /**
+     * 🆕 绑定向量化总结事件监听器
+     */
+    bindVectorizedSummaryEvents() {
+        try {
+            console.log('[InfoBarSettings] 🔗 绑定向量化总结事件监听器...');
+
+            const infoBarTool = window.SillyTavernInfobar;
+            const eventSystem = infoBarTool?.eventSource || infoBarTool?.modules?.eventSystem;
+
+            if (!eventSystem) {
+                console.warn('[InfoBarSettings] ⚠️ 事件系统未找到，无法绑定向量化总结事件');
+                return;
+            }
+
+            // 监听AI记忆总结创建事件
+            eventSystem.on('ai-summary:created', (data) => {
+                console.log('[InfoBarSettings] 📨 收到AI记忆总结创建事件:', data);
+
+                // 🔧 修复：检查设置面板是否打开且在向量化总结模式
+                if (!this.modal || !this.visible) {
+                    console.log('[InfoBarSettings] ⏸️ 设置面板未打开，跳过UI刷新');
+                    return;
+                }
+
+                const vectorizedSettings = this.modal.querySelector('.vectorized-summary-settings');
+                if (vectorizedSettings && vectorizedSettings.style.display !== 'none') {
+                    console.log('[InfoBarSettings] 🔄 刷新AI记忆总结列表...');
+                    this.loadAIMemorySummaryList();
+                }
+            });
+
+            console.log('[InfoBarSettings] ✅ 向量化总结事件监听器绑定完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 绑定向量化总结事件监听器失败:', error);
         }
     }
 
@@ -6479,6 +6552,43 @@ ${'='.repeat(80)}
             </div>
 
             <div class="content-body">
+                <!-- 🆕 API类型切换按钮 -->
+                <div class="settings-group">
+                    <h4>API配置类型</h4>
+                    <div class="form-group">
+                        <div class="api-type-switch-buttons" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <button type="button" class="api-type-switch-btn active" data-api-type="general" style="
+                                flex: 1;
+                                padding: 10px 20px;
+                                background: linear-gradient(135deg, #667eea, #764ba2);
+                                color: white;
+                                border: none;
+                                border-radius: 6px;
+                                cursor: pointer;
+                                transition: all 0.2s;
+                                font-weight: 500;
+                            ">
+                                🤖 通用API
+                            </button>
+                            <button type="button" class="api-type-switch-btn" data-api-type="vector" style="
+                                flex: 1;
+                                padding: 10px 20px;
+                                background: var(--theme-bg-secondary, #2a2a2a);
+                                color: var(--theme-text-primary, #e0e0e0);
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 6px;
+                                cursor: pointer;
+                                transition: all 0.2s;
+                            ">
+                                🧠 向量化API
+                            </button>
+                        </div>
+                        <small>通用API：用于信息栏数据生成 | 向量化API：用于记忆向量化和语义搜索</small>
+                    </div>
+                </div>
+
+                <!-- 通用API配置区域 -->
+                <div class="general-api-config-section"
 
 
                 <!-- API提供商选择 -->
@@ -6666,6 +6776,97 @@ ${'='.repeat(80)}
                     <div class="form-group">
                         <button type="button" id="regex-script-manager-btn" class="btn btn-secondary">📝 正则表达式管理</button>
                         <small>管理用于自定义API的正则表达式脚本，可从SillyTavern导入或创建新脚本</small>
+                    </div>
+                </div>
+                </div>
+
+                <!-- 🆕 向量化API配置区域 -->
+                <div class="vector-api-config-section" style="display: none;">
+                    <!-- 连接模式选择 -->
+                    <div class="settings-group">
+                        <h4>连接模式</h4>
+                        <div class="form-group">
+                            <label>连接模式</label>
+                            <select id="vector-api-provider" name="vectorAPIConfig.provider">
+                                <option value="">请选择连接模式</option>
+                                <option value="localproxy">通用全兼容（Silly Tavern后端）</option>
+                                <option value="custom">自定义API</option>
+                            </select>
+                            <small>选择向量化API的连接方式（通用全兼容使用SillyTavern后端代理，自定义API直接连接）</small>
+                        </div>
+                    </div>
+
+                    <!-- 基础URL配置 -->
+                    <div class="settings-group">
+                        <h4>基础URL</h4>
+                        <div class="form-group">
+                            <label>API基础URL</label>
+                            <input type="url" id="vector-api-base-url" name="vectorAPIConfig.baseUrl" placeholder="http://127.0.0.1:7861/v1" />
+                            <small>向量化API服务的基础地址（根据连接模式自动设置）</small>
+                        </div>
+                    </div>
+
+                    <!-- API密钥配置 -->
+                    <div class="settings-group">
+                        <h4>API密钥</h4>
+                        <div class="form-group">
+                            <label>API密钥</label>
+                            <input type="password" id="vector-api-key" name="vectorAPIConfig.apiKey" placeholder="sk-..." />
+                            <small>访问向量化API所需的密钥</small>
+                        </div>
+                    </div>
+
+                    <!-- 向量化模型配置 -->
+                    <div class="settings-group">
+                        <h4>向量化模型</h4>
+                        <div class="form-group">
+                            <label>Embedding模型</label>
+                            <select id="vector-api-model" name="vectorAPIConfig.model">
+                                <option value="">-- 请先加载模型列表 --</option>
+                            </select>
+                            <small>从API获取可用的embedding模型列表</small>
+                        </div>
+                    </div>
+
+                    <!-- 加载模型列表按钮 -->
+                    <div class="settings-group">
+                        <h4>模型列表管理</h4>
+                        <div class="form-group">
+                            <button type="button" id="load-vector-models-btn" class="btn btn-primary">🔄 重新加载模型列表</button>
+                            <small>重新从API获取最新的embedding模型列表（会消耗API额度）</small>
+                        </div>
+                    </div>
+
+                    <!-- 测试连接按钮 -->
+                    <div class="settings-group">
+                        <h4>测试连接</h4>
+                        <div class="form-group">
+                            <button type="button" id="test-vector-connection-btn" class="btn btn-secondary">🔍 测试连接</button>
+                            <small>测试向量化API连接是否正常</small>
+                        </div>
+
+                        <!-- 连接状态显示 -->
+                        <div class="form-group" style="margin-top: 12px;">
+                            <div id="vector-model-status" class="connection-status">
+                                ⏳ 未测试连接
+                            </div>
+                            <small>显示向量化API连接和模型加载状态</small>
+                        </div>
+                    </div>
+
+                    <!-- 高级配置 -->
+                    <div class="settings-group">
+                        <h4>高级配置</h4>
+                        <div class="form-group">
+                            <label>向量维度</label>
+                            <input type="number" id="vector-api-dimensions" name="vectorAPIConfig.dimensions" placeholder="384" min="128" max="4096" />
+                            <small>向量的维度大小（通常由模型决定，如text-embedding-ada-002为1536）</small>
+                        </div>
+                        <div class="form-group">
+                            <label>批处理大小</label>
+                            <input type="number" id="vector-api-batch-size" name="vectorAPIConfig.batchSize" placeholder="50" min="1" max="100" />
+                            <small>批量处理文本时每批的数量</small>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -7280,43 +7481,10 @@ ${'='.repeat(80)}
 
                 <div class="setting-row vectorized-memory-options custom-vector-api-options" id="custom-vector-api-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
                     <div class="setting-group">
-                        <label class="setting-label" for="memory-custom-vector-api-url">自定义API地址</label>
-                         <input type="text" id="memory-custom-vector-api-url" class="setting-input" placeholder="https://api.example.com" />
-                         <div class="setting-hint">
-                             <strong>支持的API格式：</strong><br>
-                             • <strong>OpenAI</strong>: https://api.openai.com (自动添加/v1/embeddings)<br>
-                             • <strong>Gemini</strong>: https://api.example.com/v1 (自动检测)<br>
-                             • <strong>Ollama</strong>: http://localhost:11434 (自动添加/api/embeddings)<br>
-                             • <strong>自定义</strong>: 输入基础URL即可，系统会自动检测格式<br>
-                             <span style="color: #FFA726;">⚠️ 如果遇到400错误，请检查模型名称是否正确</span>
-                         </div>
-                    </div>
-                </div>
-
-                <div class="setting-row vectorized-memory-options custom-vector-api-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                    <div class="setting-group">
-                        <label class="setting-label" for="memory-custom-vector-api-key">API密钥</label>
-                        <input type="password" id="memory-custom-vector-api-key" class="setting-input" placeholder="sk-..." />
-                        <div class="setting-hint">访问自定义API所需的密钥</div>
-                    </div>
-                </div>
-
-                <div class="setting-row vectorized-memory-options custom-vector-api-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                    <div class="setting-group">
-                        <label class="setting-label" for="memory-custom-vector-model">Embedding模型</label>
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <select id="memory-custom-vector-model" class="setting-select" style="flex: 1;">
-                                <option value="">-- 请先获取模型列表 --</option>
-                            </select>
-                            <button type="button" id="refresh-custom-vector-models" class="inline-button" title="获取模型列表">
-                                🔄 刷新
-                            </button>
-                            <button type="button" id="test-custom-vector-connection" class="inline-button" title="测试连接">
-                                🔍 测试
-                            </button>
+                        <div class="setting-hint" style="padding: 10px; background: rgba(255, 167, 38, 0.1); border-radius: 4px; font-size: 12px; color: #FFA726;">
+                            💡 <strong>向量化API配置已迁移</strong><br>
+                            请前往"自定义API"面板 → 点击"🧠 向量化API"按钮进行配置
                         </div>
-                        <div class="setting-hint">从API获取可用的embedding模型列表</div>
-                        <div id="custom-vector-model-status" style="margin-top: 8px; font-size: 12px;"></div>
                     </div>
                 </div>
 
@@ -7611,6 +7779,333 @@ ${'='.repeat(80)}
     }
 
     /**
+     * 🚀 创建向量功能面板
+     */
+    createVectorFunctionPanel() {
+        return `
+            <div class="content-header">
+                <h3>🔮 向量功能 - 语料库知识库</h3>
+                <div class="header-description">
+                    <p>上传同人文小说，向量化处理后构建可检索的知识库，为AI提供外挂知识</p>
+                    <p style="color: #FFA726; font-size: 12px; margin-top: 8px; padding: 8px; background: rgba(255, 167, 38, 0.1); border-radius: 4px;">
+                        💡 提示：向量化API配置请前往"自定义API"面板 → 点击"🧠 向量化API"按钮进行设置
+                    </p>
+                </div>
+            </div>
+
+            <div class="content-body">
+                <!-- 📚 语料库管理区域 -->
+                <div class="vector-corpus-section">
+                    <h4 style="color: #4CAF50; margin: 15px 0 10px 0;">📚 语料库管理</h4>
+
+                    <!-- 语料库列表 -->
+                    <div class="corpus-list-container" style="
+                        border: 1px solid var(--theme-border-color, #333);
+                        border-radius: 8px;
+                        padding: 15px;
+                        margin-bottom: 20px;
+                        background: var(--theme-bg-secondary, #1a1a1a);
+                    ">
+                        <div class="corpus-list-header" style="
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            margin-bottom: 15px;
+                        ">
+                            <span style="font-weight: 600; color: var(--theme-text-primary, #ddd);">
+                                已上传的语料库 (<span id="corpus-count">0</span>)
+                            </span>
+                            <button id="refresh-corpus-list" style="
+                                padding: 6px 12px;
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                background: var(--theme-bg-primary, #111);
+                                color: var(--theme-text-primary, #ddd);
+                                cursor: pointer;
+                            ">
+                                🔄 刷新
+                            </button>
+                        </div>
+
+                        <div id="corpus-list" style="
+                            max-height: 300px;
+                            overflow-y: auto;
+                        ">
+                            <div class="no-corpus" style="
+                                text-align: center;
+                                padding: 40px 20px;
+                                color: var(--theme-text-secondary, #888);
+                            ">
+                                暂无语料库，请上传小说文件
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 文件上传区域 -->
+                    <div class="file-upload-section" style="
+                        border: 2px dashed var(--theme-border-color, #333);
+                        border-radius: 8px;
+                        padding: 30px;
+                        text-align: center;
+                        margin-bottom: 20px;
+                        background: var(--theme-bg-secondary, #1a1a1a);
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                    " id="file-upload-area">
+                        <div class="upload-icon" style="font-size: 48px; margin-bottom: 15px;">📤</div>
+                        <div class="upload-text" style="
+                            font-size: 16px;
+                            color: var(--theme-text-primary, #ddd);
+                            margin-bottom: 10px;
+                        ">
+                            点击或拖拽文件到此处上传
+                        </div>
+                        <div class="upload-hint" style="
+                            font-size: 12px;
+                            color: var(--theme-text-secondary, #888);
+                        ">
+                            支持 .txt, .md 格式的小说文件
+                        </div>
+                        <input type="file" id="novel-file-input" accept=".txt,.md" style="display: none;">
+                    </div>
+
+                    <!-- 上传进度显示 -->
+                    <div id="upload-progress-container" style="display: none; margin-top: 15px; padding: 15px; background: var(--theme-bg-secondary, #1a1a1a); border-radius: 8px; border: 1px solid var(--theme-border-color, #333);">
+                        <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                            <span id="progress-text" style="color: var(--theme-text-primary, #ddd); font-size: 14px; font-weight: 600;">处理中...</span>
+                            <button id="abort-vectorization-btn" style="
+                                padding: 4px 12px;
+                                background: linear-gradient(135deg, #f44336, #e91e63);
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 12px;
+                                font-weight: 600;
+                                transition: all 0.2s;
+                            " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                                🛑 中止
+                            </button>
+                        </div>
+                        <div style="
+                            width: 100%;
+                            height: 24px;
+                            background: var(--theme-bg-primary, #111);
+                            border: 1px solid var(--theme-border-color, #333);
+                            border-radius: 12px;
+                            overflow: hidden;
+                            position: relative;
+                        ">
+                            <div id="progress-bar" style="
+                                height: 100%;
+                                width: 0%;
+                                background: linear-gradient(90deg, #4CAF50, #8BC34A);
+                                transition: width 0.3s ease;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                            ">
+                                <span id="progress-percentage" style="
+                                    position: absolute;
+                                    left: 50%;
+                                    transform: translateX(-50%);
+                                    color: var(--theme-text-primary, #ddd);
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    text-shadow: 0 0 4px rgba(0,0,0,0.5);
+                                ">0%</span>
+                            </div>
+                        </div>
+                        <div id="progress-details" style="margin-top: 8px; color: var(--theme-text-secondary, #888); font-size: 12px;">
+                            准备中...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ⚙️ 分块配置区域 -->
+                <div class="vectorization-config-section">
+                    <h4 style="color: #2196F3; margin: 15px 0 10px 0;">⚙️ 分块配置</h4>
+
+                    <div class="setting-row">
+                        <label>分块大小</label>
+                        <input type="number" id="vector-chunk-size" value="500" min="100" max="2000" step="100" style="
+                            width: 100%;
+                            padding: 8px;
+                            border: 1px solid var(--theme-border-color, #333);
+                            border-radius: 4px;
+                            background: var(--theme-bg-primary, #111);
+                            color: var(--theme-text-primary, #ddd);
+                        ">
+                        <div class="setting-hint">将小说内容分割为多大的块进行向量化（字符数）</div>
+                    </div>
+
+                    <div class="setting-row">
+                        <label>重叠大小</label>
+                        <input type="number" id="vector-overlap-size" value="50" min="0" max="500" step="10" style="
+                            width: 100%;
+                            padding: 8px;
+                            border: 1px solid var(--theme-border-color, #333);
+                            border-radius: 4px;
+                            background: var(--theme-bg-primary, #111);
+                            color: var(--theme-text-primary, #ddd);
+                        ">
+                        <div class="setting-hint">相邻块之间的重叠字符数，用于保持上下文连贯性</div>
+                    </div>
+
+                    <div class="setting-row">
+                        <label>批处理大小</label>
+                        <input type="number" id="vector-batch-size" value="10" min="1" max="50" step="1" style="
+                            width: 100%;
+                            padding: 8px;
+                            border: 1px solid var(--theme-border-color, #333);
+                            border-radius: 4px;
+                            background: var(--theme-bg-primary, #111);
+                            color: var(--theme-text-primary, #ddd);
+                        ">
+                        <div class="setting-hint">每批处理的块数，较小的值可以避免内存问题（推荐10）</div>
+                    </div>
+                </div>
+
+                <!-- 🧠 智能分析配置区域 -->
+                <div class="smart-analysis-section">
+                    <h4 style="color: #FF6B6B; margin: 15px 0 10px 0;">🧠 智能分析功能</h4>
+                    <div style="
+                        padding: 12px;
+                        background: rgba(255, 107, 107, 0.1);
+                        border-radius: 6px;
+                        border-left: 3px solid #FF6B6B;
+                        margin-bottom: 15px;
+                    ">
+                        <p style="margin: 0; font-size: 13px; color: var(--theme-text-primary, #ddd);">
+                            💡 启用智能分析后，系统将自动提取剧情梗概、文风特征、时间线和关键场景，让AI更好地理解和使用语料库内容
+                        </p>
+                    </div>
+
+                    <div class="setting-row">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="enable-smart-analysis" style="width: auto;">
+                            <span>启用智能分析</span>
+                        </label>
+                        <div class="setting-hint">向量化时自动分析小说内容，提取关键信息</div>
+                    </div>
+
+                    <div id="smart-analysis-options" style="display: none; margin-top: 15px; padding-left: 20px;">
+                        <div class="setting-row">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="extract-plot-summary" checked style="width: auto;">
+                                <span>📖 提取剧情梗概</span>
+                            </label>
+                            <div class="setting-hint">自动生成小说的剧情梗概和主要情节</div>
+                        </div>
+
+                        <div class="setting-row">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="analyze-writing-style" checked style="width: auto;">
+                                <span>✍️ 分析文风特征</span>
+                            </label>
+                            <div class="setting-hint">分析小说的写作风格、语言特点、常用词汇等</div>
+                        </div>
+
+                        <div class="setting-row">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="extract-timeline" checked style="width: auto;">
+                                <span>⏰ 提取时间线</span>
+                            </label>
+                            <div class="setting-hint">识别并整理小说中的时间线和事件顺序</div>
+                        </div>
+
+                        <div class="setting-row">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="mark-key-scenes" checked style="width: auto;">
+                                <span>🎬 标记关键场景</span>
+                            </label>
+                            <div class="setting-hint">识别重要的剧情转折点和关键场景</div>
+                        </div>
+
+                        <div class="setting-row">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="extract-characters" checked style="width: auto;">
+                                <span>👥 提取角色信息</span>
+                            </label>
+                            <div class="setting-hint">识别主要角色及其特征、关系</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 🔍 AI检索配置区域 -->
+                <div class="ai-retrieval-section">
+                    <h4 style="color: #9C27B0; margin: 15px 0 10px 0;">🔍 AI检索配置</h4>
+                    <div style="
+                        padding: 12px;
+                        background: rgba(156, 39, 176, 0.1);
+                        border-radius: 6px;
+                        border-left: 3px solid #9C27B0;
+                        margin-bottom: 15px;
+                    ">
+                        <p style="margin: 0; font-size: 13px; color: var(--theme-text-primary, #ddd);">
+                            💡 启用后，AI在对话时会自动检索相关的语料库内容，并注入到提示词中
+                        </p>
+                    </div>
+
+                    <div class="setting-row">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="enable-ai-retrieval" style="width: auto;">
+                            <span>启用AI自动检索</span>
+                        </label>
+                        <div class="setting-hint">AI对话时自动检索语料库中的相关内容</div>
+                    </div>
+
+                    <div id="ai-retrieval-options" style="display: none; margin-top: 15px; padding-left: 20px;">
+                        <div class="setting-row">
+                            <label>检索数量</label>
+                            <input type="number" id="retrieval-top-k" value="3" min="1" max="10" step="1" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                background: var(--theme-bg-primary, #111);
+                                color: var(--theme-text-primary, #ddd);
+                            ">
+                            <div class="setting-hint">每次检索返回的最相关内容数量</div>
+                        </div>
+
+                        <div class="setting-row">
+                            <label>相似度阈值</label>
+                            <input type="number" id="retrieval-threshold" value="0.7" min="0" max="1" step="0.05" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                background: var(--theme-bg-primary, #111);
+                                color: var(--theme-text-primary, #ddd);
+                            ">
+                            <div class="setting-hint">只返回相似度高于此阈值的内容（0-1）</div>
+                        </div>
+
+                        <div class="setting-row">
+                            <label>注入位置</label>
+                            <select id="retrieval-injection-position" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                background: var(--theme-bg-primary, #111);
+                                color: var(--theme-text-primary, #ddd);
+                            ">
+                                <option value="system">系统提示词</option>
+                                <option value="after_character">角色描述后</option>
+                                <option value="before_examples">示例对话前</option>
+                                <option value="chat_history">聊天历史中</option>
+                            </select>
+                            <div class="setting-hint">检索到的内容注入到提示词的位置</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
      * 创建提示词设置面板
      */
     createPromptSettingsPanel() {
@@ -7873,7 +8368,7 @@ ${'='.repeat(80)}
     createSummaryPanel() {
         return `
             <div class="content-header">
-                <h3>📊 总结面板</h3>
+                <h3>📖 剧情总结</h3>
                 <div class="header-actions">
                     <button class="btn-action btn-manual-summary" id="header-manual-summary-btn">
                         <span class="btn-icon">🖊️</span>
@@ -7887,6 +8382,41 @@ ${'='.repeat(80)}
             </div>
 
             <div class="content-body">
+                <!-- 🆕 总结模式切换 -->
+                <div class="summary-mode-tabs" style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid var(--theme-border-color, #333); padding-bottom: 10px;">
+                    <button type="button" class="summary-mode-tab active" data-mode="traditional" style="
+                        flex: 1;
+                        padding: 10px 16px;
+                        background: var(--theme-primary-color, #4CAF50);
+                        color: white;
+                        border: 1px solid var(--theme-primary-color, #4CAF50);
+                        border-radius: 6px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                        font-weight: 500;
+                    ">
+                        📝 传统总结
+                    </button>
+                    <button type="button" class="summary-mode-tab" data-mode="vectorized" style="
+                        flex: 1;
+                        padding: 10px 16px;
+                        background: var(--theme-bg-secondary, #2a2a2a);
+                        color: var(--theme-text-primary, #e0e0e0);
+                        border: 1px solid var(--theme-border-color, #333);
+                        border-radius: 6px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                        font-weight: 500;
+                    ">
+                        🔮 向量化总结
+                    </button>
+                </div>
+                <div style="margin-bottom: 15px; padding: 10px; background: var(--theme-bg-secondary, #2a2a2a); border-radius: 6px; font-size: 13px; color: var(--theme-text-secondary, #aaa);">
+                    <span class="summary-mode-description">传统总结：使用自定义API生成剧情总结 | 向量化总结：将AI记忆总结向量化存储，智能检索</span>
+                </div>
+
+                <!-- 传统总结设置区域 -->
+                <div class="traditional-summary-settings">
                 <!-- 总结设置区域 -->
                 <div class="summary-settings-container">
                     <div class="settings-section">
@@ -8044,13 +8574,6 @@ ${'='.repeat(80)}
                                 <div class="setting-hint">保留最新的N个楼层不隐藏</div>
                             </div>
                         </div>
-
-                        <div class="setting-actions">
-                            <button class="btn-primary" id="content-save-settings-btn">
-                                <span class="btn-icon">💾</span>
-                                <span class="btn-text">保存设置</span>
-                            </button>
-                        </div>
                     </div>
                 </div>
 
@@ -8139,6 +8662,106 @@ ${'='.repeat(80)}
                         <div class="content-body-text" id="content-summary-content-body"></div>
                     </div>
                 </div>
+                </div>
+                <!-- 传统总结设置区域结束 -->
+
+                <!-- 🆕 向量化总结设置区域 -->
+                <div class="vectorized-summary-settings" style="display: none;">
+                    <div class="summary-settings-container">
+                        <div class="settings-section">
+                            <h4>⚙️ 向量化总结设置</h4>
+
+                            <div class="setting-row">
+                                <div class="setting-group">
+                                    <label class="setting-label">
+                                        <input type="checkbox" id="vectorized-summary-enabled" />
+                                        <span class="checkbox-text">启用向量化总结</span>
+                                    </label>
+                                    <div class="setting-hint">启用后，AI记忆总结将自动向量化存储，支持智能检索</div>
+                                </div>
+                            </div>
+
+                            <div class="setting-row">
+                                <div class="setting-group">
+                                    <label class="setting-label" for="vectorized-summary-floor-count">总结楼层</label>
+                                    <div class="input-group">
+                                        <input type="number" id="vectorized-summary-floor-count" min="5" max="100" value="20" />
+                                        <span class="input-unit">条消息</span>
+                                    </div>
+                                    <div class="setting-hint">每隔多少条消息进行一次向量化总结</div>
+                                </div>
+                            </div>
+
+                            <div class="setting-row">
+                                <div class="setting-group">
+                                    <label class="setting-label">
+                                        <input type="checkbox" id="vectorized-auto-hide-enabled" />
+                                        <span class="checkbox-text">启用自动隐藏已总结楼层</span>
+                                    </label>
+                                    <div class="setting-hint">自动隐藏已经向量化总结的楼层内容</div>
+                                </div>
+                            </div>
+
+                            <div class="setting-row" id="vectorized-keep-recent-row" style="display: none;">
+                                <div class="setting-group">
+                                    <label class="setting-label" for="vectorized-keep-recent-count">保留最新楼层数</label>
+                                    <div class="input-group">
+                                        <input type="number" id="vectorized-keep-recent-count" min="1" max="50" value="10" />
+                                        <span class="input-unit">条消息</span>
+                                    </div>
+                                    <div class="setting-hint">隐藏时保留最新的N条消息不隐藏</div>
+                                </div>
+                            </div>
+
+                            <div class="setting-row">
+                                <div class="setting-group">
+                                    <div style="padding: 12px; background: var(--theme-bg-tertiary, #1a1a1a); border: 1px solid var(--theme-border-color, #333); border-radius: 6px;">
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                            <span style="font-size: 18px;">⚠️</span>
+                                            <span style="font-weight: 500; color: var(--theme-warning-color, #ff9800);">前置条件检查</span>
+                                        </div>
+                                        <div style="font-size: 13px; color: var(--theme-text-secondary, #aaa); line-height: 1.6;">
+                                            向量化总结功能需要启用<strong style="color: var(--theme-primary-color, #4CAF50);">AI记忆总结</strong>功能。<br>
+                                            请前往<strong>记忆增强</strong>面板，启用<strong>AI记忆总结</strong>和<strong>消息级别总结</strong>。
+                                        </div>
+                                        <div id="ai-memory-status" style="margin-top: 10px; padding: 8px; background: var(--theme-bg-secondary, #2a2a2a); border-radius: 4px; font-size: 12px;">
+                                            <span style="color: var(--theme-text-secondary, #888);">状态检查中...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AI记忆总结记录 -->
+                    <div class="summary-history-container">
+                        <div class="history-section">
+                            <h4>🧠 AI记忆总结记录</h4>
+                            <div class="setting-hint" style="margin-bottom: 15px;">显示待向量化的AI记忆总结，达到总结楼层后将自动向量化</div>
+
+                            <div id="ai-memory-summary-list" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--theme-border-color, #333); border-radius: 6px; padding: 10px; background: var(--theme-bg-secondary, #2a2a2a);">
+                                <div style="text-align: center; padding: 20px; color: var(--theme-text-secondary, #888);">
+                                    暂无AI记忆总结记录
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 已向量化总结记录 -->
+                    <div class="summary-history-container">
+                        <div class="history-section">
+                            <h4>📦 已向量化总结记录</h4>
+                            <div class="setting-hint" style="margin-bottom: 15px;">显示已完成向量化的总结记录</div>
+
+                            <div id="vectorized-summary-list" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--theme-border-color, #333); border-radius: 6px; padding: 10px; background: var(--theme-bg-secondary, #2a2a2a);">
+                                <div style="text-align: center; padding: 20px; color: var(--theme-text-secondary, #888);">
+                                    暂无向量化总结记录
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 向量化总结设置区域结束 -->
             </div>
         `;
     }
@@ -9138,6 +9761,62 @@ ${'='.repeat(80)}
                 this.updateAPIStatus();
             }
 
+            // 🆕 加载向量化API配置
+            if (configs.vectorAPIConfig) {
+                console.log('[InfoBarSettings] 🧠 加载向量化API配置...');
+
+                // 加载连接模式
+                const vectorProviderEl = this.modal.querySelector('#vector-api-provider');
+                if (vectorProviderEl && configs.vectorAPIConfig.provider) {
+                    vectorProviderEl.value = configs.vectorAPIConfig.provider;
+                    // 触发provider change事件以设置默认URL
+                    this.handleVectorProviderChange(configs.vectorAPIConfig.provider);
+                }
+
+                // 加载基础URL
+                const vectorBaseUrlEl = this.modal.querySelector('#vector-api-base-url');
+                if (vectorBaseUrlEl && configs.vectorAPIConfig.baseUrl) {
+                    vectorBaseUrlEl.value = configs.vectorAPIConfig.baseUrl;
+                }
+
+                // 加载API密钥
+                const vectorApiKeyEl = this.modal.querySelector('#vector-api-key');
+                if (vectorApiKeyEl && configs.vectorAPIConfig.apiKey) {
+                    vectorApiKeyEl.value = configs.vectorAPIConfig.apiKey;
+                }
+
+                // 加载向量化模型
+                const vectorModelEl = this.modal.querySelector('#vector-api-model');
+                if (vectorModelEl && configs.vectorAPIConfig.model) {
+                    // 如果模型下拉框为空，先添加保存的模型作为选项
+                    if (vectorModelEl.options.length <= 1) {
+                        const option = document.createElement('option');
+                        option.value = configs.vectorAPIConfig.model;
+                        option.textContent = configs.vectorAPIConfig.model;
+                        vectorModelEl.appendChild(option);
+                    }
+                    vectorModelEl.value = configs.vectorAPIConfig.model;
+                }
+
+                // 加载向量维度
+                const vectorDimensionsEl = this.modal.querySelector('#vector-api-dimensions');
+                if (vectorDimensionsEl && configs.vectorAPIConfig.dimensions) {
+                    vectorDimensionsEl.value = configs.vectorAPIConfig.dimensions;
+                }
+
+                // 加载批处理大小
+                const vectorBatchSizeEl = this.modal.querySelector('#vector-api-batch-size');
+                if (vectorBatchSizeEl && configs.vectorAPIConfig.batchSize) {
+                    vectorBatchSizeEl.value = configs.vectorAPIConfig.batchSize;
+                }
+
+                console.log('[InfoBarSettings] ✅ 向量化API配置加载完成');
+            }
+
+            // 🆕 恢复API类型选择状态
+            const currentAPIType = configs.currentAPIType || 'general';
+            this.switchAPIType(currentAPIType);
+
             // 🔧 修复：智能处理API模型配置 - 优先使用缓存，避免不必要的API调用
             if (configs.apiConfig && configs.apiConfig.model && configs.apiConfig.provider && configs.apiConfig.apiKey) {
                 console.log('[InfoBarSettings] 🔄 检测到保存的模型配置，智能加载模型列表...');
@@ -9185,6 +9864,96 @@ ${'='.repeat(80)}
 
             // 🧠 加载提示词设置
             await this.loadPromptSettings();
+
+            // 🔧 新增：恢复传统总结设置
+            if (configs.summarySettings) {
+                console.log('[InfoBarSettings] 📝 恢复传统总结设置:', configs.summarySettings);
+
+                const autoSummaryEnabled = this.modal.querySelector('#content-auto-summary-enabled');
+                if (autoSummaryEnabled) {
+                    autoSummaryEnabled.checked = configs.summarySettings.autoSummaryEnabled || false;
+                }
+
+                const summaryFloorCount = this.modal.querySelector('#content-summary-floor-count');
+                if (summaryFloorCount) {
+                    summaryFloorCount.value = configs.summarySettings.summaryFloorCount || 20;
+                }
+
+                const summaryType = this.modal.querySelector('#content-summary-type');
+                if (summaryType) {
+                    summaryType.value = configs.summarySettings.summaryType || 'small';
+                }
+
+                const summaryWordCount = this.modal.querySelector('#content-summary-word-count');
+                if (summaryWordCount) {
+                    summaryWordCount.value = configs.summarySettings.summaryWordCount || 300;
+                }
+
+                const injectSummaryEnabled = this.modal.querySelector('#content-inject-summary-enabled');
+                if (injectSummaryEnabled) {
+                    injectSummaryEnabled.checked = configs.summarySettings.injectSummaryEnabled || false;
+                }
+
+                const useRegexFilter = this.modal.querySelector('#content-summary-use-regex');
+                if (useRegexFilter) {
+                    useRegexFilter.checked = configs.summarySettings.useRegexFilter || false;
+                }
+
+                const autoHideEnabled = this.modal.querySelector('#content-auto-hide-enabled');
+                if (autoHideEnabled) {
+                    autoHideEnabled.checked = configs.summarySettings.autoHideEnabled || false;
+                }
+
+                const useCustomPrompt = this.modal.querySelector('#content-use-custom-prompt');
+                if (useCustomPrompt) {
+                    useCustomPrompt.checked = configs.summarySettings.useCustomPrompt || false;
+                }
+
+                const customPrompt = this.modal.querySelector('#content-custom-prompt');
+                if (customPrompt) {
+                    customPrompt.value = configs.summarySettings.customPrompt || '';
+                }
+            }
+
+            // 🔧 新增：恢复向量化总结设置
+            if (configs.vectorizedSummary && configs.vectorizedSummary.settings) {
+                const vectorizedSettings = configs.vectorizedSummary.settings;
+                console.log('[InfoBarSettings] 🔮 恢复向量化总结设置:', vectorizedSettings);
+
+                // 恢复模式状态
+                const summaryMode = vectorizedSettings.mode || 'traditional';
+                this.handleSummaryModeChange(summaryMode);
+
+                // 恢复向量化总结启用状态
+                const vectorizedEnabled = this.modal.querySelector('#vectorized-summary-enabled');
+                if (vectorizedEnabled) {
+                    vectorizedEnabled.checked = vectorizedSettings.enabled || false;
+                }
+
+                // 恢复总结楼层数
+                const vectorizedFloorCount = this.modal.querySelector('#vectorized-summary-floor-count');
+                if (vectorizedFloorCount) {
+                    vectorizedFloorCount.value = vectorizedSettings.floorCount || 20;
+                }
+
+                // 恢复自动隐藏启用状态
+                const vectorizedAutoHide = this.modal.querySelector('#vectorized-auto-hide-enabled');
+                if (vectorizedAutoHide) {
+                    vectorizedAutoHide.checked = vectorizedSettings.autoHideEnabled || false;
+
+                    // 根据自动隐藏状态显示/隐藏保留最新楼层数输入框
+                    const keepRecentRow = this.modal.querySelector('#vectorized-keep-recent-row');
+                    if (keepRecentRow) {
+                        keepRecentRow.style.display = vectorizedSettings.autoHideEnabled ? 'block' : 'none';
+                    }
+                }
+
+                // 恢复保留最新楼层数
+                const keepRecentCount = this.modal.querySelector('#vectorized-keep-recent-count');
+                if (keepRecentCount) {
+                    keepRecentCount.value = vectorizedSettings.keepRecentCount || 10;
+                }
+            }
 
             console.log('[InfoBarSettings] ✅ 设置加载完成');
 
@@ -9322,6 +10091,79 @@ ${'='.repeat(80)}
             if (npcSettings && typeof npcSettings === 'object') {
                 Object.assign(extensionSettings['Information bar integration tool'], npcSettings);
                 console.log('[InfoBarSettings] 🎭 已收集NPC管理设置并写入配置:', npcSettings);
+            }
+
+            // 🆕 收集向量化API配置
+            const vectorAPIConfig = this.collectVectorAPIConfig();
+            if (vectorAPIConfig && typeof vectorAPIConfig === 'object') {
+                extensionSettings['Information bar integration tool'].vectorAPIConfig = vectorAPIConfig;
+                console.log('[InfoBarSettings] 🧠 已收集向量化API配置:', vectorAPIConfig);
+
+                // 同步到VectorizedMemoryRetrieval模块
+                const vectorizedMemoryRetrieval = window.SillyTavernInfobar?.modules?.vectorizedMemoryRetrieval;
+                if (vectorizedMemoryRetrieval) {
+                    await vectorizedMemoryRetrieval.updateSettings({
+                        useCustomVectorAPI: true,
+                        customVectorAPI: {
+                            url: vectorAPIConfig.baseUrl,
+                            apiKey: vectorAPIConfig.apiKey,
+                            model: vectorAPIConfig.model
+                        }
+                    });
+                    console.log('[InfoBarSettings] ✅ 已同步向量化API配置到VectorizedMemoryRetrieval模块');
+                }
+            }
+
+            // 🔧 新增：收集向量功能配置
+            if (typeof this.collectVectorFunctionSettings === 'function') {
+                const vectorFunctionSettings = this.collectVectorFunctionSettings();
+                if (vectorFunctionSettings && typeof vectorFunctionSettings === 'object') {
+                    extensionSettings['Information bar integration tool'].vectorFunction = vectorFunctionSettings;
+                    console.log('[InfoBarSettings] 🔮 已收集向量功能配置:', vectorFunctionSettings);
+
+                    // 同步到CorpusRetrieval模块
+                    const corpusRetrieval = window.SillyTavernInfobar?.modules?.corpusRetrieval;
+                    if (corpusRetrieval) {
+                        corpusRetrieval.loadConfig();
+                        console.log('[InfoBarSettings] ✅ 已同步向量功能配置到CorpusRetrieval模块');
+                    }
+                }
+            }
+
+            // 🔧 新增：收集传统总结配置
+            if (typeof this.getCurrentSummarySettings === 'function') {
+                const summarySettings = this.getCurrentSummarySettings();
+                if (summarySettings && typeof summarySettings === 'object') {
+                    extensionSettings['Information bar integration tool'].summarySettings = summarySettings;
+                    console.log('[InfoBarSettings] 📝 已收集传统总结配置:', summarySettings);
+
+                    // 同步到SummaryManager模块
+                    const summaryManager = window.SillyTavernInfobar?.modules?.summaryManager;
+                    if (summaryManager && typeof summaryManager.updateSettings === 'function') {
+                        summaryManager.updateSettings(summarySettings);
+                        console.log('[InfoBarSettings] ✅ 已同步传统总结配置到SummaryManager模块');
+                    }
+                }
+            }
+
+            // 🔧 新增：收集向量化总结配置
+            if (typeof this.collectVectorizedSummarySettings === 'function') {
+                const vectorizedSummarySettings = this.collectVectorizedSummarySettings();
+                if (vectorizedSummarySettings && typeof vectorizedSummarySettings === 'object') {
+                    // 保存到扩展设置
+                    if (!extensionSettings['Information bar integration tool'].vectorizedSummary) {
+                        extensionSettings['Information bar integration tool'].vectorizedSummary = {};
+                    }
+                    extensionSettings['Information bar integration tool'].vectorizedSummary.settings = vectorizedSummarySettings;
+                    console.log('[InfoBarSettings] 🔮 已收集向量化总结配置:', vectorizedSummarySettings);
+
+                    // 同步到VectorizedSummaryManager模块
+                    const vectorizedSummaryManager = window.SillyTavernInfobar?.modules?.vectorizedSummaryManager;
+                    if (vectorizedSummaryManager) {
+                        vectorizedSummaryManager.settings = vectorizedSummarySettings;
+                        console.log('[InfoBarSettings] ✅ 已同步向量化总结配置到VectorizedSummaryManager模块');
+                    }
+                }
             }
 
             // 触发 SillyTavern 保存设置
@@ -18423,7 +19265,7 @@ ${'='.repeat(80)}
             }
 
             // 按钮
-            const buttons = this.modal.querySelectorAll('#header-manual-summary-btn, #header-refresh-summary-btn, #content-save-settings-btn, #content-delete-summary-btn, [data-action="open-error-log"], [data-action="open-project-link"], [data-action="save-profile"], [data-action="load-profile"], [data-action="delete-profile"], [data-action="export"], [data-action="import"]');
+            const buttons = this.modal.querySelectorAll('#header-manual-summary-btn, #header-refresh-summary-btn, #content-delete-summary-btn, [data-action="open-error-log"], [data-action="open-project-link"], [data-action="save-profile"], [data-action="load-profile"], [data-action="delete-profile"], [data-action="export"], [data-action="import"]');
             buttons.forEach(button => {
                 button.style.backgroundColor = theme.colors.primary;
                 button.style.color = theme.colors.bg;
@@ -19359,6 +20201,36 @@ ${'='.repeat(80)}
     }
 
     /**
+     * 🆕 处理向量化API提供商变更
+     */
+    handleVectorProviderChange(provider) {
+        console.log('[InfoBarSettings] 向量化API提供商变更:', provider);
+
+        const baseUrlInput = document.getElementById('vector-api-base-url');
+        if (!baseUrlInput) return;
+
+        // 根据连接模式设置默认URL（用户可以自行修改）
+        if (provider === 'localproxy') {
+            // 通用全兼容模式 - 使用SillyTavern后端代理（默认值，用户可修改）
+            baseUrlInput.value = 'http://127.0.0.1:7861';
+            baseUrlInput.placeholder = 'http://127.0.0.1:7861';
+            baseUrlInput.readOnly = false;
+            console.log('[InfoBarSettings] 向量化API：通用全兼容模式，已设置默认端点（可修改）');
+        } else if (provider === 'custom') {
+            // 自定义API模式 - 用户手动输入
+            baseUrlInput.value = '';
+            baseUrlInput.placeholder = 'https://your-api.com';
+            baseUrlInput.readOnly = false;
+            console.log('[InfoBarSettings] 向量化API：自定义API模式，请手动输入端点');
+        } else {
+            // 未选择模式
+            baseUrlInput.value = '';
+            baseUrlInput.placeholder = '请先选择连接模式';
+            baseUrlInput.readOnly = true;
+        }
+    }
+
+    /**
      * 测试本地反代连接 (通过SillyTavern后端)
      */
     async testLocalProxyConnection(baseUrl, apiKey, connectionStatus) {
@@ -19615,6 +20487,159 @@ ${'='.repeat(80)}
 这些限制不影响你的正常创作和表达能力。
 
 ---`;
+    }
+
+    /**
+     * 🆕 加载向量化API模型列表
+     */
+    async loadVectorModelList() {
+        console.log('[InfoBarSettings] 🔄 开始加载向量化API模型列表');
+
+        const loadBtn = document.getElementById('load-vector-models-btn');
+        const modelSelect = document.getElementById('vector-api-model');
+        const statusDiv = document.getElementById('vector-model-status');
+
+        if (loadBtn) {
+            loadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 加载中...';
+            loadBtn.disabled = true;
+        }
+
+        try {
+            // 获取配置
+            const provider = document.getElementById('vector-api-provider')?.value;
+            const baseUrl = document.getElementById('vector-api-base-url')?.value;
+            const apiKey = document.getElementById('vector-api-key')?.value;
+
+            if (!provider || !baseUrl || !apiKey) {
+                throw new Error('请先完成向量化API配置（连接模式、基础URL、API密钥）');
+            }
+
+            // 使用CustomVectorAPIAdapter获取模型列表
+            const { CustomVectorAPIAdapter } = await import('../core/CustomVectorAPIAdapter.js');
+            const adapter = new CustomVectorAPIAdapter({
+                url: baseUrl,
+                apiKey: apiKey
+            });
+
+            // 获取embedding模型列表
+            const models = await adapter.getEmbeddingModels();
+
+            if (!models || models.length === 0) {
+                throw new Error('未找到可用的embedding模型');
+            }
+
+            // 更新下拉框
+            if (modelSelect) {
+                modelSelect.innerHTML = '';
+                models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.id;
+                    option.textContent = model.id;
+                    modelSelect.appendChild(option);
+                });
+
+                console.log('[InfoBarSettings] ✅ 成功加载', models.length, '个embedding模型');
+            }
+
+            // 显示成功状态
+            if (statusDiv) {
+                statusDiv.innerHTML = `<span style="color: #4CAF50;">✅ 成功加载 ${models.length} 个模型</span>`;
+            }
+
+            this.showNotification(`✅ 成功加载 ${models.length} 个向量化模型`, 'success');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载向量化模型列表失败:', error);
+
+            if (statusDiv) {
+                statusDiv.innerHTML = `<span style="color: #f44336;">❌ ${error.message}</span>`;
+            }
+
+            this.showNotification(`❌ 加载失败: ${error.message}`, 'error');
+
+        } finally {
+            if (loadBtn) {
+                loadBtn.innerHTML = '🔄 加载模型';
+                loadBtn.disabled = false;
+            }
+        }
+    }
+
+    /**
+     * 🆕 测试向量化API连接
+     */
+    async testVectorConnection() {
+        console.log('[InfoBarSettings] 🔍 开始测试向量化API连接');
+
+        const testBtn = document.getElementById('test-vector-connection-btn');
+        const statusDiv = document.getElementById('vector-model-status');
+
+        if (testBtn) {
+            testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 测试中...';
+            testBtn.disabled = true;
+        }
+
+        try {
+            // 获取配置
+            const provider = document.getElementById('vector-api-provider')?.value;
+            const baseUrl = document.getElementById('vector-api-base-url')?.value;
+            const apiKey = document.getElementById('vector-api-key')?.value;
+            const model = document.getElementById('vector-api-model')?.value;
+
+            if (!provider || !baseUrl || !apiKey) {
+                throw new Error('请先完成向量化API配置');
+            }
+
+            if (!model) {
+                throw new Error('请先选择向量化模型');
+            }
+
+            // 使用CustomVectorAPIAdapter测试连接
+            const { CustomVectorAPIAdapter } = await import('../core/CustomVectorAPIAdapter.js');
+            const adapter = new CustomVectorAPIAdapter({
+                url: baseUrl,
+                apiKey: apiKey,
+                model: model
+            });
+
+            // 测试向量化
+            const testText = '这是一个测试文本';
+            const vector = await adapter.vectorizeText(testText);
+
+            if (!vector || !Array.isArray(vector) || vector.length === 0) {
+                throw new Error('向量化返回数据无效');
+            }
+
+            console.log('[InfoBarSettings] ✅ 向量化测试成功，维度:', vector.length);
+
+            // 显示成功状态
+            if (statusDiv) {
+                statusDiv.innerHTML = `<span style="color: #4CAF50;">✅ 连接成功！向量维度: ${vector.length}</span>`;
+            }
+
+            this.showNotification(`✅ 向量化API连接成功！维度: ${vector.length}`, 'success');
+
+            // 自动更新维度配置
+            const dimensionsInput = document.getElementById('vector-api-dimensions');
+            if (dimensionsInput) {
+                dimensionsInput.value = vector.length;
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 测试向量化API连接失败:', error);
+
+            if (statusDiv) {
+                statusDiv.innerHTML = `<span style="color: #f44336;">❌ ${error.message}</span>`;
+            }
+
+            this.showNotification(`❌ 连接测试失败: ${error.message}`, 'error');
+
+        } finally {
+            if (testBtn) {
+                testBtn.innerHTML = '🔍 测试连接';
+                testBtn.disabled = false;
+            }
+        }
     }
 
     /**
@@ -22757,17 +23782,18 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 return;
             }
 
-            // 🔧 修复：从extensionSettings读取保存的设置，而不是从summaryManager.settings
+            // 🔧 修复：从extensionSettings.summarySettings读取保存的设置
             const context = SillyTavern.getContext();
             const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
-            
+            const savedSummarySettings = extensionSettings.summarySettings || {};
+
             // 合并summaryManager的默认设置和保存的设置
             const settings = {
                 ...summaryManager.settings,  // 默认值
-                ...extensionSettings         // 保存的值（优先级更高）
+                ...savedSummarySettings      // 保存的值（优先级更高）
             };
-            
-            console.log('[InfoBarSettings] 📊 加载的设置:', settings);
+
+            console.log('[InfoBarSettings] 📊 加载的总结设置:', settings);
 
             // 应用设置到UI
             const autoSummaryEnabled = this.modal.querySelector('#content-auto-summary-enabled');
@@ -23322,6 +24348,15 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 return;
             }
 
+            // 🆕 总结模式切换事件
+            const summaryModeTabs = this.modal.querySelectorAll('.summary-mode-tab');
+            summaryModeTabs.forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    const mode = e.currentTarget.dataset.mode;
+                    this.handleSummaryModeChange(mode);
+                });
+            });
+
             // 总结类型变化事件
             const summaryTypeSelect = this.modal.querySelector('#content-summary-type');
             if (summaryTypeSelect) {
@@ -23346,11 +24381,16 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 });
             }
 
-            // 保存设置按钮事件
-            const saveSettingsBtn = this.modal.querySelector('#content-save-settings-btn');
-            if (saveSettingsBtn) {
-                saveSettingsBtn.addEventListener('click', () => {
-                    this.saveSummarySettings();
+            // 🔧 删除：保存设置按钮已移除，统一使用主保存按钮
+
+            // 🆕 新增：向量化自动隐藏复选框事件
+            const vectorizedAutoHideCheckbox = this.modal.querySelector('#vectorized-auto-hide-enabled');
+            if (vectorizedAutoHideCheckbox) {
+                vectorizedAutoHideCheckbox.addEventListener('change', (e) => {
+                    const keepRecentRow = this.modal.querySelector('#vectorized-keep-recent-row');
+                    if (keepRecentRow) {
+                        keepRecentRow.style.display = e.target.checked ? 'block' : 'none';
+                    }
                 });
             }
 
@@ -23611,6 +24651,62 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 绑定总结面板事件失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理总结模式切换
+     */
+    handleSummaryModeChange(mode) {
+        try {
+            console.log('[InfoBarSettings] 🔄 总结模式切换:', mode);
+
+            // 更新标签页样式
+            const tabs = this.modal.querySelectorAll('.summary-mode-tab');
+            tabs.forEach(tab => {
+                if (tab.dataset.mode === mode) {
+                    tab.classList.add('active');
+                    tab.style.background = 'var(--theme-primary-color, #4CAF50)';
+                    tab.style.color = 'white';
+                    tab.style.borderColor = 'var(--theme-primary-color, #4CAF50)';
+                } else {
+                    tab.classList.remove('active');
+                    tab.style.background = 'var(--theme-bg-secondary, #2a2a2a)';
+                    tab.style.color = 'var(--theme-text-primary, #e0e0e0)';
+                    tab.style.borderColor = 'var(--theme-border-color, #333)';
+                }
+            });
+
+            // 更新描述文本
+            const description = this.modal.querySelector('.summary-mode-description');
+            if (description) {
+                if (mode === 'traditional') {
+                    description.textContent = '传统总结：使用自定义API生成剧情总结 | 向量化总结：将AI记忆总结向量化存储，智能检索';
+                } else {
+                    description.textContent = '向量化总结：将AI记忆总结向量化存储，智能检索 | 传统总结：使用自定义API生成剧情总结';
+                }
+            }
+
+            // 切换设置区域显示
+            const traditionalSettings = this.modal.querySelector('.traditional-summary-settings');
+            const vectorizedSettings = this.modal.querySelector('.vectorized-summary-settings');
+
+            if (mode === 'traditional') {
+                if (traditionalSettings) traditionalSettings.style.display = 'block';
+                if (vectorizedSettings) vectorizedSettings.style.display = 'none';
+            } else {
+                if (traditionalSettings) traditionalSettings.style.display = 'none';
+                if (vectorizedSettings) vectorizedSettings.style.display = 'block';
+
+                // 🔧 检查AI记忆总结状态
+                this.checkAIMemorySummaryStatus();
+
+                // 🔧 加载向量化总结数据
+                this.loadVectorizedSummaryData();
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理总结模式切换失败:', error);
         }
     }
 
@@ -24393,6 +25489,58 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
         }
 
         return settings;
+    }
+
+    /**
+     * 🆕 收集向量化API配置
+     */
+    collectVectorAPIConfig() {
+        const config = {};
+
+        try {
+            // 1. 收集连接模式
+            const providerEl = this.modal?.querySelector('#vector-api-provider');
+            if (providerEl) {
+                config.provider = providerEl.value;
+            }
+
+            // 2. 收集基础URL
+            const baseUrlEl = this.modal?.querySelector('#vector-api-base-url');
+            if (baseUrlEl) {
+                config.baseUrl = baseUrlEl.value;
+            }
+
+            // 3. 收集API密钥
+            const apiKeyEl = this.modal?.querySelector('#vector-api-key');
+            if (apiKeyEl) {
+                config.apiKey = apiKeyEl.value;
+            }
+
+            // 4. 收集向量化模型
+            const modelEl = this.modal?.querySelector('#vector-api-model');
+            if (modelEl) {
+                config.model = modelEl.value;
+            }
+
+            // 5. 收集向量维度
+            const dimensionsEl = this.modal?.querySelector('#vector-api-dimensions');
+            if (dimensionsEl) {
+                config.dimensions = parseInt(dimensionsEl.value) || 384;
+            }
+
+            // 6. 收集批处理大小
+            const batchSizeEl = this.modal?.querySelector('#vector-api-batch-size');
+            if (batchSizeEl) {
+                config.batchSize = parseInt(batchSizeEl.value) || 50;
+            }
+
+            console.log('[InfoBarSettings] 🧠 收集到向量化API配置:', config);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 收集向量化API配置失败:', error);
+        }
+
+        return config;
     }
 
     /**
@@ -36006,6 +37154,195 @@ ${dataExamples}
     }
 
     /**
+     * 🔮 初始化向量功能面板内容
+     */
+    initVectorFunctionPanelContent() {
+        try {
+            console.log('[InfoBarSettings] 🔮 初始化向量功能面板内容...');
+
+            // 加载当前设置
+            this.loadVectorFunctionSettings();
+
+            // 绑定向量功能面板事件
+            this.bindVectorFunctionEvents();
+
+            // 刷新语料库列表
+            this.refreshCorpusList();
+
+            console.log('[InfoBarSettings] ✅ 向量功能面板内容初始化完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化向量功能面板内容失败:', error);
+        }
+    }
+
+    /**
+     * 🔮 加载向量功能设置
+     */
+    loadVectorFunctionSettings() {
+        try {
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const vectorCfg = extCfg.vectorFunction || {};
+
+            // 加载分块配置
+            const chunkSize = this.modal.querySelector('#vector-chunk-size');
+            if (chunkSize) chunkSize.value = vectorCfg.chunkSize || 500;
+
+            const overlapSize = this.modal.querySelector('#vector-overlap-size');
+            if (overlapSize) overlapSize.value = vectorCfg.overlapSize || 50;
+
+            const batchSize = this.modal.querySelector('#vector-batch-size');
+            if (batchSize) batchSize.value = vectorCfg.batchSize || 10;
+
+            // 🔧 新增：加载智能分析配置
+            const enableSmartAnalysis = this.modal.querySelector('#enable-smart-analysis');
+            if (enableSmartAnalysis) {
+                enableSmartAnalysis.checked = vectorCfg.enableSmartAnalysis || false;
+                const smartAnalysisOptions = this.modal.querySelector('#smart-analysis-options');
+                if (smartAnalysisOptions) {
+                    smartAnalysisOptions.style.display = enableSmartAnalysis.checked ? 'block' : 'none';
+                }
+            }
+
+            const extractPlotSummary = this.modal.querySelector('#extract-plot-summary');
+            if (extractPlotSummary) extractPlotSummary.checked = vectorCfg.extractPlotSummary !== false;
+
+            const analyzeWritingStyle = this.modal.querySelector('#analyze-writing-style');
+            if (analyzeWritingStyle) analyzeWritingStyle.checked = vectorCfg.analyzeWritingStyle !== false;
+
+            const extractTimeline = this.modal.querySelector('#extract-timeline');
+            if (extractTimeline) extractTimeline.checked = vectorCfg.extractTimeline !== false;
+
+            const markKeyScenes = this.modal.querySelector('#mark-key-scenes');
+            if (markKeyScenes) markKeyScenes.checked = vectorCfg.markKeyScenes !== false;
+
+            const extractCharacters = this.modal.querySelector('#extract-characters');
+            if (extractCharacters) extractCharacters.checked = vectorCfg.extractCharacters !== false;
+
+            // 🔧 新增：加载AI检索配置
+            const enableAIRetrieval = this.modal.querySelector('#enable-ai-retrieval');
+            if (enableAIRetrieval) {
+                enableAIRetrieval.checked = vectorCfg.enableAIRetrieval || false;
+                const aiRetrievalOptions = this.modal.querySelector('#ai-retrieval-options');
+                if (aiRetrievalOptions) {
+                    aiRetrievalOptions.style.display = enableAIRetrieval.checked ? 'block' : 'none';
+                }
+            }
+
+            const retrievalTopK = this.modal.querySelector('#retrieval-top-k');
+            if (retrievalTopK) retrievalTopK.value = vectorCfg.retrievalTopK || 3;
+
+            const retrievalThreshold = this.modal.querySelector('#retrieval-threshold');
+            if (retrievalThreshold) retrievalThreshold.value = vectorCfg.retrievalThreshold || 0.7;
+
+            const retrievalInjectionPosition = this.modal.querySelector('#retrieval-injection-position');
+            if (retrievalInjectionPosition) retrievalInjectionPosition.value = vectorCfg.retrievalInjectionPosition || 'system';
+
+            console.log('[InfoBarSettings] ✅ 向量功能设置加载完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载向量功能设置失败:', error);
+        }
+    }
+
+    /**
+     * 🔮 绑定向量功能面板事件
+     */
+    bindVectorFunctionEvents() {
+        try {
+            // 🔧 修复：防止重复绑定事件监听器
+            if (this._vectorFunctionEventsbound) {
+                console.log('[InfoBarSettings] ⚠️ 向量功能面板事件已绑定，跳过重复绑定');
+                return;
+            }
+
+            // 文件上传区域
+            const uploadArea = this.modal.querySelector('#file-upload-area');
+            const fileInput = this.modal.querySelector('#novel-file-input');
+
+            if (uploadArea && fileInput) {
+                // 点击上传区域
+                uploadArea.addEventListener('click', () => {
+                    fileInput.click();
+                });
+
+                // 拖拽上传
+                uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    uploadArea.style.borderColor = '#4CAF50';
+                    uploadArea.style.background = 'rgba(76, 175, 80, 0.1)';
+                });
+
+                uploadArea.addEventListener('dragleave', (e) => {
+                    e.preventDefault();
+                    uploadArea.style.borderColor = '';
+                    uploadArea.style.background = '';
+                });
+
+                uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    uploadArea.style.borderColor = '';
+                    uploadArea.style.background = '';
+
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        this.handleNovelFileUpload(files[0]);
+                    }
+                });
+
+                // 文件选择
+                fileInput.addEventListener('change', (e) => {
+                    const files = e.target.files;
+                    if (files.length > 0) {
+                        this.handleNovelFileUpload(files[0]);
+                    }
+                });
+            }
+
+            // 标记事件已绑定
+            this._vectorFunctionEventsbound = true;
+
+            // 刷新语料库列表
+            const refreshBtn = this.modal.querySelector('#refresh-corpus-list');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', () => {
+                    this.refreshCorpusList();
+                });
+            }
+
+            // 🔧 新增：中止向量化按钮
+            const abortBtn = this.modal.querySelector('#abort-vectorization-btn');
+            if (abortBtn) {
+                abortBtn.addEventListener('click', () => {
+                    this.abortVectorization();
+                });
+            }
+
+            // 🔧 新增：智能分析开关
+            const enableSmartAnalysis = this.modal.querySelector('#enable-smart-analysis');
+            const smartAnalysisOptions = this.modal.querySelector('#smart-analysis-options');
+            if (enableSmartAnalysis && smartAnalysisOptions) {
+                enableSmartAnalysis.addEventListener('change', (e) => {
+                    smartAnalysisOptions.style.display = e.target.checked ? 'block' : 'none';
+                });
+            }
+
+            // 🔧 新增：AI检索开关
+            const enableAIRetrieval = this.modal.querySelector('#enable-ai-retrieval');
+            const aiRetrievalOptions = this.modal.querySelector('#ai-retrieval-options');
+            if (enableAIRetrieval && aiRetrievalOptions) {
+                enableAIRetrieval.addEventListener('change', (e) => {
+                    aiRetrievalOptions.style.display = e.target.checked ? 'block' : 'none';
+                });
+            }
+
+            console.log('[InfoBarSettings] ✅ 向量功能面板事件绑定完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 绑定向量功能面板事件失败:', error);
+        }
+    }
+
+    /**
      * 🎯 刷新记忆系统状态显示
      */
     async refreshMemoryStatus() {
@@ -37060,12 +38397,66 @@ ${dataExamples}
     }
 
     /**
+     * 🆕 切换API配置类型（通用API / 向量化API）
+     */
+    switchAPIType(apiType) {
+        try {
+            console.log('[InfoBarSettings] 🔄 切换API类型:', apiType);
+
+            // 更新按钮样式
+            const buttons = this.modal.querySelectorAll('.api-type-switch-btn');
+            buttons.forEach(btn => {
+                const isActive = btn.dataset.apiType === apiType;
+                if (isActive) {
+                    btn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+                    btn.style.color = 'white';
+                    btn.style.border = 'none';
+                    btn.classList.add('active');
+                } else {
+                    btn.style.background = 'var(--theme-bg-secondary, #2a2a2a)';
+                    btn.style.color = 'var(--theme-text-primary, #e0e0e0)';
+                    btn.style.border = '1px solid var(--theme-border-color, #333)';
+                    btn.classList.remove('active');
+                }
+            });
+
+            // 切换配置区域显示
+            const generalSection = this.modal.querySelector('.general-api-config-section');
+            const vectorSection = this.modal.querySelector('.vector-api-config-section');
+
+            if (apiType === 'general') {
+                // 显示通用API配置
+                if (generalSection) generalSection.style.display = 'block';
+                if (vectorSection) vectorSection.style.display = 'none';
+                console.log('[InfoBarSettings] ✅ 已切换到通用API配置');
+            } else if (apiType === 'vector') {
+                // 显示向量化API配置
+                if (generalSection) generalSection.style.display = 'none';
+                if (vectorSection) vectorSection.style.display = 'block';
+                console.log('[InfoBarSettings] ✅ 已切换到向量化API配置');
+            }
+
+            // 保存当前选择的API类型
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            if (!extensionSettings['Information bar integration tool']) {
+                extensionSettings['Information bar integration tool'] = {};
+            }
+            extensionSettings['Information bar integration tool'].currentAPIType = apiType;
+            context.saveSettingsDebounced();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换API类型失败:', error);
+        }
+    }
+
+    /**
      * 🆕 切换NPC管理模式
      */
     switchNPCMode(mode) {
         try {
             console.log('[InfoBarSettings] 🔄 切换NPC模式:', mode);
-            
+
             // 更新按钮样式
             const tabs = this.modal.querySelectorAll('.npc-mode-tab');
             tabs.forEach(tab => {
@@ -39969,5 +41360,1255 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
                 resolve(true);
             }
         });
+    }
+
+    /**
+     * 🔮 处理小说文件上传
+     */
+    async handleNovelFileUpload(file) {
+        try {
+            console.log('[InfoBarSettings] 📤 开始处理文件上传:', file.name);
+
+            // 检查文件类型
+            if (!file.name.endsWith('.txt') && !file.name.endsWith('.md')) {
+                this.showNotification('❌ 仅支持 .txt 和 .md 格式的文件', 'error');
+                return;
+            }
+
+            // 🔧 修复：检查文件大小（限制20MB）
+            if (file.size > 20 * 1024 * 1024) {
+                this.showNotification('❌ 文件大小不能超过20MB', 'error');
+                return;
+            }
+
+            console.log('[InfoBarSettings] 📊 文件信息:', {
+                name: file.name,
+                size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+                type: file.type
+            });
+
+            // 🔧 修复：智能检测文件编码并读取
+            const content = await this.readFileWithEncoding(file);
+
+            if (!content || content.trim().length === 0) {
+                this.showNotification('❌ 文件内容为空或无法读取', 'error');
+                return;
+            }
+
+            console.log('[InfoBarSettings] 📖 文件读取完成，长度:', content.length);
+
+            // 处理向量化
+            await this.processNovelVectorization(file.name, content);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理文件上传失败:', error);
+            this.showNotification('❌ 文件上传失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🔧 新增：智能读取文件（支持多种编码）
+     */
+    async readFileWithEncoding(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = async (e) => {
+                try {
+                    let content = e.target.result;
+
+                    // 🔧 检测并移除UTF-8 BOM
+                    if (content.charCodeAt(0) === 0xFEFF) {
+                        content = content.substring(1);
+                        console.log('[InfoBarSettings] 🔧 检测到UTF-8 BOM，已移除');
+                    }
+
+                    // 🔧 检测乱码（如果包含大量替换字符，尝试其他编码）
+                    const replacementCharCount = (content.match(/�/g) || []).length;
+                    const replacementRatio = replacementCharCount / content.length;
+
+                    if (replacementRatio > 0.01) {
+                        console.warn('[InfoBarSettings] ⚠️ 检测到可能的编码问题，替换字符比例:', (replacementRatio * 100).toFixed(2) + '%');
+                        console.log('[InfoBarSettings] 🔄 尝试使用GBK编码重新读取...');
+
+                        // 尝试使用GBK编码
+                        const gbkContent = await this.readFileAsGBK(file);
+                        if (gbkContent && (gbkContent.match(/�/g) || []).length < replacementCharCount) {
+                            console.log('[InfoBarSettings] ✅ GBK编码读取成功');
+                            resolve(gbkContent);
+                            return;
+                        }
+                    }
+
+                    resolve(content);
+                } catch (error) {
+                    reject(error);
+                }
+            };
+
+            reader.onerror = (error) => {
+                console.error('[InfoBarSettings] ❌ 文件读取失败:', error);
+                reject(new Error('文件读取失败'));
+            };
+
+            // 首先尝试UTF-8编码
+            reader.readAsText(file, 'UTF-8');
+        });
+    }
+
+    /**
+     * 🔧 新增：使用GBK编码读取文件
+     */
+    async readFileAsGBK(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = (e) => {
+                try {
+                    const arrayBuffer = e.target.result;
+                    const uint8Array = new Uint8Array(arrayBuffer);
+
+                    // 使用TextDecoder尝试GBK解码
+                    try {
+                        const decoder = new TextDecoder('gbk');
+                        const content = decoder.decode(uint8Array);
+                        resolve(content);
+                    } catch (error) {
+                        // GBK解码失败，尝试GB2312
+                        try {
+                            const decoder = new TextDecoder('gb2312');
+                            const content = decoder.decode(uint8Array);
+                            resolve(content);
+                        } catch (error2) {
+                            console.warn('[InfoBarSettings] ⚠️ GBK/GB2312解码失败');
+                            resolve(null);
+                        }
+                    }
+                } catch (error) {
+                    reject(error);
+                }
+            };
+
+            reader.onerror = (error) => {
+                reject(error);
+            };
+
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    /**
+     * 🔧 新增：中止向量化
+     */
+    abortVectorization() {
+        console.log('[InfoBarSettings] 🛑 用户请求中止向量化');
+        this._vectorizationAborted = true;
+
+        const progressText = this.modal.querySelector('#progress-text');
+        const progressDetails = this.modal.querySelector('#progress-details');
+        const progressBar = this.modal.querySelector('#progress-bar');
+
+        if (progressText) progressText.textContent = '🛑 已中止';
+        if (progressDetails) progressDetails.textContent = '用户已中止向量化处理';
+        if (progressBar) {
+            progressBar.style.background = 'linear-gradient(90deg, #FF9800, #FFC107)';
+        }
+
+        this.showNotification('🛑 向量化已中止', 'warning');
+
+        // 延迟隐藏进度条
+        setTimeout(() => {
+            const progressContainer = this.modal.querySelector('#upload-progress-container');
+            if (progressContainer) progressContainer.style.display = 'none';
+        }, 2000);
+    }
+
+    /**
+     * 🔮 处理小说向量化
+     */
+    async processNovelVectorization(fileName, content) {
+        const progressContainer = this.modal.querySelector('#upload-progress-container');
+        const progressBar = this.modal.querySelector('#progress-bar');
+        const progressText = this.modal.querySelector('#progress-text');
+        const progressPercentage = this.modal.querySelector('#progress-percentage');
+        const progressDetails = this.modal.querySelector('#progress-details');
+
+        try {
+            console.log('[InfoBarSettings] 🔄 开始向量化处理...');
+
+            // 🔧 重置中止标志
+            this._vectorizationAborted = false;
+
+            // 显示进度条
+            if (progressContainer) progressContainer.style.display = 'block';
+
+            // 更新进度
+            const updateProgress = (percent, text, details) => {
+                if (progressBar) progressBar.style.width = `${percent}%`;
+                if (progressPercentage) progressPercentage.textContent = `${Math.round(percent)}%`;
+                if (progressText) progressText.textContent = text;
+                if (progressDetails) progressDetails.textContent = details;
+            };
+
+            updateProgress(5, '📖 正在读取文件...', `文件大小: ${(content.length / 1024).toFixed(2)} KB`);
+
+            // 获取配置
+            const chunkSize = parseInt(this.modal.querySelector('#vector-chunk-size')?.value || 500);
+            const overlapSize = parseInt(this.modal.querySelector('#vector-overlap-size')?.value || 50);
+            const batchSize = parseInt(this.modal.querySelector('#vector-batch-size')?.value || 10);
+
+            updateProgress(10, '✂️ 正在分割文本...', '准备分块处理');
+
+            // 分割文本
+            const chunks = this.splitTextIntoChunks(content, chunkSize, overlapSize);
+            console.log('[InfoBarSettings] 📊 文本已分割为', chunks.length, '个块');
+
+            updateProgress(15, '🔧 正在初始化向量化引擎...', `共 ${chunks.length} 个块需要处理`);
+
+            // 🔧 修复：使用自定义API面板的向量化API配置
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const vectorAPIConfig = extCfg.vectorAPIConfig || {};
+
+            // 检查向量化API配置
+            if (!vectorAPIConfig.baseUrl || !vectorAPIConfig.apiKey) {
+                throw new Error('请先在"自定义API"面板中配置向量化API（点击"🧠 向量化API"按钮）');
+            }
+
+            // 获取CustomVectorAPIAdapter
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+
+            if (!vectorRetrieval || !vectorRetrieval.customVectorAPI) {
+                throw new Error('向量化模块未找到');
+            }
+
+            // 更新CustomVectorAPIAdapter配置
+            vectorRetrieval.customVectorAPI.updateConfig({
+                url: vectorAPIConfig.baseUrl,
+                apiKey: vectorAPIConfig.apiKey,
+                model: vectorAPIConfig.model || 'text-embedding-ada-002'
+            });
+
+            console.log('[InfoBarSettings] 🔧 使用自定义API面板的向量化配置:', {
+                url: vectorAPIConfig.baseUrl,
+                model: vectorAPIConfig.model
+            });
+
+            // 向量化每个块（批处理）
+            const vectorizedChunks = [];
+            const totalChunks = chunks.length;
+
+            for (let i = 0; i < totalChunks; i++) {
+                // 🔧 检查是否已中止
+                if (this._vectorizationAborted) {
+                    console.log('[InfoBarSettings] 🛑 向量化已中止，停止处理');
+                    throw new Error('用户已中止向量化');
+                }
+
+                const chunk = chunks[i];
+                const progress = 15 + (i / totalChunks) * 80; // 15% - 95%
+
+                updateProgress(
+                    progress,
+                    `🔄 正在向量化... (${i + 1}/${totalChunks})`,
+                    `当前块: ${chunk.text.substring(0, 50)}...`
+                );
+
+                try {
+                    // 🔧 修复：直接使用customVectorAPI进行向量化
+                    const vector = await vectorRetrieval.customVectorAPI.vectorizeText(chunk.text);
+                    vectorizedChunks.push({
+                        id: `${fileName}_chunk_${i}`,
+                        text: chunk.text,
+                        vector: vector,
+                        metadata: {
+                            fileName: fileName,
+                            chunkIndex: i,
+                            totalChunks: totalChunks,
+                            startPos: chunk.startPos,
+                            endPos: chunk.endPos,
+                            timestamp: Date.now()
+                        }
+                    });
+                } catch (error) {
+                    console.error(`[InfoBarSettings] ❌ 向量化第 ${i + 1} 块失败:`, error);
+                    // 继续处理下一块，不中断整个流程
+                }
+
+                // 批处理延迟，避免内存问题
+                if ((i + 1) % batchSize === 0 && i < totalChunks - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
+
+            // 🔧 最后检查是否已中止
+            if (this._vectorizationAborted) {
+                console.log('[InfoBarSettings] 🛑 向量化已中止，停止保存');
+                throw new Error('用户已中止向量化');
+            }
+
+            // 🔧 新增：智能分析
+            let analysisResults = null;
+            const vectorCfg = extCfg.vectorFunction || {};
+
+            if (vectorCfg.enableSmartAnalysis) {
+                updateProgress(85, '🧠 正在进行智能分析...', '分析小说内容特征');
+
+                try {
+                    // 动态导入NovelAnalyzer
+                    const { NovelAnalyzer } = await import('../core/NovelAnalyzer.js');
+                    const analyzer = new NovelAnalyzer();
+
+                    analysisResults = await analyzer.analyzeNovel(content, {
+                        extractPlotSummary: vectorCfg.extractPlotSummary,
+                        analyzeWritingStyle: vectorCfg.analyzeWritingStyle,
+                        extractTimeline: vectorCfg.extractTimeline,
+                        markKeyScenes: vectorCfg.markKeyScenes,
+                        extractCharacters: vectorCfg.extractCharacters
+                    });
+
+                    console.log('[InfoBarSettings] ✅ 智能分析完成:', analysisResults);
+                } catch (error) {
+                    console.error('[InfoBarSettings] ⚠️ 智能分析失败:', error);
+                    // 分析失败不影响向量化流程
+                }
+            }
+
+            updateProgress(95, '💾 正在保存语料库...', `共 ${vectorizedChunks.length} 个块已向量化`);
+
+            // 保存语料库（包含分析结果）
+            await this.saveCorpus(fileName, vectorizedChunks, content.length, analysisResults);
+
+            updateProgress(100, '✅ 向量化完成！', `成功处理 ${vectorizedChunks.length} 个块`);
+
+            // 延迟隐藏进度条
+            setTimeout(() => {
+                if (progressContainer) progressContainer.style.display = 'none';
+            }, 2000);
+
+            this.showNotification(`✅ 向量化完成！共处理 ${vectorizedChunks.length} 个块`, 'success');
+            this.refreshCorpusList();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 向量化处理失败:', error);
+
+            // 🔧 区分中止和错误
+            if (error.message.includes('中止')) {
+                // 中止情况已在abortVectorization()中处理
+                return;
+            }
+
+            if (progressText) progressText.textContent = '❌ 处理失败';
+            if (progressDetails) progressDetails.textContent = error.message;
+            if (progressBar) {
+                progressBar.style.background = 'linear-gradient(90deg, #f44336, #e91e63)';
+            }
+
+            this.showNotification('❌ 向量化失败: ' + error.message, 'error');
+
+            // 延迟隐藏进度条
+            setTimeout(() => {
+                if (progressContainer) progressContainer.style.display = 'none';
+            }, 3000);
+        } finally {
+            // 🔧 清理中止标志
+            this._vectorizationAborted = false;
+        }
+    }
+
+    /**
+     * 🔮 分割文本为块
+     */
+    splitTextIntoChunks(text, chunkSize, overlapSize) {
+        const chunks = [];
+        let startPos = 0;
+
+        while (startPos < text.length) {
+            const endPos = Math.min(startPos + chunkSize, text.length);
+            const chunkText = text.substring(startPos, endPos);
+
+            chunks.push({
+                text: chunkText,
+                startPos: startPos,
+                endPos: endPos
+            });
+
+            startPos += chunkSize - overlapSize;
+        }
+
+        return chunks;
+    }
+
+    /**
+     * 🔮 保存语料库
+     * 🔧 修复：使用SillyTavern原生向量API存储，避免settings.json过大
+     */
+    async saveCorpus(fileName, vectorizedChunks, fileSize = 0, analysisResults = null) {
+        try {
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+
+            if (!extCfg.vectorCorpus) {
+                extCfg.vectorCorpus = {};
+            }
+
+            // 🔧 修复：生成包含聊天ID和模型名称的集合ID
+            const chatId = context?.chatId || 'default';
+            const vectorAPIConfig = extCfg.vectorAPIConfig || {};
+            const modelName = vectorAPIConfig.model || 'unknown';
+
+            // 清理聊天ID和模型名称，移除特殊字符
+            const cleanChatId = chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const cleanModelName = modelName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+            const collectionId = `${cleanChatId}/${cleanModelName}`;
+
+            console.log('[InfoBarSettings] 📤 开始保存向量数据到后端API...');
+            console.log('[InfoBarSettings] 📊 聊天ID:', chatId);
+            console.log('[InfoBarSettings] 📊 模型名称:', modelName);
+            console.log('[InfoBarSettings] 📊 集合ID:', collectionId);
+            console.log('[InfoBarSettings] 📊 向量块数:', vectorizedChunks.length);
+
+            // 🔧 准备向量数据
+            const items = vectorizedChunks.map((chunk, index) => ({
+                hash: this.generateHash(chunk.text + Date.now() + index),
+                text: chunk.text,
+                metadata: chunk.metadata || {}
+            }));
+
+            // 🔧 准备embeddings
+            const embeddings = vectorizedChunks.reduce((acc, chunk) => {
+                acc[chunk.text] = chunk.vector;
+                return acc;
+            }, {});
+
+            // 🔧 调用SillyTavern原生向量API插入数据
+            const insertPayload = {
+                collectionId: collectionId,
+                items: items,
+                source: 'webllm',
+                embeddings: embeddings
+            };
+
+            const response = await fetch('/api/vector/insert', {
+                method: 'POST',
+                headers: context.getRequestHeaders(),
+                body: JSON.stringify(insertPayload)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`向量API插入失败 (${response.status}): ${errorText}`);
+            }
+
+            console.log('[InfoBarSettings] ✅ 向量数据已保存到后端API');
+
+            // 🔧 只在settings.json中保存元数据（不包含向量数据）
+            extCfg.vectorCorpus[fileName] = {
+                fileName: fileName,
+                collectionId: collectionId,  // 保存集合ID用于后续查询和删除
+                createdAt: Date.now(),
+                chunkCount: vectorizedChunks.length,
+                fileSize: fileSize,
+                // 🔧 新增：保存智能分析结果
+                analysis: analysisResults || null
+            };
+
+            context.saveSettingsDebounced();
+            console.log('[InfoBarSettings] 💾 语料库元数据已保存:', fileName);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 保存语料库失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🔧 新增：生成哈希值
+     */
+    generateHash(text) {
+        let hash = 0;
+        for (let i = 0; i < text.length; i++) {
+            const char = text.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        return Math.abs(hash).toString(36);
+    }
+
+    /**
+     * 🔮 刷新语料库列表
+     */
+    refreshCorpusList() {
+        try {
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const corpusData = extCfg.vectorCorpus || {};
+
+            const corpusList = this.modal.querySelector('#corpus-list');
+            const corpusCount = this.modal.querySelector('#corpus-count');
+
+            if (!corpusList || !corpusCount) return;
+
+            const corpusArray = Object.values(corpusData);
+            corpusCount.textContent = corpusArray.length;
+
+            if (corpusArray.length === 0) {
+                corpusList.innerHTML = `
+                    <div class="no-corpus" style="
+                        text-align: center;
+                        padding: 40px 20px;
+                        color: var(--theme-text-secondary, #888);
+                    ">
+                        暂无语料库，请上传小说文件
+                    </div>
+                `;
+                return;
+            }
+
+            corpusList.innerHTML = corpusArray.map(corpus => `
+                <div class="corpus-item" style="
+                    border: 1px solid var(--theme-border-color, #333);
+                    border-radius: 6px;
+                    padding: 12px;
+                    margin-bottom: 10px;
+                    background: var(--theme-bg-primary, #111);
+                ">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: var(--theme-text-primary, #ddd); margin-bottom: 5px;">
+                                📚 ${corpus.fileName}
+                            </div>
+                            <div style="font-size: 12px; color: var(--theme-text-secondary, #888);">
+                                块数: ${corpus.chunkCount} | 创建时间: ${new Date(corpus.createdAt).toLocaleString()}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="view-corpus-btn" data-filename="${corpus.fileName}" style="
+                                padding: 6px 12px;
+                                border: 1px solid #2196F3;
+                                border-radius: 4px;
+                                background: transparent;
+                                color: #2196F3;
+                                cursor: pointer;
+                                transition: all 0.3s;
+                            " title="查看向量化数据">
+                                👁️ 查看
+                            </button>
+                            <button class="delete-corpus-btn" data-filename="${corpus.fileName}" style="
+                                padding: 6px 12px;
+                                border: 1px solid #f44336;
+                                border-radius: 4px;
+                                background: transparent;
+                                color: #f44336;
+                                cursor: pointer;
+                                transition: all 0.3s;
+                            " title="删除语料库">
+                                🗑️ 删除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // 绑定查看按钮事件
+            corpusList.querySelectorAll('.view-corpus-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const fileName = e.target.dataset.filename;
+                    this.viewCorpusDetails(fileName);
+                });
+            });
+
+            // 绑定删除按钮事件
+            corpusList.querySelectorAll('.delete-corpus-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const fileName = e.target.dataset.filename;
+                    this.deleteCorpus(fileName);
+                });
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 刷新语料库列表失败:', error);
+        }
+    }
+
+    /**
+     * 🔮 查看语料库详情
+     * 🔧 修复：从后端API获取向量数据
+     */
+    async viewCorpusDetails(fileName) {
+        try {
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const corpus = extCfg.vectorCorpus?.[fileName];
+
+            if (!corpus) {
+                this.showNotification('❌ 未找到语料库数据', 'error');
+                return;
+            }
+
+            // 创建详情模态框
+            const modal = document.createElement('div');
+            modal.className = 'corpus-details-modal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            `;
+
+            const content = document.createElement('div');
+            content.style.cssText = `
+                background: var(--theme-bg-primary, #111);
+                border: 1px solid var(--theme-border-color, #333);
+                border-radius: 12px;
+                padding: 24px;
+                max-width: 800px;
+                max-height: 80vh;
+                overflow-y: auto;
+                color: var(--theme-text-primary, #ddd);
+            `;
+
+            // 🔧 从后端API获取向量数据
+            let chunksHTML = '';
+            let vectorChunks = [];
+
+            if (corpus.collectionId) {
+                try {
+                    console.log('[InfoBarSettings] 📥 从后端API获取向量数据...');
+                    console.log('[InfoBarSettings] 📊 集合ID:', corpus.collectionId);
+
+                    // 使用通配符查询获取所有向量
+                    const queryPayload = {
+                        collectionId: corpus.collectionId,
+                        searchText: '*',
+                        topK: 10000,  // 获取所有数据
+                        threshold: 0,
+                        source: 'webllm',
+                        embeddings: {}
+                    };
+
+                    const response = await fetch('/api/vector/query', {
+                        method: 'POST',
+                        headers: context.getRequestHeaders(),
+                        body: JSON.stringify(queryPayload)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        vectorChunks = result.metadata || result.results || result.data || [];
+                        console.log('[InfoBarSettings] ✅ 获取到', vectorChunks.length, '个向量块');
+                    } else {
+                        console.warn('[InfoBarSettings] ⚠️ 获取向量数据失败:', response.status);
+                    }
+                } catch (fetchError) {
+                    console.warn('[InfoBarSettings] ⚠️ 获取向量数据时出错:', fetchError);
+                }
+            }
+
+            // 构建详情内容
+            if (vectorChunks.length > 0) {
+                // 限制显示前50个块，避免性能问题
+                const displayChunks = vectorChunks.slice(0, 50);
+                chunksHTML = displayChunks.map((chunk, index) => `
+                    <div style="
+                        margin-bottom: 15px;
+                        padding: 12px;
+                        background: var(--theme-bg-secondary, #1a1a1a);
+                        border-radius: 6px;
+                        border-left: 3px solid #2196F3;
+                    ">
+                        <div style="font-weight: 600; color: #2196F3; margin-bottom: 8px;">
+                            块 #${index + 1}
+                        </div>
+                        <div style="font-size: 13px; line-height: 1.6; color: var(--theme-text-primary, #ddd); margin-bottom: 8px;">
+                            ${(chunk.text || '').substring(0, 200)}${(chunk.text || '').length > 200 ? '...' : ''}
+                        </div>
+                        <div style="font-size: 11px; color: var(--theme-text-secondary, #888);">
+                            来源: ${chunk.metadata?.source || '未知'}
+                        </div>
+                    </div>
+                `).join('');
+
+                if (vectorChunks.length > 50) {
+                    chunksHTML += `
+                        <div style="text-align: center; padding: 12px; color: var(--theme-text-secondary, #888); font-size: 12px;">
+                            ... 还有 ${vectorChunks.length - 50} 个块未显示
+                        </div>
+                    `;
+                }
+            } else {
+                chunksHTML = '<div style="text-align: center; padding: 20px; color: var(--theme-text-secondary, #888);">暂无数据块或无法从后端获取数据</div>';
+            }
+
+            // 🔧 修复：获取向量化模型信息
+            const vectorAPIConfig = extCfg.vectorAPIConfig || {};
+            const modelName = vectorAPIConfig.model || '未知';
+            const storageLocation = corpus.collectionId ? 'SillyTavern向量数据库' : '本地存储';
+            const collectionId = corpus.collectionId || '无';
+
+            content.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0; color: #4CAF50;">📚 ${fileName}</h3>
+                    <button id="close-corpus-details" style="
+                        padding: 6px 12px;
+                        border: 1px solid var(--theme-border-color, #333);
+                        border-radius: 4px;
+                        background: var(--theme-bg-secondary, #1a1a1a);
+                        color: var(--theme-text-primary, #ddd);
+                        cursor: pointer;
+                    ">✖ 关闭</button>
+                </div>
+
+                <div style="margin-bottom: 20px; padding: 12px; background: var(--theme-bg-secondary, #1a1a1a); border-radius: 6px;">
+                    <div style="margin-bottom: 8px;">
+                        <strong>📊 总块数:</strong> ${corpus.chunkCount || corpus.chunks?.length || 0}
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <strong>⏰ 创建时间:</strong> ${new Date(corpus.createdAt).toLocaleString()}
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <strong>📦 文件大小:</strong> ${corpus.fileSize ? (corpus.fileSize / 1024).toFixed(2) + ' KB' : '未知'}
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <strong>🤖 向量化模型:</strong> ${modelName}
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <strong>💾 存储位置:</strong> ${storageLocation}
+                    </div>
+                    <div style="margin-bottom: 8px; font-size: 11px; color: var(--theme-text-secondary, #888);">
+                        <strong>🔑 集合ID:</strong> ${collectionId}
+                    </div>
+                </div>
+            `;
+
+            modal.appendChild(content);
+            document.body.appendChild(modal);
+
+            // 绑定关闭事件
+            const closeBtn = content.querySelector('#close-corpus-details');
+            const closeModal = () => {
+                modal.remove();
+            };
+            closeBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal();
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 查看语料库详情失败:', error);
+            this.showNotification('❌ 查看失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🔮 删除语料库
+     * 🔧 修复：同时清理后端向量数据
+     */
+    async deleteCorpus(fileName) {
+        try {
+            if (!confirm(`确定要删除语料库 "${fileName}" 吗？\n\n此操作将同时删除所有向量数据，不可恢复！`)) {
+                return;
+            }
+
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+
+            if (extCfg.vectorCorpus && extCfg.vectorCorpus[fileName]) {
+                const corpus = extCfg.vectorCorpus[fileName];
+                const collectionId = corpus.collectionId;
+
+                // 🔧 如果有collectionId，清理后端向量数据
+                if (collectionId) {
+                    console.log('[InfoBarSettings] 🗑️ 开始清理后端向量数据...');
+                    console.log('[InfoBarSettings] 📊 集合ID:', collectionId);
+
+                    try {
+                        const purgePayload = {
+                            collectionId: collectionId
+                        };
+
+                        const response = await fetch('/api/vector/purge', {
+                            method: 'POST',
+                            headers: context.getRequestHeaders(),
+                            body: JSON.stringify(purgePayload)
+                        });
+
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            console.warn('[InfoBarSettings] ⚠️ 清理向量数据失败:', errorText);
+                            // 继续删除元数据，即使清理失败
+                        } else {
+                            console.log('[InfoBarSettings] ✅ 后端向量数据已清理');
+                        }
+                    } catch (purgeError) {
+                        console.warn('[InfoBarSettings] ⚠️ 清理向量数据时出错:', purgeError);
+                        // 继续删除元数据
+                    }
+                }
+
+                // 🔧 删除元数据
+                delete extCfg.vectorCorpus[fileName];
+                context.saveSettingsDebounced();
+
+                this.showNotification(`✅ 已删除语料库: ${fileName}`, 'success');
+                this.refreshCorpusList();
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除语料库失败:', error);
+            this.showNotification('❌ 删除失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🔮 收集向量功能设置
+     */
+    collectVectorFunctionSettings() {
+        try {
+            return {
+                // 分块配置
+                chunkSize: parseInt(this.modal.querySelector('#vector-chunk-size')?.value || 500),
+                overlapSize: parseInt(this.modal.querySelector('#vector-overlap-size')?.value || 50),
+                batchSize: parseInt(this.modal.querySelector('#vector-batch-size')?.value || 10),
+
+                // 智能分析配置
+                enableSmartAnalysis: this.modal.querySelector('#enable-smart-analysis')?.checked || false,
+                extractPlotSummary: this.modal.querySelector('#extract-plot-summary')?.checked || false,
+                analyzeWritingStyle: this.modal.querySelector('#analyze-writing-style')?.checked || false,
+                extractTimeline: this.modal.querySelector('#extract-timeline')?.checked || false,
+                markKeyScenes: this.modal.querySelector('#mark-key-scenes')?.checked || false,
+                extractCharacters: this.modal.querySelector('#extract-characters')?.checked || false,
+
+                // AI检索配置
+                enableAIRetrieval: this.modal.querySelector('#enable-ai-retrieval')?.checked || false,
+                retrievalTopK: parseInt(this.modal.querySelector('#retrieval-top-k')?.value || 3),
+                retrievalThreshold: parseFloat(this.modal.querySelector('#retrieval-threshold')?.value || 0.7),
+                retrievalInjectionPosition: this.modal.querySelector('#retrieval-injection-position')?.value || 'system'
+            };
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 收集向量功能设置失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🔮 收集向量化总结设置
+     */
+    collectVectorizedSummarySettings() {
+        try {
+            // 🔧 新增：收集模式切换状态
+            const summaryModeTab = this.modal?.querySelector('.summary-mode-tab.active');
+            const summaryMode = summaryModeTab?.dataset?.mode || 'traditional';
+
+            return {
+                mode: summaryMode, // 🔧 新增：保存模式状态
+                enabled: this.modal.querySelector('#vectorized-summary-enabled')?.checked || false,
+                floorCount: parseInt(this.modal.querySelector('#vectorized-summary-floor-count')?.value || 20),
+                autoHideEnabled: this.modal.querySelector('#vectorized-auto-hide-enabled')?.checked || false,
+                keepRecentCount: parseInt(this.modal.querySelector('#vectorized-keep-recent-count')?.value || 10)
+            };
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 收集向量化总结设置失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🆕 检查AI记忆总结状态
+     */
+    checkAIMemorySummaryStatus() {
+        try {
+            const statusDiv = this.modal.querySelector('#ai-memory-status');
+            if (!statusDiv) return;
+
+            const infobar = window.SillyTavernInfobar;
+            // 🔧 修复：aiMemorySummarizer直接在modules下，不在summaryManager下
+            const aiMemorySummarizer = infobar?.modules?.aiMemorySummarizer;
+
+            if (!aiMemorySummarizer) {
+                statusDiv.innerHTML = `
+                    <span style="color: var(--theme-error-color, #f44336);">❌ AI记忆总结模块未初始化</span>
+                `;
+                return;
+            }
+
+            const enabled = aiMemorySummarizer.settings?.enabled || false;
+            const messageLevelEnabled = aiMemorySummarizer.settings?.messageLevelSummary || false;
+
+            console.log('[InfoBarSettings] 🔍 AI记忆总结状态检查:', { enabled, messageLevelEnabled });
+
+            if (enabled && messageLevelEnabled) {
+                statusDiv.innerHTML = `
+                    <span style="color: var(--theme-success-color, #4CAF50);">✅ AI记忆总结已启用（消息级别总结已启用）</span>
+                `;
+            } else if (enabled && !messageLevelEnabled) {
+                statusDiv.innerHTML = `
+                    <span style="color: var(--theme-warning-color, #ff9800);">⚠️ AI记忆总结已启用，但未启用消息级别总结</span>
+                `;
+            } else {
+                statusDiv.innerHTML = `
+                    <span style="color: var(--theme-error-color, #f44336);">❌ AI记忆总结未启用</span>
+                `;
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 检查AI记忆总结状态失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 加载向量化总结数据
+     */
+    async loadVectorizedSummaryData() {
+        try {
+            console.log('[InfoBarSettings] 📊 加载向量化总结数据...');
+
+            // 加载AI记忆总结记录
+            await this.loadAIMemorySummaryList();
+
+            // 加载已向量化总结记录
+            await this.loadVectorizedSummaryList();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载向量化总结数据失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 加载AI记忆总结列表
+     */
+    async loadAIMemorySummaryList() {
+        try {
+            const listDiv = this.modal.querySelector('#ai-memory-summary-list');
+            if (!listDiv) return;
+
+            // 🔧 从当前聊天的数据核心获取AI记忆总结记录
+            const context = SillyTavern.getContext();
+            const chatId = context?.chatId;
+
+            if (!chatId) {
+                listDiv.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: var(--theme-text-secondary, #888);">
+                        请先选择一个聊天
+                    </div>
+                `;
+                return;
+            }
+
+            // 🔧 从扩展设置中获取当前聊天的AI记忆总结记录
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const vectorizedSummarySettings = extCfg.vectorizedSummary || {};
+            const chatSummaries = vectorizedSummarySettings[chatId] || {};
+            const aiMemorySummaries = chatSummaries.pendingSummaries || [];
+
+            console.log('[InfoBarSettings] 📊 加载AI记忆总结列表:', { chatId, count: aiMemorySummaries.length });
+
+            if (aiMemorySummaries.length === 0) {
+                listDiv.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: var(--theme-text-secondary, #888);">
+                        暂无AI记忆总结记录<br>
+                        <small style="color: var(--theme-text-tertiary, #666);">AI生成消息时会自动创建记忆总结</small>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            aiMemorySummaries.forEach((summary, index) => {
+                const content = summary.summary?.content || summary.content || '无内容';
+                const timestamp = summary.timestamp || Date.now();
+                const importance = summary.summary?.importance || summary.importance || 0;
+                const floorNumber = summary.floorNumber || summary.summary?.floorNumber || 0;
+
+                html += `
+                    <div class="ai-memory-summary-item" style="padding: 10px; margin-bottom: 10px; background: var(--theme-bg-tertiary, #1a1a1a); border: 1px solid var(--theme-border-color, #333); border-radius: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <span style="font-weight: 500; color: var(--theme-primary-color, #4CAF50);">总结 #${index + 1}${floorNumber > 0 ? ` (楼层${floorNumber})` : ''}</span>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <span style="font-size: 12px; color: var(--theme-text-secondary, #888);">${new Date(timestamp).toLocaleString()}</span>
+                                <button class="delete-ai-memory-summary-btn" data-index="${index}" data-floor="${floorNumber}" style="
+                                    padding: 4px 8px;
+                                    background: var(--theme-error-color, #f44336);
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                    font-size: 12px;
+                                    transition: opacity 0.2s;
+                                " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                    🗑️ 删除
+                                </button>
+                            </div>
+                        </div>
+                        <div style="font-size: 13px; color: var(--theme-text-primary, #e0e0e0); line-height: 1.5; margin-bottom: 5px;">
+                            ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}
+                        </div>
+                        <div style="font-size: 11px; color: var(--theme-text-tertiary, #666);">
+                            重要性: ${(importance * 100).toFixed(0)}%
+                        </div>
+                    </div>
+                `;
+            });
+
+            listDiv.innerHTML = html;
+
+            // 🔧 新增：绑定删除按钮事件
+            listDiv.querySelectorAll('.delete-ai-memory-summary-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const index = parseInt(e.target.dataset.index);
+                    const floorNumber = parseInt(e.target.dataset.floor);
+                    this.deleteAIMemorySummary(index, floorNumber);
+                });
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载AI记忆总结列表失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 加载已向量化总结列表
+     */
+    async loadVectorizedSummaryList() {
+        try {
+            const listDiv = this.modal.querySelector('#vectorized-summary-list');
+            if (!listDiv) return;
+
+            // 🔧 从当前聊天的数据核心获取已向量化总结记录
+            const context = SillyTavern.getContext();
+            const chatId = context?.chatId;
+
+            if (!chatId) {
+                listDiv.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: var(--theme-text-secondary, #888);">
+                        请先选择一个聊天
+                    </div>
+                `;
+                return;
+            }
+
+            // 🔧 从扩展设置中获取当前聊天的已向量化总结记录
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const vectorizedSummarySettings = extCfg.vectorizedSummary || {};
+            const chatSummaries = vectorizedSummarySettings[chatId] || {};
+            const vectorizedSummaries = chatSummaries.vectorizedRecords || [];
+
+            console.log('[InfoBarSettings] 📊 加载已向量化总结列表:', { chatId, count: vectorizedSummaries.length });
+
+            if (vectorizedSummaries.length === 0) {
+                listDiv.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: var(--theme-text-secondary, #888);">
+                        暂无向量化总结记录<br>
+                        <small style="color: var(--theme-text-tertiary, #666);">达到总结楼层后会自动向量化</small>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            vectorizedSummaries.forEach((summary, index) => {
+                const startFloor = summary.startFloor || 0;
+                const endFloor = summary.endFloor || 0;
+                const timestamp = summary.timestamp || Date.now();
+                const vectorCount = summary.vectorCount || 0;
+                const collectionId = summary.collectionId || '未知';
+
+                html += `
+                    <div class="vectorized-summary-item" style="padding: 10px; margin-bottom: 10px; background: var(--theme-bg-tertiary, #1a1a1a); border: 1px solid var(--theme-border-color, #333); border-radius: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <span style="font-weight: 500; color: var(--theme-primary-color, #4CAF50);">楼层 ${startFloor}-${endFloor}</span>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <span style="font-size: 12px; color: var(--theme-text-secondary, #888);">${new Date(timestamp).toLocaleString()}</span>
+                                <button class="delete-vectorized-summary-btn" data-index="${index}" data-collection-id="${collectionId}" style="
+                                    padding: 4px 8px;
+                                    background: var(--theme-error-color, #f44336);
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                    font-size: 12px;
+                                    transition: opacity 0.2s;
+                                " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                    🗑️ 删除
+                                </button>
+                            </div>
+                        </div>
+                        <div style="font-size: 12px; color: var(--theme-text-secondary, #aaa);">
+                            向量数量: ${vectorCount} | 集合ID: ${collectionId.substring(0, 20)}...
+                        </div>
+                    </div>
+                `;
+            });
+
+            listDiv.innerHTML = html;
+
+            // 🔧 新增：绑定删除按钮事件
+            listDiv.querySelectorAll('.delete-vectorized-summary-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const index = parseInt(e.target.dataset.index);
+                    const collectionId = e.target.dataset.collectionId;
+                    this.deleteVectorizedSummary(index, collectionId);
+                });
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载已向量化总结列表失败:', error);
+        }
+    }
+
+    /**
+     * 🔮 保存向量功能设置（已废弃，使用主保存按钮）
+     * @deprecated 使用主保存按钮代替
+     */
+    async saveVectorFunctionSettings() {
+        try {
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+
+            extCfg.vectorFunction = this.collectVectorFunctionSettings();
+
+            context.saveSettingsDebounced();
+            this.showNotification('✅ 所有配置已保存', 'success');
+
+            console.log('[InfoBarSettings] 💾 向量功能设置已保存:', extCfg.vectorFunction);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 保存向量功能设置失败:', error);
+            this.showNotification('❌ 保存失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🔧 新增：删除AI记忆总结
+     */
+    async deleteAIMemorySummary(index, floorNumber) {
+        try {
+            const confirmed = confirm(`确认删除总结 #${index + 1}${floorNumber > 0 ? ` (楼层 ${floorNumber})` : ''}？\n\n此操作将删除：\n• 向量化总结中的待处理记录\n• AI记忆数据库中的相关记忆\n\n此操作不可撤销！`);
+
+            if (!confirmed) return;
+
+            console.log('[InfoBarSettings] 🗑️ 删除AI记忆总结:', { index, floorNumber });
+
+            const context = SillyTavern.getContext();
+            const chatId = context?.chatId;
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const vectorizedSummarySettings = extCfg.vectorizedSummary || {};
+            const chatSummaries = vectorizedSummarySettings[chatId] || {};
+            const aiMemorySummaries = chatSummaries.pendingSummaries || [];
+
+            // 1. 从待向量化列表中删除
+            if (index >= 0 && index < aiMemorySummaries.length) {
+                aiMemorySummaries.splice(index, 1);
+                chatSummaries.pendingSummaries = aiMemorySummaries;
+                vectorizedSummarySettings[chatId] = chatSummaries;
+                extCfg.vectorizedSummary = vectorizedSummarySettings;
+
+                context.saveSettingsDebounced();
+                console.log('[InfoBarSettings] ✅ 已从待向量化列表中删除');
+            }
+
+            // 2. 从AI记忆数据库中删除（如果有楼层号）
+            if (floorNumber > 0) {
+                const infobar = window.SillyTavernInfobar;
+                const aiMemoryDatabase = infobar?.modules?.aiMemoryDatabase;
+
+                if (aiMemoryDatabase && aiMemoryDatabase.database) {
+                    // 删除该楼层的所有记忆
+                    const memoriesToDelete = [];
+                    for (const [memoryId, memory] of aiMemoryDatabase.database.memories) {
+                        if (memory.floorNumber === floorNumber) {
+                            memoriesToDelete.push(memoryId);
+                        }
+                    }
+
+                    memoriesToDelete.forEach(id => {
+                        aiMemoryDatabase.database.memories.delete(id);
+                    });
+
+                    if (memoriesToDelete.length > 0) {
+                        console.log(`[InfoBarSettings] ✅ 已从AI记忆数据库删除 ${memoriesToDelete.length} 条记忆`);
+                    }
+                }
+            }
+
+            // 3. 刷新UI
+            await this.loadAIMemorySummaryList();
+            this.showNotification('✅ AI记忆总结已删除', 'success');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除AI记忆总结失败:', error);
+            this.showNotification('❌ 删除失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🔧 新增：删除已向量化总结
+     */
+    async deleteVectorizedSummary(index, collectionId) {
+        try {
+            const confirmed = confirm(`确认删除已向量化总结记录？\n\n此操作将删除：\n• 向量化总结记录\n• 后端向量数据（集合ID: ${collectionId.substring(0, 20)}...）\n\n此操作不可撤销！`);
+
+            if (!confirmed) return;
+
+            console.log('[InfoBarSettings] 🗑️ 删除已向量化总结:', { index, collectionId });
+
+            const context = SillyTavern.getContext();
+            const chatId = context?.chatId;
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const vectorizedSummarySettings = extCfg.vectorizedSummary || {};
+            const chatSummaries = vectorizedSummarySettings[chatId] || {};
+            const vectorizedSummaries = chatSummaries.vectorizedRecords || [];
+
+            // 1. 从已向量化列表中删除
+            if (index >= 0 && index < vectorizedSummaries.length) {
+                vectorizedSummaries.splice(index, 1);
+                chatSummaries.vectorizedRecords = vectorizedSummaries;
+                vectorizedSummarySettings[chatId] = chatSummaries;
+                extCfg.vectorizedSummary = vectorizedSummarySettings;
+
+                context.saveSettingsDebounced();
+                console.log('[InfoBarSettings] ✅ 已从已向量化列表中删除');
+            }
+
+            // 2. 删除后端向量数据
+            if (collectionId && collectionId !== '未知') {
+                try {
+                    const purgePayload = {
+                        collectionId: collectionId
+                    };
+
+                    const response = await fetch('/api/vector/purge', {
+                        method: 'POST',
+                        headers: context.getRequestHeaders(),
+                        body: JSON.stringify(purgePayload)
+                    });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.warn('[InfoBarSettings] ⚠️ 清理向量数据失败:', errorText);
+                    } else {
+                        console.log('[InfoBarSettings] ✅ 后端向量数据已清理');
+                    }
+                } catch (purgeError) {
+                    console.warn('[InfoBarSettings] ⚠️ 清理向量数据时出错:', purgeError);
+                }
+            }
+
+            // 3. 刷新UI
+            await this.loadVectorizedSummaryList();
+            this.showNotification('✅ 已向量化总结已删除', 'success');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除已向量化总结失败:', error);
+            this.showNotification('❌ 删除失败: ' + error.message, 'error');
+        }
     }
 }
