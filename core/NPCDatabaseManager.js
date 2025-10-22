@@ -508,9 +508,8 @@ export class NPCDatabaseManager {
                 return;
             }
 
-            // 🔧 修复：从NPCManagementPanel获取用户选择的数据源面板
-            const npcPanel = window.SillyTavernInfobar?.modules?.npcManagementPanel;
-            const sourcePanelId = npcPanel?.sourcePanelId || 'interaction';
+            // 🔧 修复：直接从localStorage获取用户选择的数据源面板
+            const sourcePanelId = localStorage.getItem('npcPanel_sourcePanel') || 'interaction';
             const panelData = panelsData[sourcePanelId] || {};
 
             console.log('[NPCDB] 🔍 使用数据源面板:', sourcePanelId, '可用面板:', Object.keys(panelsData));
