@@ -6483,7 +6483,7 @@ ${'='.repeat(80)}
 
                 <!-- API提供商选择 -->
                 <div class="settings-group">
-                    <h4>1. 选择API提供商</h4>
+                    <h4>选择API提供商</h4>
                     <div class="form-group">
                         <label>API提供商</label>
                         <select id="api-provider" name="apiConfig.provider">
@@ -6497,8 +6497,8 @@ ${'='.repeat(80)}
                 </div>
 
                 <!-- 接口类型选择 -->
-                <div class="settings-group">
-                    <h4>2. 选择接口类型</h4>
+                <div class="settings-group" id="interface-type-group">
+                    <h4>选择接口类型</h4>
                     <div class="form-group">
                         <label>接口类型</label>
                         <select id="interface-type" name="apiConfig.format">
@@ -6510,7 +6510,7 @@ ${'='.repeat(80)}
 
                 <!-- 基础URL配置 -->
                 <div class="settings-group">
-                    <h4>3. 基础URL</h4>
+                    <h4>基础URL</h4>
                     <div class="form-group">
                         <label>API基础URL</label>
                         <input type="url" id="api-base-url" name="apiConfig.baseUrl" placeholder="https://api.example.com" />
@@ -6520,7 +6520,7 @@ ${'='.repeat(80)}
 
                 <!-- API密钥配置 -->
                 <div class="settings-group">
-                    <h4>4. API密钥</h4>
+                    <h4>API密钥</h4>
                     <div class="form-group">
                         <label>API密钥</label>
                         <input type="password" id="api-key" name="apiConfig.apiKey" placeholder="输入您的API密钥" />
@@ -6530,7 +6530,7 @@ ${'='.repeat(80)}
 
                 <!-- 模型选择 -->
                 <div class="settings-group">
-                    <h4>5. 模型选择</h4>
+                    <h4>模型选择</h4>
                     <div class="form-group">
                         <label>AI模型</label>
                         <select id="api-model" name="apiConfig.model">
@@ -6542,7 +6542,7 @@ ${'='.repeat(80)}
 
                 <!-- 加载模型列表按钮 -->
                 <div class="settings-group">
-                    <h4>6. 模型列表管理</h4>
+                    <h4>模型列表管理</h4>
                     <div class="form-group">
                         <button type="button" id="load-models-btn" class="btn btn-primary">🔄 重新加载模型列表</button>
                         <small>重新从API获取最新的模型列表（会消耗API额度）</small>
@@ -6551,16 +6551,24 @@ ${'='.repeat(80)}
 
                 <!-- 测试连接按钮 -->
                 <div class="settings-group">
-                    <h4>7. 测试连接</h4>
+                    <h4>测试连接</h4>
                     <div class="form-group">
                         <button type="button" id="test-connection-btn" class="btn btn-secondary">🔍 测试连接</button>
                         <small>测试API连接是否正常</small>
+                    </div>
+                    
+                    <!-- 连接状态显示 -->
+                    <div class="form-group" style="margin-top: 12px;">
+                        <div id="connection-status" class="connection-status">
+                            ⏳ 未测试连接
+                        </div>
+                        <small>显示API连接和模型加载状态</small>
                     </div>
                 </div>
 
                 <!-- 模型参数配置 -->
                 <div class="settings-group">
-                    <h4>8. 模型参数</h4>
+                    <h4>模型参数</h4>
                     <div class="form-group">
                         <label>温度 (0-2)</label>
                         <input type="range" name="apiConfig.temperature" min="0" max="2" step="0.1" value="0.7" />
@@ -6576,7 +6584,7 @@ ${'='.repeat(80)}
 
                 <!-- 连接设置 -->
                 <div class="settings-group">
-                    <h4>9. 连接设置</h4>
+                    <h4>连接设置</h4>
                     <div class="form-group">
                         <label>请求超时 (秒)</label>
                         <input type="number" name="apiConfig.timeout" min="5" max="300" step="5" value="30" />
@@ -6654,21 +6662,10 @@ ${'='.repeat(80)}
 
                 <!-- 🆕 正则表达式管理 -->
                 <div class="settings-group">
-                    <h4>10. 正则表达式管理</h4>
+                    <h4>正则表达式管理</h4>
                     <div class="form-group">
                         <button type="button" id="regex-script-manager-btn" class="btn btn-secondary">📝 正则表达式管理</button>
                         <small>管理用于自定义API的正则表达式脚本，可从SillyTavern导入或创建新脚本</small>
-                    </div>
-                </div>
-
-                <!-- 连接状态显示 -->
-                <div class="settings-group">
-                    <h4>11. 连接状态</h4>
-                    <div class="form-group">
-                        <div id="connection-status" class="connection-status">
-                            ⏳ 未测试连接
-                        </div>
-                        <small>显示API连接和模型加载状态</small>
                     </div>
                 </div>
             </div>
@@ -19275,6 +19272,7 @@ ${'='.repeat(80)}
         console.log('[InfoBarSettings] API提供商变更:', provider);
 
         const interfaceTypeSelect = document.getElementById('interface-type');
+        const interfaceTypeGroup = document.getElementById('interface-type-group');
         const baseUrlInput = document.getElementById('api-base-url');
 
         if (!interfaceTypeSelect || !baseUrlInput) return;
@@ -19287,27 +19285,45 @@ ${'='.repeat(80)}
         baseUrlInput.value = '';
 
         if (provider === 'gemini') {
-            // Gemini提供商的接口类型
+            // Gemini提供商的接口类型 - 显示接口类型选择
+            if (interfaceTypeGroup) {
+                interfaceTypeGroup.style.display = '';
+            }
             interfaceTypeSelect.innerHTML = `
                 <option value="">请选择接口类型</option>
                 <option value="native">Gemini原生接口</option>
                 <option value="openai-compatible">OpenAI兼容接口</option>
             `;
         } else if (provider === 'localproxy') {
-            // 本地反代提供商的接口类型
+            // 通用全兼容提供商 - 隐藏接口类型选择，自动设置为OpenAI兼容
+            if (interfaceTypeGroup) {
+                interfaceTypeGroup.style.display = 'none';
+            }
             interfaceTypeSelect.innerHTML = `
-                <option value="">请选择接口类型</option>
-                <option value="openai-compatible">OpenAI兼容接口</option>
+                <option value="openai-compatible" selected>OpenAI兼容接口</option>
             `;
+            interfaceTypeSelect.value = 'openai-compatible';
             // 设置默认端点
             baseUrlInput.value = 'http://127.0.0.1:7861/v1';
             baseUrlInput.placeholder = 'http://127.0.0.1:7861/v1';
+            
+            console.log('[InfoBarSettings] 通用全兼容模式：已自动选择OpenAI兼容接口');
         } else if (provider === 'custom') {
-            // 自定义提供商的接口类型
+            // 自定义API提供商 - 隐藏接口类型选择，自动设置为OpenAI兼容
+            if (interfaceTypeGroup) {
+                interfaceTypeGroup.style.display = 'none';
+            }
             interfaceTypeSelect.innerHTML = `
-                <option value="">请选择接口类型</option>
-                <option value="openai-compatible">OpenAI兼容接口</option>
+                <option value="openai-compatible" selected>OpenAI兼容接口</option>
             `;
+            interfaceTypeSelect.value = 'openai-compatible';
+            
+            console.log('[InfoBarSettings] 自定义API模式：已自动选择OpenAI兼容接口');
+        } else {
+            // 其他情况，显示接口类型选择
+            if (interfaceTypeGroup) {
+                interfaceTypeGroup.style.display = '';
+            }
         }
     }
 
@@ -33919,6 +33935,9 @@ ${dataExamples}
                 );
             }
 
+            // 🔧 刷新状态显示
+            this.refreshMemoryStatus();
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理AI记忆总结启用状态变化失败:', error);
         }
@@ -33991,6 +34010,9 @@ ${dataExamples}
                 enabled ? 'success' : 'info'
             );
 
+            // 🔧 刷新状态显示
+            this.refreshMemoryStatus();
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理AI记忆数据库启用状态变化失败:', error);
         }
@@ -34031,6 +34053,9 @@ ${dataExamples}
                 enabled ? '✅ 剧情规划助手已启用' : '⏸️ 剧情规划助手已禁用',
                 enabled ? 'success' : 'info'
             );
+
+            // 🔧 刷新状态显示
+            this.refreshMemoryStatus();
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理剧情规划助手启用状态变化失败:', error);
@@ -35269,6 +35294,9 @@ ${dataExamples}
         try {
             console.log('[InfoBarSettings] 🔗 SillyTavern深度集成启用状态变化:', enabled);
 
+            // 🔧 刷新状态显示
+            this.refreshMemoryStatus();
+
             const infoBarTool = window.SillyTavernInfobar;
             const sillyTavernIntegration = infoBarTool?.modules?.sillyTavernIntegration;
             if (sillyTavernIntegration && typeof sillyTavernIntegration.updateSettings === 'function') {
@@ -35990,6 +36018,29 @@ ${dataExamples}
                 return;
             }
 
+            // 🔧 读取功能启用状态，控制状态卡片的显示/隐藏
+            const featureEnabledMap = {
+                'aiSummarizer': this.modal.querySelector('#memory-ai-memory-enabled')?.checked || false,
+                'aiMemoryDatabase': this.modal.querySelector('#memory-ai-memory-database-enabled')?.checked || false,
+                'memoryMaintenance': this.modal.querySelector('#memory-maintenance-enabled')?.checked || false,
+                'contextualRetrieval': this.modal.querySelector('#contextual-retrieval-enabled')?.checked || false,
+                'userProfile': this.modal.querySelector('#user-profile-enabled')?.checked || false,
+                'knowledgeGraph': this.modal.querySelector('#knowledge-graph-enabled')?.checked || false,
+                'timeAware': this.modal.querySelector('#time-aware-enabled')?.checked || false,
+                'stIntegration': this.modal.querySelector('#st-integration-enabled')?.checked || false,
+                'storyPlanning': this.modal.querySelector('#memory-story-planning-enabled')?.checked || false
+            };
+
+            console.log('[InfoBarSettings] 📊 功能启用状态:', featureEnabledMap);
+
+            // 🔧 根据启用状态显示/隐藏状态卡片
+            Object.keys(featureEnabledMap).forEach(module => {
+                const card = this.modal.querySelector(`[data-module="${module}"]`);
+                if (card) {
+                    card.style.display = featureEnabledMap[module] ? '' : 'none';
+                }
+            });
+
             // 获取各模块状态
             const deepMemoryManager = infoBarTool.modules?.deepMemoryManager;
             const aiMemorySummarizer = infoBarTool.modules?.summaryManager?.aiMemorySummarizer;
@@ -35997,7 +36048,7 @@ ${dataExamples}
             const intelligentMemoryClassifier = infoBarTool.modules?.intelligentMemoryClassifier;
             const aiMemoryDatabaseInjector = infoBarTool.modules?.aiMemoryDatabaseInjector;
 
-            // 更新四层记忆架构状态
+            // 更新四层记忆架构状态（总是显示，因为是核心功能）
             if (deepMemoryManager) {
                 const status = deepMemoryManager.getStatus();
                 this.updateMemoryLayerStatus('sensory', status);
@@ -36006,12 +36057,13 @@ ${dataExamples}
                 this.updateMemoryLayerStatus('deepArchive', status);
             }
 
-            // 更新模块状态
-            if (aiMemorySummarizer) {
+            // 更新模块状态（只在启用时更新数据）
+            if (aiMemorySummarizer && featureEnabledMap.aiSummarizer) {
                 const status = aiMemorySummarizer.getStatus();
                 this.updateModuleStatus('aiSummarizer', status);
             }
 
+            // 🔧 vectorSearch, classifier, injector 是基础模块，总是显示
             if (vectorizedMemoryRetrieval) {
                 const status = vectorizedMemoryRetrieval.getStatus();
                 this.updateModuleStatus('vectorSearch', status);
@@ -36027,53 +36079,53 @@ ${dataExamples}
                 this.updateModuleStatus('injector', status);
             }
 
-            // 🆕 更新六大核心功能模块状态
+            // 🆕 更新六大核心功能模块状态（只在启用时更新）
             const memoryMaintenanceSystem = infoBarTool.modules?.memoryMaintenanceSystem;
-            if (memoryMaintenanceSystem) {
+            if (memoryMaintenanceSystem && featureEnabledMap.memoryMaintenance) {
                 const status = memoryMaintenanceSystem.getStatus();
                 this.updateEnhancementModuleStatus('memoryMaintenance', status);
             }
 
             const contextualRetrieval = infoBarTool.modules?.contextualRetrieval;
-            if (contextualRetrieval) {
+            if (contextualRetrieval && featureEnabledMap.contextualRetrieval) {
                 const status = contextualRetrieval.getStatus();
                 this.updateEnhancementModuleStatus('contextualRetrieval', status);
             }
 
             const userProfileManager = infoBarTool.modules?.userProfileManager;
-            if (userProfileManager) {
+            if (userProfileManager && featureEnabledMap.userProfile) {
                 const status = userProfileManager.getStatus();
                 this.updateEnhancementModuleStatus('userProfile', status);
             }
 
             const knowledgeGraphManager = infoBarTool.modules?.knowledgeGraphManager;
-            if (knowledgeGraphManager) {
+            if (knowledgeGraphManager && featureEnabledMap.knowledgeGraph) {
                 const status = knowledgeGraphManager.getStatus();
                 this.updateEnhancementModuleStatus('knowledgeGraph', status);
             }
 
             const timeAwareMemoryManager = infoBarTool.modules?.timeAwareMemoryManager;
-            if (timeAwareMemoryManager) {
+            if (timeAwareMemoryManager && featureEnabledMap.timeAware) {
                 const status = timeAwareMemoryManager.getStatus();
                 this.updateEnhancementModuleStatus('timeAware', status);
             }
 
             const sillyTavernIntegration = infoBarTool.modules?.sillyTavernIntegration;
-            if (sillyTavernIntegration) {
+            if (sillyTavernIntegration && featureEnabledMap.stIntegration) {
                 const status = sillyTavernIntegration.getStatus();
                 this.updateEnhancementModuleStatus('stIntegration', status);
             }
 
-            // 🗄️ 更新AI记忆数据库状态
+            // 🗄️ 更新AI记忆数据库状态（只在启用时更新）
             const aiMemoryDatabase = infoBarTool.modules?.aiMemoryDatabase || window.__TEST_AIMemoryDatabase;
-            if (aiMemoryDatabase) {
+            if (aiMemoryDatabase && featureEnabledMap.aiMemoryDatabase) {
                 const status = aiMemoryDatabase.getStatus();
                 this.updateAIMemoryDatabaseStatus(status);
             }
 
-            // 📖 更新剧情规划助手状态
+            // 📖 更新剧情规划助手状态（只在启用时更新）
             const storyPlanningAssistant = infoBarTool.modules?.storyPlanningAssistant;
-            if (storyPlanningAssistant) {
+            if (storyPlanningAssistant && featureEnabledMap.storyPlanning) {
                 const status = storyPlanningAssistant.getStatus();
                 this.updateStoryPlanningStatus(status);
             }
