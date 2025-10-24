@@ -14,7 +14,7 @@ export class CustomVectorAPIAdapter {
             url: config.url || '',
             apiKey: config.apiKey || '',
             model: config.model || 'text-embedding-ada-002',
-            timeout: config.timeout || 30000,
+            timeout: config.timeout || 9999000, // 默认9999秒，转换为毫秒
             maxRetries: config.maxRetries || 3,
             // 🆕 新增：API类型配置
             apiType: config.apiType || 'openai', // openai, ollama, custom

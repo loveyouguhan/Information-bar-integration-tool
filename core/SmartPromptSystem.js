@@ -3127,12 +3127,20 @@ ${aiMemoryInstruction}
                 console.log('[SmartPromptSystem] 🔧 检测到自定义API模式已启用');
                 console.log('[SmartPromptSystem] 📊 自定义API提供商:', apiConfig.provider);
                 console.log('[SmartPromptSystem] 📊 自定义API模型:', apiConfig.model);
-                console.log('[SmartPromptSystem] ℹ️ 自定义API模式下不注入主API技术性限制提示词');
-                
+                console.log('[SmartPromptSystem] ℹ️ 自定义API模式下不注入主API提示词');
+
                 // 🔧 修复：清除可能存在的禁止规则，避免影响主API
                 await this.clearMainAPIProhibitionRules();
-                
-                // 不再注入禁止规则，跳过主API提示词注入，继续生成智能提示词
+
+                // 🔧 修复：清除主API提示词，避免填报提示词出现在主API中
+                if (typeof this.context.setExtensionPrompt === 'function') {
+                    this.context.setExtensionPrompt('Information bar integration tool', '', 1, 0);
+                    console.log('[SmartPromptSystem] 🧹 已清除主API提示词（自定义API模式）');
+                }
+
+                // 🔧 修复：自定义API模式下，直接返回，不生成和注入智能提示词
+                console.log('[SmartPromptSystem] ✅ 自定义API模式下，跳过主API智能提示词生成');
+                return;
             } else {
                 // 🆕 自定义API未启用时，向主API注入必须输出标签的规则
                 await this.injectMainAPIRequiredRules();

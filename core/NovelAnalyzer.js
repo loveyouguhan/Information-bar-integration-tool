@@ -333,102 +333,81 @@ ${content.substring(0, 10000)}${content.length > 10000 ? '...(内容过长，已
                 throw new Error('未配置模型，请在"自定义API"面板中配置模型名称');
             }
 
-            // 🔧 修复：根据provider类型决定是否使用SillyTavern代理
+            // 🔧 修复：统一使用SillyTavern后端代理，避免CORS问题
             let endpoint;
             let headers;
             let requestBody;
 
-            if (apiConfig.provider === 'localproxy') {
-                // 🔧 使用SillyTavern后端代理，避免CORS问题
-                endpoint = '/api/backends/chat-completions/generate';
+            // 🔧 所有外部API调用都通过SillyTavern后端代理
+            endpoint = '/api/backends/chat-completions/generate';
 
-                // 🔧 修复：使用context.getRequestHeaders()获取正确的请求头（包含CSRF Token）
-                headers = context.getRequestHeaders();
+            // 🔧 修复：使用context.getRequestHeaders()获取正确的请求头（包含CSRF Token）
+            headers = context.getRequestHeaders();
 
-                // 🔧 构建SillyTavern后端代理的请求体格式
-                requestBody = {
-                    messages: [{ role: 'user', content: prompt }],
-                    model: apiConfig.model || 'gpt-3.5-turbo',
-                    temperature: 0.7,
-                    frequency_penalty: 0,
-                    presence_penalty: 0.12,
-                    top_p: 1.0,
-                    max_tokens: 2000,
-                    stream: false,
-                    chat_completion_source: "openai",
-                    group_names: [],
-                    include_reasoning: false,
-                    reasoning_effort: "medium",
-                    enable_web_search: false,
-                    request_images: false,
-                    custom_prompt_post_processing: "strict",
-                    reverse_proxy: baseUrl,
-                    proxy_password: apiConfig.apiKey
-                };
+            // 🔧 修复：从用户配置读取max_tokens参数
+            const maxTokens = apiConfig.maxTokens || apiConfig.max_tokens || 20000;
 
-                console.log('[NovelAnalyzer] 🔧 使用SillyTavern后端代理');
-            } else {
-                // 🔧 直接调用外部API
-                endpoint = baseUrl;
+            // 🔧 修复：从用户配置读取timeout参数（默认9999秒，适应长文本分析）
+            let timeout = apiConfig.timeout || apiConfig.request_timeout || 9999;
 
-                // 🔧 修复：智能检测并添加正确的端点路径
-                if (!endpoint.endsWith('/chat/completions')) {
-                    // 检查是否已经包含/v1
-                    const hasV1 = endpoint.includes('/v1');
+            // 🔧 修复：如果timeout小于1000，可能是秒为单位，转换为毫秒
+            if (timeout < 1000) {
+                timeout = timeout * 1000;
+                console.log('[NovelAnalyzer] 🔧 timeout单位转换: 秒 → 毫秒');
+            }
 
-                    if (hasV1) {
-                        // 如果已经包含/v1，只添加/chat/completions
-                        endpoint = endpoint.replace(/\/$/, '') + '/chat/completions';
-                    } else {
-                        // 如果不包含/v1，根据provider类型决定
-                        if (apiConfig.provider === 'openai' || apiConfig.provider === 'custom') {
-                            endpoint = endpoint.replace(/\/$/, '') + '/chat/completions';
-                        } else {
-                            endpoint = endpoint.replace(/\/$/, '') + '/v1/chat/completions';
-                        }
-                    }
+            // 🔧 构建SillyTavern后端代理的请求体格式
+            requestBody = {
+                messages: [{ role: 'user', content: prompt }],
+                model: apiConfig.model || 'gpt-3.5-turbo',
+                temperature: apiConfig.temperature || 0.7,
+                frequency_penalty: apiConfig.frequency_penalty || 0,
+                presence_penalty: apiConfig.presence_penalty || 0.12,
+                top_p: apiConfig.top_p || 1.0,
+                max_tokens: maxTokens,  // 🔧 使用用户配置的max_tokens
+                stream: false,
+                chat_completion_source: "openai",
+                group_names: [],
+                include_reasoning: false,
+                reasoning_effort: "medium",
+                enable_web_search: false,
+                request_images: false,
+                custom_prompt_post_processing: "strict",
+                reverse_proxy: baseUrl,
+                proxy_password: apiConfig.apiKey
+            };
+
+            console.log('[NovelAnalyzer] 🔧 使用SillyTavern后端代理');
+            console.log('[NovelAnalyzer] 🔧 代理目标:', baseUrl);
+            console.log('[NovelAnalyzer] 🔧 max_tokens:', maxTokens);
+            console.log('[NovelAnalyzer] 🔧 timeout:', timeout, 'ms');
+
+            // 🔧 修复：创建AbortController用于超时控制
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+            try {
+                // 调用API
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(requestBody),
+                    signal: controller.signal  // 🔧 添加超时信号
+                });
+
+                clearTimeout(timeoutId);  // 清除超时定时器
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('[NovelAnalyzer] ❌ API响应错误:', errorText);
+                    throw new Error(`API调用失败: ${response.status} - ${errorText}`);
                 }
 
-                headers = {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiConfig.apiKey || ''}`
-                };
+                const data = await response.json();
 
-                // 🔧 标准OpenAI格式的请求体
-                requestBody = {
-                    model: apiConfig.model || 'gpt-3.5-turbo',
-                    messages: [
-                        {
-                            role: 'user',
-                            content: prompt
-                        }
-                    ],
-                    temperature: 0.7,
-                    max_tokens: 2000
-                };
+                // 🔧 修复：统一处理SillyTavern后端代理的响应格式
+                let content = '';
 
-                console.log('[NovelAnalyzer] 🔧 使用外部API端点:', endpoint);
-            }
-
-            // 调用API
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(requestBody)
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('[NovelAnalyzer] ❌ API响应错误:', errorText);
-                throw new Error(`API调用失败: ${response.status} - ${errorText}`);
-            }
-
-            const data = await response.json();
-
-            // 🔧 修复：处理不同的响应格式
-            let content = '';
-
-            if (apiConfig.provider === 'localproxy') {
                 // SillyTavern后端代理的响应格式
                 // 可能的格式：{ choices: [...] } 或 { error: true, response: "..." }
                 if (data.error) {
@@ -441,15 +420,29 @@ ${content.substring(0, 10000)}${content.length > 10000 ? '...(内容过长，已
                          data.choices?.[0]?.text ||
                          data.response ||
                          '';
-            } else {
-                // 标准OpenAI格式的响应
-                content = data.choices?.[0]?.message?.content || '';
+
+                if (!content) {
+                    console.error('[NovelAnalyzer] ❌ 无法从响应中提取内容:', data);
+                    throw new Error('AI响应格式错误：无法提取内容');
+                }
+
+                console.log('[NovelAnalyzer] ✅ AI响应成功');
+                console.log('[NovelAnalyzer] 📊 响应内容长度:', content.length);
+
+                return content;
+
+            } catch (error) {
+                clearTimeout(timeoutId);  // 🔧 确保清除超时定时器
+
+                // 🔧 处理超时错误
+                if (error.name === 'AbortError') {
+                    console.error('[NovelAnalyzer] ❌ API调用超时 (', timeout, 'ms)');
+                    throw new Error(`API调用超时: 请求超过${timeout/1000}秒未响应`);
+                }
+
+                console.error('[NovelAnalyzer] ❌ AI调用失败:', error);
+                throw error;
             }
-
-            console.log('[NovelAnalyzer] ✅ AI响应成功');
-            console.log('[NovelAnalyzer] 📊 响应内容长度:', content.length);
-
-            return content;
 
         } catch (error) {
             console.error('[NovelAnalyzer] ❌ AI调用失败:', error);

@@ -40,28 +40,28 @@ export class CustomAPITaskQueue {
                 priority: this.priorities.HIGH,
                 debounceDelay: 2000,
                 maxRetries: 3,
-                timeout: 120000  // 🔧 修复：增加到2分钟，适应慢速自定义API
+                timeout: 9999000  // 默认9999秒
             },
             SUMMARY: {
                 name: 'summary',
                 priority: this.priorities.MEDIUM,
                 debounceDelay: 5000,
                 maxRetries: 2,
-                timeout: 60000   // 🔧 修复：增加到1分钟
+                timeout: 9999000  // 默认9999秒
             },
             MEMORY: {
                 name: 'memory',
                 priority: this.priorities.LOW,
                 debounceDelay: 3000,
                 maxRetries: 2,
-                timeout: 45000   // 🔧 修复：增加到45秒
+                timeout: 9999000  // 默认9999秒
             },
             MANUAL: {
                 name: 'manual',
                 priority: this.priorities.CRITICAL,
                 debounceDelay: 0,
                 maxRetries: 5,
-                timeout: 180000  // 🔧 修复：增加到3分钟，手动任务允许更长时间
+                timeout: 9999000  // 默认9999秒
             }
         };
 
@@ -77,6 +77,9 @@ export class CustomAPITaskQueue {
         this.lastSummaryEnqueueTime = 0;
         this.summaryCooldownMs = 15000; // 15秒冷却
 
+        // 🆕 延迟生成队列
+        this.delayedTaskQueue = []; // 存储待延迟处理的任务
+        this.aiMessageCounter = 0; // AI消息计数器
 
         // 初始化状态
         this.initialized = false;
@@ -91,6 +94,9 @@ export class CustomAPITaskQueue {
      */
     async init() {
         try {
+            // 🆕 恢复延迟生成状态
+            await this.restoreDelayedGenerationState();
+
             // 启动队列处理器
             this.startQueueProcessor();
 
@@ -165,9 +171,9 @@ export class CustomAPITaskQueue {
             const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
             const basicSettings = extensionSettings.basic || {};
             const tableRecordsEnabled = basicSettings.tableRecords?.enabled !== false;
-            
+
             console.log('[CustomAPITaskQueue] 🔧 表格记录启用状态:', tableRecordsEnabled);
-            
+
             if (!tableRecordsEnabled) {
                 console.log('[CustomAPITaskQueue] ℹ️ 表格记录已禁用，跳过信息栏数据生成任务');
                 return;
@@ -192,8 +198,8 @@ export class CustomAPITaskQueue {
 
             // 🔧 修复：检查是否已有相同内容的任务在队列中或正在处理
             const contentHash = this.hashString(messageContent);
-            const hasDuplicateTask = this.taskQueue.some(t => 
-                t.type === 'INFOBAR_DATA' && 
+            const hasDuplicateTask = this.taskQueue.some(t =>
+                t.type === 'INFOBAR_DATA' &&
                 t.contentHash === contentHash &&
                 (t.status === 'pending' || t.status === 'processing')
             );
@@ -203,13 +209,44 @@ export class CustomAPITaskQueue {
                 return;
             }
 
-            // 添加信息栏数据生成任务（高优先级）
-            this.addTask({
-                type: 'INFOBAR_DATA',
-                data: { content: messageContent },
-                source: 'main_api_response',
-                contentHash: contentHash // 添加内容哈希用于去重
-            });
+            // 🆕 检查是否启用延迟生成
+            const apiConfig = extensionSettings.apiConfig || {};
+            const delayedGeneration = apiConfig.delayedGeneration === true;
+            const delayFloors = parseInt(apiConfig.delayFloors) || 1;
+
+            if (delayedGeneration) {
+                console.log(`[CustomAPITaskQueue] ⏱️ 延迟生成已启用，延迟 ${delayFloors} 层`);
+
+                // 增加AI消息计数器
+                this.aiMessageCounter++;
+
+                // 将当前任务添加到延迟队列
+                this.delayedTaskQueue.push({
+                    type: 'INFOBAR_DATA',
+                    data: { content: messageContent },
+                    source: 'main_api_response',
+                    contentHash: contentHash,
+                    messageIndex: this.aiMessageCounter,
+                    timestamp: Date.now()
+                });
+
+                console.log(`[CustomAPITaskQueue] 📝 任务已添加到延迟队列 (消息索引: ${this.aiMessageCounter})`);
+
+                // 🆕 保存延迟生成状态
+                await this.saveDelayedGenerationState();
+
+                // 处理延迟队列中符合条件的任务
+                await this.processDelayedTasks(delayFloors);
+
+            } else {
+                // 立即添加信息栏数据生成任务（高优先级）
+                this.addTask({
+                    type: 'INFOBAR_DATA',
+                    data: { content: messageContent },
+                    source: 'main_api_response',
+                    contentHash: contentHash
+                });
+            }
 
             // 检查是否需要生成总结（遵循楼层阈值 + 冷却时间 + 去重）
             if (this.shouldGenerateSummary()) {
@@ -452,11 +489,11 @@ export class CustomAPITaskQueue {
                 if (task.retries === 0) {
                     task.retries++;
                     task.status = 'pending';
-                    task.timeout = 180000; // 重试时给予更长时间（3分钟）
+                    task.timeout = 9999000; // 重试时使用默认超时时间（9999秒）
                     
                     setTimeout(() => {
                         this.taskQueue.unshift(task);
-                        console.log(`[CustomAPITaskQueue] 🔄 超时任务重试: ${task.id} (延长超时时间至3分钟)`);
+                        console.log(`[CustomAPITaskQueue] 🔄 超时任务重试: ${task.id} (使用默认超时时间9999秒)`);
                     }, 5000); // 5秒后重试
                 } else {
                     // 已经重试过，标记为失败
@@ -668,6 +705,138 @@ export class CustomAPITaskQueue {
 
         if (task.data.callback && typeof task.data.callback === 'function') {
             await task.data.callback(task.data);
+        }
+    }
+
+    /**
+     * 🆕 处理延迟任务队列
+     */
+    async processDelayedTasks(delayFloors) {
+        try {
+            console.log(`[CustomAPITaskQueue] 🔍 检查延迟队列，当前消息索引: ${this.aiMessageCounter}, 延迟楼层: ${delayFloors}`);
+
+            // 找出所有需要处理的任务
+            // 判断条件：当前消息索引 - 任务消息索引 >= 延迟楼层
+            // 例如：延迟1层，当前索引2，任务索引1，则 2 - 1 = 1 >= 1，可以处理
+            // 例如：延迟1层，当前索引2，任务索引2，则 2 - 2 = 0 < 1，不能处理
+            // 例如：延迟2层，当前索引3，任务索引1，则 3 - 1 = 2 >= 2，可以处理
+            const tasksToProcess = this.delayedTaskQueue.filter(task => {
+                const floorsPassed = this.aiMessageCounter - task.messageIndex;
+                const shouldProcess = floorsPassed >= delayFloors;
+                if (shouldProcess) {
+                    console.log(`[CustomAPITaskQueue] ✅ 任务符合处理条件 (消息索引: ${task.messageIndex}, 当前索引: ${this.aiMessageCounter}, 已过楼层: ${floorsPassed}, 需要: ${delayFloors})`);
+                } else {
+                    console.log(`[CustomAPITaskQueue] ⏳ 任务还需等待 (消息索引: ${task.messageIndex}, 已过楼层: ${floorsPassed}, 还需: ${delayFloors - floorsPassed})`);
+                }
+                return shouldProcess;
+            });
+
+            if (tasksToProcess.length === 0) {
+                console.log('[CustomAPITaskQueue] ℹ️ 暂无符合条件的延迟任务');
+                return;
+            }
+
+            console.log(`[CustomAPITaskQueue] 📋 找到 ${tasksToProcess.length} 个需要处理的延迟任务`);
+
+            // 将符合条件的任务添加到主队列
+            tasksToProcess.forEach(task => {
+                this.addTask({
+                    type: task.type,
+                    data: task.data,
+                    source: task.source,
+                    contentHash: task.contentHash
+                });
+
+                console.log(`[CustomAPITaskQueue] ➕ 延迟任务已添加到主队列 (消息索引: ${task.messageIndex})`);
+            });
+
+            // 从延迟队列中移除已处理的任务
+            this.delayedTaskQueue = this.delayedTaskQueue.filter(task =>
+                !tasksToProcess.includes(task)
+            );
+
+            console.log(`[CustomAPITaskQueue] 🗑️ 已清理延迟队列，剩余任务: ${this.delayedTaskQueue.length}`);
+
+            // 🆕 保存延迟生成状态
+            await this.saveDelayedGenerationState();
+
+        } catch (error) {
+            console.error('[CustomAPITaskQueue] ❌ 处理延迟任务失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 保存延迟生成状态到localStorage
+     */
+    async saveDelayedGenerationState() {
+        try {
+            const context = SillyTavern?.getContext?.();
+            const chatId = context?.chatId;
+
+            if (!chatId) {
+                console.warn('[CustomAPITaskQueue] ⚠️ 无法获取chatId，跳过延迟生成状态保存');
+                return;
+            }
+
+            const state = {
+                aiMessageCounter: this.aiMessageCounter,
+                delayedTaskQueue: this.delayedTaskQueue,
+                timestamp: Date.now()
+            };
+
+            const stateKey = `delayedGeneration_${chatId}`;
+            localStorage.setItem(stateKey, JSON.stringify(state));
+
+            console.log(`[CustomAPITaskQueue] 💾 延迟生成状态已保存 (消息计数: ${this.aiMessageCounter}, 延迟任务: ${this.delayedTaskQueue.length})`);
+
+        } catch (error) {
+            console.error('[CustomAPITaskQueue] ❌ 保存延迟生成状态失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 从localStorage恢复延迟生成状态
+     */
+    async restoreDelayedGenerationState() {
+        try {
+            const context = SillyTavern?.getContext?.();
+            const chatId = context?.chatId;
+
+            if (!chatId) {
+                console.warn('[CustomAPITaskQueue] ⚠️ 无法获取chatId，跳过延迟生成状态恢复');
+                return;
+            }
+
+            const stateKey = `delayedGeneration_${chatId}`;
+            const savedState = localStorage.getItem(stateKey);
+
+            if (!savedState) {
+                console.log('[CustomAPITaskQueue] ℹ️ 未找到保存的延迟生成状态');
+                return;
+            }
+
+            const state = JSON.parse(savedState);
+
+            // 恢复消息计数器和延迟任务队列
+            this.aiMessageCounter = state.aiMessageCounter || 0;
+            this.delayedTaskQueue = state.delayedTaskQueue || [];
+
+            console.log(`[CustomAPITaskQueue] ✅ 延迟生成状态已恢复 (消息计数: ${this.aiMessageCounter}, 延迟任务: ${this.delayedTaskQueue.length})`);
+
+            // 如果有延迟任务，检查是否需要立即处理
+            if (this.delayedTaskQueue.length > 0) {
+                console.log('[CustomAPITaskQueue] 🔄 检查恢复的延迟任务是否需要处理...');
+
+                const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+                const apiConfig = extensionSettings.apiConfig || {};
+                const delayFloors = parseInt(apiConfig.delayFloors) || 1;
+
+                // 处理延迟队列
+                this.processDelayedTasks(delayFloors);
+            }
+
+        } catch (error) {
+            console.error('[CustomAPITaskQueue] ❌ 恢复延迟生成状态失败:', error);
         }
     }
 

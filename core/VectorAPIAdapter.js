@@ -112,12 +112,12 @@ export class VectorAPIAdapter {
     }
 
     /**
-     * 插入向量
+     * 🔧 重构：插入向量数据（支持记忆存储）
      * @param {Array} vectors - 向量数组 [{content, vector, metadata}]
-     * @param {string} knowledgeBaseId - 知识库ID
+     * @param {string} knowledgeBaseId - 知识库ID（默认为'memory'用于记忆存储）
      * @returns {Promise<Object>} 插入结果
      */
-    async insertVectors(vectors, knowledgeBaseId = 'default') {
+    async insertVectors(vectors, knowledgeBaseId = 'memory') {
         try {
             if (!vectors || vectors.length === 0) {
                 return { success: true, count: 0 };
@@ -131,7 +131,15 @@ export class VectorAPIAdapter {
             const items = vectors.map((v, index) => ({
                 hash: this.generateHash(v.content + Date.now() + index + Math.random()),
                 text: v.content,
-                metadata: v.metadata || {}
+                metadata: {
+                    ...v.metadata,
+                    // 🔧 新增：记忆相关元数据
+                    type: v.type || 'memory',
+                    importance: v.importance || 0.5,
+                    timestamp: v.timestamp || Date.now(),
+                    category: v.category || '未分类',
+                    tags: v.tags || []
+                }
             }));
 
             // 准备embeddings
@@ -143,7 +151,7 @@ export class VectorAPIAdapter {
             // 调用API
             const response = await fetch('/api/vector/insert', {
                 method: 'POST',
-                headers: this.context.getRequestHeaders(),
+                headers: this.context?.getRequestHeaders?.() || { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     collectionId: collectionId,
                     items: items,
@@ -158,9 +166,9 @@ export class VectorAPIAdapter {
             }
 
             this.stats.insertCount += vectors.length;
-            console.log(`[VectorAPIAdapter] ✅ 成功插入 ${vectors.length} 个向量`);
+            console.log(`[VectorAPIAdapter] ✅ 成功插入 ${vectors.length} 个向量到集合: ${collectionId}`);
 
-            return { success: true, count: vectors.length };
+            return { success: true, count: vectors.length, collectionId: collectionId };
 
         } catch (error) {
             console.error('[VectorAPIAdapter] ❌ 插入向量失败:', error);
@@ -170,41 +178,44 @@ export class VectorAPIAdapter {
     }
 
     /**
-     * 查询向量
+     * 🔧 重构：查询向量（支持记忆检索，queryVector现在是可选的）
      * @param {string} queryText - 查询文本
-     * @param {Array} queryVector - 查询向量
-     * @param {Object} options - 查询选项
+     * @param {Array} queryVector - 查询向量（可选，SillyTavern会自动生成）
+     * @param {string} knowledgeBaseId - 知识库ID（默认'memory'）
+     * @param {number} topK - 返回结果数量
+     * @param {number} threshold - 相似度阈值
      * @returns {Promise<Array>} 查询结果
      */
-    async queryVectors(queryText, queryVector, options = {}) {
+    async queryVectors(queryText, queryVector = null, knowledgeBaseId = 'memory', topK = 10, threshold = 0.6) {
         try {
-            const {
-                knowledgeBaseId = 'default',
-                topK = 10,
-                threshold = 0.6
-            } = options;
-
-            console.log(`[VectorAPIAdapter] 🔍 查询向量，知识库: ${knowledgeBaseId}, topK: ${topK}`);
+            console.log(`[VectorAPIAdapter] 🔍 查询向量，知识库: ${knowledgeBaseId}, topK: ${topK}, 阈值: ${threshold}`);
 
             const collectionId = await this.getCollectionId(knowledgeBaseId);
 
+            // 🔧 重构：构建请求体（queryVector可选）
+            const requestBody = {
+                collectionId: collectionId,
+                searchText: queryText,
+                topK: topK,
+                threshold: threshold,
+                source: 'infobar_memory'
+            };
+
+            // 如果提供了queryVector，添加到embeddings中
+            if (queryVector && Array.isArray(queryVector)) {
+                requestBody.embeddings = { [queryText]: queryVector };
+            }
+
             const response = await fetch('/api/vector/query', {
                 method: 'POST',
-                headers: this.context.getRequestHeaders(),
-                body: JSON.stringify({
-                    collectionId: collectionId,
-                    searchText: queryText,
-                    topK: topK,
-                    threshold: threshold,
-                    source: 'infobar_memory',
-                    embeddings: { [queryText]: queryVector }
-                })
+                headers: this.context?.getRequestHeaders?.() || { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
                 if (response.status === 404) {
                     // 集合不存在，返回空结果
-                    console.log(`[VectorAPIAdapter] ℹ️ 集合不存在: ${collectionId}`);
+                    console.log(`[VectorAPIAdapter] ℹ️ 集合不存在: ${collectionId}，返回空结果`);
                     return [];
                 }
                 const errorText = await response.text();
@@ -217,7 +228,16 @@ export class VectorAPIAdapter {
             this.stats.queryCount++;
             console.log(`[VectorAPIAdapter] ✅ 查询完成，返回 ${results.length} 个结果`);
 
-            return results;
+            // 🔧 新增：格式化结果，统一返回格式
+            const formattedResults = results.map(result => ({
+                id: result.hash || result.id,
+                content: result.text || result.content,
+                similarity: result.score || result.similarity || 1.0,
+                metadata: result.metadata || {},
+                timestamp: result.metadata?.timestamp || Date.now()
+            }));
+
+            return formattedResults;
 
         } catch (error) {
             console.error('[VectorAPIAdapter] ❌ 查询向量失败:', error);

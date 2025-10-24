@@ -127,6 +127,9 @@ export class APIIntegration {
                 maxTokens: apiConfigFromExtension.maxTokens !== undefined ?
                     apiConfigFromExtension.maxTokens :
                     await this.configManager.getConfig('apiConfig.maxTokens'),
+                timeout: apiConfigFromExtension.timeout !== undefined ?
+                    apiConfigFromExtension.timeout :
+                    await this.configManager.getConfig('apiConfig.timeout'),
                 retryCount: apiConfigFromExtension.retryCount !== undefined ?
                     apiConfigFromExtension.retryCount :
                     await this.configManager.getConfig('apiConfig.retryCount'),
@@ -1358,12 +1361,12 @@ class LocalProxyProvider {
             // 获取CSRF令牌
             const csrfToken = await this.apiIntegration.getCsrfToken();
 
-            // 构建状态检查请求
+            // 🔧 修复：构建状态检查请求 - 使用openai作为chat_completion_source
             const statusUrl = `${this.baseUrl}/api/backends/chat-completions/status`;
             const requestBody = {
                 reverse_proxy: this.endpoint,
                 proxy_password: this.apiKey,
-                chat_completion_source: "custom",
+                chat_completion_source: "openai",  // 🔧 修复：改为openai以正确获取模型列表
                 custom_url: this.endpoint,
                 custom_include_headers: ""
             };
@@ -1475,15 +1478,21 @@ class LocalProxyProvider {
             // 获取CSRF令牌
             const csrfToken = await this.apiIntegration.getCsrfToken();
 
-            // 构建模型列表请求
+            // 🔧 修复：构建模型列表请求 - 使用openai作为chat_completion_source
             const statusUrl = `${this.baseUrl}/api/backends/chat-completions/status`;
             const requestBody = {
                 reverse_proxy: this.endpoint,
                 proxy_password: this.apiKey,
-                chat_completion_source: "custom",
+                chat_completion_source: "openai",  // 🔧 修复：改为openai以正确获取模型列表
                 custom_url: this.endpoint,
                 custom_include_headers: ""
             };
+
+            console.log('[LocalProxyProvider] 📊 请求参数:', {
+                statusUrl,
+                reverseProxy: this.endpoint,
+                source: 'openai'  // 🔧 新增：显示使用的source
+            });
 
             const response = await fetch(statusUrl, {
                 method: 'POST',
@@ -1583,6 +1592,7 @@ class OpenAIProvider {
             console.log(`[OpenAIProvider] 🔑 API Key信息: 长度=${apiKeyLength}, 预览=${apiKeyPreview}`);
             
             // 使用CORS兼容的fetch
+            const timeoutMs = (this.config.timeout || 9999) * 1000; // 转换为毫秒
             const response = await this.apiIntegration.proxyCompatibleFetch(
                 testUrl,
                 {
@@ -1592,7 +1602,7 @@ class OpenAIProvider {
                         'Content-Type': 'application/json',
                         'User-Agent': 'SillyTavern-InfoBar/1.0'
                     },
-                    timeout: 10000 // 10秒超时
+                    timeout: timeoutMs
                 }
             );
             
@@ -1730,6 +1740,7 @@ class OpenAIProvider {
             });
 
             // 使用CORS兼容的fetch
+            const timeoutMs = (this.config.timeout || 9999) * 1000; // 转换为毫秒
             const response = await this.apiIntegration.proxyCompatibleFetch(
                 `${this.endpoint}/v1/chat/completions`,
                 {
@@ -1740,7 +1751,7 @@ class OpenAIProvider {
                         'User-Agent': 'SillyTavern-InfoBar/1.0'
                     },
                     body: JSON.stringify(requestBody),
-                    timeout: 30000 // 30秒超时
+                    timeout: timeoutMs
                 }
             );
             
@@ -1871,6 +1882,7 @@ class OpenAIProvider {
             console.log(`[OpenAIProvider] 🔑 API Key信息: 长度=${apiKeyLength}, 预览=${apiKeyPreview}`);
             
             // 使用CORS兼容的fetch
+            const timeoutMs = (this.config.timeout || 9999) * 1000; // 转换为毫秒
             const response = await this.apiIntegration.proxyCompatibleFetch(
                 modelsUrl,
                 {
@@ -1880,7 +1892,7 @@ class OpenAIProvider {
                         'Content-Type': 'application/json',
                         'User-Agent': 'SillyTavern-InfoBar/1.0'
                     },
-                    timeout: 15000 // 15秒超时
+                    timeout: timeoutMs
                 }
             );
             

@@ -497,6 +497,13 @@ export class NPCDatabaseManager {
     // 处理 data:updated 事件，从指定面板提取NPC并更新数据库
     async handleDataUpdated(payload) {
         try {
+            // 🔧 新增：检查自动同步开关
+            const autoSyncEnabled = localStorage.getItem('npcPanel_autoSync') === 'true';
+            if (!autoSyncEnabled) {
+                console.log('[NPCDB] ℹ️ 自动同步NPC数据已关闭，跳过更新');
+                return;
+            }
+
             // 🔧 修复：始终使用当前聊天ID，不信任payload中的chatId
             const currentChatId = this.getCurrentChatId();
             const messageId = payload?.dataEntry?.messageId || payload?.dataEntry?.index || null;

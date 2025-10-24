@@ -440,6 +440,11 @@ export class AIMemoryDatabaseInjector {
      */
     async handleGenerationStarted(data) {
         try {
+            // 🔧 修复：由UnifiedVectorRetrieval统一管理，此处禁用向量检索
+            console.log('[AIMemoryDatabaseInjector] ⚠️ 向量检索已由UnifiedVectorRetrieval统一管理，此模块不再执行检索');
+            return;
+
+            /* 以下代码已禁用，由UnifiedVectorRetrieval接管
             console.log('[AIMemoryDatabaseInjector] 🚀 生成开始，检测API类型并进行记忆注入...');
 
             // 🔧 修复1：检查用户是否启用了AI记忆数据库功能
@@ -467,6 +472,7 @@ export class AIMemoryDatabaseInjector {
 
             // 准备记忆数据
             const memoryData = await this.prepareMemoryData();
+            */
             
             if (!memoryData || memoryData.length === 0) {
                 console.log('[AIMemoryDatabaseInjector] ℹ️ 没有可注入的记忆数据');

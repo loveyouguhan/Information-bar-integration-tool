@@ -81,7 +81,11 @@ export class UnifiedDataCore {
                 retryCount: 3,
                 extraPrompt: '',
                 mergeMessages: true,
-                includeWorldBook: false
+                includeWorldBook: false,
+                requestConfirmation: false,
+                // 🆕 延迟生成配置
+                delayedGeneration: false,
+                delayFloors: 1
             },
             
             // 界面配置
@@ -1302,6 +1306,7 @@ export class UnifiedDataCore {
 
     /**
      * 从 chatMetadata 加载数据到 localStorage（初始化时使用）
+     * 🔧 修复：只加载聊天级别的数据，不覆盖全局配置
      */
     async loadFromChat() {
         try {
@@ -1310,17 +1315,50 @@ export class UnifiedDataCore {
             const chatData = this.chatMetadata.getAll();
             let loadedCount = 0;
 
-            // 优先使用 chatMetadata 中的数据
+            // 🔧 修复：定义不应该从chatMetadata加载到localStorage的键
+            // 这些是全局配置，不应该被聊天级别的数据覆盖
+            const globalConfigKeys = [
+                'memoryEnhancement',      // 记忆增强配置
+                'vectorFunction',         // 向量功能配置
+                'summary',                // 总结配置（旧版）
+                'summarySettings',        // 总结配置（新版）
+                'vectorizedSummary',      // 向量化总结配置
+                'apiConfig',              // API配置
+                'vectorAPIConfig',        // 向量API配置
+                'customAPIConfig',        // 自定义API配置
+                'frontendDisplay',        // 前端显示配置
+                'theme',                  // 主题配置
+                'style',                  // 风格配置
+                'debug',                  // 调试配置
+                'customPanels',           // 自定义面板配置
+                'profiles',               // 配置文件
+                'currentAPIType',         // 当前API类型
+                'promptSettings',         // 提示词设置
+                'vectorCorpus',           // 向量语料库
+                'npcSettings'             // NPC设置
+            ];
+
+            // 只加载聊天级别的数据（以chat_开头的键）
             for (const [key, value] of Object.entries(chatData)) {
-                if (value !== undefined && value !== null) {
-                    this.localStorage.set(key, value);
-                    this.cache.set(`global:${key}`, value);
+                // 🔧 修复：只加载聊天数据，跳过全局配置
+                if (key.startsWith('chat_')) {
+                    // 聊天数据不需要加载到localStorage，保持在chatMetadata中
                     loadedCount++;
-                    console.log(`[UnifiedDataCore] 📥 从 chatMetadata 加载 ${key}`);
+                    console.log(`[UnifiedDataCore] 📥 检测到聊天数据: ${key}`);
+                } else if (!globalConfigKeys.includes(key)) {
+                    // 其他非全局配置的数据可以加载
+                    if (value !== undefined && value !== null) {
+                        this.localStorage.set(key, value);
+                        this.cache.set(`global:${key}`, value);
+                        loadedCount++;
+                        console.log(`[UnifiedDataCore] 📥 从 chatMetadata 加载 ${key}`);
+                    }
+                } else {
+                    console.log(`[UnifiedDataCore] ⏭️ 跳过全局配置: ${key}（避免覆盖用户设置）`);
                 }
             }
 
-            console.log(`[UnifiedDataCore] ✅ 从 chatMetadata 加载了 ${loadedCount} 个配置项`);
+            console.log(`[UnifiedDataCore] ✅ 从 chatMetadata 处理了 ${loadedCount} 个数据项`);
 
         } catch (error) {
             console.error('[UnifiedDataCore] ❌ 从 chatMetadata 加载数据失败:', error);

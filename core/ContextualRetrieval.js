@@ -229,7 +229,13 @@ export class ContextualRetrieval {
             
             if (!this.settings.enabled) {
                 console.log('[ContextualRetrieval] ⚠️ 上下文感知检索已禁用，使用默认检索');
-                return await this.vectorizedMemoryRetrieval.semanticSearch(query, options);
+                // 🔧 修复：检查向量化检索是否启用
+                if (this.vectorizedMemoryRetrieval?.settings?.enabled) {
+                    return await this.vectorizedMemoryRetrieval.semanticSearch(query, options);
+                } else {
+                    console.log('[ContextualRetrieval] ⚠️ 向量化检索也已禁用，返回空结果');
+                    return { results: [], processingTime: 0 };
+                }
             }
             
             // 更新统计
@@ -306,7 +312,13 @@ export class ContextualRetrieval {
             this.handleError(error);
             
             // 降级到默认检索
-            return await this.vectorizedMemoryRetrieval.semanticSearch(query, options);
+            // 🔧 修复：检查向量化检索是否启用
+            if (this.vectorizedMemoryRetrieval?.settings?.enabled) {
+                return await this.vectorizedMemoryRetrieval.semanticSearch(query, options);
+            } else {
+                console.log('[ContextualRetrieval] ⚠️ 向量化检索已禁用，返回空结果');
+                return { results: [], processingTime: 0 };
+            }
         }
     }
 
@@ -410,6 +422,12 @@ export class ContextualRetrieval {
     async vectorSearch(query, options = {}) {
         try {
             if (!this.vectorizedMemoryRetrieval) return [];
+
+            // 🔧 修复：检查向量化检索是否启用
+            if (!this.vectorizedMemoryRetrieval.settings?.enabled) {
+                console.log('[ContextualRetrieval] ⏸️ 向量化记忆检索已禁用，跳过向量搜索');
+                return [];
+            }
 
             this.stats.vectorSearchCount++;
 

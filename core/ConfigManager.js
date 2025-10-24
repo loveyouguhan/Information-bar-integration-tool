@@ -46,6 +46,7 @@ export class ConfigManager {
             'apiConfig.model': { type: 'string', default: '' },
             'apiConfig.temperature': { type: 'number', min: 0, max: 2, default: 0.7 },
             'apiConfig.maxTokens': { type: 'number', min: 1, max: 100000, default: 2000 },
+            'apiConfig.timeout': { type: 'number', min: 1, max: 99999, default: 9999 },
             'apiConfig.retryCount': { type: 'number', min: 0, max: 10, default: 3 },
             'apiConfig.extraPrompt': { type: 'string', default: '' },
             'apiConfig.mergeMessages': { type: 'boolean', default: true },

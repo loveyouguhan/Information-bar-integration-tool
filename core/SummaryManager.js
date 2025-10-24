@@ -48,13 +48,24 @@ export class SummaryManager {
             worldBookEntryFormat: 'auto',
             worldBookCustomEntryName: '',
             worldBookAddTimestamp: true,
-            worldBookUseContentTags: true
+            worldBookUseContentTags: true,
+            // 🆕 传统总结向量化设置
+            vectorizeSummaryEnabled: false,  // 启用传统总结向量化
+            vectorizeSummaryFloorCount: 100  // 向量化楼层间隔
         };
 
         // 状态管理
         this.lastMessageCount = 0;
         this.lastSummaryMessageId = 0;
         this.summaryInProgress = false;
+
+        // 🆕 传统总结向量化状态
+        this.lastVectorizeMessageId = 0;  // 上次向量化的消息ID
+        this.vectorizationInProgress = false;  // 向量化进行中标志
+
+        // 🆕 总结失败追踪和重试机制
+        this.failedSummaryAttempts = [];  // 失败的总结尝试记录 [{floor: number, reason: string, timestamp: number, retryCount: number}]
+        this.maxRetryPerFloor = 3;  // 每个楼层最大重试次数
 
         // 初始化状态
         this.initialized = false;
@@ -487,20 +498,28 @@ export class SummaryManager {
      */
     shouldTriggerSummary(currentMessageCount) {
         try {
+            // 🆕 优先检查是否有失败的总结需要重试
+            const failedAttempt = this.checkFailedSummaryRetry(currentMessageCount);
+            if (failedAttempt) {
+                console.log('[SummaryManager] 🔄 检测到失败的总结需要重试:', failedAttempt);
+                return true;
+            }
+
             // 检查是否达到总结楼层数
             const messagesSinceLastSummary = currentMessageCount - this.lastSummaryMessageId;
             const shouldTrigger = messagesSinceLastSummary >= this.settings.summaryFloorCount;
-            
+
             console.log('[SummaryManager] 🤔 总结触发检查:', {
                 currentMessageCount,
                 lastSummaryMessageId: this.lastSummaryMessageId,
                 messagesSinceLastSummary,
                 summaryFloorCount: this.settings.summaryFloorCount,
-                shouldTrigger
+                shouldTrigger,
+                failedAttempts: this.failedSummaryAttempts.length
             });
-            
+
             return shouldTrigger;
-            
+
         } catch (error) {
             console.error('[SummaryManager] ❌ 判断总结触发失败:', error);
             return false;
@@ -508,34 +527,79 @@ export class SummaryManager {
     }
 
     /**
+     * 🆕 检查是否有失败的总结需要重试
+     */
+    checkFailedSummaryRetry(currentMessageCount) {
+        try {
+            // 清理过期的失败记录（超过1小时）
+            const oneHourAgo = Date.now() - 60 * 60 * 1000;
+            this.failedSummaryAttempts = this.failedSummaryAttempts.filter(
+                attempt => attempt.timestamp > oneHourAgo
+            );
+
+            // 查找需要重试的失败记录
+            for (const attempt of this.failedSummaryAttempts) {
+                // 如果当前消息数大于失败的楼层，且重试次数未超限
+                if (currentMessageCount > attempt.floor && attempt.retryCount < this.maxRetryPerFloor) {
+                    console.log('[SummaryManager] 🎯 发现需要重试的失败总结:', {
+                        failedFloor: attempt.floor,
+                        currentFloor: currentMessageCount,
+                        retryCount: attempt.retryCount,
+                        reason: attempt.reason
+                    });
+                    return attempt;
+                }
+            }
+
+            return null;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 检查失败总结重试失败:', error);
+            return null;
+        }
+    }
+
+    /**
      * 生成总结
      */
     async generateSummary(options = {}) {
+        const currentFloor = options.messageCount || 0;  // 记录当前楼层
+
         try {
             console.log('[SummaryManager] 📝 开始生成总结...', options);
-            
+
             if (this.summaryInProgress) {
                 console.log('[SummaryManager] ⏳ 总结正在进行中，跳过');
                 return { success: false, error: '总结正在进行中' };
             }
-            
+
             this.summaryInProgress = true;
-            
+
             // 获取聊天消息
             const messages = await this.getChatMessages();
             if (!messages || messages.length === 0) {
                 throw new Error('没有可总结的消息');
             }
-            
+
             // 确定总结范围
             const summaryRange = await this.determineSummaryRange(messages, options);
-            
+
+            // 🆕 验证总结范围的有效性
+            if (!this.validateSummaryRange(summaryRange, messages.length)) {
+                throw new Error(`总结范围无效: start=${summaryRange.start}, end=${summaryRange.end}, total=${messages.length}`);
+            }
+
             // 生成总结提示词
             const summaryPrompt = this.createSummaryPrompt(messages, summaryRange, options);
-            
+
             // 调用自定义API生成总结
             const summaryContent = await this.callSummaryAPI(summaryPrompt);
-            
+
+            // 🆕 验证总结内容的有效性
+            if (!this.validateSummaryContent(summaryContent)) {
+                throw new Error('总结内容验证失败：内容为空或过短');
+            }
+
             // 保存总结记录
             const summaryRecord = await this.saveSummaryRecord({
                 type: options.type || 'manual',
@@ -544,10 +608,19 @@ export class SummaryManager {
                 settings: { ...this.settings },
                 timestamp: Date.now()
             });
-            
+
+            // 🆕 验证总结记录是否成功保存
+            const savedSuccessfully = await this.verifySummarySaved(summaryRecord.id);
+            if (!savedSuccessfully) {
+                throw new Error('总结记录保存验证失败');
+            }
+
             // 🔧 修复：无论手动还是自动总结，都要更新lastSummaryMessageId，避免重复总结
             this.lastSummaryMessageId = summaryRange.end + 1;
             console.log('[SummaryManager] 🎯 更新lastSummaryMessageId:', this.lastSummaryMessageId, '类型:', options.type);
+
+            // 🆕 总结成功，清除该楼层的失败记录
+            this.clearFailedAttempt(currentFloor);
 
             // 🔧 新增：如果启用了总结注入，则注入到主API上下文
             if (this.settings.injectSummaryEnabled) {
@@ -591,6 +664,16 @@ export class SummaryManager {
                 }
             }
 
+            // 🆕 检查是否需要向量化传统总结
+            if (this.settings.vectorizeSummaryEnabled) {
+                try {
+                    await this.checkAndVectorizeTraditionalSummary(summaryRecord);
+                } catch (error) {
+                    console.error('[SummaryManager] ❌ 向量化传统总结失败:', error);
+                    // 不阻塞总结流程，继续执行
+                }
+            }
+
             console.log('[SummaryManager] ✅ 总结生成完成:', summaryRecord.id);
 
             return {
@@ -599,12 +682,21 @@ export class SummaryManager {
                 content: summaryContent,
                 aiMemorySummary: summaryRecord.aiMemorySummary
             };
-            
+
         } catch (error) {
             console.error('[SummaryManager] ❌ 生成总结失败:', error);
+
+            // 🆕 记录失败的总结尝试
+            this.recordFailedSummary(currentFloor, error.message || '总结生成失败');
+
+            // 🆕 不更新lastSummaryMessageId，以便下次重试
+            console.log('[SummaryManager] 🔄 保持lastSummaryMessageId不变，等待下次重试:', this.lastSummaryMessageId);
+
             return {
                 success: false,
-                error: error.message || '总结生成失败'
+                error: error.message || '总结生成失败',
+                floor: currentFloor,
+                willRetry: true
             };
         } finally {
             this.summaryInProgress = false;
@@ -1162,6 +1254,156 @@ ${messageContent}
     }
 
     /**
+     * 🆕 验证总结范围的有效性
+     */
+    validateSummaryRange(summaryRange, totalMessages) {
+        try {
+            if (!summaryRange || typeof summaryRange.start !== 'number' || typeof summaryRange.end !== 'number') {
+                console.error('[SummaryManager] ❌ 总结范围格式无效:', summaryRange);
+                return false;
+            }
+
+            if (summaryRange.start < 0 || summaryRange.end < 0) {
+                console.error('[SummaryManager] ❌ 总结范围包含负数:', summaryRange);
+                return false;
+            }
+
+            if (summaryRange.start > summaryRange.end) {
+                console.error('[SummaryManager] ❌ 总结范围起始大于结束:', summaryRange);
+                return false;
+            }
+
+            if (summaryRange.end >= totalMessages) {
+                console.error('[SummaryManager] ❌ 总结范围超出消息总数:', { summaryRange, totalMessages });
+                return false;
+            }
+
+            console.log('[SummaryManager] ✅ 总结范围验证通过:', summaryRange);
+            return true;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 验证总结范围失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 🆕 验证总结内容的有效性
+     */
+    validateSummaryContent(content) {
+        try {
+            if (!content || typeof content !== 'string') {
+                console.error('[SummaryManager] ❌ 总结内容无效:', typeof content);
+                return false;
+            }
+
+            const trimmedContent = content.trim();
+            if (trimmedContent.length === 0) {
+                console.error('[SummaryManager] ❌ 总结内容为空');
+                return false;
+            }
+
+            // 检查内容是否过短（少于10个字符可能是错误）
+            if (trimmedContent.length < 10) {
+                console.error('[SummaryManager] ❌ 总结内容过短:', trimmedContent.length);
+                return false;
+            }
+
+            console.log('[SummaryManager] ✅ 总结内容验证通过，长度:', trimmedContent.length);
+            return true;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 验证总结内容失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 🆕 验证总结记录是否成功保存
+     */
+    async verifySummarySaved(summaryId) {
+        try {
+            console.log('[SummaryManager] 🔍 验证总结记录是否保存成功:', summaryId);
+
+            const summaryHistory = await this.getSummaryHistory();
+            if (!summaryHistory || summaryHistory.length === 0) {
+                console.error('[SummaryManager] ❌ 总结历史为空');
+                return false;
+            }
+
+            const savedRecord = summaryHistory.find(record => record.id === summaryId);
+            if (!savedRecord) {
+                console.error('[SummaryManager] ❌ 未找到保存的总结记录:', summaryId);
+                return false;
+            }
+
+            console.log('[SummaryManager] ✅ 总结记录验证成功:', summaryId);
+            return true;
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 验证总结保存失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 🆕 记录失败的总结尝试
+     */
+    recordFailedSummary(floor, reason) {
+        try {
+            console.log('[SummaryManager] 📝 记录失败的总结尝试:', { floor, reason });
+
+            // 查找是否已有该楼层的失败记录
+            const existingAttempt = this.failedSummaryAttempts.find(attempt => attempt.floor === floor);
+
+            if (existingAttempt) {
+                // 更新重试次数
+                existingAttempt.retryCount++;
+                existingAttempt.lastReason = reason;
+                existingAttempt.timestamp = Date.now();
+                console.log('[SummaryManager] 🔄 更新失败记录，重试次数:', existingAttempt.retryCount);
+            } else {
+                // 添加新的失败记录
+                this.failedSummaryAttempts.push({
+                    floor: floor,
+                    reason: reason,
+                    lastReason: reason,
+                    timestamp: Date.now(),
+                    retryCount: 1
+                });
+                console.log('[SummaryManager] 🆕 添加新的失败记录');
+            }
+
+            // 限制失败记录数量，避免内存泄漏
+            if (this.failedSummaryAttempts.length > 10) {
+                this.failedSummaryAttempts = this.failedSummaryAttempts.slice(-10);
+            }
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 记录失败总结失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 清除失败的总结尝试记录
+     */
+    clearFailedAttempt(floor) {
+        try {
+            const beforeLength = this.failedSummaryAttempts.length;
+            this.failedSummaryAttempts = this.failedSummaryAttempts.filter(
+                attempt => attempt.floor !== floor
+            );
+
+            if (beforeLength > this.failedSummaryAttempts.length) {
+                console.log('[SummaryManager] 🧹 已清除楼层的失败记录:', floor);
+            }
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 清除失败记录失败:', error);
+        }
+    }
+
+    /**
      * 获取总结历史（聊天隔离版本）
      */
     async getSummaryHistory() {
@@ -1267,7 +1509,28 @@ ${messageContent}
             lastMessageCount: this.lastMessageCount,
             lastSummaryMessageId: this.lastSummaryMessageId,
             summaryInProgress: this.summaryInProgress,
-            errorCount: this.errorCount
+            errorCount: this.errorCount,
+            // 🆕 失败总结追踪信息
+            failedSummaryAttempts: this.failedSummaryAttempts,
+            failedAttemptsCount: this.failedSummaryAttempts.length,
+            maxRetryPerFloor: this.maxRetryPerFloor
+        };
+    }
+
+    /**
+     * 🆕 获取失败总结的详细信息
+     */
+    getFailedSummaryInfo() {
+        return {
+            failedAttempts: this.failedSummaryAttempts.map(attempt => ({
+                floor: attempt.floor,
+                retryCount: attempt.retryCount,
+                lastReason: attempt.lastReason,
+                timestamp: attempt.timestamp,
+                canRetry: attempt.retryCount < this.maxRetryPerFloor
+            })),
+            totalFailed: this.failedSummaryAttempts.length,
+            maxRetryPerFloor: this.maxRetryPerFloor
         };
     }
 
@@ -1728,6 +1991,12 @@ ${summaryContent}
                 return await this.basicSearchMemories(query, options);
             }
 
+            // 🔧 修复：检查向量化检索是否启用
+            if (!this.vectorizedMemoryRetrieval.settings?.enabled) {
+                console.log('[SummaryManager] ⏸️ 向量化记忆检索已禁用，使用基础搜索');
+                return await this.basicSearchMemories(query, options);
+            }
+
             // 使用向量化记忆检索系统进行语义搜索
             const searchResults = await this.vectorizedMemoryRetrieval.semanticSearch(query, options);
 
@@ -1825,6 +2094,12 @@ ${summaryContent}
 
             if (!this.vectorizedMemoryRetrieval) {
                 console.warn('[SummaryManager] ⚠️ 向量化记忆检索系统未初始化');
+                return [];
+            }
+
+            // 🔧 修复：检查向量化检索是否启用
+            if (!this.vectorizedMemoryRetrieval.settings?.enabled) {
+                console.log('[SummaryManager] ⏸️ 向量化记忆检索已禁用，返回空结果');
                 return [];
             }
 
@@ -2132,5 +2407,252 @@ ${summaryContent}
                 error: error.message
             };
         }
+    }
+
+    /**
+     * 🆕 检查并向量化传统总结
+     */
+    async checkAndVectorizeTraditionalSummary(currentSummaryRecord) {
+        try {
+            console.log('[SummaryManager] 🔍 检查是否需要向量化传统总结...');
+
+            if (!this.settings.vectorizeSummaryEnabled) {
+                console.log('[SummaryManager] ⏸️ 传统总结向量化未启用');
+                return;
+            }
+
+            if (this.vectorizationInProgress) {
+                console.log('[SummaryManager] ⏸️ 向量化正在进行中，跳过');
+                return;
+            }
+
+            const context = window.SillyTavern?.getContext?.();
+            if (!context) {
+                throw new Error('SillyTavern上下文未找到');
+            }
+
+            const currentMessageCount = context.chat?.length || 0;
+            const messagesSinceLastVectorize = currentMessageCount - this.lastVectorizeMessageId;
+
+            console.log('[SummaryManager] 📊 向量化检查:', {
+                currentMessageCount,
+                lastVectorizeMessageId: this.lastVectorizeMessageId,
+                messagesSinceLastVectorize,
+                vectorizeFloorCount: this.settings.vectorizeSummaryFloorCount
+            });
+
+            // 检查是否达到向量化楼层
+            if (messagesSinceLastVectorize >= this.settings.vectorizeSummaryFloorCount) {
+                console.log('[SummaryManager] 🎯 达到向量化楼层，开始向量化传统总结...');
+                await this.vectorizeTraditionalSummaries(currentMessageCount);
+            } else {
+                console.log('[SummaryManager] ℹ️ 未达到向量化楼层，当前进度:',
+                    `${messagesSinceLastVectorize}/${this.settings.vectorizeSummaryFloorCount}`);
+            }
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 检查向量化传统总结失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🆕 向量化传统总结
+     */
+    async vectorizeTraditionalSummaries(currentMessageCount) {
+        try {
+            this.vectorizationInProgress = true;
+            console.log('[SummaryManager] 🔮 开始向量化传统总结...');
+
+            // 获取当前聊天ID
+            const currentChatId = this.getCurrentChatId();
+            if (!currentChatId) {
+                throw new Error('无法获取当前聊天ID');
+            }
+
+            // 获取当前聊天的总结历史
+            const chatData = await this.unifiedDataCore.getChatData(currentChatId) || {};
+            const summaryHistory = chatData.summary_history || [];
+
+            if (summaryHistory.length === 0) {
+                console.log('[SummaryManager] ℹ️ 没有总结记录，跳过向量化');
+                return;
+            }
+
+            // 获取需要向量化的总结（从上次向量化位置到当前）
+            const summariesToVectorize = summaryHistory.filter(summary => {
+                const summaryEndMessage = summary.messageRange?.end || 0;
+                return summaryEndMessage > this.lastVectorizeMessageId &&
+                       summaryEndMessage <= currentMessageCount;
+            });
+
+            if (summariesToVectorize.length === 0) {
+                console.log('[SummaryManager] ℹ️ 没有新的总结需要向量化');
+                return;
+            }
+
+            console.log('[SummaryManager] 📊 找到 ${summariesToVectorize.length} 个总结需要向量化');
+
+            // 获取向量化API
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+
+            if (!vectorRetrieval || !vectorRetrieval.customVectorAPI) {
+                throw new Error('向量化模块未找到');
+            }
+
+            // 获取向量API配置
+            const context = window.SillyTavern?.getContext?.();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const vectorAPIConfig = extCfg.vectorAPIConfig || {};
+
+            if (!vectorAPIConfig.baseUrl || !vectorAPIConfig.apiKey) {
+                throw new Error('请先在"API配置"面板中配置向量化API');
+            }
+
+            // 更新向量化API配置
+            vectorRetrieval.customVectorAPI.updateConfig({
+                url: vectorAPIConfig.baseUrl,
+                apiKey: vectorAPIConfig.apiKey,
+                model: vectorAPIConfig.model || 'text-embedding-ada-002'
+            });
+
+            // 🔧 修复：生成集合ID使用 {summary} 格式，与向量化文件管理中心命名规则一致
+            // 格式：{chatId}{summary}
+            const collectionId = `${currentChatId}{summary}`;
+
+            console.log('[SummaryManager] 📦 集合ID:', collectionId);
+
+            // 准备向量化数据
+            const items = [];
+            const embeddings = {};
+
+            for (let i = 0; i < summariesToVectorize.length; i++) {
+                const summary = summariesToVectorize[i];
+                const text = summary.content || '';
+
+                if (!text) {
+                    console.warn(`[SummaryManager] ⚠️ 总结 ${i + 1} 内容为空，跳过`);
+                    continue;
+                }
+
+                try {
+                    // 向量化文本
+                    const vector = await vectorRetrieval.customVectorAPI.vectorizeText(text);
+
+                    items.push({
+                        hash: this.generateHash(text + Date.now() + i),
+                        text: text,
+                        metadata: {
+                            summaryId: summary.id,
+                            summaryType: summary.type || 'traditional',
+                            messageRangeStart: summary.messageRange?.start || 0,
+                            messageRangeEnd: summary.messageRange?.end || 0,
+                            timestamp: summary.timestamp || Date.now()
+                        }
+                    });
+
+                    embeddings[text] = vector;
+
+                    console.log(`[SummaryManager] ✅ 总结 ${i + 1}/${summariesToVectorize.length} 向量化成功`);
+
+                } catch (error) {
+                    console.error(`[SummaryManager] ❌ 总结 ${i + 1} 向量化失败:`, error);
+                    throw new Error(`向量化第 ${i + 1} 个总结失败: ${error.message}`);
+                }
+            }
+
+            if (items.length === 0) {
+                console.log('[SummaryManager] ℹ️ 没有有效的总结内容可向量化');
+                return;
+            }
+
+            // 调用SillyTavern向量API保存数据
+            const insertPayload = {
+                collectionId: collectionId,
+                items: items,
+                source: 'infobar_summary',
+                embeddings: embeddings
+            };
+
+            console.log('[SummaryManager] 📤 开始保存向量数据到后端API...');
+            console.log('[SummaryManager] 📊 集合ID:', collectionId);
+            console.log('[SummaryManager] 📊 数据项数:', items.length);
+
+            const response = await fetch('/api/vector/insert', {
+                method: 'POST',
+                headers: context.getRequestHeaders(),
+                body: JSON.stringify(insertPayload)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`向量API插入失败 (${response.status}): ${errorText}`);
+            }
+
+            console.log('[SummaryManager] ✅ 向量数据保存成功');
+
+            // 创建向量化记录
+            const vectorizedRecord = {
+                id: `vectorized_summary_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+                collectionId: collectionId,
+                summaryCount: items.length,
+                messageRangeStart: Math.min(...summariesToVectorize.map(s => s.messageRange?.start || 0)),
+                messageRangeEnd: Math.max(...summariesToVectorize.map(s => s.messageRange?.end || 0)),
+                timestamp: Date.now(),
+                summaries: summariesToVectorize.map(s => ({
+                    id: s.id,
+                    content: s.content,
+                    type: s.type,
+                    messageRange: s.messageRange,
+                    timestamp: s.timestamp
+                }))
+            };
+
+            // 保存向量化记录到聊天数据
+            if (!chatData.vectorized_summary_records) {
+                chatData.vectorized_summary_records = [];
+            }
+            chatData.vectorized_summary_records.push(vectorizedRecord);
+            await this.unifiedDataCore.setChatData(currentChatId, chatData);
+
+            // 更新lastVectorizeMessageId
+            this.lastVectorizeMessageId = currentMessageCount;
+
+            // 触发向量化完成事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('traditional-summary:vectorized', {
+                    record: vectorizedRecord,
+                    summaryCount: items.length,
+                    chatId: currentChatId,
+                    timestamp: Date.now()
+                });
+            }
+
+            console.log('[SummaryManager] ✅ 传统总结向量化完成:', {
+                summaryCount: items.length,
+                collectionId: collectionId,
+                recordId: vectorizedRecord.id
+            });
+
+        } catch (error) {
+            console.error('[SummaryManager] ❌ 向量化传统总结失败:', error);
+            throw error;
+        } finally {
+            this.vectorizationInProgress = false;
+        }
+    }
+
+    /**
+     * 🆕 生成哈希值（用于向量数据）
+     */
+    generateHash(text) {
+        let hash = 0;
+        for (let i = 0; i < text.length; i++) {
+            const char = text.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        return Math.abs(hash).toString(36);
     }
 }

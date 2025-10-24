@@ -101,6 +101,11 @@ export class VectorizedSummaryManager {
 
                 context.extensionSettings['Information bar integration tool'].vectorizedSummary.settings = this.settings;
 
+                // 🔧 修复：调用saveSettingsDebounced持久化到settings.json
+                if (context.saveSettingsDebounced) {
+                    await context.saveSettingsDebounced();
+                }
+
                 console.log('[VectorizedSummaryManager] ✅ 设置已保存');
             }
 
@@ -233,6 +238,11 @@ export class VectorizedSummaryManager {
             }
 
             extensionSettings.vectorizedSummary[chatId].vectorizedRecords = this.vectorizedRecords;
+
+            // 🔧 修复：调用saveSettingsDebounced持久化到settings.json
+            if (context.saveSettingsDebounced) {
+                await context.saveSettingsDebounced();
+            }
 
             console.log('[VectorizedSummaryManager] ✅ 已向量化记录已保存:', {
                 chatId,
@@ -401,18 +411,211 @@ export class VectorizedSummaryManager {
 
     /**
      * 向量化总结
+     * @param {Function} progressCallback - 进度回调函数 (progress, message)
      */
-    async vectorizeSummaries() {
+    async vectorizeSummaries(progressCallback = null) {
         try {
             console.log('[VectorizedSummaryManager] 🔮 开始向量化总结...');
 
-            // TODO: 实现向量化逻辑
-            console.log('[VectorizedSummaryManager] ⚠️ 向量化功能尚未实现');
+            if (!this.pendingSummaries || this.pendingSummaries.length === 0) {
+                console.log('[VectorizedSummaryManager] ℹ️ 没有待向量化的总结');
+                return;
+            }
+
+            const totalSummaries = this.pendingSummaries.length;
+            console.log(`[VectorizedSummaryManager] 📊 待向量化总结数量: ${totalSummaries}`);
+
+            // 🔧 获取当前聊天ID
+            const context = window.SillyTavern?.getContext?.();
+            const chatId = context?.chatId;
+
+            if (!chatId) {
+                throw new Error('无法获取当前聊天ID');
+            }
+
+            // 🔧 获取扩展配置
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const vectorAPIConfig = extCfg.vectorAPIConfig || {};
+
+            // 检查向量化API配置
+            if (!vectorAPIConfig.baseUrl || !vectorAPIConfig.apiKey) {
+                throw new Error('请先在"自定义API"面板中配置向量化API（点击"🧠 向量化API"按钮）');
+            }
+
+            // 🔧 获取向量化模块
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+
+            if (!vectorRetrieval || !vectorRetrieval.customVectorAPI) {
+                throw new Error('向量化模块未找到');
+            }
+
+            // 🔧 更新向量化API配置
+            vectorRetrieval.customVectorAPI.updateConfig({
+                url: vectorAPIConfig.baseUrl,
+                apiKey: vectorAPIConfig.apiKey,
+                model: vectorAPIConfig.model || 'text-embedding-ada-002'
+            });
+
+            console.log('[VectorizedSummaryManager] 🔧 使用向量化API配置:', {
+                url: vectorAPIConfig.baseUrl,
+                model: vectorAPIConfig.model
+            });
+
+            if (progressCallback) {
+                progressCallback(10, '准备向量化数据...');
+            }
+
+            // 🔧 生成集合ID（使用聊天ID和模型名称）
+            const cleanChatId = chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const cleanModelName = (vectorAPIConfig.model || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const collectionId = `${cleanChatId}/${cleanModelName}`;
+
+            console.log('[VectorizedSummaryManager] 📦 集合ID:', collectionId);
+
+            // 🔧 准备向量化数据项
+            const items = [];
+            const embeddings = {}; // 🔧 修复：embeddings应该是对象，键是文本，值是向量
+
+            for (let i = 0; i < totalSummaries; i++) {
+                const summaryData = this.pendingSummaries[i];
+
+                // 🔧 修复：从summary对象中提取content
+                const summaryContent = summaryData.summary?.content || summaryData.content || '';
+                const floorInfo = summaryData.floorNumber > 0 ? `楼层${summaryData.floorNumber}` : '';
+                const text = `【总结 #${i + 1}${floorInfo ? ` (${floorInfo})` : ''}】\n${summaryContent}`;
+
+                if (progressCallback) {
+                    const progress = 10 + (i / totalSummaries) * 60; // 10% - 70%
+                    progressCallback(progress, `正在向量化总结 ${i + 1}/${totalSummaries}...`);
+                }
+
+                try {
+                    // 🔧 使用customVectorAPI进行向量化
+                    const vector = await vectorRetrieval.customVectorAPI.vectorizeText(text);
+
+                    items.push({
+                        hash: this.generateHash(text + Date.now() + i),
+                        text: text,
+                        metadata: {
+                            summaryIndex: i,
+                            floorNumber: summaryData.floorNumber,
+                            timestamp: summaryData.timestamp || Date.now()
+                        }
+                    });
+
+                    // 🔧 修复：embeddings是对象，键是文本内容，值是向量数组
+                    embeddings[text] = vector;
+
+                    console.log(`[VectorizedSummaryManager] ✅ 总结 ${i + 1} 向量化成功`);
+
+                } catch (error) {
+                    console.error(`[VectorizedSummaryManager] ❌ 总结 ${i + 1} 向量化失败:`, error);
+                    throw new Error(`向量化第 ${i + 1} 个总结失败: ${error.message}`);
+                }
+            }
+
+            if (progressCallback) {
+                progressCallback(70, '保存向量数据到后端...');
+            }
+
+            // 🔧 调用SillyTavern向量API保存数据
+            const insertPayload = {
+                collectionId: collectionId,
+                items: items,
+                source: 'webllm',  // 🔧 修复：使用webllm作为source，与向量功能保持一致
+                embeddings: embeddings
+            };
+
+            console.log('[VectorizedSummaryManager] 📤 开始保存向量数据到后端API...');
+            console.log('[VectorizedSummaryManager] 📊 集合ID:', collectionId);
+            console.log('[VectorizedSummaryManager] 📊 数据项数:', items.length);
+            console.log('[VectorizedSummaryManager] 📦 完整payload:', JSON.stringify(insertPayload, null, 2));
+
+            const response = await fetch('/api/vector/insert', {
+                method: 'POST',
+                headers: context.getRequestHeaders(),
+                body: JSON.stringify(insertPayload)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`向量API插入失败 (${response.status}): ${errorText}`);
+            }
+
+            console.log('[VectorizedSummaryManager] ✅ 向量数据已保存到后端API');
+
+            if (progressCallback) {
+                progressCallback(90, '保存向量化记录...');
+            }
+
+            // 🔧 创建向量化记录（只保存元数据，不保存向量数据）
+            // 🔧 修复：使用UI期望的数据结构（startFloor, endFloor, vectorCount）
+            const floorNumbers = this.pendingSummaries.map(s => s.floorNumber || 0);
+            const minFloor = Math.min(...floorNumbers);
+            const maxFloor = Math.max(...floorNumbers);
+
+            const vectorizedRecord = {
+                id: `vectorized_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+                collectionId: collectionId,
+                startFloor: minFloor,  // 🔧 修复：使用startFloor而不是floorRange.min
+                endFloor: maxFloor,    // 🔧 修复：使用endFloor而不是floorRange.max
+                vectorCount: totalSummaries,  // 🔧 修复：使用vectorCount而不是summaryCount
+                timestamp: Date.now(),
+                summaries: this.pendingSummaries.map(s => ({
+                    content: s.summary?.content || s.content || '',
+                    floorNumber: s.floorNumber,
+                    timestamp: s.timestamp,
+                    importance: s.summary?.importance || 0.5,
+                    tags: s.summary?.tags || [],
+                    category: s.summary?.category || ''
+                }))
+            };
+
+            // 🔧 添加到已向量化记录列表
+            this.vectorizedRecords.push(vectorizedRecord);
+
+            // 🔧 清空待向量化列表
+            this.pendingSummaries = [];
+            this.currentFloor = 0;
+
+            // 🔧 保存数据
+            await this.saveVectorizedRecords();
+            await this.savePendingSummaries();
+
+            if (progressCallback) {
+                progressCallback(100, '向量化完成！');
+            }
+
+            // 🔧 触发向量化完成事件
+            if (this.eventSystem) {
+                this.eventSystem.emit('vectorized-summary:completed', {
+                    record: vectorizedRecord,
+                    summaryCount: totalSummaries,
+                    timestamp: Date.now()
+                });
+            }
+
+            console.log('[VectorizedSummaryManager] ✅ 向量化总结完成');
 
         } catch (error) {
             console.error('[VectorizedSummaryManager] ❌ 向量化总结失败:', error);
             this.handleError(error);
+            throw error;
         }
+    }
+
+    /**
+     * 🔧 生成哈希值
+     */
+    generateHash(text) {
+        let hash = 0;
+        for (let i = 0; i < text.length; i++) {
+            const char = text.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        return Math.abs(hash).toString(36);
     }
 
     /**
