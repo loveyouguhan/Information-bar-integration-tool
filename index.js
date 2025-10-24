@@ -59,6 +59,7 @@ import { StoryPlanningAssistant } from './core/StoryPlanningAssistant.js';
 import { NovelAnalyzer } from './core/NovelAnalyzer.js';
 import { CorpusRetrieval } from './core/CorpusRetrieval.js';
 import { VectorizedSummaryManager } from './core/VectorizedSummaryManager.js';
+import { UnifiedVectorRetrieval } from './core/UnifiedVectorRetrieval.js';
 
 // 🔧 修复：初始化控制台门禁，默认禁用日志收集，避免在配置加载前收集日志
 (function bootstrapInfobarConsoleGate() {
@@ -607,6 +608,21 @@ class InformationBarIntegrationTool {
         });
         console.log('[InfoBarTool] ✅ 语料库检索系统初始化完成');
 
+        // 🔍 新增：初始化统一向量检索管理器
+        this.unifiedVectorRetrieval = new UnifiedVectorRetrieval({
+            corpusRetrieval: this.corpusRetrieval,
+            vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
+            aiMemoryDatabase: this.aiMemoryDatabase,
+            unifiedDataCore: this.dataCore
+        });
+        console.log('[InfoBarTool] ✅ 统一向量检索管理器初始化完成');
+
+        // 🔧 立即添加到全局modules
+        if (window.SillyTavernInfobar && window.SillyTavernInfobar.modules) {
+            window.SillyTavernInfobar.modules.unifiedVectorRetrieval = this.unifiedVectorRetrieval;
+            console.log('[InfoBarTool] ✅ unifiedVectorRetrieval 已添加到全局 modules');
+        }
+
         // 🔮 新增：初始化向量化总结管理器
         this.vectorizedSummaryManager = new VectorizedSummaryManager({
             unifiedDataCore: this.dataCore,
@@ -855,28 +871,40 @@ class InformationBarIntegrationTool {
             settingsMenuItem.href = '#';
             settingsMenuItem.innerHTML = '<i class="fa-solid fa-cog"></i> 信息助手';
 
-            // 创建"数据表格"菜单项
-            const tableMenuItem = document.createElement('a');
-            tableMenuItem.id = 'infobar-table-menu-item';
-            tableMenuItem.className = 'dropdown-item';
-            tableMenuItem.href = '#';
-            tableMenuItem.innerHTML = '<i class="fa-solid fa-table"></i> 数据表格';
-
             // 绑定菜单项事件
             settingsMenuItem.addEventListener('click', (e) => {
                 e.preventDefault();
                 this.infoBarSettings.show();
             });
 
-            tableMenuItem.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.dataTable.show();
-            });
-
-            // 🔧 修复：统一添加菜单项，不添加额外分隔线（保持与其他扩展一致）
-            // 添加菜单项到扩展菜单
+            // 添加"信息助手"菜单项
             extensionMenu.appendChild(settingsMenuItem);
-            extensionMenu.appendChild(tableMenuItem);
+
+            // 🔧 新增：根据配置动态添加"数据表格"菜单项
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings['Information bar integration tool'] || {};
+            const basicSettings = configs.basic || {};
+            const tableRecordsEnabled = basicSettings.tableRecords?.enabled !== false;
+
+            if (tableRecordsEnabled) {
+                // 创建"数据表格"菜单项
+                const tableMenuItem = document.createElement('a');
+                tableMenuItem.id = 'infobar-table-menu-item';
+                tableMenuItem.className = 'dropdown-item';
+                tableMenuItem.href = '#';
+                tableMenuItem.innerHTML = '<i class="fa-solid fa-table"></i> 数据表格';
+
+                tableMenuItem.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.dataTable.show();
+                });
+
+                extensionMenu.appendChild(tableMenuItem);
+                console.log('[InfoBarTool] ✅ 数据表格菜单项已添加（启用数据表格功能）');
+            } else {
+                console.log('[InfoBarTool] ℹ️ 数据表格菜单项未添加（数据表格功能已禁用）');
+            }
 
             console.log('[InfoBarTool] ✅ 用户界面创建完成');
 
@@ -977,6 +1005,7 @@ class InformationBarIntegrationTool {
                 storyPlanningAssistant: this.storyPlanningAssistant, // 📖 新增：剧情规划助手
                 novelAnalyzer: this.novelAnalyzer, // 📚 新增：小说分析器
                 corpusRetrieval: this.corpusRetrieval, // 🔍 新增：语料库检索系统
+                unifiedVectorRetrieval: this.unifiedVectorRetrieval, // 🔍 新增：统一向量检索管理器
                 vectorizedSummaryManager: this.vectorizedSummaryManager, // 🔮 新增：向量化总结管理器
                 // 🔧 修复：添加自定义API任务队列模块
                 customAPITaskQueue: this.infoBarSettings?.customAPITaskQueue
@@ -1061,6 +1090,24 @@ setTimeout(() => {
     if (!window.SillyTavernInfobar.modules.panelRuleManager && informationBarTool.panelRuleManager) {
         window.SillyTavernInfobar.modules.panelRuleManager = informationBarTool.panelRuleManager;
         console.log('[InfoBarTool] 🔧 备用机制：panelRuleManager 已添加到全局 modules');
+    }
+
+    // 🔧 新增：添加统一向量检索管理器到全局
+    if (informationBarTool.unifiedVectorRetrieval) {
+        window.SillyTavernInfobar.modules.unifiedVectorRetrieval = informationBarTool.unifiedVectorRetrieval;
+        console.log('[InfoBarTool] ✅ unifiedVectorRetrieval 已添加到全局 modules');
+    }
+
+    // 🔧 新增：添加语料库检索到全局
+    if (informationBarTool.corpusRetrieval) {
+        window.SillyTavernInfobar.modules.corpusRetrieval = informationBarTool.corpusRetrieval;
+        console.log('[InfoBarTool] ✅ corpusRetrieval 已添加到全局 modules');
+    }
+
+    // 🔧 新增：添加向量化记忆检索到全局
+    if (informationBarTool.vectorizedMemoryRetrieval) {
+        window.SillyTavernInfobar.modules.vectorizedMemoryRetrieval = informationBarTool.vectorizedMemoryRetrieval;
+        console.log('[InfoBarTool] ✅ vectorizedMemoryRetrieval 已添加到全局 modules');
     }
 }, 1000);
 
