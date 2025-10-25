@@ -1608,7 +1608,7 @@ export class FrontendDisplayManager {
                 </div>
             `;
 
-            // 使用全屏遮罩容器 + 居中内容，确保完美居中
+            // 🔧 修复：使用全屏遮罩容器 + 居中内容，降低z-index，删除模糊效果
             popup.style.setProperty('position', 'fixed', 'important');
             popup.style.setProperty('top', '0', 'important');
             popup.style.setProperty('left', '0', 'important');
@@ -1619,8 +1619,8 @@ export class FrontendDisplayManager {
             popup.style.setProperty('display', 'flex', 'important');
             popup.style.setProperty('align-items', 'center', 'important');
             popup.style.setProperty('justify-content', 'center', 'important');
-            popup.style.setProperty('z-index', '10000', 'important');
-            popup.style.setProperty('background', 'rgba(0,0,0,0.5)', 'important');
+            popup.style.setProperty('z-index', '1000', 'important'); // 🔧 降低优先级：从10000改为1000
+            popup.style.setProperty('background', 'rgba(0,0,0,0.5)', 'important'); // 🔧 删除模糊效果
             popup.style.setProperty('margin', '0', 'important');
             popup.style.setProperty('padding', '20px', 'important');
             popup.style.setProperty('box-sizing', 'border-box', 'important');
@@ -1742,18 +1742,40 @@ export class FrontendDisplayManager {
                     const fullChatData = await dataCore.getChatData(chatId);
                     
                     // 从infobar_data.panels获取面板数据
-                    const panelData = fullChatData?.infobar_data?.panels?.[panelId] || {};
-                    
+                    let panelData = fullChatData?.infobar_data?.panels?.[panelId] || {};
+
                     console.log(`[FrontendDisplayManager] 🔍 聊天ID:`, chatId);
                     console.log(`[FrontendDisplayManager] 🔍 完整聊天数据:`, fullChatData);
                     console.log(`[FrontendDisplayManager] 🔍 面板数据 [${panelId}]:`, panelData);
-                    
+
+                    // 🔧 修复：处理数组格式的面板数据（支持多行数据）
+                    if (Array.isArray(panelData)) {
+                        console.log(`[FrontendDisplayManager] 🔧 检测到数组格式面板数据，行数: ${panelData.length}`);
+                        if (panelData.length > 1) {
+                            // 多行数据：返回特殊格式，标记为多行数据
+                            console.log(`[FrontendDisplayManager] 🔧 多行数据，返回特殊格式`);
+                            return {
+                                _isMultiRow: true,
+                                _rowCount: panelData.length,
+                                _rows: panelData,
+                                _panelId: panelId,
+                                source: '多行数据'
+                            };
+                        } else if (panelData.length === 1) {
+                            // 单行数据：取第一行
+                            panelData = panelData[0];
+                            console.log(`[FrontendDisplayManager] 🔧 使用第一行数据:`, panelData);
+                        } else {
+                            panelData = {};
+                        }
+                    }
+
                     // 🔧 特殊处理：交互面板支持多NPC格式
                     if (panelId === 'interaction' && Object.keys(panelData).length > 0) {
                         console.log('[FrontendDisplayManager] 🎯 处理交互面板多NPC数据');
                         return this.processInteractionPanelData(panelData, panelConfig);
                     }
-                    
+
                     // 🔧 重要：组织架构面板不再进行特殊处理，保持原始分组数据
                     // 原因：processOrganizationPanelData会将orgX.fieldName格式合并为单一字段，
                     // 这会影响DataTable的正确显示，DataTable需要原始的分组数据
@@ -1761,30 +1783,57 @@ export class FrontendDisplayManager {
                         console.log('[FrontendDisplayManager] 🎯 组织架构面板保持原始数据格式，不进行合并处理');
                         // 直接返回原始数据，不调用processOrganizationPanelData
                     }
-                    
+
+                    // 🔧 修复：从subItems获取启用的字段
+                    const subItems = panelConfig.subItems || [];
+                    const enabledSubItems = subItems.filter(item => item.enabled !== false);
+
+                    console.log(`[FrontendDisplayManager] 📋 启用的字段数量: ${enabledSubItems.length}`);
+
                     // 遍历启用的字段
-                    Object.entries(panelConfig).forEach(([fieldKey, fieldConfig]) => {
-                        if (fieldConfig?.enabled === true && fieldKey !== 'enabled' && fieldKey !== 'subItems') {
-                            const displayName = this.getFieldDisplayName(fieldKey);
-                            const fieldValue = panelData[fieldKey];
-                            
-                            if (fieldValue && fieldValue.trim() !== '') {
-                                realData[displayName] = fieldValue;
-                            } else {
-                                realData[displayName] = '未设置';
+                    let currentFieldIndex = 1;
+                    enabledSubItems.forEach((subItem) => {
+                        const displayName = subItem.displayName || subItem.name;
+                        const fieldKey = subItem.key || subItem.id;
+
+                        // 🔧 修复：尝试多种字段名格式获取数据
+                        let fieldValue = null;
+
+                        // 1. 尝试数字索引（新格式）
+                        const indexKey = String(currentFieldIndex);
+                        if (panelData[indexKey] !== undefined && panelData[indexKey] !== null) {
+                            fieldValue = panelData[indexKey];
+                            console.log(`[FrontendDisplayManager] 🔢 使用数字索引 ${indexKey} (${displayName}): ${fieldValue}`);
+                        }
+
+                        // 2. 尝试字段key
+                        if (!fieldValue || (typeof fieldValue === 'string' && fieldValue.trim() === '')) {
+                            fieldValue = panelData[fieldKey];
+                        }
+
+                        // 3. 尝试中文字段名
+                        if (!fieldValue || (typeof fieldValue === 'string' && fieldValue.trim() === '')) {
+                            const chineseFieldName = dataCore?.getChineseFieldName?.(fieldKey, panelId);
+                            if (chineseFieldName && chineseFieldName !== fieldKey) {
+                                fieldValue = panelData[chineseFieldName];
+                                console.log(`[FrontendDisplayManager] 🔄 字段名映射: ${fieldKey} -> ${chineseFieldName}, 值: ${fieldValue}`);
                             }
                         }
-                    });
-                    
-                    // 添加子项数据
-                    const subItems = panelConfig.subItems || [];
-                    subItems.forEach(subItem => {
-                        if (subItem.enabled) {
-                            const subItemData = panelData[subItem.key] || panelData[subItem.id];
-                            realData[subItem.displayName || subItem.name] = subItemData || '未设置';
+
+                        // 4. 尝试displayName
+                        if (!fieldValue || (typeof fieldValue === 'string' && fieldValue.trim() === '')) {
+                            fieldValue = panelData[displayName];
                         }
+
+                        if (fieldValue && (typeof fieldValue !== 'string' || fieldValue.trim() !== '')) {
+                            realData[displayName] = fieldValue;
+                        } else {
+                            realData[displayName] = '未设置';
+                        }
+
+                        currentFieldIndex++;
                     });
-                    
+
                     console.log(`[FrontendDisplayManager] ✅ 处理后的数据:`, realData);
                     
                 } catch (dataError) {
@@ -2255,12 +2304,11 @@ export class FrontendDisplayManager {
                 bottom: 0;
                 width: 100vw;
                 height: 100vh;
-                background: rgba(0, 0, 0, 0.7);
-                backdrop-filter: blur(4px);
+                background: rgba(0, 0, 0, 0.5);
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                z-index: 10000;
+                z-index: 1000;
                 opacity: 0;
                 visibility: visible;
                 transition: opacity 0.3s ease;
@@ -2608,6 +2656,11 @@ export class FrontendDisplayManager {
         try {
             console.log(`[FrontendDisplayManager] 🎨 渲染面板数据: ${panelId}`);
 
+            // 🔧 新增：多行数据支持
+            if (panelData._isMultiRow) {
+                return this.renderMultiRowPanelData(panelData);
+            }
+
             // 🔧 特殊处理：多NPC交互面板
             if (panelId === 'interaction' && panelData._isMultiNpc) {
                 return this.renderInteractionPanelData(panelData);
@@ -2646,6 +2699,103 @@ export class FrontendDisplayManager {
             console.error('[FrontendDisplayManager] ❌ 渲染面板数据失败:', error);
             // 🔧 修复：不显示错误UI，返回空字符串
             return '';
+        }
+    }
+
+    /**
+     * 🆕 渲染多行面板数据
+     */
+    renderMultiRowPanelData(panelData) {
+        try {
+            console.log('[FrontendDisplayManager] 🎭 渲染多行面板数据');
+
+            const rows = panelData._rows || [];
+            const panelId = panelData._panelId;
+
+            if (rows.length === 0) {
+                return '<div class="data-row"><span class="data-value">暂无数据</span></div>';
+            }
+
+            // 获取面板配置
+            const settings = window.SillyTavernInfobar?.modules?.settings;
+            const enabledPanels = settings?.getEnabledPanels?.() || {};
+            const panelConfig = enabledPanels[panelId];
+            const subItems = panelConfig?.subItems || [];
+            const enabledSubItems = subItems.filter(item => item.enabled !== false);
+
+            let html = '';
+
+            // 添加行选择器
+            html += `
+                <div class="data-row row-selector-row">
+                    <span class="data-label">选择行:</span>
+                    <select class="data-row-selector" onchange="window.SillyTavernInfobar?.modules?.frontendDisplayManager?.switchRowDisplay(this)">
+            `;
+
+            rows.forEach((row, index) => {
+                html += `<option value="${index}" ${index === 0 ? 'selected' : ''}>第 ${index + 1} 行</option>`;
+            });
+
+            html += '</select></div>';
+
+            // 为每行创建数据显示区域
+            rows.forEach((rowData, rowIndex) => {
+                const displayStyle = rowIndex === 0 ? 'block' : 'none';
+                html += `<div class="row-data-container" data-row-index="${rowIndex}" style="display: ${displayStyle};">`;
+
+                // 渲染行的字段数据
+                let fieldIndex = 1;
+                enabledSubItems.forEach((subItem) => {
+                    const displayName = subItem.displayName || subItem.name;
+                    const indexKey = String(fieldIndex);
+                    const fieldValue = rowData[indexKey] || '未设置';
+
+                    html += `
+                        <div class="data-row">
+                            <span class="data-label">${this.escapeHtml(displayName)}</span>
+                            <span class="data-value">${this.escapeHtml(String(fieldValue))}</span>
+                        </div>
+                    `;
+
+                    fieldIndex++;
+                });
+
+                html += '</div>';
+            });
+
+            console.log(`[FrontendDisplayManager] ✅ 多行数据渲染完成，共 ${rows.length} 行`);
+            return html;
+
+        } catch (error) {
+            console.error('[FrontendDisplayManager] ❌ 渲染多行数据失败:', error);
+            return '<div class="data-row"><span class="data-value">渲染失败</span></div>';
+        }
+    }
+
+    /**
+     * 🆕 切换行显示
+     */
+    switchRowDisplay(selectElement) {
+        try {
+            const selectedIndex = selectElement.value;
+            const popup = selectElement.closest('.panel-popup');
+            if (!popup) return;
+
+            // 隐藏所有行
+            const allRows = popup.querySelectorAll('.row-data-container');
+            allRows.forEach(row => {
+                row.style.display = 'none';
+            });
+
+            // 显示选中的行
+            const selectedRow = popup.querySelector(`.row-data-container[data-row-index="${selectedIndex}"]`);
+            if (selectedRow) {
+                selectedRow.style.display = 'block';
+            }
+
+            console.log(`[FrontendDisplayManager] 🔄 切换到第 ${parseInt(selectedIndex) + 1} 行`);
+        } catch (error) {
+            console.error('[FrontendDisplayManager] ❌ 切换行显示失败:', error);
         }
     }
 

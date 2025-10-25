@@ -889,19 +889,7 @@ export class DataTable {
             let specialColumnHeader = '';
             let hasSpecialColumn = false;
 
-            if (panel.key === 'interaction') {
-                // 交互对象面板添加NPC名称列
-                specialColumnHeader = `<th class="col-property" style="
-                    width: 120px;
-                    min-width: 100px;
-                    padding: 8px;
-                    text-align: center;
-                    white-space: nowrap;
-                    overflow: visible;
-                    word-wrap: break-word;
-                ">NPC名称</th>`;
-                hasSpecialColumn = true;
-            } else if (panel.key === 'organization') {
+            if (panel.key === 'organization') {
                 // 组织架构面板添加组织名称列
                 specialColumnHeader = `<th class="col-org-name" style="
                     width: 120px;
@@ -1081,23 +1069,14 @@ export class DataTable {
             // 🔧 智能计算自适应列宽（包含NPC名称列）
             const columnAnalysis = this.calculateAdaptiveColumnWidths(panel);
 
-            // 生成表头（添加NPC名称列）
+            // 🔧 修复：不添加额外的NPC名称列，直接使用预设面板中的字段
             const headers = `
-                <th class="col-property" style="
-                    width: 120px;
-                    min-width: 100px;
-                    padding: 8px;
-                    text-align: center;
-                    white-space: nowrap;
-                    overflow: visible;
-                    word-wrap: break-word;
-                ">NPC名称</th>
                 ${columnAnalysis.map((analysis, index) => {
                     const { item, adaptiveWidth } = analysis;
                     // 获取字段的中文显示名称
                     const displayName = this.getFieldDisplayName(item.name, 'interaction') || item.name;
                     return `<th class="col-property"
-                        data-column-index="${index + 1}"
+                        data-column-index="${index}"
                         data-property="${item.name}"
                         style="
                         width: ${adaptiveWidth}px;
@@ -1113,9 +1092,6 @@ export class DataTable {
 
             // 🔧 修复：为每个交互对象数据项生成数据行
             const npcDataRows = interactionDataItems.map((dataItem, index) => {
-                // 🔧 修复：获取NPC名称，支持数字键格式
-                const npcName = dataItem.rowData?.['1'] || dataItem.rowData?.col_1 || `NPC ${index + 1}`;
-
                 // 🔧 使用统一的字段映射管理器
                 const fieldMapping = this.getFieldMapping('interaction');
 
@@ -1167,25 +1143,9 @@ export class DataTable {
                         ">${formattedValue}</td>`;
                 }).join('');
 
-                // 🔧 为NPC名称单元格生成唯一标识
-                const npcCellId = `interaction_${index}_0_NPC名称`;
-
+                // 🔧 修复：不添加额外的NPC名称单元格，直接使用数据行
                 return `
                     <tr class="data-row npc-data-row" data-npc-id="npc${index}">
-                        <td class="cell-value npc-name-cell"
-                            data-property="NPC名称"
-                            data-cell-id="${npcCellId}"
-                            data-panel-id="interaction"
-                            data-row-index="${index}"
-                            data-col-index="0"
-                            style="
-                                padding: 8px;
-                                vertical-align: top;
-                                word-wrap: break-word;
-                                width: 120px;
-                                min-width: 100px;
-                                overflow: visible;
-                            ">${this.escapeHtml(npcName)}</td>
                         ${dataRow}
                     </tr>
                 `;
@@ -2412,9 +2372,15 @@ export class DataTable {
 
                     // 🔧 修复：监听任务完成事件，而不是立即显示成功
                     const waitForTaskCompletion = new Promise((resolve, reject) => {
+                        // 🔧 修复：从CustomAPITaskQueue获取实际超时配置
+                        const taskQueue = window.SillyTavernInfobar?.modules?.customAPITaskQueue;
+                        const timeoutMs = taskQueue?.timeout || 600000; // 默认10分钟，与CustomAPITaskQueue一致
+
+                        console.log(`[DataTable] ⏰ 设置API调用超时: ${timeoutMs}ms (${timeoutMs/1000}秒)`);
+
                         const timeout = setTimeout(() => {
-                            reject(new Error('API调用超时（60秒）'));
-                        }, 60000); // 60秒超时
+                            reject(new Error(`API调用超时（${timeoutMs/1000}秒）`));
+                        }, timeoutMs);
 
                         // 监听任务完成事件
                         const taskCompletedHandler = (payload) => {
@@ -4694,17 +4660,23 @@ export class DataTable {
 
                     if (shouldHighlight) {
                         // 🔧 清理该单元格的旧高亮状态和定时器
-                        cell.classList.remove('cell-updated');
+                        cell.classList.remove('cell-added', 'cell-updated', 'cell-deleted');
                         cell.removeAttribute('data-updated-at');
                         cell.removeAttribute('data-updated-value');
+                        cell.removeAttribute('data-operation-type');
                         const existingTimer = cell.getAttribute('data-highlight-timer');
                         if (existingTimer) {
                             clearTimeout(parseInt(existingTimer));
                             cell.removeAttribute('data-highlight-timer');
                         }
-                        // 🎨 添加高亮效果
-                        this.highlightCell(cell, panelId, property, value);
-                        console.log(`[DataTable] 🔍 ${panelId}字段更新并高亮: ${property} -> ${colKey} = "${value}"`);
+
+                        // 🎨 判断操作类型：新增(add) 或 更新(update)
+                        // 如果上次值为空且新值不为空，则是新增；否则是更新
+                        const operationType = (!lastProcessed || lastProcessed === '') && newValue ? 'add' : 'update';
+
+                        // 添加高亮效果
+                        this.highlightCell(cell, panelId, property, value, operationType);
+                        console.log(`[DataTable] 🔍 ${panelId}字段${operationType === 'add' ? '新增' : '更新'}并高亮: ${property} -> ${colKey} = "${value}"`);
                     } else {
                         console.log(`[DataTable] ✓ ${panelId}值未变化: ${property} = "${value}"`);
                     }
@@ -4904,17 +4876,23 @@ export class DataTable {
 
                     if (shouldHighlight) {
                         // 清理旧的高亮痕迹
-                        cell.classList.remove('cell-updated');
+                        cell.classList.remove('cell-added', 'cell-updated', 'cell-deleted');
                         cell.removeAttribute('data-updated-at');
                         cell.removeAttribute('data-updated-value');
+                        cell.removeAttribute('data-operation-type');
                         const existingTimer = cell.getAttribute('data-highlight-timer');
                         if (existingTimer) {
                             clearTimeout(parseInt(existingTimer));
                             cell.removeAttribute('data-highlight-timer');
                         }
+
+                        // 🎨 判断操作类型：新增(add) 或 更新(update)
+                        // 如果上次值为空且新值不为空，则是新增；否则是更新
+                        const operationType = (!lastProcessed || lastProcessed === '') && newValue ? 'add' : 'update';
+
                         // 添加高亮
-                        this.highlightCell(cell, panelId, property, value);
-                        console.log(`[DataTable] 🔍 ${panelId}精确更新并高亮: ${property} -> ${colKey} = "${value}" (单元格ID: ${cellId})`);
+                        this.highlightCell(cell, panelId, property, value, operationType);
+                        console.log(`[DataTable] 🔍 ${panelId}精确${operationType === 'add' ? '新增' : '更新'}并高亮: ${property} -> ${colKey} = "${value}" (单元格ID: ${cellId})`);
                     } else {
                         console.log(`[DataTable] ✓ ${panelId}值未变化: ${property} = "${value}"`);
                     }
@@ -4935,10 +4913,14 @@ export class DataTable {
      * @param {string} panelId - 面板ID
      * @param {string} property - 属性名称
      * @param {*} newValue - 新值
+     * @param {string} operationType - 操作类型：'add'(新增-蓝色) | 'update'(更新-绿色) | 'delete'(删除-红色)
      */
-    highlightCell(cell, panelId, property, newValue) {
+    highlightCell(cell, panelId, property, newValue, operationType = 'update') {
         try {
-            // 🔧 修复：简化高亮逻辑，移除CSS动画，直接高亮显示
+            // 🔧 优化：支持不同操作类型的高亮颜色
+            // - add: 蓝色高亮（新增内容）
+            // - update: 绿色高亮（更新内容）
+            // - delete: 红色高亮（删除内容）
 
             // 清除该单元格之前的高亮定时器（如果存在）
             const existingTimer = cell.getAttribute('data-highlight-timer');
@@ -4947,20 +4929,40 @@ export class DataTable {
                 cell.removeAttribute('data-highlight-timer');
             }
 
-            // 移除已存在的高亮类（如果有），准备重新高亮
-            cell.classList.remove('cell-updated');
+            // 移除所有已存在的高亮类（如果有），准备重新高亮
+            cell.classList.remove('cell-added', 'cell-updated', 'cell-deleted');
 
             // 强制重绘
             void cell.offsetWidth;
 
-            // 添加高亮类（不使用动画类）
-            cell.classList.add('cell-updated');
+            // 根据操作类型添加对应的高亮类
+            let highlightClass = 'cell-updated'; // 默认绿色（更新）
+            let emoji = '🔄';
 
-            // 记录更新时间和值
+            switch (operationType) {
+                case 'add':
+                    highlightClass = 'cell-added';
+                    emoji = '➕';
+                    break;
+                case 'delete':
+                    highlightClass = 'cell-deleted';
+                    emoji = '🗑️';
+                    break;
+                case 'update':
+                default:
+                    highlightClass = 'cell-updated';
+                    emoji = '🔄';
+                    break;
+            }
+
+            cell.classList.add(highlightClass);
+
+            // 记录更新时间、值和操作类型
             cell.setAttribute('data-updated-at', Date.now());
             cell.setAttribute('data-updated-value', String(newValue));
+            cell.setAttribute('data-operation-type', operationType);
 
-            console.log(`[DataTable] 🎨 单元格高亮: ${panelId}.${property} = "${newValue}"`);
+            console.log(`[DataTable] 🎨 单元格高亮 ${emoji}: ${panelId}.${property} = "${newValue}" (${operationType})`);
 
         } catch (error) {
             console.error('[DataTable] ❌ 单元格高亮失败:', error);
@@ -9934,9 +9936,17 @@ export class DataTable {
         try {
             console.log('[DataTable] 🗑️ 执行删除字段数据:', cellInfo);
 
+            // 🎨 先高亮要删除的单元格（红色）
+            if (cellInfo.cell) {
+                const oldValue = cellInfo.cell.textContent?.trim() || '';
+                this.highlightCell(cellInfo.cell, cellInfo.panelId, cellInfo.property, oldValue, 'delete');
+                // 等待一小段时间让用户看到高亮效果
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+
             // 🔧 修复：将中文显示名转换为实际字段名
             let actualFieldName = cellInfo.property;
-            
+
             // 尝试映射中文显示名到旧架构字段名
             const legacyFieldName = this.mapDisplayNameToLegacyField(cellInfo.property, cellInfo.panelId);
             if (legacyFieldName) {
@@ -9975,6 +9985,22 @@ export class DataTable {
     async executeDeleteRow(cellInfo) {
         try {
             console.log('[DataTable] 🗂️ 执行删除数据行:', cellInfo);
+
+            // 🎨 先高亮要删除的行（红色）
+            if (cellInfo.cell) {
+                const row = cellInfo.cell.closest('tr');
+                if (row) {
+                    // 高亮整行的所有单元格
+                    const cells = row.querySelectorAll('.cell-value');
+                    cells.forEach(cell => {
+                        const value = cell.textContent?.trim() || '';
+                        const property = cell.getAttribute('data-property') || '';
+                        this.highlightCell(cell, cellInfo.panelId, property, value, 'delete');
+                    });
+                    // 等待一小段时间让用户看到高亮效果
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            }
 
             if (cellInfo.npcId) {
                 // 删除整个NPC的所有数据（行级别）

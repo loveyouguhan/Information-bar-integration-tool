@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 信息栏设置界面
  *
  * 负责管理信息栏的设置界面：
@@ -31,6 +31,10 @@ export class InfoBarSettings {
         this._customAPIProcessing = false; // 自定义API处理进行中
         this._boundHandlers = {}; // 存放已绑定的事件处理器引用，避免重复绑定
 
+        // 🔧 新增：保存缓存机制
+        this._lastSaveTimestamp = null; // 上次保存时间戳，用于防抖
+        this._savedConfigsCache = null; // 配置缓存，用于快速对比
+        
         // UI元素引用
         this.container = null;
         this.modal = null;
@@ -868,7 +872,7 @@ ${'='.repeat(80)}
                                 基础设置
                             </div>
                             <div class="nav-item" data-nav="api">
-                                自定义API
+                                API配置
                             </div>
                             <div class="nav-item" data-nav="promptSettings">
                                 提示词设置
@@ -883,7 +887,7 @@ ${'='.repeat(80)}
                                 面板管理
                             </div>
                             <div class="nav-item" data-nav="summary">
-                                总结面板
+                                剧情总结
                             </div>
                             <div class="nav-item" data-nav="npc-management">
                                 NPC管理
@@ -1008,9 +1012,9 @@ ${'='.repeat(80)}
                     <div class="setting-item">
                         <div class="checkbox-wrapper">
                             <input type="checkbox" id="table-records-checkbox" name="basic.tableRecords.enabled" />
-                            <label for="table-records-checkbox" class="checkbox-label">启用表格记录</label>
+                            <label for="table-records-checkbox" class="checkbox-label">启用数据表格</label>
                         </div>
-                        <div class="setting-desc">启用数据表格记录和管理功能</div>
+                        <div class="setting-desc">启用后在扩展内增加数据表格按钮，用于查看和管理数据</div>
                     </div>
 
                     <div class="setting-item">
@@ -1029,13 +1033,7 @@ ${'='.repeat(80)}
                         <div class="setting-desc">启动时信息栏默认为折叠状态</div>
                     </div>
 
-                    <div class="setting-item">
-                        <div class="checkbox-wrapper">
-                            <input type="checkbox" id="error-logging-checkbox" name="basic.errorLogging.enabled" checked />
-                            <label for="error-logging-checkbox" class="checkbox-label">错误日志</label>
-                        </div>
-                        <div class="setting-desc">启用详细的错误日志记录</div>
-                    </div>
+
 
                     <!-- 提示词插入位置配置 -->
                     <div class="setting-item">
@@ -1089,11 +1087,7 @@ ${'='.repeat(80)}
                             <i class="fa fa-code"></i>
                             变量管理器
                         </button>
-                        <button class="btn btn-danger" id="clear-memory-database-btn" data-action="clear-memory-database" style="margin-left:8px;">
-                            <i class="fa fa-trash"></i>
-                            清空AI记忆数据库
-                        </button>
-                        <div class="tool-desc">管理全局变量、宏定义和自定义函数；清空AI记忆数据库（用于解决记忆混乱问题）</div>
+                        <div class="tool-desc">管理全局变量、宏定义和自定义函数</div>
                     </div>
                 </div>
             </div>
@@ -1725,10 +1719,10 @@ ${'='.repeat(80)}
                 }
 
                 // API配置相关按钮
-                if (e.target.id === 'load-models-btn') {
+                if (e.target.id === 'infobar-load-models-btn') {
                     this.loadModelList();
                 }
-                if (e.target.id === 'test-connection-btn') {
+                if (e.target.id === 'infobar-test-connection-btn') {
                     this.testConnection();
                 }
                 // 🆕 正则表达式管理按钮
@@ -1777,10 +1771,10 @@ ${'='.repeat(80)}
                 }
 
                 // 🆕 向量化API相关按钮
-                if (e.target.id === 'load-vector-models-btn') {
+                if (e.target.id === 'infobar-load-vector-models-btn') {
                     this.loadVectorModelList();
                 }
-                if (e.target.id === 'test-vector-connection-btn') {
+                if (e.target.id === 'infobar-test-vector-connection-btn') {
                     this.testVectorConnection();
                 }
 
@@ -1839,17 +1833,17 @@ ${'='.repeat(80)}
                 }
 
                 // API提供商变更
-                if (e.target.id === 'api-provider') {
+                if (e.target.id === 'infobar-api-provider') {
                     this.handleProviderChange(e.target.value);
                 }
 
                 // 接口类型变更
-                if (e.target.id === 'interface-type') {
+                if (e.target.id === 'infobar-interface-type') {
                     this.handleInterfaceTypeChange(e.target.value);
                 }
 
                 // 🆕 向量化API提供商变更
-                if (e.target.id === 'vector-api-provider') {
+                if (e.target.id === 'infobar-vector-api-provider') {
                     this.handleVectorProviderChange(e.target.value);
                 }
             });
@@ -6287,20 +6281,52 @@ ${'='.repeat(80)}
                 return;
             }
 
-            // 监听AI记忆总结创建事件
+            // 🔧 修复：监听AI记忆总结创建事件，立即刷新UI
             eventSystem.on('ai-summary:created', (data) => {
                 console.log('[InfoBarSettings] 📨 收到AI记忆总结创建事件:', data);
 
-                // 🔧 修复：检查设置面板是否打开且在向量化总结模式
-                if (!this.modal || !this.visible) {
-                    console.log('[InfoBarSettings] ⏸️ 设置面板未打开，跳过UI刷新');
-                    return;
+                // 🔧 修复：无论设置面板是否打开，都刷新数据（确保数据同步）
+                // 只是在面板打开时才刷新UI显示
+                if (this.modal && this.visible) {
+                    const vectorizedSettings = this.modal.querySelector('.vectorized-summary-settings');
+                    if (vectorizedSettings && vectorizedSettings.style.display !== 'none') {
+                        console.log('[InfoBarSettings] 🔄 立即刷新AI记忆总结列表...');
+                        // 使用setTimeout确保数据已经保存
+                        setTimeout(() => {
+                            this.loadAIMemorySummaryList();
+                        }, 100);
+                    }
                 }
+            });
 
-                const vectorizedSettings = this.modal.querySelector('.vectorized-summary-settings');
-                if (vectorizedSettings && vectorizedSettings.style.display !== 'none') {
-                    console.log('[InfoBarSettings] 🔄 刷新AI记忆总结列表...');
-                    this.loadAIMemorySummaryList();
+            // 🔧 新增：监听向量化总结待处理列表更新事件
+            eventSystem.on('vectorized-summary:pending-updated', (data) => {
+                console.log('[InfoBarSettings] 📨 收到向量化总结待处理列表更新事件:', data);
+
+                if (this.modal && this.visible) {
+                    const vectorizedSettings = this.modal.querySelector('.vectorized-summary-settings');
+                    if (vectorizedSettings && vectorizedSettings.style.display !== 'none') {
+                        console.log('[InfoBarSettings] 🔄 刷新AI记忆总结列表（待处理列表更新）...');
+                        setTimeout(() => {
+                            this.loadAIMemorySummaryList();
+                        }, 100);
+                    }
+                }
+            });
+
+            // 🔧 新增：监听向量化总结完成事件
+            eventSystem.on('vectorized-summary:completed', (data) => {
+                console.log('[InfoBarSettings] 📨 收到向量化总结完成事件:', data);
+
+                if (this.modal && this.visible) {
+                    const vectorizedSettings = this.modal.querySelector('.vectorized-summary-settings');
+                    if (vectorizedSettings && vectorizedSettings.style.display !== 'none') {
+                        console.log('[InfoBarSettings] 🔄 刷新向量化总结记录列表...');
+                        setTimeout(() => {
+                            this.loadAIMemorySummaryList();
+                            this.loadVectorizedSummaryList();
+                        }, 100);
+                    }
                 }
             });
 
@@ -6390,6 +6416,39 @@ ${'='.repeat(80)}
                     console.log('[InfoBarSettings] 🧹 清空AI记忆数据库...');
                     this.clearMemoryDatabaseUI();
                     break;
+
+                // 🆕 预设管理操作
+                case 'export-preset':
+                    console.log('[InfoBarSettings] 🚀 执行导出预设...');
+                    this.exportPreset();
+                    break;
+                case 'import-preset':
+                    console.log('[InfoBarSettings] 🚀 执行导入预设...');
+                    this.importPreset();
+                    break;
+                case 'load-preset-panels':
+                    console.log('[InfoBarSettings] 🚀 执行加载预设面板...');
+                    this.loadPresetPanels();
+                    break;
+                case 'load-preset-rules':
+                    console.log('[InfoBarSettings] 🚀 执行加载预设规则...');
+                    this.loadPresetRules();
+                    break;
+                case 'switch-preset':
+                    const presetId = event?.target?.closest('[data-action]')?.dataset?.presetId;
+                    if (presetId) {
+                        console.log('[InfoBarSettings] 🚀 执行切换预设:', presetId);
+                        this.switchPreset(presetId);
+                    }
+                    break;
+                case 'delete-preset':
+                    const deletePresetId = event?.target?.closest('[data-action]')?.dataset?.presetId;
+                    if (deletePresetId) {
+                        console.log('[InfoBarSettings] 🚀 执行删除预设:', deletePresetId);
+                        this.deletePreset(deletePresetId);
+                    }
+                    break;
+
                 default:
                     console.log(`[InfoBarSettings] 🔘 处理操作: ${action}`);
             }
@@ -6467,6 +6526,11 @@ ${'='.repeat(80)}
 
             console.log(`[InfoBarSettings] ☑️ 复选框变更: ${name} = ${checked}`);
 
+            // 🆕 特殊处理"启用数据表格"复选框 - 实时创建/删除菜单按钮
+            if (name === 'basic.tableRecords.enabled') {
+                this.handleTableRecordsToggle(checked);
+            }
+
             // 🔧 修复：处理自定义面板启用/禁用状态
             if (name && name.endsWith('.enabled')) {
                 const panelId = name.replace('.enabled', '');
@@ -6520,6 +6584,15 @@ ${'='.repeat(80)}
                 }
             }
 
+            // 🆕 特殊处理延迟生成开关
+            if (name === 'apiConfig.delayedGeneration') {
+                const delayedGenerationConfig = this.modal.querySelector('.delayed-generation-config');
+                if (delayedGenerationConfig) {
+                    delayedGenerationConfig.style.display = checked ? 'block' : 'none';
+                    console.log(`[InfoBarSettings] ⏱️ 延迟生成配置区域${checked ? '显示' : '隐藏'}`);
+                }
+            }
+
             // 如果是主开关，控制相关子项
             if (name && name.includes('.enabled')) {
                 const baseName = name.replace('.enabled', '');
@@ -6534,10 +6607,98 @@ ${'='.repeat(80)}
             // 更新对应面板的配置计数
             this.updatePanelCounts(e.target);
 
+            // 🔧 修复：不再自动保存，只在用户点击"保存"按钮时保存
+            // 这样可以避免与SillyTavern的保存机制冲突
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理复选框变更失败:', error);
         }
     }
+
+    /**
+     * 🆕 处理"启用数据表格"复选框切换
+     * 🔧 修复：只更新UI（创建/删除按钮），不触发保存
+     * 配置会在用户点击"保存"按钮时统一保存
+     */
+    handleTableRecordsToggle(enabled) {
+        try {
+            console.log(`[InfoBarSettings] 📊 数据表格功能${enabled ? '启用' : '禁用'}（仅更新UI）`);
+
+            const extensionMenu = document.querySelector('#extensionsMenu');
+            if (!extensionMenu) {
+                console.warn('[InfoBarSettings] ⚠️ 未找到扩展菜单');
+                return;
+            }
+
+            const existingButton = document.getElementById('infobar-table-menu-item');
+
+            if (enabled) {
+                // 🔧 修复：定义事件处理函数，确保可以重复绑定
+                const handleTableClick = (e) => {
+                    e.preventDefault();
+                    console.log('[InfoBarSettings] 🔍 点击数据表格按钮');
+                    
+                    const dataTable = window.SillyTavernInfobar?.modules?.dataTable;
+                    
+                    if (dataTable && typeof dataTable.show === 'function') {
+                        console.log('[InfoBarSettings] ✅ 调用 dataTable.show()');
+                        dataTable.show();
+                    } else {
+                        console.error('[InfoBarSettings] ❌ 数据表格模块未找到或未初始化');
+                        console.error('[InfoBarSettings] 📊 dataTable:', dataTable);
+                    }
+                };
+
+                // 启用：如果按钮不存在，则创建
+                if (!existingButton) {
+                    const tableMenuItem = document.createElement('a');
+                    tableMenuItem.id = 'infobar-table-menu-item';
+                    tableMenuItem.className = 'dropdown-item';
+                    tableMenuItem.href = '#';
+                    tableMenuItem.innerHTML = '<i class="fa-solid fa-table"></i> 数据表格';
+
+                    // 绑定事件
+                    tableMenuItem.addEventListener('click', handleTableClick);
+
+                    // 插入到"信息助手"按钮之后
+                    const settingsButton = document.getElementById('infobar-settings-menu-item');
+                    if (settingsButton && settingsButton.nextSibling) {
+                        extensionMenu.insertBefore(tableMenuItem, settingsButton.nextSibling);
+                    } else {
+                        extensionMenu.appendChild(tableMenuItem);
+                    }
+
+                    console.log('[InfoBarSettings] ✅ 数据表格按钮已创建并绑定事件');
+                } else {
+                    // 🔧 修复：按钮已存在时，移除旧的事件监听器并重新绑定
+                    console.log('[InfoBarSettings] 🔄 数据表格按钮已存在，重新绑定事件');
+                    
+                    // 克隆节点以移除所有旧的事件监听器
+                    const newButton = existingButton.cloneNode(true);
+                    existingButton.parentNode.replaceChild(newButton, existingButton);
+                    
+                    // 绑定新的事件监听器
+                    newButton.addEventListener('click', handleTableClick);
+                    
+                    console.log('[InfoBarSettings] ✅ 数据表格按钮事件已重新绑定');
+                }
+            } else {
+                // 禁用：如果按钮存在，则删除
+                if (existingButton) {
+                    existingButton.remove();
+                    console.log('[InfoBarSettings] ✅ 数据表格按钮已删除');
+                } else {
+                    console.log('[InfoBarSettings] ℹ️ 数据表格按钮不存在，无需删除');
+                }
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理数据表格切换失败:', error);
+        }
+    }
+
+    // 🔧 修复：移除自动保存机制，避免与SillyTavern保存机制冲突
+    // 所有配置变更只在用户点击"保存"按钮时统一保存
     /**
      * 创建API配置面板
      */
@@ -6596,7 +6757,7 @@ ${'='.repeat(80)}
                     <h4>选择API提供商</h4>
                     <div class="form-group">
                         <label>API提供商</label>
-                        <select id="api-provider" name="apiConfig.provider">
+                        <select id="infobar-api-provider" name="apiConfig.provider">
                             <option value="">请选择提供商</option>
                             <option value="gemini">Google Gemini</option>
                             <option value="localproxy">通用全兼容（Silly Tavern后端）</option>
@@ -6607,11 +6768,11 @@ ${'='.repeat(80)}
                 </div>
 
                 <!-- 接口类型选择 -->
-                <div class="settings-group" id="interface-type-group">
+                <div class="settings-group" id="infobar-interface-type-group">
                     <h4>选择接口类型</h4>
                     <div class="form-group">
                         <label>接口类型</label>
-                        <select id="interface-type" name="apiConfig.format">
+                        <select id="infobar-interface-type" name="apiConfig.format">
                             <option value="">请先选择提供商</option>
                         </select>
                         <small>选择API接口的调用方式</small>
@@ -6623,7 +6784,7 @@ ${'='.repeat(80)}
                     <h4>基础URL</h4>
                     <div class="form-group">
                         <label>API基础URL</label>
-                        <input type="url" id="api-base-url" name="apiConfig.baseUrl" placeholder="https://api.example.com" />
+                        <input type="url" id="infobar-api-base-url" name="apiConfig.baseUrl" placeholder="https://api.example.com" />
                         <small>API服务的基础地址</small>
                     </div>
                 </div>
@@ -6633,7 +6794,7 @@ ${'='.repeat(80)}
                     <h4>API密钥</h4>
                     <div class="form-group">
                         <label>API密钥</label>
-                        <input type="password" id="api-key" name="apiConfig.apiKey" placeholder="输入您的API密钥" />
+                        <input type="password" id="infobar-api-key" name="apiConfig.apiKey" placeholder="输入您的API密钥" />
                         <small>从API提供商获取的访问密钥</small>
                     </div>
                 </div>
@@ -6643,7 +6804,7 @@ ${'='.repeat(80)}
                     <h4>模型选择</h4>
                     <div class="form-group">
                         <label>AI模型</label>
-                        <select id="api-model" name="apiConfig.model">
+                        <select id="infobar-api-model" name="apiConfig.model">
                             <option value="">请先加载模型列表</option>
                         </select>
                         <small>选择要使用的AI模型</small>
@@ -6654,7 +6815,7 @@ ${'='.repeat(80)}
                 <div class="settings-group">
                     <h4>模型列表管理</h4>
                     <div class="form-group">
-                        <button type="button" id="load-models-btn" class="btn btn-primary">🔄 重新加载模型列表</button>
+                        <button type="button" id="infobar-load-models-btn" class="btn btn-primary">🔄 重新加载模型列表</button>
                         <small>重新从API获取最新的模型列表（会消耗API额度）</small>
                     </div>
                 </div>
@@ -6663,13 +6824,13 @@ ${'='.repeat(80)}
                 <div class="settings-group">
                     <h4>测试连接</h4>
                     <div class="form-group">
-                        <button type="button" id="test-connection-btn" class="btn btn-secondary">🔍 测试连接</button>
+                        <button type="button" id="infobar-test-connection-btn" class="btn btn-secondary">🔍 测试连接</button>
                         <small>测试API连接是否正常</small>
                     </div>
-                    
+
                     <!-- 连接状态显示 -->
                     <div class="form-group" style="margin-top: 12px;">
-                        <div id="connection-status" class="connection-status">
+                        <div id="infobar-connection-status" class="connection-status">
                             ⏳ 未测试连接
                         </div>
                         <small>显示API连接和模型加载状态</small>
@@ -6696,11 +6857,6 @@ ${'='.repeat(80)}
                 <div class="settings-group">
                     <h4>连接设置</h4>
                     <div class="form-group">
-                        <label>请求超时 (秒)</label>
-                        <input type="number" name="apiConfig.timeout" min="5" max="300" step="5" value="30" />
-                        <small>API请求的超时时间</small>
-                    </div>
-                    <div class="form-group">
                         <label>重试次数</label>
                         <input type="number" name="apiConfig.retryCount" min="0" max="10" step="1" value="3" />
                         <small>请求失败时的重试次数</small>
@@ -6710,33 +6866,56 @@ ${'='.repeat(80)}
                         <input type="number" id="api-min-message-length" name="apiConfig.minMessageLength" min="0" max="10000" step="50" value="500" />
                         <small>AI消息字数低于此阈值时，跳过信息栏数据生成（默认500字）。设置为0表示不检查字数。</small>
                     </div>
-                    <div class="form-group">
-                        <div class="checkbox-wrapper">
-                            <input type="checkbox" id="api-merge-messages" name="apiConfig.mergeMessages" checked />
-                            <label for="api-merge-messages" class="checkbox-label">合并消息</label>
+                    <!-- 🆕 数据表格功能区域 -->
+                    <div class="settings-group data-table-features-section">
+                        <h4 style="color: #2196F3; margin: 15px 0 10px 0;">📊 数据表格功能</h4>
+
+                        <div class="form-group">
+                            <div class="checkbox-wrapper">
+                                <input type="checkbox" id="api-merge-messages" name="apiConfig.mergeMessages" checked />
+                                <label for="api-merge-messages" class="checkbox-label">合并消息</label>
+                            </div>
+                            <small>启用时将API返回数据合并到AI消息中再解析，禁用时直接解析API返回数据</small>
                         </div>
-                        <small>启用时将API返回数据合并到AI消息中再解析，禁用时直接解析API返回数据</small>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-wrapper">
-                            <input type="checkbox" id="api-include-worldbook" name="apiConfig.includeWorldBook" />
-                            <label for="api-include-worldbook" class="checkbox-label">读取世界书</label>
+
+                        <div class="form-group">
+                            <div class="checkbox-wrapper">
+                                <input type="checkbox" id="infobar-api-include-worldbook" name="apiConfig.includeWorldBook" />
+                                <label for="infobar-api-include-worldbook" class="checkbox-label">读取世界书</label>
+                            </div>
+                            <small>启用时将SillyTavern世界书内容注入到自定义API请求中</small>
                         </div>
-                        <small>启用时将SillyTavern世界书内容注入到自定义API请求中</small>
+
+                        <div class="form-group">
+                            <div class="checkbox-wrapper">
+                                <input type="checkbox" id="api-request-confirmation" name="apiConfig.requestConfirmation" />
+                                <label for="api-request-confirmation" class="checkbox-label">请求询问</label>
+                            </div>
+                            <small>启用后，在调用自定义API生成数据前会弹出确认对话框，询问是否继续生成</small>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="checkbox-wrapper">
+                                <input type="checkbox" id="api-delayed-generation" name="apiConfig.delayedGeneration" />
+                                <label for="api-delayed-generation" class="checkbox-label">延迟生成</label>
+                            </div>
+                            <small>启用后，AI消息生成后不立即执行数据生成，等待N层后再处理</small>
+                        </div>
+
+                        <div class="form-group delayed-generation-config" style="display: none; margin-left: 30px;">
+                            <label>延迟楼层数</label>
+                            <input type="number" id="api-delay-floors" name="apiConfig.delayFloors" min="1" max="10" step="1" value="1" />
+                            <small>设置延迟的楼层数。例如设置为1，则在下一层AI消息完成后，再对上一层消息进行数据生成</small>
+                        </div>
                     </div>
+
+                    <!-- 破甲提示词配置 -->
                     <div class="form-group">
                         <div class="checkbox-wrapper">
                             <input type="checkbox" id="api-enable-armor-breaking" name="apiConfig.enableArmorBreaking" />
                             <label for="api-enable-armor-breaking" class="checkbox-label">启用破甲提示词</label>
                         </div>
                         <small>启用后在智能提示词顶部显示破甲提示词，用于突破AI限制</small>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-wrapper">
-                            <input type="checkbox" id="api-request-confirmation" name="apiConfig.requestConfirmation" />
-                            <label for="api-request-confirmation" class="checkbox-label">请求询问</label>
-                        </div>
-                        <small>启用后，在调用自定义API生成数据前会弹出确认对话框，询问是否继续生成</small>
                     </div>
                 </div>
 
@@ -6787,7 +6966,7 @@ ${'='.repeat(80)}
                         <h4>连接模式</h4>
                         <div class="form-group">
                             <label>连接模式</label>
-                            <select id="vector-api-provider" name="vectorAPIConfig.provider">
+                            <select id="infobar-vector-api-provider" name="vectorAPIConfig.provider">
                                 <option value="">请选择连接模式</option>
                                 <option value="localproxy">通用全兼容（Silly Tavern后端）</option>
                                 <option value="custom">自定义API</option>
@@ -6801,7 +6980,7 @@ ${'='.repeat(80)}
                         <h4>基础URL</h4>
                         <div class="form-group">
                             <label>API基础URL</label>
-                            <input type="url" id="vector-api-base-url" name="vectorAPIConfig.baseUrl" placeholder="http://127.0.0.1:7861/v1" />
+                            <input type="url" id="infobar-vector-api-base-url" name="vectorAPIConfig.baseUrl" placeholder="http://127.0.0.1:7861/v1" />
                             <small>向量化API服务的基础地址（根据连接模式自动设置）</small>
                         </div>
                     </div>
@@ -6811,7 +6990,7 @@ ${'='.repeat(80)}
                         <h4>API密钥</h4>
                         <div class="form-group">
                             <label>API密钥</label>
-                            <input type="password" id="vector-api-key" name="vectorAPIConfig.apiKey" placeholder="sk-..." />
+                            <input type="password" id="infobar-vector-api-key" name="vectorAPIConfig.apiKey" placeholder="sk-..." />
                             <small>访问向量化API所需的密钥</small>
                         </div>
                     </div>
@@ -6821,10 +7000,21 @@ ${'='.repeat(80)}
                         <h4>向量化模型</h4>
                         <div class="form-group">
                             <label>Embedding模型</label>
-                            <select id="vector-api-model" name="vectorAPIConfig.model">
+                            <select id="infobar-vector-api-model" name="vectorAPIConfig.model">
                                 <option value="">-- 请先加载模型列表 --</option>
                             </select>
                             <small>从API获取可用的embedding模型列表</small>
+                        </div>
+                        <div class="form-group">
+                            <label>重排序模型</label>
+                            <select id="infobar-vector-api-rerank-model" name="vectorAPIConfig.rerankModel">
+                                <option value="">-- 不使用重排序 --</option>
+                                <option value="jina-reranker-v2-base-multilingual">Jina Reranker v2 Base (多语言)</option>
+                                <option value="jina-reranker-v1-base-en">Jina Reranker v1 Base (英文)</option>
+                                <option value="bge-reranker-v2-m3">BGE Reranker v2 M3</option>
+                                <option value="bge-reranker-base">BGE Reranker Base</option>
+                            </select>
+                            <small>🎯 重排序模型用于多路召回后的精准筛选（使用相同的API地址和密钥）</small>
                         </div>
                     </div>
 
@@ -6832,7 +7022,7 @@ ${'='.repeat(80)}
                     <div class="settings-group">
                         <h4>模型列表管理</h4>
                         <div class="form-group">
-                            <button type="button" id="load-vector-models-btn" class="btn btn-primary">🔄 重新加载模型列表</button>
+                            <button type="button" id="infobar-load-vector-models-btn" class="btn btn-primary">🔄 重新加载模型列表</button>
                             <small>重新从API获取最新的embedding模型列表（会消耗API额度）</small>
                         </div>
                     </div>
@@ -6841,13 +7031,13 @@ ${'='.repeat(80)}
                     <div class="settings-group">
                         <h4>测试连接</h4>
                         <div class="form-group">
-                            <button type="button" id="test-vector-connection-btn" class="btn btn-secondary">🔍 测试连接</button>
+                            <button type="button" id="infobar-test-vector-connection-btn" class="btn btn-secondary">🔍 测试连接</button>
                             <small>测试向量化API连接是否正常</small>
                         </div>
 
                         <!-- 连接状态显示 -->
                         <div class="form-group" style="margin-top: 12px;">
-                            <div id="vector-model-status" class="connection-status">
+                            <div id="infobar-vector-model-status" class="connection-status">
                                 ⏳ 未测试连接
                             </div>
                             <small>显示向量化API连接和模型加载状态</small>
@@ -6859,13 +7049,27 @@ ${'='.repeat(80)}
                         <h4>高级配置</h4>
                         <div class="form-group">
                             <label>向量维度</label>
-                            <input type="number" id="vector-api-dimensions" name="vectorAPIConfig.dimensions" placeholder="384" min="128" max="4096" />
+                            <input type="number" id="infobar-vector-api-dimensions" name="vectorAPIConfig.dimensions" placeholder="384" min="128" max="4096" />
                             <small>向量的维度大小（通常由模型决定，如text-embedding-ada-002为1536）</small>
                         </div>
                         <div class="form-group">
                             <label>批处理大小</label>
-                            <input type="number" id="vector-api-batch-size" name="vectorAPIConfig.batchSize" placeholder="50" min="1" max="100" />
+                            <input type="number" id="infobar-vector-api-batch-size" name="vectorAPIConfig.batchSize" placeholder="50" min="1" max="100" />
                             <small>批量处理文本时每批的数量</small>
+                        </div>
+                        <div class="form-group">
+                            <label>🎯 重排序模型参数</label>
+                            <textarea id="infobar-vector-api-rerank-params" name="vectorAPIConfig.rerankParams" rows="3" placeholder='{"temperature": 0.7, "max_tokens": 100}' style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                background: var(--theme-bg-primary, #111);
+                                color: var(--theme-text-primary, #ddd);
+                                font-family: monospace;
+                                resize: vertical;
+                            "></textarea>
+                            <small>重排序模型的额外参数（JSON格式，可选）</small>
                         </div>
                     </div>
                 </div>
@@ -7436,90 +7640,7 @@ ${'='.repeat(80)}
                     </div>
                 </div>
 
-                <!-- 🔍 语义搜索设置 -->
-                <div class="setting-row vectorized-memory-section">
-                    <h5 style="color: #2196F3; margin: 15px 0 10px 0; font-size: 14px; font-weight: 600;">🔍 语义搜索</h5>
-                    <div class="setting-group">
-                        <label class="setting-label">
-                            <input type="checkbox" id="memory-vectorized-memory-enabled" />
-                            <span class="checkbox-text">启用语义搜索</span>
-                        </label>
-                        <div class="setting-hint">使用向量化技术进行智能语义搜索 <span style="color: #FF9800;">⚠️ 需要配合深度记忆管理器使用</span></div>
-                    </div>
-                </div>
-
-                <div class="setting-row vectorized-memory-options" id="memory-vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                    <div class="setting-group">
-                        <label class="setting-label" for="memory-vector-storage-mode">向量数据存储方式</label>
-                        <select id="memory-vector-storage-mode" class="setting-select">
-                            <option value="local">聊天文件存储（默认）</option>
-                            <option value="native">原生向量API（推荐）</option>
-                            <option value="custom">自定义向量API</option>
-                        </select>
-                        <div class="setting-hint">选择向量数据的存储位置和方式</div>
-                    </div>
-                </div>
-
-                <div class="setting-row vectorized-memory-options vector-storage-hint" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                    <div class="setting-group">
-                        <div class="setting-hint" id="vector-storage-hint-text" style="padding: 10px; background: #f5f5f5; border-radius: 4px; font-size: 12px;">
-                            <strong>聊天文件存储：</strong>向量数据存储在聊天文件中，无需额外配置，但数据量大时可能影响性能。
-                        </div>
-                    </div>
-                </div>
-
-                <div class="setting-row vectorized-memory-options local-storage-options" id="local-storage-size-limit" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                    <div class="setting-group">
-                        <label class="setting-label" for="memory-vector-storage-size-limit">向量存储大小限制</label>
-                        <div class="input-group">
-                            <input type="number" id="memory-vector-storage-size-limit" min="1" max="100" value="10" />
-                            <span class="input-unit">MB</span>
-                        </div>
-                        <div class="setting-hint">当向量数据超过此大小时，自动删除最旧的数据。设置为0表示不限制。</div>
-                    </div>
-                </div>
-
-                <div class="setting-row vectorized-memory-options custom-vector-api-options" id="custom-vector-api-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                    <div class="setting-group">
-                        <div class="setting-hint" style="padding: 10px; background: rgba(255, 167, 38, 0.1); border-radius: 4px; font-size: 12px; color: #FFA726;">
-                            💡 <strong>向量化API配置已迁移</strong><br>
-                            请前往"自定义API"面板 → 点击"🧠 向量化API"按钮进行配置
-                        </div>
-                    </div>
-                </div>
-
-                <div class="setting-row vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                    <div class="setting-group">
-                        <label class="setting-label" for="memory-vector-engine">向量化引擎</label>
-                        <select id="memory-vector-engine" class="setting-select">
-                            <option value="transformers">Transformers.js (本地)</option>
-                            <option value="openai">OpenAI (在线)</option>
-                        </select>
-                        <div class="setting-hint">选择向量化引擎类型</div>
-                    </div>
-                </div>
-
-                <div class="setting-row vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                    <div class="setting-group">
-                        <label class="setting-label" for="memory-similarity-threshold">相似度阈值</label>
-                        <div class="input-group">
-                            <input type="range" id="memory-similarity-threshold" min="0.1" max="1.0" step="0.05" value="0.7" />
-                            <span class="input-unit" id="memory-similarity-value">70%</span>
-                        </div>
-                        <div class="setting-hint">语义搜索的最低相似度要求</div>
-                    </div>
-                </div>
-
-                <div class="setting-row vectorized-memory-options" style="display: none; margin-left: 20px; border-left: 2px solid #2196F3; padding-left: 15px;">
-                    <div class="setting-group">
-                        <label class="setting-label" for="memory-max-search-results">最大搜索结果</label>
-                        <div class="input-group">
-                            <input type="number" id="memory-max-search-results" min="5" max="50" value="10" />
-                            <span class="input-unit">个结果</span>
-                        </div>
-                        <div class="setting-hint">语义搜索返回的最大结果数量</div>
-                    </div>
-                </div>
+                <!-- 🔧 语义搜索功能已移除，统一使用向量功能面板的AI自动检索 -->
 
                 <!-- 🧠 深度记忆管理设置 -->
                 <div class="setting-row deep-memory-section">
@@ -7794,6 +7915,80 @@ ${'='.repeat(80)}
             </div>
 
             <div class="content-body">
+                <!-- 📁 向量化文件管理中心 -->
+                <div class="vector-file-management-section">
+                    <h4 style="color: #9C27B0; margin: 15px 0 10px 0;">📁 向量化文件管理中心</h4>
+
+                    <!-- 文件类型标签页 -->
+                    <div class="vector-file-tabs" style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 2px solid var(--theme-border-color, #333); padding-bottom: 10px;">
+                        <button class="vector-file-tab active" data-file-type="corpus" style="
+                            flex: 1;
+                            padding: 10px 16px;
+                            background: var(--theme-primary-color, #4CAF50);
+                            color: white;
+                            border: none;
+                            border-radius: 6px 6px 0 0;
+                            cursor: pointer;
+                            font-weight: 600;
+                            transition: all 0.2s;
+                        ">
+                            📚 语料库
+                        </button>
+                        <button class="vector-file-tab" data-file-type="summary" style="
+                            flex: 1;
+                            padding: 10px 16px;
+                            background: var(--theme-bg-secondary, #2a2a2a);
+                            color: var(--theme-text-primary, #ddd);
+                            border: none;
+                            border-radius: 6px 6px 0 0;
+                            cursor: pointer;
+                            font-weight: 600;
+                            transition: all 0.2s;
+                        ">
+                            📝 总结
+                        </button>
+                        <button class="vector-file-tab" data-file-type="memory" style="
+                            flex: 1;
+                            padding: 10px 16px;
+                            background: var(--theme-bg-secondary, #2a2a2a);
+                            color: var(--theme-text-primary, #ddd);
+                            border: none;
+                            border-radius: 6px 6px 0 0;
+                            cursor: pointer;
+                            font-weight: 600;
+                            transition: all 0.2s;
+                        ">
+                            🧠 记忆
+                        </button>
+                    </div>
+
+                    <!-- 作用域切换 -->
+                    <div class="vector-scope-toggle" style="margin-bottom: 15px; padding: 12px; background: var(--theme-bg-secondary, #2a2a2a); border-radius: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span style="font-weight: 600; color: var(--theme-text-primary, #ddd);">作用域模式：</span>
+                                <span id="current-scope-mode" style="color: var(--theme-primary-color, #4CAF50); font-weight: 600; margin-left: 8px;">局部模式</span>
+                            </div>
+                            <button id="toggle-scope-btn" class="btn btn-secondary" style="padding: 6px 16px; font-size: 13px;">
+                                🔄 切换为全局模式
+                            </button>
+                        </div>
+                        <div class="setting-hint" style="margin-top: 8px; font-size: 12px;">
+                            <strong>局部模式：</strong>只在当前聊天中显示和检索 | <strong>全局模式：</strong>在所有聊天中显示和检索
+                        </div>
+                    </div>
+
+                    <!-- 文件列表容器 -->
+                    <div id="vector-file-list-container" style="min-height: 200px; padding: 15px; background: var(--theme-bg-primary, #1a1a1a); border: 1px solid var(--theme-border-color, #333); border-radius: 6px;">
+                        <div style="text-align: center; padding: 40px; color: var(--theme-text-secondary, #888);">
+                            <div style="font-size: 48px; margin-bottom: 16px;">📂</div>
+                            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">暂无向量化文件</div>
+                            <div style="font-size: 13px;">请先上传文件并进行向量化处理</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin: 20px 0; border-top: 2px solid var(--theme-border-color, #333);"></div>
                 <!-- 📚 语料库管理区域 -->
                 <div class="vector-corpus-section">
                     <h4 style="color: #4CAF50; margin: 15px 0 10px 0;">📚 语料库管理</h4>
@@ -8057,8 +8252,20 @@ ${'='.repeat(80)}
 
                     <div id="ai-retrieval-options" style="display: none; margin-top: 15px; padding-left: 20px;">
                         <div class="setting-row">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="enable-multi-recall" style="width: auto;">
+                                <span>🎯 启用多路召回+重排序</span>
+                            </label>
+                            <div class="setting-hint" style="color: #FFA726;">
+                                <strong>智能检索增强：</strong>关键词检索+语义检索双路召回，重排序模型精准筛选，预测性检索提前匹配用户意图
+                                <br>
+                                <small style="color: #888;">需要在"自定义API → 向量化API"中配置重排序模型</small>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
                             <label>检索数量</label>
-                            <input type="number" id="retrieval-top-k" value="3" min="1" max="10" step="1" style="
+                            <input type="number" id="retrieval-top-k" value="10" min="1" max="50" step="1" style="
                                 width: 100%;
                                 padding: 8px;
                                 border: 1px solid var(--theme-border-color, #333);
@@ -8066,12 +8273,12 @@ ${'='.repeat(80)}
                                 background: var(--theme-bg-primary, #111);
                                 color: var(--theme-text-primary, #ddd);
                             ">
-                            <div class="setting-hint">每次检索返回的最相关内容数量</div>
+                            <div class="setting-hint">每次检索返回的最相关内容数量（默认：10）</div>
                         </div>
 
                         <div class="setting-row">
                             <label>相似度阈值</label>
-                            <input type="number" id="retrieval-threshold" value="0.7" min="0" max="1" step="0.05" style="
+                            <input type="number" id="retrieval-threshold" value="0.5" min="0" max="1" step="0.05" style="
                                 width: 100%;
                                 padding: 8px;
                                 border: 1px solid var(--theme-border-color, #333);
@@ -8079,7 +8286,20 @@ ${'='.repeat(80)}
                                 background: var(--theme-bg-primary, #111);
                                 color: var(--theme-text-primary, #ddd);
                             ">
-                            <div class="setting-hint">只返回相似度高于此阈值的内容（0-1）</div>
+                            <div class="setting-hint">只返回相似度高于此阈值的内容（0-1，默认：0.5）</div>
+                        </div>
+
+                        <div class="setting-row" id="rerank-threshold-row" style="display: none;">
+                            <label>重排序阈值</label>
+                            <input type="number" id="rerank-threshold" value="10" min="0" max="100" step="1" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                background: var(--theme-bg-primary, #111);
+                                color: var(--theme-text-primary, #ddd);
+                            ">
+                            <div class="setting-hint">只有当检索数量高于此阈值时才调用重排序模型（默认：10，设为0则总是使用重排序）</div>
                         </div>
 
                         <div class="setting-row">
@@ -8098,6 +8318,64 @@ ${'='.repeat(80)}
                                 <option value="chat_history">聊天历史中</option>
                             </select>
                             <div class="setting-hint">检索到的内容注入到提示词的位置</div>
+                        </div>
+
+                        <div class="setting-row">
+                            <label>检索来源</label>
+                            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                                <label style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="checkbox" id="enable-corpus-retrieval" checked style="width: auto;">
+                                    <span>语料库检索</span>
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="checkbox" id="enable-memory-retrieval" checked style="width: auto;">
+                                    <span>记忆检索</span>
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="checkbox" id="enable-summary-retrieval" checked style="width: auto;">
+                                    <span>总结检索</span>
+                                </label>
+                            </div>
+                            <div class="setting-hint">选择要检索的数据来源</div>
+                        </div>
+
+                        <div class="setting-row">
+                            <label>缓存超时</label>
+                            <input type="number" id="retrieval-cache-timeout" value="5000" min="0" max="60000" step="1000" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                background: var(--theme-bg-primary, #111);
+                                color: var(--theme-text-primary, #ddd);
+                            ">
+                            <div class="setting-hint">查询结果缓存时间（毫秒），避免短时间内重复检索</div>
+                        </div>
+
+                        <div class="setting-row">
+                            <label>注入深度</label>
+                            <input type="number" id="retrieval-injection-depth" value="0" min="0" max="10" step="1" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                background: var(--theme-bg-primary, #111);
+                                color: var(--theme-text-primary, #ddd);
+                            ">
+                            <div class="setting-hint">提示词注入深度（0=最顶层）</div>
+                        </div>
+
+                        <div class="setting-row">
+                            <label>注入优先级</label>
+                            <input type="number" id="retrieval-injection-priority" value="0" min="-100" max="100" step="1" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                background: var(--theme-bg-primary, #111);
+                                color: var(--theme-text-primary, #ddd);
+                            ">
+                            <div class="setting-hint">提示词注入优先级（数值越大优先级越高）</div>
                         </div>
                     </div>
                 </div>
@@ -8574,6 +8852,18 @@ ${'='.repeat(80)}
                                 <div class="setting-hint">保留最新的N个楼层不隐藏</div>
                             </div>
                         </div>
+
+                        <!-- 🆕 传统总结向量化设置 -->
+                        <div class="setting-row" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--theme-border-color, #333);">
+                            <div class="setting-group">
+                                <h5 style="color: #9C27B0; margin: 0 0 10px 0; font-size: 14px; font-weight: 600;">🔮 传统总结向量化</h5>
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-vectorize-summary-enabled" />
+                                    <span class="checkbox-text">启用传统总结向量化</span>
+                                </label>
+                                <div class="setting-hint">启用后，传统总结内容将自动向量化存储到SillyTavern向量API，支持智能检索</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -8715,16 +9005,16 @@ ${'='.repeat(80)}
 
                             <div class="setting-row">
                                 <div class="setting-group">
-                                    <div style="padding: 12px; background: var(--theme-bg-tertiary, #1a1a1a); border: 1px solid var(--theme-border-color, #333); border-radius: 6px;">
+                                    <div style="padding: 12px; background: var(--theme-bg-secondary, #1a1a1a); border: 1px solid var(--theme-border-color, #333); border-radius: 6px;">
                                         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                                             <span style="font-size: 18px;">⚠️</span>
-                                            <span style="font-weight: 500; color: var(--theme-warning-color, #ff9800);">前置条件检查</span>
+                                            <span style="font-weight: 500; color: #ff9800;">前置条件检查</span>
                                         </div>
                                         <div style="font-size: 13px; color: var(--theme-text-secondary, #aaa); line-height: 1.6;">
-                                            向量化总结功能需要启用<strong style="color: var(--theme-primary-color, #4CAF50);">AI记忆总结</strong>功能。<br>
+                                            向量化总结功能需要启用<strong style="color: #4CAF50;">AI记忆总结</strong>功能。<br>
                                             请前往<strong>记忆增强</strong>面板，启用<strong>AI记忆总结</strong>和<strong>消息级别总结</strong>。
                                         </div>
-                                        <div id="ai-memory-status" style="margin-top: 10px; padding: 8px; background: var(--theme-bg-secondary, #2a2a2a); border-radius: 4px; font-size: 12px;">
+                                        <div id="ai-memory-status" style="margin-top: 10px; padding: 8px; background: var(--theme-bg-hover, #2a2a2a); border-radius: 4px; font-size: 12px;">
                                             <span style="color: var(--theme-text-secondary, #888);">状态检查中...</span>
                                         </div>
                                     </div>
@@ -8736,8 +9026,27 @@ ${'='.repeat(80)}
                     <!-- AI记忆总结记录 -->
                     <div class="summary-history-container">
                         <div class="history-section">
-                            <h4>🧠 AI记忆总结记录</h4>
-                            <div class="setting-hint" style="margin-bottom: 15px;">显示待向量化的AI记忆总结，达到总结楼层后将自动向量化</div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <h4 style="margin: 0;">🧠 AI记忆总结记录</h4>
+                                <button id="manual-vectorize-btn" class="btn btn-primary" style="padding: 6px 12px; font-size: 13px; background: var(--theme-primary-color, #4CAF50); border: none; border-radius: 4px; color: white; cursor: pointer; transition: all 0.2s;">
+                                    🔮 手动向量化
+                                </button>
+                            </div>
+                            <div class="setting-hint" style="margin-bottom: 15px;">显示待向量化的AI记忆总结，达到总结楼层后将自动向量化，或点击"手动向量化"按钮立即向量化</div>
+
+                            <!-- 向量化进度条 -->
+                            <div id="vectorize-progress-container" style="display: none; margin-bottom: 15px; padding: 12px; background: var(--theme-bg-tertiary, #1a1a1a); border: 1px solid var(--theme-border-color, #333); border-radius: 6px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                    <span style="font-size: 16px;">⏳</span>
+                                    <span id="vectorize-progress-text" style="font-weight: 500; color: var(--theme-primary-color, #4CAF50);">正在向量化...</span>
+                                </div>
+                                <div style="width: 100%; height: 6px; background: var(--theme-bg-secondary, #2a2a2a); border-radius: 3px; overflow: hidden;">
+                                    <div id="vectorize-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--theme-primary-color, #4CAF50), var(--theme-success-color, #10b981)); transition: width 0.3s;"></div>
+                                </div>
+                                <div id="vectorize-progress-detail" style="margin-top: 8px; font-size: 12px; color: var(--theme-text-secondary, #888);">
+                                    准备中...
+                                </div>
+                            </div>
 
                             <div id="ai-memory-summary-list" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--theme-border-color, #333); border-radius: 6px; padding: 10px; background: var(--theme-bg-secondary, #2a2a2a);">
                                 <div style="text-align: center; padding: 20px; color: var(--theme-text-secondary, #888);">
@@ -9306,64 +9615,39 @@ ${'='.repeat(80)}
             </div>
 
             <div class="settings-group">
-                <h3>配置管理</h3>
+                <h3>预设管理</h3>
 
-                <!-- 导出配置选项 -->
+                <!-- 预设操作按钮 -->
                 <div class="form-group">
-                    <label>导出配置选项</label>
-                    <div class="export-options">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="export-panel-configs" checked />
-                            <span>面板配置（启用状态、自定义子项、自定义面板）</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="export-panel-rules" checked />
-                            <span>面板规则</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="export-field-rules" checked />
-                            <span>字段规则</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="export-theme-settings" />
-                            <span>主题设置</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="export-api-settings" />
-                            <span>API设置</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="export-all-settings" />
-                            <span>所有设置（包含调试、前端显示等）</span>
-                        </label>
+                    <div class="preset-actions-row" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="btn btn-primary" data-action="export-preset" title="导出当前配置为预设">
+                            📤 导出预设
+                        </button>
+                        <button class="btn" data-action="import-preset" title="导入预设配置">
+                            📥 导入预设
+                        </button>
+                        <button class="btn btn-warning" data-action="load-preset-panels" title="重新加载15个预设面板">
+                            🔄 加载预设面板
+                        </button>
+                        <button class="btn btn-warning" data-action="load-preset-rules" title="重新加载15个预设面板的规则">
+                            📋 加载预设规则
+                        </button>
                     </div>
                 </div>
 
-                <!-- 配置文件操作 -->
+                <!-- 预设列表 -->
                 <div class="form-group">
-                    <label>保存为配置名称</label>
-                    <input type="text" id="config-profile-name" placeholder="输入配置名称" />
-                </div>
-                <div class="form-group config-primary-actions">
-                    <button class="btn" data-action="save-profile">保存配置</button>
-                    <button class="btn btn-primary" data-action="export-custom">📤 导出选定配置</button>
-                    <button class="btn" data-action="export">导出全部配置</button>
-                    <button class="btn" data-action="import">导入配置</button>
-                    <button class="btn btn-warning" data-action="open-data-cleanup" title="清理settings.json中的大型数据">🧹 数据清理</button>
+                    <label>已导入的预设</label>
+                    <div id="preset-list-container" class="preset-list-container">
+                        <!-- 预设列表将动态生成 -->
+                    </div>
                 </div>
 
-                <!-- 已保存的配置 -->
+                <!-- 数据清理按钮 -->
                 <div class="form-group">
-                    <label>已保存的配置</label>
-                    <div class="config-row">
-                        <select id="config-profile-select" class="setting-select">
-                            <option value="">请选择一个配置</option>
-                        </select>
-                        <div class="config-row-actions">
-                            <button class="btn btn-small" data-action="load-profile">加载配置</button>
-                            <button class="btn btn-small" data-action="delete-profile">删除配置</button>
-                        </div>
-                    </div>
+                    <button class="btn btn-warning" data-action="open-data-cleanup" title="清理settings.json中的大型数据">
+                        🧹 数据清理工具
+                    </button>
                 </div>
             </div>
 
@@ -9471,6 +9755,34 @@ ${'='.repeat(80)}
                         break;
                     case 'delete-profile':
                         this.deleteSettingsProfile();
+                        break;
+                    case 'export-preset':
+                        console.log('[InfoBarSettings] 🚀 执行导出预设...');
+                        this.exportPreset();
+                        break;
+                    case 'import-preset':
+                        console.log('[InfoBarSettings] 🚀 执行导入预设...');
+                        this.importPreset();
+                        break;
+                    case 'load-preset-panels':
+                        console.log('[InfoBarSettings] 🚀 执行加载预设面板...');
+                        this.loadPresetPanels();
+                        break;
+                    case 'load-preset-rules':
+                        console.log('[InfoBarSettings] 🚀 执行加载预设规则...');
+                        this.loadPresetRules();
+                        break;
+                    case 'switch-preset':
+                        const presetId = actionEl.dataset.presetId;
+                        if (presetId) {
+                            this.switchPreset(presetId);
+                        }
+                        break;
+                    case 'delete-preset':
+                        const deletePresetId = actionEl.dataset.presetId;
+                        if (deletePresetId) {
+                            this.deletePreset(deletePresetId);
+                        }
                         break;
                     case 'export-data':
                         console.log('[InfoBarSettings] 🚀 开始执行导出数据...');
@@ -9582,6 +9894,8 @@ ${'='.repeat(80)}
                 this.initAllBasicPanelCustomSubItems();
                 // 刷新已保存配置下拉
                 this.refreshProfilesSelect();
+                // 🆕 刷新预设列表
+                this.refreshPresetList();
                 // 🆕 初始化世界书配置面板
                 this.initWorldBookConfigPanel();
                 // 应用调试级别到控制台
@@ -9649,12 +9963,12 @@ ${'='.repeat(80)}
 
             console.log(`[InfoBarSettings] 📑 切换到标签页: ${tabName}`);
 
-            // 🔧 新增：切换到NPC管理标签时，刷新NPC列表
+            // 🔧 修复：切换到NPC管理标签时，初始化面板内容
             if (tabName === 'npc') {
-                console.log('[InfoBarSettings] 🔄 切换到NPC管理标签，刷新NPC列表');
-                // 延迟刷新，确保DOM已更新
+                console.log('[InfoBarSettings] 🔄 切换到NPC管理标签，初始化面板内容');
+                // 延迟初始化，确保DOM已更新
                 setTimeout(() => {
-                    this.refreshNPCList();
+                    this.initNPCManagementPanelContent();
                 }, 100);
             }
 
@@ -9663,6 +9977,166 @@ ${'='.repeat(80)}
             this.handleError(error);
         }
     }
+    /**
+     * 🔧 配置完整性检查和自动恢复
+     */
+    async validateAndRestoreConfigs(configs) {
+        try {
+            console.log('[InfoBarSettings] 🔍 开始配置完整性检查...');
+
+            // 定义必需的配置键
+            const requiredConfigs = [
+                'memoryEnhancement',
+                'vectorFunction',
+                'summarySettings',
+                'vectorizedSummary',
+                'apiConfig',
+                'vectorAPIConfig',
+                'customPanels',
+                'promptSettings'
+            ];
+
+            const missingConfigs = [];
+            const restoredConfigs = [];
+
+            // 检查每个必需配置是否存在
+            for (const configKey of requiredConfigs) {
+                // 🔧 修复：只检查配置是否为 undefined 或 null，不检查空对象
+                // 空对象可能是用户有意设置的（比如禁用了所有功能）
+                // 这样可以避免与其他插件的保存操作冲突
+                if (configs[configKey] === undefined || configs[configKey] === null) {
+                    missingConfigs.push(configKey);
+                    console.warn(`[InfoBarSettings] ⚠️ 配置缺失: ${configKey}`);
+
+                    // 尝试从默认配置恢复
+                    const defaultConfig = this.getDefaultConfig(configKey);
+                    if (defaultConfig) {
+                        configs[configKey] = defaultConfig;
+                        restoredConfigs.push(configKey);
+                        console.log(`[InfoBarSettings] ✅ 已恢复默认配置: ${configKey}`);
+                    }
+                }
+            }
+
+            // 如果有配置被恢复，保存到settings.json
+            if (restoredConfigs.length > 0) {
+                console.log(`[InfoBarSettings] 💾 保存恢复的配置: ${restoredConfigs.join(', ')}`);
+                const context = SillyTavern.getContext();
+                if (context.saveSettingsDebounced) {
+                    await context.saveSettingsDebounced();
+                }
+                this.showMessage(`⚠️ 检测到${restoredConfigs.length}个配置缺失，已自动恢复默认值`, 'warning');
+            }
+
+            // 打印配置完整性报告
+            console.log('[InfoBarSettings] 📊 配置完整性报告:', {
+                total: requiredConfigs.length,
+                missing: missingConfigs.length,
+                restored: restoredConfigs.length,
+                missingList: missingConfigs,
+                restoredList: restoredConfigs
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 配置完整性检查失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 获取默认配置
+     */
+    getDefaultConfig(configKey) {
+        const defaults = {
+            memoryEnhancement: {
+                ai: {
+                    enabled: false,
+                    messageLevelSummary: false,
+                    importanceThreshold: 0.5
+                },
+                aiDatabase: {
+                    enabled: false,
+                    autoIndexing: true,
+                    minKeywordLength: 2,
+                    maxKeywordsPerMemory: 10
+                }
+            },
+            vectorFunction: {
+                chunkSize: 500,
+                overlapSize: 50,
+                batchSize: 10,
+                enableSmartAnalysis: false,
+                extractPlotSummary: true,
+                analyzeWritingStyle: true,
+                extractTimeline: true,
+                markKeyScenes: true,
+                extractCharacters: true,
+                enableAIRetrieval: false,
+                enableMultiRecall: false, // 🆕 多路召回+重排序
+                retrievalTopK: 5,
+                retrievalInjectionPosition: 'system'
+            },
+            summarySettings: {
+                autoSummaryEnabled: false,
+                summaryFloorCount: 20,
+                summaryType: 'small',
+                summaryWordCount: 300,
+                injectSummaryEnabled: false,
+                autoHideEnabled: false,
+                autoHideThreshold: 30,
+                autoUploadNewSummary: false,
+                worldBookEntryFormat: 'auto',
+                worldBookCustomEntryName: '',
+                worldBookAddTimestamp: true,
+                worldBookUseContentTags: true,
+                useRegexFilter: false,
+                npcMode: 'panel',
+                npcAiUpdateFloor: 20,
+                npcAiUseRegex: false,
+                useCustomPrompt: false,
+                customPrompt: '',
+                // 🆕 传统总结向量化设置
+                vectorizeSummaryEnabled: false,
+                vectorizeSummaryFloorCount: 100
+            },
+            vectorizedSummary: {
+                settings: {
+                    mode: 'traditional',
+                    enabled: false,
+                    floorCount: 20,
+                    autoHideEnabled: false,
+                    keepRecentCount: 10
+                }
+            },
+            apiConfig: {
+                enabled: false,
+                provider: 'gemini',
+                format: 'native',
+                endpoint: '',
+                apiKey: '',
+                model: 'gemini-pro',
+                temperature: 0.7,
+                maxTokens: 2000,
+                retryCount: 3,
+                extraPrompt: ''
+            },
+            vectorAPIConfig: {
+                provider: 'localproxy',
+                baseUrl: '',
+                apiKey: '',
+                model: '',
+                dimensions: 1536,
+                batchSize: 100
+            },
+            customPanels: {},
+            promptSettings: {
+                mode: 'smart',
+                customContent: ''
+            }
+        };
+
+        return defaults[configKey] || null;
+    }
+
     /**
      * 加载设置到表单
      */
@@ -9680,6 +10154,9 @@ ${'='.repeat(80)}
             }
 
             const configs = extensionSettings['Information bar integration tool'];
+
+            // 🔧 新增：配置完整性检查和自动恢复
+            await this.validateAndRestoreConfigs(configs);
 
             // 特别处理前端显示配置，确保从FrontendDisplayManager读取最新状态
             const fdm = window.SillyTavernInfobar?.modules?.frontendDisplayManager;
@@ -9763,30 +10240,33 @@ ${'='.repeat(80)}
 
             // 🆕 加载向量化API配置
             if (configs.vectorAPIConfig) {
-                console.log('[InfoBarSettings] 🧠 加载向量化API配置...');
+                console.log('[InfoBarSettings] 🧠 加载向量化API配置...', configs.vectorAPIConfig);
 
                 // 加载连接模式
-                const vectorProviderEl = this.modal.querySelector('#vector-api-provider');
+                const vectorProviderEl = this.modal.querySelector('#infobar-vector-api-provider');
                 if (vectorProviderEl && configs.vectorAPIConfig.provider) {
                     vectorProviderEl.value = configs.vectorAPIConfig.provider;
                     // 触发provider change事件以设置默认URL
                     this.handleVectorProviderChange(configs.vectorAPIConfig.provider);
+                    console.log('[InfoBarSettings] ✅ 向量化Provider已加载:', configs.vectorAPIConfig.provider);
                 }
 
                 // 加载基础URL
-                const vectorBaseUrlEl = this.modal.querySelector('#vector-api-base-url');
+                const vectorBaseUrlEl = this.modal.querySelector('#infobar-vector-api-base-url');
                 if (vectorBaseUrlEl && configs.vectorAPIConfig.baseUrl) {
                     vectorBaseUrlEl.value = configs.vectorAPIConfig.baseUrl;
+                    console.log('[InfoBarSettings] ✅ 向量化BaseURL已加载:', configs.vectorAPIConfig.baseUrl);
                 }
 
                 // 加载API密钥
-                const vectorApiKeyEl = this.modal.querySelector('#vector-api-key');
+                const vectorApiKeyEl = this.modal.querySelector('#infobar-vector-api-key');
                 if (vectorApiKeyEl && configs.vectorAPIConfig.apiKey) {
                     vectorApiKeyEl.value = configs.vectorAPIConfig.apiKey;
+                    console.log('[InfoBarSettings] ✅ 向量化API密钥已加载');
                 }
 
                 // 加载向量化模型
-                const vectorModelEl = this.modal.querySelector('#vector-api-model');
+                const vectorModelEl = this.modal.querySelector('#infobar-vector-api-model');
                 if (vectorModelEl && configs.vectorAPIConfig.model) {
                     // 如果模型下拉框为空，先添加保存的模型作为选项
                     if (vectorModelEl.options.length <= 1) {
@@ -9794,20 +10274,40 @@ ${'='.repeat(80)}
                         option.value = configs.vectorAPIConfig.model;
                         option.textContent = configs.vectorAPIConfig.model;
                         vectorModelEl.appendChild(option);
+                        console.log('[InfoBarSettings] ✅ 向量化模型选项已添加:', configs.vectorAPIConfig.model);
                     }
                     vectorModelEl.value = configs.vectorAPIConfig.model;
+                    console.log('[InfoBarSettings] ✅ 向量化模型已加载:', configs.vectorAPIConfig.model);
                 }
 
                 // 加载向量维度
-                const vectorDimensionsEl = this.modal.querySelector('#vector-api-dimensions');
+                const vectorDimensionsEl = this.modal.querySelector('#infobar-vector-api-dimensions');
                 if (vectorDimensionsEl && configs.vectorAPIConfig.dimensions) {
                     vectorDimensionsEl.value = configs.vectorAPIConfig.dimensions;
+                    console.log('[InfoBarSettings] ✅ 向量维度已加载:', configs.vectorAPIConfig.dimensions);
                 }
 
                 // 加载批处理大小
-                const vectorBatchSizeEl = this.modal.querySelector('#vector-api-batch-size');
+                const vectorBatchSizeEl = this.modal.querySelector('#infobar-vector-api-batch-size');
                 if (vectorBatchSizeEl && configs.vectorAPIConfig.batchSize) {
                     vectorBatchSizeEl.value = configs.vectorAPIConfig.batchSize;
+                    console.log('[InfoBarSettings] ✅ 批处理大小已加载:', configs.vectorAPIConfig.batchSize);
+                }
+
+                // 🆕 加载重排序模型
+                const vectorRerankModelEl = this.modal.querySelector('#infobar-vector-api-rerank-model');
+                if (vectorRerankModelEl && configs.vectorAPIConfig.rerankModel) {
+                    vectorRerankModelEl.value = configs.vectorAPIConfig.rerankModel;
+                    console.log('[InfoBarSettings] ✅ 重排序模型已加载:', configs.vectorAPIConfig.rerankModel);
+                }
+
+                // 🆕 加载重排序模型参数
+                const vectorRerankParamsEl = this.modal.querySelector('#infobar-vector-api-rerank-params');
+                if (vectorRerankParamsEl && configs.vectorAPIConfig.rerankParams) {
+                    vectorRerankParamsEl.value = typeof configs.vectorAPIConfig.rerankParams === 'string'
+                        ? configs.vectorAPIConfig.rerankParams
+                        : JSON.stringify(configs.vectorAPIConfig.rerankParams, null, 2);
+                    console.log('[InfoBarSettings] ✅ 重排序模型参数已加载');
                 }
 
                 console.log('[InfoBarSettings] ✅ 向量化API配置加载完成');
@@ -9834,7 +10334,7 @@ ${'='.repeat(80)}
                             this.populateModelSelect(cachedModels);
 
                             // 恢复保存的模型选择
-                            const modelSelect = this.modal.querySelector('#api-model');
+                            const modelSelect = this.modal.querySelector('#infobar-api-model');
                             if (modelSelect && configs.apiConfig.model) {
                                 modelSelect.value = configs.apiConfig.model;
                                 console.log('[InfoBarSettings] ✅ 已恢复保存的模型选择:', configs.apiConfig.model);
@@ -10006,6 +10506,15 @@ ${'='.repeat(80)}
                         console.log(`[InfoBarSettings] 🛡️ 加载设置时：破甲提示词配置区域${element.checked ? '显示' : '隐藏'}`);
                     }
                 }
+
+                // 🆕 特殊处理延迟生成开关 - 加载设置时同步显示/隐藏配置区域
+                if (name === 'apiConfig.delayedGeneration') {
+                    const delayedGenerationConfig = this.modal.querySelector('.delayed-generation-config');
+                    if (delayedGenerationConfig) {
+                        delayedGenerationConfig.style.display = element.checked ? 'block' : 'none';
+                        console.log(`[InfoBarSettings] ⏱️ 加载设置时：延迟生成配置区域${element.checked ? '显示' : '隐藏'}`);
+                    }
+                }
             } else if (element.type === 'radio') {
                 // 🔧 修复：单选框特殊处理，只设置checked状态，不修改value属性
                 if (element.value === value) {
@@ -10021,7 +10530,7 @@ ${'='.repeat(80)}
                 }
             } else {
                 // 特殊处理接口类型选择器
-                if (name === 'apiConfig.format' && element.id === 'interface-type') {
+                if (name === 'apiConfig.format' && element.id === 'infobar-interface-type') {
                     // 如果是接口类型选择器，需要先触发提供商变更来生成选项
                     const providerElement = this.modal.querySelector('[name="apiConfig.provider"]');
                     if (providerElement && providerElement.value) {
@@ -10029,6 +10538,7 @@ ${'='.repeat(80)}
                         // 延迟设置值，等待选项生成
                         setTimeout(() => {
                             element.value = value || '';
+                            console.log('[InfoBarSettings] ✅ 已恢复接口类型:', value);
                         }, 100);
                     } else {
                         element.value = value || '';
@@ -10049,6 +10559,27 @@ ${'='.repeat(80)}
     async saveSettings() {
         try {
             console.log('[InfoBarSettings] 💾 开始保存设置...');
+
+            // 🔧 修复：添加保存锁，防止并发保存导致数据冲突
+            if (this._isSaving) {
+                console.warn('[InfoBarSettings] ⚠️ 正在保存中，跳过重复保存请求');
+                this.showMessage('正在保存中，请稍候...', 'warning');
+                return;
+            }
+
+            // 设置保存锁
+            this._isSaving = true;
+
+            // 🔧 新增：检查缓存，避免重复保存（5秒内）
+            const now = Date.now();
+            if (this._lastSaveTimestamp && (now - this._lastSaveTimestamp) < 5000) {
+                console.log('[InfoBarSettings] ⏸️ 5秒内已保存过，使用缓存，跳过重复保存');
+                // 即使跳过也要隐藏界面和显示成功消息
+                this._isSaving = false; // 释放锁
+                this.hide();
+                this.showMessage('设置保存成功', 'success');
+                return;
+            }
 
             // 收集表单数据
             const formData = this.collectFormData();
@@ -10071,8 +10602,22 @@ ${'='.repeat(80)}
                 extensionSettings['Information bar integration tool'] = {};
             }
 
-            // 保存基础设置表单数据
+            // 🔧 修复：保存基础设置表单数据时，保留apiConfig.modelCache
+            // 避免覆盖模型缓存，防止影响其他插件
+            const existingApiConfig = extensionSettings['Information bar integration tool'].apiConfig || {};
+            const existingModelCache = existingApiConfig.modelCache || {};
+
+            // 合并表单数据
             Object.assign(extensionSettings['Information bar integration tool'], formData);
+
+            // 恢复模型缓存
+            if (extensionSettings['Information bar integration tool'].apiConfig) {
+                if (!extensionSettings['Information bar integration tool'].apiConfig.modelCache) {
+                    extensionSettings['Information bar integration tool'].apiConfig.modelCache = {};
+                }
+                Object.assign(extensionSettings['Information bar integration tool'].apiConfig.modelCache, existingModelCache);
+                console.log('[InfoBarSettings] 🔧 已保留apiConfig.modelCache，避免覆盖模型缓存');
+            }
 
             // 额外收集记忆增强面板的设置（这些控件大多没有 name，需要单独处理）
             if (typeof this.collectMemoryEnhancementFormData === 'function') {
@@ -10166,8 +10711,50 @@ ${'='.repeat(80)}
                 }
             }
 
-            // 触发 SillyTavern 保存设置
-            context.saveSettingsDebounced();
+            // 🔧 新增：触发保存前事件，允许其他模块保存自己的配置
+            if (this.eventSystem) {
+                this.eventSystem.emit('settings:before-save', {
+                    extensionSettings: extensionSettings['Information bar integration tool'],
+                    timestamp: now
+                });
+            }
+
+            // 🔧 修复：只调用一次保存，避免与SillyTavern保存机制冲突
+            // 使用防抖保存，让SillyTavern自己决定何时真正写入文件
+            if (context.saveSettingsDebounced) {
+                await context.saveSettingsDebounced();
+                console.log('[InfoBarSettings] 💾 已触发配置保存（防抖）');
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ saveSettingsDebounced不可用');
+            }
+
+            // 🔧 新增：更新缓存时间戳
+            this._lastSaveTimestamp = now;
+
+            // 🔧 新增：保存配置缓存（用于验证）
+            this._savedConfigsCache = JSON.parse(JSON.stringify(extensionSettings['Information bar integration tool']));
+
+            console.log('[InfoBarSettings] 💾 配置已持久化到settings.json');
+
+            // 🔧 新增：验证配置完整性
+            await this.validateConfigIntegrity();
+
+            // 🔧 修复：验证关键配置是否成功保存
+            const savedConfig = extensionSettings['Information bar integration tool'];
+            const missingConfigs = [];
+            if (!savedConfig.memoryEnhancement) missingConfigs.push('memoryEnhancement');
+            if (!savedConfig.vectorFunction) missingConfigs.push('vectorFunction');
+            if (!savedConfig.summarySettings) missingConfigs.push('summarySettings');
+            if (!savedConfig.vectorizedSummary) missingConfigs.push('vectorizedSummary');
+            if (!savedConfig.vectorAPIConfig) missingConfigs.push('vectorAPIConfig');
+            if (!savedConfig.apiConfig) missingConfigs.push('apiConfig');
+
+            if (missingConfigs.length > 0) {
+                console.error('[InfoBarSettings] ❌ 以下配置未成功保存:', missingConfigs);
+                this.showMessage(`⚠️ 部分配置可能未保存: ${missingConfigs.join(', ')}`, 'warning');
+            } else {
+                console.log('[InfoBarSettings] ✅ 所有关键配置已验证保存');
+            }
 
             // 🔧 修复：清除字段映射缓存，确保下次获取时重新生成最新映射
             this._cachedCompleteMapping = null;
@@ -10221,6 +10808,118 @@ ${'='.repeat(80)}
             console.error('[InfoBarSettings] ❌ 保存设置失败:', error);
             this.showMessage('保存设置失败: ' + error.message, 'error');
             this.handleError(error);
+        } finally {
+            // 🔧 修复：无论成功或失败，都要释放保存锁
+            this._isSaving = false;
+            console.log('[InfoBarSettings] 🔓 保存锁已释放');
+        }
+    }
+
+    /**
+     * 🔧 新增：验证配置完整性
+     * 确保所有面板的配置都正确保存到settings.json中
+     */
+    async validateConfigIntegrity() {
+        try {
+            console.log('[InfoBarSettings] 🔍 开始验证配置完整性...');
+
+            const context = SillyTavern.getContext();
+            const savedSettings = context.extensionSettings['Information bar integration tool'];
+
+            const validationReport = {
+                timestamp: Date.now(),
+                checks: [],
+                warnings: [],
+                errors: [],
+                totalChecks: 0,
+                passedChecks: 0,
+                failedChecks: 0
+            };
+
+            // 1. 验证基础设置
+            validationReport.checks.push('基础设置');
+            if (savedSettings.enabled !== undefined) {
+                validationReport.passedChecks++;
+            } else {
+                validationReport.failedChecks++;
+                validationReport.errors.push('基础设置: enabled 未保存');
+            }
+
+            // 2. 验证记忆增强配置
+            validationReport.checks.push('记忆增强配置');
+            if (savedSettings.memoryEnhancement) {
+                const memoryKeys = ['ai', 'aiDatabase', 'vector', 'deep'];
+                let memoryValid = true;
+                for (const key of memoryKeys) {
+                    if (!savedSettings.memoryEnhancement[key]) {
+                        validationReport.warnings.push(`记忆增强配置: ${key} 可能未保存`);
+                        memoryValid = false;
+                    }
+                }
+                if (memoryValid) {
+                    validationReport.passedChecks++;
+                }
+            } else {
+                validationReport.failedChecks++;
+                validationReport.warnings.push('记忆增强配置整体未保存');
+            }
+
+            // 3. 验证向量功能配置
+            validationReport.checks.push('向量功能配置');
+            if (savedSettings.vectorFunction) {
+                validationReport.passedChecks++;
+            } else {
+                validationReport.warnings.push('向量功能配置未保存（可能未使用）');
+            }
+
+            // 4. 验证总结配置
+            validationReport.checks.push('传统总结配置');
+            if (savedSettings.summarySettings) {
+                validationReport.passedChecks++;
+            } else {
+                validationReport.warnings.push('传统总结配置未保存');
+            }
+
+            // 5. 验证向量化总结配置
+            validationReport.checks.push('向量化总结配置');
+            if (savedSettings.vectorizedSummary?.settings) {
+                validationReport.passedChecks++;
+            } else {
+                validationReport.warnings.push('向量化总结配置未保存');
+            }
+
+            // 6. 验证自定义面板配置
+            validationReport.checks.push('自定义面板配置');
+            if (savedSettings.customPanels && Object.keys(savedSettings.customPanels).length > 0) {
+                validationReport.passedChecks++;
+                console.log('[InfoBarSettings] ✅ 自定义面板配置已保存:', Object.keys(savedSettings.customPanels).length, '个面板');
+            } else {
+                validationReport.warnings.push('自定义面板配置为空');
+            }
+
+            validationReport.totalChecks = validationReport.checks.length;
+
+            // 输出验证报告
+            console.log('[InfoBarSettings] 📊 配置完整性验证报告:', {
+                总检查项: validationReport.totalChecks,
+                通过: validationReport.passedChecks,
+                警告数: validationReport.warnings.length,
+                错误数: validationReport.errors.length
+            });
+
+            if (validationReport.warnings.length > 0) {
+                console.warn('[InfoBarSettings] ⚠️ 配置验证警告:', validationReport.warnings);
+            }
+
+            if (validationReport.warnings.length === 0) {
+                console.log('[InfoBarSettings] ✅ 配置完整性验证通过！所有配置已正确保存');
+            }
+
+            return validationReport;
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 配置完整性验证失败:', error);
+            return null;
         }
     }
 
@@ -10335,21 +11034,7 @@ ${'='.repeat(80)}
                 }
             }
 
-            // 2. 同步VectorizedMemoryRetrieval设置
-            if (modules.vectorizedMemoryRetrieval && memoryEnhancementData.vector) {
-                const storageMode = memoryEnhancementData.vector.storageMode || 'local';
-                await modules.vectorizedMemoryRetrieval.updateSettings({
-                    enabled: memoryEnhancementData.vector.enabled,
-                    vectorEngine: memoryEnhancementData.vector.vectorEngine,
-                    similarityThreshold: memoryEnhancementData.vector.similarityThreshold,
-                    maxResults: memoryEnhancementData.vector.maxResults,
-                    useLocalStorage: storageMode === 'local',
-                    useNativeVectorAPI: storageMode === 'native',
-                    useCustomVectorAPI: storageMode === 'custom',
-                    customVectorAPI: memoryEnhancementData.vector.customAPI || {}
-                });
-                console.log('[InfoBarSettings] ✅ VectorizedMemoryRetrieval设置已同步');
-            }
+            // 🔧 VectorizedMemoryRetrieval同步已移除，统一使用向量功能面板的AI自动检索
 
             // 3. 同步IntelligentMemoryClassifier设置
             if (modules.intelligentMemoryClassifier && memoryEnhancementData.classifier) {
@@ -10471,19 +11156,7 @@ ${'='.repeat(80)}
                     maxSearchResults: getNum('memory-ai-db-max-results') || 20,
                     minImportance: getNum('memory-ai-db-min-importance') || 0.5
                 },
-                vector: {
-                    enabled: getBool('memory-vectorized-memory-enabled'),
-                    vectorEngine: getVal('memory-vector-engine'),
-                    similarityThreshold: getNum('memory-similarity-threshold'),
-                    maxResults: getNum('memory-max-search-results'),
-                    storageMode: getVal('memory-vector-storage-mode') || 'local',
-                    storageSizeLimit: getNum('memory-vector-storage-size-limit') || 10,
-                    customAPI: {
-                        url: getVal('memory-custom-vector-api-url') || '',
-                        apiKey: getVal('memory-custom-vector-api-key') || '',
-                        model: getVal('memory-custom-vector-model') || ''
-                    }
-                },
+                // 🔧 vector配置已移除，统一使用向量功能面板的AI自动检索
                 deep: {
                     enabled: getBool('memory-deep-memory-enabled'),
                     autoMemoryMigration: getBool('memory-auto-memory-migration'),
@@ -19584,7 +20257,7 @@ ${'='.repeat(80)}
      */
     populateModelSelect(models) {
         try {
-            const modelSelect = this.modal.querySelector('#api-model');
+            const modelSelect = this.modal.querySelector('#infobar-api-model');
             if (!modelSelect) {
                 console.warn('[InfoBarSettings] ⚠️ 模型选择框未找到');
                 return;
@@ -19614,7 +20287,7 @@ ${'='.repeat(80)}
      */
     showModelLoadingHint() {
         try {
-            const connectionStatus = this.modal.querySelector('#connection-status');
+            const connectionStatus = this.modal.querySelector('#infobar-connection-status');
             if (connectionStatus) {
                 connectionStatus.innerHTML = `
                     <div style="color: #f59e0b;">
@@ -19625,7 +20298,7 @@ ${'='.repeat(80)}
             }
 
             // 同时更新模型选择框的提示
-            const modelSelect = this.modal.querySelector('#api-model');
+            const modelSelect = this.modal.querySelector('#infobar-api-model');
             if (modelSelect) {
                 modelSelect.innerHTML = '<option value="">请先加载模型列表</option>';
             }
@@ -19640,9 +20313,16 @@ ${'='.repeat(80)}
      */
     async loadModelList() {
         console.log('[InfoBarSettings] 开始加载模型列表');
-        const loadModelsBtn = document.getElementById('load-models-btn');
-        const modelSelect = document.getElementById('api-model');
-        const connectionStatus = document.getElementById('connection-status');
+
+        // 🔧 修复：使用this.modal限定查询范围，避免被其他插件影响
+        if (!this.modal) {
+            console.error('[InfoBarSettings] ❌ 模态框未初始化');
+            return;
+        }
+
+        const loadModelsBtn = this.modal.querySelector('#infobar-load-models-btn');
+        const modelSelect = this.modal.querySelector('#infobar-api-model');
+        const connectionStatus = this.modal.querySelector('#infobar-connection-status');
 
         if (loadModelsBtn) {
             loadModelsBtn.textContent = '🔄 加载中...';
@@ -19650,11 +20330,11 @@ ${'='.repeat(80)}
         }
 
         try {
-            // 获取当前配置
-            const provider = document.getElementById('api-provider')?.value;
-            const interfaceType = document.getElementById('interface-type')?.value;
-            const baseUrl = document.getElementById('api-base-url')?.value;
-            const apiKey = document.getElementById('api-key')?.value;
+            // 🔧 修复：使用this.modal限定查询范围，并使用正确的ID前缀
+            const provider = this.modal.querySelector('#infobar-api-provider')?.value;
+            const interfaceType = this.modal.querySelector('#infobar-interface-type')?.value;
+            const baseUrl = this.modal.querySelector('#infobar-api-base-url')?.value;
+            const apiKey = this.modal.querySelector('#infobar-api-key')?.value;
 
             if (!provider || !interfaceType || !baseUrl || !apiKey) {
                 throw new Error('请先完成API配置（提供商、接口类型、基础URL、API密钥）');
@@ -19796,12 +20476,12 @@ ${'='.repeat(80)}
             const csrfData = await csrfResponse.json();
             const csrfToken = csrfData.token;
 
-            // 构建状态检查请求
+            // 🔧 修复：构建状态检查请求 - 使用openai作为chat_completion_source
             const statusUrl = `${window.location.origin}/api/backends/chat-completions/status`;
             const requestBody = {
                 reverse_proxy: baseUrl,
                 proxy_password: apiKey,
-                chat_completion_source: "custom",
+                chat_completion_source: "openai",  // 🔧 修复：改为openai以正确获取模型列表
                 custom_url: baseUrl,
                 custom_include_headers: ""
             };
@@ -19809,7 +20489,8 @@ ${'='.repeat(80)}
             console.log('[InfoBarSettings] 📊 本地反代状态检查:', {
                 statusUrl,
                 reverseProxy: baseUrl,
-                hasPassword: !!apiKey
+                hasPassword: !!apiKey,
+                source: 'openai'  // 🔧 新增：显示使用的source
             });
 
             const response = await fetch(statusUrl, {
@@ -20113,9 +20794,15 @@ ${'='.repeat(80)}
     handleProviderChange(provider) {
         console.log('[InfoBarSettings] API提供商变更:', provider);
 
-        const interfaceTypeSelect = document.getElementById('interface-type');
-        const interfaceTypeGroup = document.getElementById('interface-type-group');
-        const baseUrlInput = document.getElementById('api-base-url');
+        // 🔧 修复：使用this.modal限定查询范围，避免被其他插件影响
+        if (!this.modal) {
+            console.error('[InfoBarSettings] ❌ 模态框未初始化');
+            return;
+        }
+
+        const interfaceTypeSelect = this.modal.querySelector('#infobar-interface-type');
+        const interfaceTypeGroup = this.modal.querySelector('#infobar-interface-type-group');
+        const baseUrlInput = this.modal.querySelector('#infobar-api-base-url');
 
         if (!interfaceTypeSelect || !baseUrlInput) return;
 
@@ -20175,8 +20862,14 @@ ${'='.repeat(80)}
     handleInterfaceTypeChange(interfaceType) {
         console.log('[InfoBarSettings] 接口类型变更:', interfaceType);
 
-        const provider = document.getElementById('api-provider')?.value;
-        const baseUrlInput = document.getElementById('api-base-url');
+        // 🔧 修复：使用this.modal限定查询范围，避免被其他插件影响
+        if (!this.modal) {
+            console.error('[InfoBarSettings] ❌ 模态框未初始化');
+            return;
+        }
+
+        const provider = this.modal.querySelector('#infobar-api-provider')?.value;
+        const baseUrlInput = this.modal.querySelector('#infobar-api-base-url');
 
         if (!baseUrlInput) return;
 
@@ -20206,7 +20899,13 @@ ${'='.repeat(80)}
     handleVectorProviderChange(provider) {
         console.log('[InfoBarSettings] 向量化API提供商变更:', provider);
 
-        const baseUrlInput = document.getElementById('vector-api-base-url');
+        // 🔧 修复：使用this.modal限定查询范围，避免被其他插件影响
+        if (!this.modal) {
+            console.error('[InfoBarSettings] ❌ 模态框未初始化');
+            return;
+        }
+
+        const baseUrlInput = this.modal.querySelector('#infobar-vector-api-base-url');
         if (!baseUrlInput) return;
 
         // 根据连接模式设置默认URL（用户可以自行修改）
@@ -20312,8 +21011,14 @@ ${'='.repeat(80)}
     async testConnection() {
         console.log('[InfoBarSettings] 开始测试API连接');
 
-        const testBtn = document.getElementById('test-connection-btn');
-        const connectionStatus = document.getElementById('connection-status');
+        // 🔧 修复：使用this.modal限定查询范围，避免被其他插件影响
+        if (!this.modal) {
+            console.error('[InfoBarSettings] ❌ 模态框未初始化');
+            return;
+        }
+
+        const testBtn = this.modal.querySelector('#infobar-test-connection-btn');
+        const connectionStatus = this.modal.querySelector('#infobar-connection-status');
 
         if (testBtn) {
             testBtn.textContent = '🔄 测试中...';
@@ -20322,10 +21027,10 @@ ${'='.repeat(80)}
 
         try {
             // 获取配置
-            const provider = document.getElementById('api-provider')?.value;
-            const interfaceType = document.getElementById('interface-type')?.value;
-            const baseUrl = document.getElementById('api-base-url')?.value;
-            const apiKey = document.getElementById('api-key')?.value;
+            const provider = this.modal.querySelector('#infobar-api-provider')?.value;
+            const interfaceType = this.modal.querySelector('#infobar-interface-type')?.value;
+            const baseUrl = this.modal.querySelector('#infobar-api-base-url')?.value;
+            const apiKey = this.modal.querySelector('#infobar-api-key')?.value;
 
             if (!provider || !interfaceType || !baseUrl || !apiKey) {
                 throw new Error('请完成所有必填配置项');
@@ -20495,9 +21200,16 @@ ${'='.repeat(80)}
     async loadVectorModelList() {
         console.log('[InfoBarSettings] 🔄 开始加载向量化API模型列表');
 
-        const loadBtn = document.getElementById('load-vector-models-btn');
-        const modelSelect = document.getElementById('vector-api-model');
-        const statusDiv = document.getElementById('vector-model-status');
+        // 🔧 修复：使用this.modal限定查询范围，避免被其他插件影响
+        if (!this.modal) {
+            console.error('[InfoBarSettings] ❌ 模态框未初始化');
+            return;
+        }
+
+        const loadBtn = this.modal.querySelector('#infobar-load-vector-models-btn');
+        const modelSelect = this.modal.querySelector('#infobar-vector-api-model');
+        const rerankModelSelect = this.modal.querySelector('#infobar-vector-api-rerank-model'); // 🆕 重排序模型下拉框
+        const statusDiv = this.modal.querySelector('#infobar-vector-model-status');
 
         if (loadBtn) {
             loadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 加载中...';
@@ -20506,12 +21218,12 @@ ${'='.repeat(80)}
 
         try {
             // 获取配置
-            const provider = document.getElementById('vector-api-provider')?.value;
-            const baseUrl = document.getElementById('vector-api-base-url')?.value;
-            const apiKey = document.getElementById('vector-api-key')?.value;
+            const provider = this.modal.querySelector('#infobar-vector-api-provider')?.value;
+            const baseUrl = this.modal.querySelector('#infobar-vector-api-base-url')?.value;
+            const apiKey = this.modal.querySelector('#infobar-vector-api-key')?.value;
 
-            if (!provider || !baseUrl || !apiKey) {
-                throw new Error('请先完成向量化API配置（连接模式、基础URL、API密钥）');
+            if (!baseUrl || !apiKey) {
+                throw new Error('请先完成向量化API配置（基础URL、API密钥）');
             }
 
             // 使用CustomVectorAPIAdapter获取模型列表
@@ -20521,32 +21233,56 @@ ${'='.repeat(80)}
                 apiKey: apiKey
             });
 
-            // 获取embedding模型列表
-            const models = await adapter.getEmbeddingModels();
+            // 🔄 获取embedding模型列表
+            const embeddingModels = await adapter.getEmbeddingModels();
 
-            if (!models || models.length === 0) {
+            if (!embeddingModels || embeddingModels.length === 0) {
                 throw new Error('未找到可用的embedding模型');
             }
 
-            // 更新下拉框
+            // 🔄 获取reranker模型列表
+            const rerankModels = await adapter.getRerankModels();
+
+            // 更新embedding模型下拉框
             if (modelSelect) {
                 modelSelect.innerHTML = '';
-                models.forEach(model => {
+                embeddingModels.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model.id;
                     option.textContent = model.id;
                     modelSelect.appendChild(option);
                 });
 
-                console.log('[InfoBarSettings] ✅ 成功加载', models.length, '个embedding模型');
+                console.log('[InfoBarSettings] ✅ 成功加载', embeddingModels.length, '个embedding模型');
+            }
+
+            // 🆕 更新reranker模型下拉框
+            if (rerankModelSelect) {
+                // 保留"不使用重排序"选项
+                const currentValue = rerankModelSelect.value;
+                rerankModelSelect.innerHTML = '<option value="">-- 不使用重排序 --</option>';
+
+                rerankModels.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.id;
+                    option.textContent = model.id;
+                    rerankModelSelect.appendChild(option);
+                });
+
+                // 恢复之前的选择
+                if (currentValue && rerankModels.some(m => m.id === currentValue)) {
+                    rerankModelSelect.value = currentValue;
+                }
+
+                console.log('[InfoBarSettings] ✅ 成功加载', rerankModels.length, '个reranker模型');
             }
 
             // 显示成功状态
             if (statusDiv) {
-                statusDiv.innerHTML = `<span style="color: #4CAF50;">✅ 成功加载 ${models.length} 个模型</span>`;
+                statusDiv.innerHTML = `<span style="color: #4CAF50;">✅ 成功加载 ${embeddingModels.length} 个embedding模型，${rerankModels.length} 个reranker模型</span>`;
             }
 
-            this.showNotification(`✅ 成功加载 ${models.length} 个向量化模型`, 'success');
+            this.showNotification(`✅ 成功加载 ${embeddingModels.length} 个embedding模型，${rerankModels.length} 个reranker模型`, 'success');
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 加载向量化模型列表失败:', error);
@@ -20571,8 +21307,14 @@ ${'='.repeat(80)}
     async testVectorConnection() {
         console.log('[InfoBarSettings] 🔍 开始测试向量化API连接');
 
-        const testBtn = document.getElementById('test-vector-connection-btn');
-        const statusDiv = document.getElementById('vector-model-status');
+        // 🔧 修复：使用this.modal限定查询范围，避免被其他插件影响
+        if (!this.modal) {
+            console.error('[InfoBarSettings] ❌ 模态框未初始化');
+            return;
+        }
+
+        const testBtn = this.modal.querySelector('#infobar-test-vector-connection-btn');
+        const statusDiv = this.modal.querySelector('#infobar-vector-model-status');
 
         if (testBtn) {
             testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 测试中...';
@@ -20581,13 +21323,13 @@ ${'='.repeat(80)}
 
         try {
             // 获取配置
-            const provider = document.getElementById('vector-api-provider')?.value;
-            const baseUrl = document.getElementById('vector-api-base-url')?.value;
-            const apiKey = document.getElementById('vector-api-key')?.value;
-            const model = document.getElementById('vector-api-model')?.value;
+            const provider = this.modal.querySelector('#infobar-vector-api-provider')?.value;
+            const baseUrl = this.modal.querySelector('#infobar-vector-api-base-url')?.value;
+            const apiKey = this.modal.querySelector('#infobar-vector-api-key')?.value;
+            const model = this.modal.querySelector('#infobar-vector-api-model')?.value;
 
-            if (!provider || !baseUrl || !apiKey) {
-                throw new Error('请先完成向量化API配置');
+            if (!baseUrl || !apiKey) {
+                throw new Error('请先完成向量化API配置（基础URL、API密钥）');
             }
 
             if (!model) {
@@ -20620,7 +21362,7 @@ ${'='.repeat(80)}
             this.showNotification(`✅ 向量化API连接成功！维度: ${vector.length}`, 'success');
 
             // 自动更新维度配置
-            const dimensionsInput = document.getElementById('vector-api-dimensions');
+            const dimensionsInput = this.modal.querySelector('#infobar-vector-api-dimensions');
             if (dimensionsInput) {
                 dimensionsInput.value = vector.length;
             }
@@ -20769,8 +21511,17 @@ ${'='.repeat(80)}
             console.log('[InfoBarSettings] 🤖 主API生成完成，开始处理信息栏数据...');
 
             // 🔧 优化：使用任务队列处理，避免频繁并发调用
-            if (this.customAPITaskQueue) {
-                console.log('[InfoBarSettings] 📋 使用任务队列处理信息栏数据生成');
+            // 🆕 修复：通过handleMainAPIResponse处理，以支持延迟生成功能
+            if (this.customAPITaskQueue && typeof this.customAPITaskQueue.handleMainAPIResponse === 'function') {
+                console.log('[InfoBarSettings] 📋 使用任务队列处理信息栏数据生成（支持延迟生成）');
+                // 构造消息对象，模拟message_received事件的数据格式
+                await this.customAPITaskQueue.handleMainAPIResponse({
+                    mes: cleanedMessage,
+                    is_user: false
+                });
+            } else if (this.customAPITaskQueue) {
+                // 回退到直接添加任务（不支持延迟生成）
+                console.log('[InfoBarSettings] 📋 使用任务队列处理信息栏数据生成（直接添加）');
                 this.customAPITaskQueue.addTask({
                     type: 'INFOBAR_DATA',
                     data: { content: cleanedMessage },
@@ -24051,6 +24802,12 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 useTagsEl.checked = settings.worldBookUseContentTags !== false;
             }
 
+            // 🆕 加载传统总结向量化设置
+            const vectorizeSummaryEnabled = this.modal.querySelector('#content-vectorize-summary-enabled');
+            if (vectorizeSummaryEnabled) {
+                vectorizeSummaryEnabled.checked = settings.vectorizeSummaryEnabled || false;
+            }
+
             // 🆕 新增：加载自定义提示词设置
             const useCustomPrompt = this.modal.querySelector('#content-use-custom-prompt');
             if (useCustomPrompt) {
@@ -24644,6 +25401,16 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 });
             }
 
+            // 🆕 传统总结向量化复选框事件（已移除楼层间隔UI，无需特殊处理）
+
+            // 🆕 手动向量化按钮事件
+            const manualVectorizeBtn = this.modal.querySelector('#manual-vectorize-btn');
+            if (manualVectorizeBtn) {
+                manualVectorizeBtn.addEventListener('click', async () => {
+                    await this.handleManualVectorize();
+                });
+            }
+
             // 🔧 修复：设置事件绑定标志，防止重复绑定
             this._summaryEventsbound = true;
 
@@ -24830,6 +25597,8 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             console.error('[InfoBarSettings] ❌ 处理自动隐藏状态变化失败:', error);
         }
     }
+
+
 
     /**
      * 🔧 新增：检查并执行自动隐藏楼层
@@ -25294,8 +26063,8 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                     extensionSettings['Information bar integration tool'] = {};
                 }
 
-                // 保存总结设置到扩展设置
-                Object.assign(extensionSettings['Information bar integration tool'], settings);
+                // 🔧 修复：保存总结设置到summarySettings子对象
+                extensionSettings['Information bar integration tool'].summarySettings = settings;
 
                 // 触发SillyTavern保存
                 if (context.saveSettingsDebounced) {
@@ -25332,7 +26101,10 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             worldBookEntryFormat: 'auto',
             worldBookCustomEntryName: '',
             worldBookAddTimestamp: true,
-            worldBookUseContentTags: true
+            worldBookUseContentTags: true,
+            // 🆕 传统总结向量化设置
+            vectorizeSummaryEnabled: false,
+            vectorizeSummaryFloorCount: 100
         };
 
         try {
@@ -25433,6 +26205,12 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 settings.worldBookUseContentTags = useTagsEl.checked !== false;
             }
 
+            // 🆕 获取传统总结向量化设置
+            const vectorizeSummaryEnabled = this.modal.querySelector('#content-vectorize-summary-enabled');
+            if (vectorizeSummaryEnabled) {
+                settings.vectorizeSummaryEnabled = vectorizeSummaryEnabled.checked;
+            }
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 获取当前总结设置失败:', error);
         }
@@ -25499,39 +26277,56 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
         try {
             // 1. 收集连接模式
-            const providerEl = this.modal?.querySelector('#vector-api-provider');
+            const providerEl = this.modal?.querySelector('#infobar-vector-api-provider');
             if (providerEl) {
                 config.provider = providerEl.value;
             }
 
             // 2. 收集基础URL
-            const baseUrlEl = this.modal?.querySelector('#vector-api-base-url');
+            const baseUrlEl = this.modal?.querySelector('#infobar-vector-api-base-url');
             if (baseUrlEl) {
                 config.baseUrl = baseUrlEl.value;
             }
 
             // 3. 收集API密钥
-            const apiKeyEl = this.modal?.querySelector('#vector-api-key');
+            const apiKeyEl = this.modal?.querySelector('#infobar-vector-api-key');
             if (apiKeyEl) {
                 config.apiKey = apiKeyEl.value;
             }
 
             // 4. 收集向量化模型
-            const modelEl = this.modal?.querySelector('#vector-api-model');
+            const modelEl = this.modal?.querySelector('#infobar-vector-api-model');
             if (modelEl) {
                 config.model = modelEl.value;
             }
 
             // 5. 收集向量维度
-            const dimensionsEl = this.modal?.querySelector('#vector-api-dimensions');
+            const dimensionsEl = this.modal?.querySelector('#infobar-vector-api-dimensions');
             if (dimensionsEl) {
                 config.dimensions = parseInt(dimensionsEl.value) || 384;
             }
 
             // 6. 收集批处理大小
-            const batchSizeEl = this.modal?.querySelector('#vector-api-batch-size');
+            const batchSizeEl = this.modal?.querySelector('#infobar-vector-api-batch-size');
             if (batchSizeEl) {
                 config.batchSize = parseInt(batchSizeEl.value) || 50;
+            }
+
+            // 7. 🆕 收集重排序模型
+            const rerankModelEl = this.modal?.querySelector('#infobar-vector-api-rerank-model');
+            if (rerankModelEl) {
+                config.rerankModel = rerankModelEl.value;
+            }
+
+            // 8. 🆕 收集重排序模型参数
+            const rerankParamsEl = this.modal?.querySelector('#infobar-vector-api-rerank-params');
+            if (rerankParamsEl && rerankParamsEl.value.trim()) {
+                try {
+                    config.rerankParams = JSON.parse(rerankParamsEl.value);
+                } catch (error) {
+                    console.warn('[InfoBarSettings] ⚠️ 重排序参数JSON解析失败，保存为字符串:', error);
+                    config.rerankParams = rerankParamsEl.value;
+                }
             }
 
             console.log('[InfoBarSettings] 🧠 收集到向量化API配置:', config);
@@ -34898,7 +35693,7 @@ ${dataExamples}
     bindWorldBookEvents() {
         try {
             // 绑定世界书启用复选框事件
-            const worldBookCheckbox = this.modal.querySelector('#api-include-worldbook');
+            const worldBookCheckbox = this.modal.querySelector('#infobar-api-include-worldbook');
             if (worldBookCheckbox) {
                 worldBookCheckbox.addEventListener('change', (e) => {
                     this.handleWorldBookToggle(e.target.checked);
@@ -34951,7 +35746,7 @@ ${dataExamples}
                 };
             }
 
-            const worldBookCheckbox = this.modal.querySelector('#api-include-worldbook');
+            const worldBookCheckbox = this.modal.querySelector('#infobar-api-include-worldbook');
             const enabled = worldBookCheckbox ? worldBookCheckbox.checked : false;
 
             return {
@@ -35584,7 +36379,55 @@ ${dataExamples}
     }
 
     /**
-     * 🔍 处理向量化引擎变化
+     * 🔧 新增：处理记忆增强面板的向量化引擎变化
+     */
+    handleMemoryVectorEngineChange(engine) {
+        try {
+            console.log('[InfoBarSettings] 🚀 记忆增强面板 - 向量化引擎变化:', engine);
+
+            // 显示/隐藏对应的提示信息
+            const hintElement = this.modal.querySelector('#vector-engine-hint');
+            const hintTextElement = this.modal.querySelector('#vector-engine-hint-text');
+            
+            if (hintElement) {
+                if (engine === 'custom') {
+                    hintElement.style.display = 'block';
+                    if (hintTextElement) {
+                        hintTextElement.innerHTML = `
+                            💡 <strong>自定义向量化API：</strong>使用您在"自定义API"面板配置的向量化API进行向量计算<br>
+                            <span style="color: #666;">请前往"自定义API"面板 → 点击"🧠 向量化API"按钮进行配置</span>
+                        `;
+                    }
+                } else if (engine === 'local') {
+                    hintElement.style.display = 'block';
+                    if (hintTextElement) {
+                        hintTextElement.innerHTML = `
+                            💡 <strong>Transformers.js (本地)：</strong>使用浏览器内的本地引擎计算向量<br>
+                            <span style="color: #666;">无需额外配置，完全离线可用，但首次加载需要下载模型文件</span>
+                        `;
+                    }
+                } else {
+                    hintElement.style.display = 'none';
+                }
+            }
+
+            // 更新向量化记忆检索系统设置
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedMemoryRetrieval = infoBarTool?.modules?.vectorizedMemoryRetrieval;
+            if (vectorizedMemoryRetrieval) {
+                vectorizedMemoryRetrieval.updateSettings({
+                    vectorEngine: engine
+                });
+                console.log('[InfoBarSettings] ✅ 已同步向量化引擎设置到模块');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理向量化引擎变化失败:', error);
+        }
+    }
+
+    /**
+     * 🔍 处理向量化引擎变化（总结面板）
      */
     handleVectorEngineChange(engine) {
         try {
@@ -36547,74 +37390,7 @@ ${dataExamples}
                 });
             }
 
-            // 语义搜索事件
-            const memoryVectorizedEnabled = this.modal.querySelector('#memory-vectorized-memory-enabled');
-            if (memoryVectorizedEnabled) {
-                memoryVectorizedEnabled.addEventListener('change', (e) => {
-                    this.handleVectorizedMemoryEnabledChange(e.target.checked);
-                });
-            }
-
-            const memoryVectorEngine = this.modal.querySelector('#memory-vector-engine');
-            if (memoryVectorEngine) {
-                memoryVectorEngine.addEventListener('change', (e) => {
-                    this.handleVectorEngineChange(e.target.value);
-                });
-            }
-
-            // 🚀 新增：向量存储模式选择事件
-            const memoryVectorStorageMode = this.modal.querySelector('#memory-vector-storage-mode');
-            if (memoryVectorStorageMode) {
-                memoryVectorStorageMode.addEventListener('change', (e) => {
-                    this.handleVectorStorageModeChange(e.target.value);
-                });
-            }
-
-            // 🚀 新增：自定义向量API配置事件
-            const customVectorApiUrl = this.modal.querySelector('#memory-custom-vector-api-url');
-            if (customVectorApiUrl) {
-                customVectorApiUrl.addEventListener('input', (e) => {
-                    this.handleCustomVectorApiConfigChange();
-                });
-            }
-
-            const customVectorApiKey = this.modal.querySelector('#memory-custom-vector-api-key');
-            if (customVectorApiKey) {
-                customVectorApiKey.addEventListener('input', (e) => {
-                    this.handleCustomVectorApiConfigChange();
-                });
-            }
-
-            const customVectorModel = this.modal.querySelector('#memory-custom-vector-model');
-            if (customVectorModel) {
-                customVectorModel.addEventListener('change', (e) => {
-                    this.handleCustomVectorModelChange(e.target.value);
-                });
-            }
-
-            // 🆕 新增：刷新自定义向量API模型列表按钮
-            const refreshCustomVectorModelsBtn = this.modal.querySelector('#refresh-custom-vector-models');
-            if (refreshCustomVectorModelsBtn) {
-                refreshCustomVectorModelsBtn.addEventListener('click', async () => {
-                    await this.refreshCustomVectorModels();
-                });
-            }
-
-            // 🆕 新增：测试自定义向量API连接按钮
-            const testCustomVectorConnectionBtn = this.modal.querySelector('#test-custom-vector-connection');
-            if (testCustomVectorConnectionBtn) {
-                testCustomVectorConnectionBtn.addEventListener('click', async () => {
-                    await this.testCustomVectorConnection();
-                });
-            }
-
-            // 🚀 新增：向量存储大小限制事件
-            const vectorStorageSizeLimit = this.modal.querySelector('#memory-vector-storage-size-limit');
-            if (vectorStorageSizeLimit) {
-                vectorStorageSizeLimit.addEventListener('input', (e) => {
-                    this.handleVectorStorageSizeLimitChange(parseInt(e.target.value) || 0);
-                });
-            }
+            // 🔧 语义搜索功能已移除，统一使用向量功能面板的AI自动检索
 
             // 深度记忆管理事件
             const memoryDeepMemoryEnabled = this.modal.querySelector('#memory-deep-memory-enabled');
@@ -36897,91 +37673,7 @@ ${dataExamples}
                 aiDbOptions.style.display = aiDatabaseSettings.enabled ? 'block' : 'none';
             }
 
-            // 🔍 语义搜索设置
-            const vectorSettings = summaryManager?.vectorizedMemoryRetriever?.settings || savedMem.vector || {};
-            const vecEnabledEl = this.modal.querySelector('#memory-vectorized-memory-enabled');
-            const vecEngineEl = this.modal.querySelector('#memory-vector-engine');
-            const vecSimEl = this.modal.querySelector('#memory-similarity-threshold');
-            const vecSimVal = this.modal.querySelector('#memory-similarity-value');
-            const vecMaxEl = this.modal.querySelector('#memory-max-search-results');
-
-            // 🚀 新增：向量存储模式设置
-            const vecStorageModeEl = this.modal.querySelector('#memory-vector-storage-mode');
-            const vecCustomApiUrlEl = this.modal.querySelector('#memory-custom-vector-api-url');
-            const vecCustomApiKeyEl = this.modal.querySelector('#memory-custom-vector-api-key');
-            const vecCustomModelEl = this.modal.querySelector('#memory-custom-vector-model');
-            const vecStorageSizeLimitEl = this.modal.querySelector('#memory-vector-storage-size-limit');
-
-            if (vecEnabledEl) vecEnabledEl.checked = !!vectorSettings.enabled;
-            if (vecEngineEl && vectorSettings.vectorEngine) vecEngineEl.value = vectorSettings.vectorEngine;
-            if (vecSimEl) {
-                const v = typeof vectorSettings.similarityThreshold === 'number' ? vectorSettings.similarityThreshold : parseFloat(vecSimEl.value) || 0.7;
-                vecSimEl.value = v;
-                if (vecSimVal) vecSimVal.textContent = `${Math.round(v * 100)}%`;
-            }
-            if (vecMaxEl && typeof vectorSettings.maxResults === 'number') vecMaxEl.value = vectorSettings.maxResults;
-
-            // 🚀 新增：加载向量存储模式
-            if (vecStorageModeEl) {
-                // 🔧 修复：优先从storageMode字段读取，然后从布尔值推断
-                let storageMode = vectorSettings.storageMode || savedMem.vector?.storageMode || 'local';
-                
-                // 如果storageMode未设置，从布尔值推断
-                if (!vectorSettings.storageMode && !savedMem.vector?.storageMode) {
-                    if (vectorSettings.useNativeVectorAPI) {
-                        storageMode = 'native';
-                    } else if (vectorSettings.useCustomVectorAPI) {
-                        storageMode = 'custom';
-                    } else {
-                        storageMode = 'local';
-                    }
-                }
-                
-                vecStorageModeEl.value = storageMode;
-                console.log('[InfoBarSettings] 📦 加载向量存储模式:', storageMode);
-
-                // 🔧 修复：使用静默模式触发，避免显示不必要的提示
-                this.handleVectorStorageModeChange(storageMode, true);
-            }
-
-            // 🚀 新增：加载自定义API配置
-            const customAPIConfig = vectorSettings.customVectorAPI || vectorSettings.customAPI || savedMem.vector?.customAPI || {};
-            if (vecCustomApiUrlEl) {
-                vecCustomApiUrlEl.value = customAPIConfig.url || '';
-                console.log('[InfoBarSettings] 🔗 加载自定义API地址:', customAPIConfig.url);
-            }
-            if (vecCustomApiKeyEl) {
-                vecCustomApiKeyEl.value = customAPIConfig.apiKey || '';
-                console.log('[InfoBarSettings] 🔑 加载自定义API密钥:', customAPIConfig.apiKey ? '***' : '(空)');
-            }
-            if (vecCustomModelEl) {
-                // 🔧 修复：如果是下拉框且没有选项，先添加当前模型作为选项
-                const modelValue = customAPIConfig.model || '';
-                if (modelValue && vecCustomModelEl.options.length <= 1) {
-                    // 清空并添加当前模型
-                    vecCustomModelEl.innerHTML = '';
-                    const option = document.createElement('option');
-                    option.value = modelValue;
-                    option.textContent = modelValue;
-                    vecCustomModelEl.appendChild(option);
-                }
-                vecCustomModelEl.value = modelValue;
-                console.log('[InfoBarSettings] 🤖 加载自定义API模型:', modelValue);
-            }
-
-            // 🚀 新增：加载存储大小限制
-            if (vecStorageSizeLimitEl) {
-                const sizeLimit = typeof vectorSettings.storageSizeLimit === 'number' ? 
-                    vectorSettings.storageSizeLimit : 
-                    (typeof savedMem.vector?.storageSizeLimit === 'number' ? 
-                        savedMem.vector.storageSizeLimit : 10);
-                vecStorageSizeLimitEl.value = sizeLimit;
-                console.log('[InfoBarSettings] 📏 加载存储大小限制:', sizeLimit, 'MB');
-            }
-
-            this.modal.querySelectorAll('.vectorized-memory-options').forEach(opt => {
-                opt.style.display = vectorSettings.enabled ? 'block' : 'none';
-            });
+            // 🔧 语义搜索功能已移除，统一使用向量功能面板的AI自动检索
 
             // 🧠 深度记忆管理设置
             const deepManager = infoBarTool?.modules?.deepMemoryManager;
@@ -37169,6 +37861,9 @@ ${dataExamples}
             // 刷新语料库列表
             this.refreshCorpusList();
 
+            // 🆕 初始化向量化文件管理中心
+            this.initVectorFileManagement();
+
             console.log('[InfoBarSettings] ✅ 向量功能面板内容初始化完成');
 
         } catch (error) {
@@ -37230,14 +37925,47 @@ ${dataExamples}
                 }
             }
 
+            // 🆕 加载多路召回配置
+            const enableMultiRecall = this.modal.querySelector('#enable-multi-recall');
+            if (enableMultiRecall) {
+                enableMultiRecall.checked = vectorCfg.enableMultiRecall || false;
+                // 🆕 根据多路召回状态显示/隐藏重排序阈值
+                const rerankThresholdRow = this.modal.querySelector('#rerank-threshold-row');
+                if (rerankThresholdRow) {
+                    rerankThresholdRow.style.display = enableMultiRecall.checked ? 'block' : 'none';
+                }
+            }
+
+            const enableCorpusRetrieval = this.modal.querySelector('#enable-corpus-retrieval');
+            if (enableCorpusRetrieval) enableCorpusRetrieval.checked = vectorCfg.enableCorpusRetrieval !== false;
+
+            const enableMemoryRetrieval = this.modal.querySelector('#enable-memory-retrieval');
+            if (enableMemoryRetrieval) enableMemoryRetrieval.checked = vectorCfg.enableMemoryRetrieval !== false;
+
+            const enableSummaryRetrieval = this.modal.querySelector('#enable-summary-retrieval');
+            if (enableSummaryRetrieval) enableSummaryRetrieval.checked = vectorCfg.enableSummaryRetrieval !== false;
+
             const retrievalTopK = this.modal.querySelector('#retrieval-top-k');
-            if (retrievalTopK) retrievalTopK.value = vectorCfg.retrievalTopK || 3;
+            if (retrievalTopK) retrievalTopK.value = vectorCfg.retrievalTopK || 10;
 
             const retrievalThreshold = this.modal.querySelector('#retrieval-threshold');
-            if (retrievalThreshold) retrievalThreshold.value = vectorCfg.retrievalThreshold || 0.7;
+            if (retrievalThreshold) retrievalThreshold.value = vectorCfg.retrievalThreshold || 0.5;
+
+            // 🆕 加载重排序阈值
+            const rerankThreshold = this.modal.querySelector('#rerank-threshold');
+            if (rerankThreshold) rerankThreshold.value = vectorCfg.rerankThreshold || 10;
+
+            const retrievalCacheTimeout = this.modal.querySelector('#retrieval-cache-timeout');
+            if (retrievalCacheTimeout) retrievalCacheTimeout.value = vectorCfg.retrievalCacheTimeout || 5000;
 
             const retrievalInjectionPosition = this.modal.querySelector('#retrieval-injection-position');
             if (retrievalInjectionPosition) retrievalInjectionPosition.value = vectorCfg.retrievalInjectionPosition || 'system';
+
+            const retrievalInjectionDepth = this.modal.querySelector('#retrieval-injection-depth');
+            if (retrievalInjectionDepth) retrievalInjectionDepth.value = vectorCfg.retrievalInjectionDepth || 0;
+
+            const retrievalInjectionPriority = this.modal.querySelector('#retrieval-injection-priority');
+            if (retrievalInjectionPriority) retrievalInjectionPriority.value = vectorCfg.retrievalInjectionPriority || 0;
 
             console.log('[InfoBarSettings] ✅ 向量功能设置加载完成');
         } catch (error) {
@@ -37336,6 +38064,15 @@ ${dataExamples}
                 });
             }
 
+            // 🆕 新增：多路召回开关（控制重排序阈值显示）
+            const enableMultiRecall = this.modal.querySelector('#enable-multi-recall');
+            const rerankThresholdRow = this.modal.querySelector('#rerank-threshold-row');
+            if (enableMultiRecall && rerankThresholdRow) {
+                enableMultiRecall.addEventListener('change', (e) => {
+                    rerankThresholdRow.style.display = e.target.checked ? 'block' : 'none';
+                });
+            }
+
             console.log('[InfoBarSettings] ✅ 向量功能面板事件绑定完成');
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 绑定向量功能面板事件失败:', error);
@@ -37397,7 +38134,13 @@ ${dataExamples}
             // 更新模块状态（只在启用时更新数据）
             if (aiMemorySummarizer && featureEnabledMap.aiSummarizer) {
                 const status = aiMemorySummarizer.getStatus();
+                console.log('[InfoBarSettings] 📊 AI记忆总结器状态:', status);
                 this.updateModuleStatus('aiSummarizer', status);
+            } else {
+                console.log('[InfoBarSettings] ⚠️ AI记忆总结器未找到或未启用:', {
+                    aiMemorySummarizer: !!aiMemorySummarizer,
+                    enabled: featureEnabledMap.aiSummarizer
+                });
             }
 
             // 🔧 vectorSearch, classifier, injector 是基础模块，总是显示
@@ -38190,42 +38933,25 @@ ${dataExamples}
 
             // 清空现有选项
             select.innerHTML = '';
-            
+
             // 添加默认选项
             const defaultOption = document.createElement('option');
             defaultOption.value = 'interaction';
             defaultOption.textContent = '交互对象面板（默认）';
             select.appendChild(defaultOption);
 
-            // 添加基础面板选项
-            const basicPanels = ['personal', 'world', 'tasks', 'organization', 'news', 'inventory', 'abilities', 'plot'];
-            const panelNames = {
-                'personal': '个人信息',
-                'world': '世界信息',
-                'tasks': '任务系统',
-                'organization': '组织架构',
-                'news': '新闻资讯',
-                'inventory': '物品清单',
-                'abilities': '能力技能',
-                'plot': '剧情发展'
-            };
-
-            basicPanels.forEach(panelId => {
-                if (settings[panelId] && settings[panelId].enabled !== false) {
-                    const option = document.createElement('option');
-                    option.value = panelId;
-                    option.textContent = `${panelNames[panelId]}面板`;
-                    select.appendChild(option);
-                }
-            });
-
-            // 添加自定义面板选项
+            // 🔧 修复：只从customPanels获取面板，不再添加基础面板
+            // 因为所有基础面板都已经改为自定义面板了
             if (settings.customPanels) {
                 Object.entries(settings.customPanels).forEach(([panelId, panelConfig]) => {
+                    // 跳过interaction面板（已经作为默认选项添加）
+                    if (panelId === 'interaction') return;
+
                     if (panelConfig.enabled !== false) {
                         const option = document.createElement('option');
                         option.value = panelId;
-                        option.textContent = `${panelConfig.name}（自定义面板）`;
+                        // 🔧 修复：不再添加"（自定义面板）"后缀，因为现在所有面板都是自定义面板
+                        option.textContent = panelConfig.name || panelId;
                         select.appendChild(option);
                     }
                 });
@@ -39876,21 +40602,21 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
 
     /**
      * 处理同步NPC到世界书
-     * 🔧 修复：不再依赖已删除的NPCManagementPanel，直接调用WorldBookManager
+     * 🔧 修复：使用用户选择的目标世界书，而不是总是使用默认世界书
      */
     async handleNPCWorldBookSyncNow() {
         try {
             console.log('[InfoBarSettings] 🌍 开始手动同步NPC到世界书...');
-            
+
             // 获取WorldBookManager和NPCDatabaseManager
             const worldBookManager = window.SillyTavernInfobar?.modules?.worldBookManager;
             const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
-            
+
             if (!worldBookManager) {
                 this.showNotification('世界书管理器未找到', 'error');
                 return;
             }
-            
+
             if (!npcDB) {
                 this.showNotification('NPC数据库管理器未找到', 'error');
                 return;
@@ -39905,13 +40631,27 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
 
             console.log(`[InfoBarSettings] 🌍 找到 ${npcs.length} 个NPC，开始同步到世界书...`);
 
-            // 获取或创建目标世界书
-            const worldBookResult = await worldBookManager.getOrCreateTargetWorldBook(true);
+            // 🔧 修复：获取用户选择的目标世界书
+            const selectedWorldBook = localStorage.getItem('npcPanel_targetWorldBook') || 'auto';
+            console.log('[InfoBarSettings] 🎯 用户选择的目标世界书:', selectedWorldBook);
+
+            let worldBookResult;
+
+            if (selectedWorldBook === 'auto') {
+                // 自动模式：使用角色链接的主要世界书
+                worldBookResult = await worldBookManager.getOrCreateTargetWorldBook(true);
+            } else {
+                // 手动模式：使用用户选择的世界书
+                worldBookResult = await this.getSpecificWorldBook(selectedWorldBook);
+            }
+
             if (!worldBookResult.success) {
                 throw new Error(`获取目标世界书失败: ${worldBookResult.error}`);
             }
 
             const { worldBookName, worldBookData, isNewWorldBook } = worldBookResult;
+            console.log('[InfoBarSettings] 📚 目标世界书:', worldBookName);
+
             let syncedCount = 0;
 
             // 为每个NPC创建或更新世界书条目
@@ -39919,17 +40659,17 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
                 try {
                     // 格式化NPC数据为世界书条目
                     const entryData = this.formatNPCAsWorldBookEntry(npc);
-                    
+
                     // 创建或更新世界书条目
                     const entryResult = await worldBookManager.createOrUpdateWorldBookEntry(
-                        worldBookName, 
-                        worldBookData, 
+                        worldBookName,
+                        worldBookData,
                         entryData
                     );
-                    
+
                     if (entryResult.success) {
                         syncedCount++;
-                        console.log(`[InfoBarSettings] ✅ NPC "${npc.name}" 已同步到世界书`);
+                        console.log(`[InfoBarSettings] ✅ NPC "${npc.name}" 已同步到世界书 "${worldBookName}"`);
                     }
                 } catch (error) {
                     console.error(`[InfoBarSettings] ❌ 处理NPC "${npc.name}" 失败:`, error);
@@ -39947,11 +40687,65 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
             // 刷新缓存
             await worldBookManager.refreshCache();
 
-            this.showNotification(`NPC数据已同步到世界书 (${syncedCount}/${npcs.length})`, 'success');
-            
+            this.showNotification(`NPC数据已同步到世界书 "${worldBookName}" (${syncedCount}/${npcs.length})`, 'success');
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 手动同步NPC到世界书失败:', error);
             this.showNotification('同步到世界书失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 获取指定的世界书
+     */
+    async getSpecificWorldBook(worldBookName) {
+        try {
+            const context = window.SillyTavern?.getContext?.();
+            if (!context) {
+                return {
+                    success: false,
+                    error: '无法获取SillyTavern上下文'
+                };
+            }
+
+            console.log('[InfoBarSettings] 📚 尝试加载指定的世界书:', worldBookName);
+
+            // 尝试加载世界书数据
+            let worldData = null;
+            if (typeof context.loadWorldInfo === 'function') {
+                try {
+                    worldData = await context.loadWorldInfo(worldBookName);
+                } catch (loadError) {
+                    console.warn('[InfoBarSettings] ⚠️ 加载世界书失败:', loadError);
+                    return {
+                        success: false,
+                        error: `加载世界书失败: ${loadError.message}`
+                    };
+                }
+            }
+
+            if (!worldData) {
+                return {
+                    success: false,
+                    error: `世界书 "${worldBookName}" 不存在或无法加载`
+                };
+            }
+
+            console.log('[InfoBarSettings] ✅ 成功加载世界书:', worldBookName);
+
+            return {
+                success: true,
+                worldBookName: worldBookName,
+                worldBookData: worldData,
+                isNewWorldBook: false
+            };
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取指定世界书失败:', error);
+            return {
+                success: false,
+                error: error.message
+            };
         }
     }
 
@@ -41552,22 +42346,49 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
 
             updateProgress(5, '📖 正在读取文件...', `文件大小: ${(content.length / 1024).toFixed(2)} KB`);
 
-            // 获取配置
-            const chunkSize = parseInt(this.modal.querySelector('#vector-chunk-size')?.value || 500);
-            const overlapSize = parseInt(this.modal.querySelector('#vector-overlap-size')?.value || 50);
-            const batchSize = parseInt(this.modal.querySelector('#vector-batch-size')?.value || 10);
-
-            updateProgress(10, '✂️ 正在分割文本...', '准备分块处理');
-
-            // 分割文本
-            const chunks = this.splitTextIntoChunks(content, chunkSize, overlapSize);
-            console.log('[InfoBarSettings] 📊 文本已分割为', chunks.length, '个块');
-
-            updateProgress(15, '🔧 正在初始化向量化引擎...', `共 ${chunks.length} 个块需要处理`);
-
-            // 🔧 修复：使用自定义API面板的向量化API配置
+            // 🔧 修复：提前获取配置
             const context = SillyTavern.getContext();
             const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const vectorCfg = extCfg.vectorFunction || {};
+
+            // 获取配置
+            const batchSize = parseInt(this.modal.querySelector('#vector-batch-size')?.value || 10);
+
+            // 🔧 新增：使用NovelChunkAnalyzer进行智能分析和分块
+            updateProgress(10, '🧠 正在初始化智能分析器...', '准备分析小说结构');
+
+            // 动态导入NovelChunkAnalyzer（使用绝对路径）
+            const extensionPath = 'scripts/extensions/third-party/Information bar integration tool';
+            const { NovelChunkAnalyzer } = await import(`/${extensionPath}/core/NovelChunkAnalyzer.js`);
+            const chunkAnalyzer = new NovelChunkAnalyzer();
+
+            // 生成小说ID
+            const novelId = `novel_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+            const enableSmartAnalysis = vectorCfg.enableSmartAnalysis || false;
+
+            // 分析并分块
+            const chunks = await chunkAnalyzer.analyzeNovel(
+                content,
+                novelId,
+                {
+                    enableSmartAnalysis: enableSmartAnalysis,
+                    extractPlotSummary: vectorCfg.extractPlotSummary,
+                    analyzeWritingStyle: vectorCfg.analyzeWritingStyle,
+                    extractTimeline: vectorCfg.extractTimeline,
+                    markKeyScenes: vectorCfg.markKeyScenes,
+                    extractCharacters: vectorCfg.extractCharacters
+                },
+                (progress, text, details) => {
+                    updateProgress(10 + progress * 0.4, text, details);
+                }
+            );
+
+            console.log('[InfoBarSettings] 📊 智能分析完成，生成', chunks.length, '个块');
+
+            updateProgress(50, '🔧 正在初始化向量化引擎...', `共 ${chunks.length} 个块需要处理`);
+
+            // 🔧 修复：使用自定义API面板的向量化API配置
             const vectorAPIConfig = extCfg.vectorAPIConfig || {};
 
             // 检查向量化API配置
@@ -41607,7 +42428,7 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
                 }
 
                 const chunk = chunks[i];
-                const progress = 15 + (i / totalChunks) * 80; // 15% - 95%
+                const progress = 50 + (i / totalChunks) * 40; // 50% - 90%
 
                 updateProgress(
                     progress,
@@ -41618,17 +42439,21 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
                 try {
                     // 🔧 修复：直接使用customVectorAPI进行向量化
                     const vector = await vectorRetrieval.customVectorAPI.vectorizeText(chunk.text);
+
+                    // 🔥 关键修改：使用NovelChunkAnalyzer生成的富metadata
                     vectorizedChunks.push({
-                        id: `${fileName}_chunk_${i}`,
+                        id: `${novelId}_chunk_${i}`,
                         text: chunk.text,
                         vector: vector,
                         metadata: {
+                            // 保留原有的基础信息
                             fileName: fileName,
                             chunkIndex: i,
                             totalChunks: totalChunks,
-                            startPos: chunk.startPos,
-                            endPos: chunk.endPos,
-                            timestamp: Date.now()
+                            timestamp: Date.now(),
+
+                            // 🔥 添加NovelChunkAnalyzer生成的智能metadata
+                            ...chunk.metadata
                         }
                     });
                 } catch (error) {
@@ -41648,32 +42473,9 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
                 throw new Error('用户已中止向量化');
             }
 
-            // 🔧 新增：智能分析
+            // 🔧 修复：智能分析已经在NovelChunkAnalyzer中完成，这里不再需要
+            // 保留analysisResults变量以兼容后续代码
             let analysisResults = null;
-            const vectorCfg = extCfg.vectorFunction || {};
-
-            if (vectorCfg.enableSmartAnalysis) {
-                updateProgress(85, '🧠 正在进行智能分析...', '分析小说内容特征');
-
-                try {
-                    // 动态导入NovelAnalyzer
-                    const { NovelAnalyzer } = await import('../core/NovelAnalyzer.js');
-                    const analyzer = new NovelAnalyzer();
-
-                    analysisResults = await analyzer.analyzeNovel(content, {
-                        extractPlotSummary: vectorCfg.extractPlotSummary,
-                        analyzeWritingStyle: vectorCfg.analyzeWritingStyle,
-                        extractTimeline: vectorCfg.extractTimeline,
-                        markKeyScenes: vectorCfg.markKeyScenes,
-                        extractCharacters: vectorCfg.extractCharacters
-                    });
-
-                    console.log('[InfoBarSettings] ✅ 智能分析完成:', analysisResults);
-                } catch (error) {
-                    console.error('[InfoBarSettings] ⚠️ 智能分析失败:', error);
-                    // 分析失败不影响向量化流程
-                }
-            }
 
             updateProgress(95, '💾 正在保存语料库...', `共 ${vectorizedChunks.length} 个块已向量化`);
 
@@ -41753,20 +42555,13 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
                 extCfg.vectorCorpus = {};
             }
 
-            // 🔧 修复：生成包含聊天ID和模型名称的集合ID
+            // 🔧 修复：生成集合ID使用 {cuerpo} 格式，与向量化文件管理中心命名规则一致
+            // 格式：{chatId}{cuerpo}
             const chatId = context?.chatId || 'default';
-            const vectorAPIConfig = extCfg.vectorAPIConfig || {};
-            const modelName = vectorAPIConfig.model || 'unknown';
-
-            // 清理聊天ID和模型名称，移除特殊字符
-            const cleanChatId = chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
-            const cleanModelName = modelName.replace(/[^a-zA-Z0-9_-]/g, '_');
-
-            const collectionId = `${cleanChatId}/${cleanModelName}`;
+            const collectionId = `${chatId}{cuerpo}`;
 
             console.log('[InfoBarSettings] 📤 开始保存向量数据到后端API...');
             console.log('[InfoBarSettings] 📊 聊天ID:', chatId);
-            console.log('[InfoBarSettings] 📊 模型名称:', modelName);
             console.log('[InfoBarSettings] 📊 集合ID:', collectionId);
             console.log('[InfoBarSettings] 📊 向量块数:', vectorizedChunks.length);
 
@@ -42173,7 +42968,8 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
      */
     collectVectorFunctionSettings() {
         try {
-            return {
+            // 🔧 修复：确保所有配置都被正确收集
+            const settings = {
                 // 分块配置
                 chunkSize: parseInt(this.modal.querySelector('#vector-chunk-size')?.value || 500),
                 overlapSize: parseInt(this.modal.querySelector('#vector-overlap-size')?.value || 50),
@@ -42189,10 +42985,21 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
 
                 // AI检索配置
                 enableAIRetrieval: this.modal.querySelector('#enable-ai-retrieval')?.checked || false,
-                retrievalTopK: parseInt(this.modal.querySelector('#retrieval-top-k')?.value || 3),
-                retrievalThreshold: parseFloat(this.modal.querySelector('#retrieval-threshold')?.value || 0.7),
-                retrievalInjectionPosition: this.modal.querySelector('#retrieval-injection-position')?.value || 'system'
+                enableMultiRecall: this.modal.querySelector('#enable-multi-recall')?.checked || false, // 🆕 多路召回
+                enableCorpusRetrieval: this.modal.querySelector('#enable-corpus-retrieval')?.checked !== false,
+                enableMemoryRetrieval: this.modal.querySelector('#enable-memory-retrieval')?.checked !== false,
+                enableSummaryRetrieval: this.modal.querySelector('#enable-summary-retrieval')?.checked !== false,
+                retrievalTopK: parseInt(this.modal.querySelector('#retrieval-top-k')?.value || 10),
+                retrievalThreshold: parseFloat(this.modal.querySelector('#retrieval-threshold')?.value || 0.5),
+                rerankThreshold: parseInt(this.modal.querySelector('#rerank-threshold')?.value || 10), // 🆕 重排序阈值
+                retrievalCacheTimeout: parseInt(this.modal.querySelector('#retrieval-cache-timeout')?.value || 5000),
+                retrievalInjectionPosition: this.modal.querySelector('#retrieval-injection-position')?.value || 'system',
+                retrievalInjectionDepth: parseInt(this.modal.querySelector('#retrieval-injection-depth')?.value || 0),
+                retrievalInjectionPriority: parseInt(this.modal.querySelector('#retrieval-injection-priority')?.value || 0)
             };
+
+            console.log('[InfoBarSettings] 📦 收集的向量功能设置:', settings);
+            return settings;
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 收集向量功能设置失败:', error);
             return null;
@@ -42609,6 +43416,1137 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 删除已向量化总结失败:', error);
             this.showNotification('❌ 删除失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 处理手动向量化
+     */
+    async handleManualVectorize() {
+        try {
+            console.log('[InfoBarSettings] 🔮 开始手动向量化...');
+
+            // 获取VectorizedSummaryManager模块
+            const infoBarTool = window.SillyTavernInfobar;
+            const vectorizedSummaryManager = infoBarTool?.modules?.vectorizedSummaryManager;
+
+            if (!vectorizedSummaryManager) {
+                this.showNotification('❌ 向量化总结管理器未初始化', 'error');
+                return;
+            }
+
+            // 检查是否有待向量化的总结
+            if (!vectorizedSummaryManager.pendingSummaries || vectorizedSummaryManager.pendingSummaries.length === 0) {
+                this.showNotification('ℹ️ 暂无待向量化的AI记忆总结', 'info');
+                return;
+            }
+
+            // 显示进度条
+            this.showVectorizeProgress(true);
+            this.updateVectorizeProgress(0, '准备向量化...');
+
+            // 调用向量化方法
+            await vectorizedSummaryManager.vectorizeSummaries((progress, message) => {
+                this.updateVectorizeProgress(progress, message);
+            });
+
+            // 隐藏进度条
+            this.showVectorizeProgress(false);
+
+            // 刷新UI
+            await this.loadAIMemorySummaryList();
+            await this.loadVectorizedSummaryList();
+
+            this.showNotification('✅ 向量化完成', 'success');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 手动向量化失败:', error);
+            this.showVectorizeProgress(false);
+            this.showNotification('❌ 向量化失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 显示/隐藏向量化进度条
+     */
+    showVectorizeProgress(show) {
+        const progressContainer = this.modal.querySelector('#vectorize-progress-container');
+        if (progressContainer) {
+            progressContainer.style.display = show ? 'block' : 'none';
+        }
+
+        // 禁用/启用手动向量化按钮
+        const manualVectorizeBtn = this.modal.querySelector('#manual-vectorize-btn');
+        if (manualVectorizeBtn) {
+            manualVectorizeBtn.disabled = show;
+            manualVectorizeBtn.style.opacity = show ? '0.5' : '1';
+            manualVectorizeBtn.style.cursor = show ? 'not-allowed' : 'pointer';
+        }
+    }
+
+    /**
+     * 🆕 更新向量化进度
+     */
+    updateVectorizeProgress(progress, message) {
+        const progressBar = this.modal.querySelector('#vectorize-progress-bar');
+        const progressText = this.modal.querySelector('#vectorize-progress-text');
+        const progressDetail = this.modal.querySelector('#vectorize-progress-detail');
+
+        if (progressBar) {
+            progressBar.style.width = `${progress}%`;
+        }
+
+        if (progressText) {
+            progressText.textContent = `正在向量化... ${Math.round(progress)}%`;
+        }
+
+        if (progressDetail) {
+            progressDetail.textContent = message || '';
+        }
+    }
+
+    /**
+     * 📁 初始化向量化文件管理中心
+     */
+    initVectorFileManagement() {
+        try {
+            console.log('[InfoBarSettings] 📁 初始化向量化文件管理中心...');
+
+            // 初始化当前状态
+            this.currentFileType = 'corpus'; // 当前选中的文件类型
+            this.currentScopeMode = 'local'; // 当前作用域模式（local/global）
+
+            // 绑定文件类型标签页切换事件
+            const fileTabs = this.modal.querySelectorAll('.vector-file-tab');
+            fileTabs.forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    const fileType = e.target.dataset.fileType;
+                    this.switchFileType(fileType);
+                });
+            });
+
+            // 绑定作用域切换按钮事件
+            const toggleScopeBtn = this.modal.querySelector('#toggle-scope-btn');
+            if (toggleScopeBtn) {
+                toggleScopeBtn.addEventListener('click', () => {
+                    this.toggleScopeMode();
+                });
+            }
+
+            // 加载文件列表
+            this.loadVectorFileList();
+
+            console.log('[InfoBarSettings] ✅ 向量化文件管理中心初始化完成');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化向量化文件管理中心失败:', error);
+        }
+    }
+
+    /**
+     * 📁 切换文件类型
+     */
+    switchFileType(fileType) {
+        try {
+            console.log('[InfoBarSettings] 📁 切换文件类型:', fileType);
+
+            this.currentFileType = fileType;
+
+            // 更新标签页样式
+            const fileTabs = this.modal.querySelectorAll('.vector-file-tab');
+            fileTabs.forEach(tab => {
+                if (tab.dataset.fileType === fileType) {
+                    tab.classList.add('active');
+                    tab.style.background = 'var(--theme-primary-color, #4CAF50)';
+                    tab.style.color = 'white';
+                } else {
+                    tab.classList.remove('active');
+                    tab.style.background = 'var(--theme-bg-secondary, #2a2a2a)';
+                    tab.style.color = 'var(--theme-text-primary, #ddd)';
+                }
+            });
+
+            // 重新加载文件列表
+            this.loadVectorFileList();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换文件类型失败:', error);
+        }
+    }
+
+    /**
+     * 🔄 切换作用域模式
+     */
+    toggleScopeMode() {
+        try {
+            // 切换模式
+            this.currentScopeMode = this.currentScopeMode === 'local' ? 'global' : 'local';
+
+            console.log('[InfoBarSettings] 🔄 切换作用域模式:', this.currentScopeMode);
+
+            // 更新UI显示
+            const scopeModeText = this.modal.querySelector('#current-scope-mode');
+            const toggleBtn = this.modal.querySelector('#toggle-scope-btn');
+
+            if (scopeModeText) {
+                scopeModeText.textContent = this.currentScopeMode === 'local' ? '局部模式' : '全局模式';
+                scopeModeText.style.color = this.currentScopeMode === 'local' ? 'var(--theme-primary-color, #4CAF50)' : 'var(--theme-warning-color, #FFA726)';
+            }
+
+            if (toggleBtn) {
+                toggleBtn.textContent = this.currentScopeMode === 'local' ? '🔄 切换为全局模式' : '🔄 切换为局部模式';
+            }
+
+            // 重新加载文件列表
+            this.loadVectorFileList();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换作用域模式失败:', error);
+        }
+    }
+
+    /**
+     * 📁 加载向量化文件列表
+     */
+    async loadVectorFileList() {
+        try {
+            console.log('[InfoBarSettings] 📁 加载向量化文件列表...', {
+                fileType: this.currentFileType,
+                scopeMode: this.currentScopeMode
+            });
+
+            const listContainer = this.modal.querySelector('#vector-file-list-container');
+            if (!listContainer) return;
+
+            const context = SillyTavern.getContext();
+            const chatId = context?.chatId || 'default';
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+
+            // 根据文件类型获取对应的数据
+            let files = [];
+
+            switch (this.currentFileType) {
+                case 'corpus':
+                    files = this.getCorpusFiles(extCfg, chatId);
+                    break;
+                case 'summary':
+                    files = this.getSummaryFiles(extCfg, chatId);
+                    break;
+                case 'memory':
+                    files = this.getMemoryFiles(extCfg, chatId);
+                    break;
+            }
+
+            // 根据作用域模式过滤文件
+            if (this.currentScopeMode === 'local') {
+                // 局部模式：只显示属于当前聊天的文件
+                files = files.filter(file => file.belongsToCurrentChat || file.scope === 'global');
+            }
+            // 全局模式：显示所有文件（不过滤）
+
+            console.log('[InfoBarSettings] 📁 文件列表加载完成:', {
+                totalFiles: files.length,
+                fileType: this.currentFileType,
+                scopeMode: this.currentScopeMode
+            });
+
+            // 渲染文件列表
+            this.renderVectorFileList(files, listContainer);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载向量化文件列表失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 标准化chatId用于匹配
+     * chatId格式：
+     *   新格式：{聊天名称} - {创建日期}@{对话总时长}  例如：1123 - 2025-10-24@23h19m56s
+     *   旧格式：{聊天名称}_-_{创建日期}_{对话总时长}  例如：1123_-_2025-10-24_07h23m22s
+     * 我们只匹配聊天名称和创建日期部分，忽略时长
+     */
+    normalizeChatIdForMatching(chatId) {
+        if (!chatId) return '';
+
+        // 移除@后面的时长部分（新格式）
+        let normalized = chatId.split('@')[0];
+
+        // 将空格替换为下划线，统一格式
+        normalized = normalized.replace(/\s/g, '_');
+
+        // 移除时长部分（旧格式）
+        // 匹配模式：_XXhXXmXXs 或 _XXhXXm 或 _XXh
+        normalized = normalized.replace(/_\d+h\d+m\d+s$/, '');
+        normalized = normalized.replace(/_\d+h\d+m$/, '');
+        normalized = normalized.replace(/_\d+h$/, '');
+
+        return normalized;
+    }
+
+    /**
+     * 📚 获取语料库文件列表
+     */
+    getCorpusFiles(extCfg, currentChatId) {
+        const corpusData = extCfg.vectorCorpus || {};
+        const files = [];
+
+        // 🔧 标准化当前chatId，用于匹配（只保留聊天名称和创建日期）
+        const normalizedCurrentChatId = this.normalizeChatIdForMatching(currentChatId);
+
+        for (const [fileName, corpus] of Object.entries(corpusData)) {
+            // 🔧 修复：从collectionId中提取chatId
+            // 新格式：{chatId}{cuerpo}
+            // 旧格式：{chatId}/{modelName} (兼容)
+            const collectionId = corpus.collectionId || '';
+            let chatIdFromCollection = '';
+            let isGlobal = false;
+
+            if (collectionId.includes('{cuerpo}')) {
+                // 新格式：{chatId}{cuerpo}
+                chatIdFromCollection = collectionId.replace('{cuerpo}', '');
+                isGlobal = collectionId.startsWith('global{cuerpo}');
+            } else if (collectionId.includes('/')) {
+                // 旧格式：{chatId}/{modelName}（兼容）
+                chatIdFromCollection = collectionId.split('/')[0] || '';
+                isGlobal = collectionId.startsWith('global/');
+            } else {
+                // 未知格式，使用原值
+                chatIdFromCollection = collectionId;
+            }
+
+            // 🔧 标准化文件的chatId，用于匹配（只保留聊天名称和创建日期）
+            const normalizedFileChatId = this.normalizeChatIdForMatching(chatIdFromCollection);
+
+            // 判断是否属于当前聊天
+            // 使用标准化后的chatId进行比较
+            const belongsToCurrentChat = isGlobal || normalizedFileChatId === normalizedCurrentChatId;
+
+            files.push({
+                id: `${chatIdFromCollection}{cuerpo}`,
+                name: fileName,
+                type: 'corpus',
+                chatId: chatIdFromCollection,
+                scope: isGlobal ? 'global' : (corpus.scope || 'local'),
+                collectionId: collectionId,
+                chunkCount: corpus.chunkCount || 0,
+                fileSize: corpus.fileSize || 0,
+                createdAt: corpus.createdAt || Date.now(),
+                belongsToCurrentChat: belongsToCurrentChat,
+                metadata: corpus
+            });
+        }
+
+        return files;
+    }
+
+    /**
+     * 📝 获取总结文件列表
+     */
+    getSummaryFiles(extCfg, currentChatId) {
+        const vectorizedSummary = extCfg.vectorizedSummary || {};
+        const files = [];
+
+        // 🔧 标准化当前chatId，用于匹配（只保留聊天名称和创建日期）
+        const normalizedCurrentChatId = this.normalizeChatIdForMatching(currentChatId);
+
+        for (const [chatId, chatData] of Object.entries(vectorizedSummary)) {
+            // 跳过settings字段
+            if (chatId === 'settings') continue;
+
+            const vectorizedRecords = chatData.vectorizedRecords || [];
+
+            // 🔧 标准化文件的chatId，用于匹配（只保留聊天名称和创建日期）
+            const normalizedFileChatId = this.normalizeChatIdForMatching(chatId);
+
+            // 判断是否属于当前聊天
+            const belongsToCurrentChat = normalizedFileChatId === normalizedCurrentChatId;
+
+            vectorizedRecords.forEach((record, index) => {
+                files.push({
+                    id: `${chatId}{summary}_${index}`,
+                    name: `总结 #${index + 1} (楼层 ${record.startFloor}-${record.endFloor})`,
+                    type: 'summary',
+                    chatId: chatId,
+                    scope: record.scope || 'local',
+                    collectionId: record.collectionId || '',
+                    vectorCount: record.vectorCount || 0,
+                    startFloor: record.startFloor || 0,
+                    endFloor: record.endFloor || 0,
+                    createdAt: record.timestamp || Date.now(),
+                    belongsToCurrentChat: belongsToCurrentChat,
+                    recordIndex: index,
+                    metadata: record
+                });
+            });
+        }
+
+        return files;
+    }
+
+    /**
+     * 🧠 获取记忆文件列表
+     */
+    getMemoryFiles(extCfg, currentChatId) {
+        // TODO: 实现记忆文件获取逻辑
+        // 这需要从 DeepMemoryManager 或 VectorizedMemoryRetrieval 获取数据
+        const files = [];
+
+        // 暂时返回空数组，后续实现
+        console.log('[InfoBarSettings] ⚠️ 记忆文件列表功能待实现');
+
+        return files;
+    }
+
+    /**
+     * 📁 渲染向量化文件列表
+     */
+    renderVectorFileList(files, container) {
+        if (!container) return;
+
+        if (files.length === 0) {
+            const typeText = this.currentFileType === 'corpus' ? '语料库' :
+                           this.currentFileType === 'summary' ? '总结' : '记忆';
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: var(--theme-text-secondary, #888);">
+                    <div style="font-size: 48px; margin-bottom: 16px;">📂</div>
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">暂无向量化文件</div>
+                    <div style="font-size: 13px;">当前作用域下没有找到任何${typeText}文件</div>
+                </div>
+            `;
+            return;
+        }
+
+        let html = `
+            <div style="margin-bottom: 15px; padding: 10px; background: var(--theme-bg-secondary, #2a2a2a); border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-weight: 600; color: var(--theme-text-primary, #ddd);">
+                    共找到 ${files.length} 个文件
+                </div>
+                <div style="font-size: 12px; color: var(--theme-text-secondary, #888);">
+                    ${this.currentScopeMode === 'local' ? '仅显示当前聊天' : '显示所有聊天'}
+                </div>
+            </div>
+        `;
+
+        files.forEach(file => {
+            const scopeColor = file.scope === 'global' ? '#FFA726' : '#4CAF50';
+            const scopeText = file.scope === 'global' ? '全局' : '局部';
+            const typeIcon = file.type === 'corpus' ? '📚' : file.type === 'summary' ? '📝' : '🧠';
+
+            html += `
+                <div class="vector-file-item" data-file-id="${file.id}" style="
+                    padding: 12px;
+                    margin-bottom: 10px;
+                    background: var(--theme-bg-secondary, #2a2a2a);
+                    border: 1px solid var(--theme-border-color, #333);
+                    border-radius: 6px;
+                    transition: all 0.2s;
+                ">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                        <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                                <span style="font-size: 20px;">${typeIcon}</span>
+                                <span style="font-weight: 600; color: var(--theme-text-primary, #ddd); font-size: 14px;">${file.name}</span>
+                                <span style="
+                                    padding: 2px 8px;
+                                    background: ${scopeColor};
+                                    color: white;
+                                    border-radius: 4px;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                ">${scopeText}</span>
+                            </div>
+                            <div style="font-size: 12px; color: var(--theme-text-secondary, #888); margin-bottom: 4px;">
+                                ${file.type === 'corpus' ? `📦 ${file.chunkCount} 个块 | 💾 ${(file.fileSize / 1024).toFixed(2)} KB` : ''}
+                                ${file.type === 'summary' ? `🔢 ${file.vectorCount} 个向量 | 📊 楼层 ${file.startFloor}-${file.endFloor}` : ''}
+                            </div>
+                            <div style="font-size: 11px; color: var(--theme-text-tertiary, #666);">
+                                🆔 ${file.id} | 📅 ${new Date(file.createdAt).toLocaleString()}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                            <button class="toggle-file-scope-btn" data-file-id="${file.id}" style="
+                                padding: 6px 12px;
+                                background: ${file.scope === 'global' ? 'var(--theme-primary-color, #4CAF50)' : 'var(--theme-warning-color, #FFA726)'};
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 12px;
+                                font-weight: 600;
+                                transition: all 0.2s;
+                            " title="${file.scope === 'global' ? '切换为局部' : '切换为全局'}">
+                                ${file.scope === 'global' ? '🔒 设为局部' : '🌐 设为全局'}
+                            </button>
+                            <button class="delete-vector-file-btn" data-file-id="${file.id}" style="
+                                padding: 6px 12px;
+                                background: var(--theme-error-color, #f44336);
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 12px;
+                                transition: all 0.2s;
+                            " title="删除文件">
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+
+        // 绑定事件
+        container.querySelectorAll('.toggle-file-scope-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const fileId = e.target.dataset.fileId;
+                this.toggleFileScope(fileId);
+            });
+        });
+
+        container.querySelectorAll('.delete-vector-file-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const fileId = e.target.dataset.fileId;
+                this.deleteVectorFile(fileId);
+            });
+        });
+    }
+
+    /**
+     * 🔄 切换文件作用域
+     */
+    async toggleFileScope(fileId) {
+        try {
+            console.log('[InfoBarSettings] 🔄 切换文件作用域:', fileId);
+
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+
+            // 解析fileId获取chatId和类型
+            const parts = fileId.split('{');
+            const chatId = parts[0];
+            const typeWithIndex = parts[1].replace('}', '');
+            const [type, indexStr] = typeWithIndex.split('_');
+
+            // 🔧 标准化chatId用于匹配
+            const normalizedChatId = this.normalizeChatIdForMatching(chatId);
+
+            // 根据类型更新对应的配置
+            if (type === 'cuerpo') {
+                // 语料库文件
+                const corpusData = extCfg.vectorCorpus || {};
+                for (const [fileName, corpus] of Object.entries(corpusData)) {
+                    if (corpus.collectionId) {
+                        // 从collectionId中提取chatId并标准化
+                        let collectionChatId = '';
+                        if (corpus.collectionId.includes('{cuerpo}')) {
+                            collectionChatId = corpus.collectionId.replace('{cuerpo}', '');
+                        } else if (corpus.collectionId.includes('/')) {
+                            collectionChatId = corpus.collectionId.split('/')[0];
+                        }
+
+                        const normalizedCollectionChatId = this.normalizeChatIdForMatching(collectionChatId);
+
+                        if (normalizedCollectionChatId === normalizedChatId) {
+                            corpus.scope = corpus.scope === 'global' ? 'local' : 'global';
+                            console.log(`[InfoBarSettings] ✅ 已切换语料库 "${fileName}" 的作用域为: ${corpus.scope}`);
+                            break;
+                        }
+                    }
+                }
+            } else if (type === 'summary') {
+                // 总结文件
+                const vectorizedSummary = extCfg.vectorizedSummary || {};
+
+                // 🔧 查找匹配的chatId（使用标准化匹配）
+                let matchedChatId = null;
+                for (const storedChatId of Object.keys(vectorizedSummary)) {
+                    if (storedChatId === 'settings') continue;
+                    const normalizedStoredChatId = this.normalizeChatIdForMatching(storedChatId);
+                    if (normalizedStoredChatId === normalizedChatId) {
+                        matchedChatId = storedChatId;
+                        break;
+                    }
+                }
+
+                if (matchedChatId) {
+                    const chatData = vectorizedSummary[matchedChatId] || {};
+                    const vectorizedRecords = chatData.vectorizedRecords || [];
+
+                    const recordIndex = parseInt(indexStr);
+                    if (!isNaN(recordIndex) && vectorizedRecords[recordIndex]) {
+                        vectorizedRecords[recordIndex].scope = vectorizedRecords[recordIndex].scope === 'global' ? 'local' : 'global';
+                        console.log(`[InfoBarSettings] ✅ 已切换总结 #${recordIndex + 1} 的作用域为: ${vectorizedRecords[recordIndex].scope}`);
+                    }
+                }
+            }
+
+            // 保存配置
+            context.saveSettingsDebounced();
+
+            // 刷新列表
+            await this.loadVectorFileList();
+
+            this.showNotification('✅ 作用域已切换', 'success');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换文件作用域失败:', error);
+            this.showNotification('❌ 切换失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🗑️ 删除向量化文件
+     */
+    async deleteVectorFile(fileId) {
+        try {
+            if (!confirm(`确定要删除此向量化文件吗？\n\n文件ID: ${fileId}\n\n此操作不可撤销！`)) {
+                return;
+            }
+
+            console.log('[InfoBarSettings] 🗑️ 删除向量化文件:', fileId);
+
+            // 解析fileId获取chatId和类型
+            const parts = fileId.split('{');
+            const chatId = parts[0];
+            const typeWithIndex = parts[1].replace('}', '');
+            const [type, indexStr] = typeWithIndex.split('_');
+
+            // 根据类型调用对应的删除方法
+            if (type === 'cuerpo') {
+                // 删除语料库文件
+                await this.deleteCorpusFileByCollectionId(chatId);
+            } else if (type === 'summary') {
+                // 删除总结文件
+                const recordIndex = parseInt(indexStr);
+                await this.deleteSummaryFileByIndex(chatId, recordIndex);
+            }
+
+            // 刷新列表
+            await this.loadVectorFileList();
+
+            this.showNotification('✅ 文件已删除', 'success');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除向量化文件失败:', error);
+            this.showNotification('❌ 删除失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🗑️ 根据collectionId删除语料库文件
+     */
+    async deleteCorpusFileByCollectionId(chatId) {
+        try {
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const corpusData = extCfg.vectorCorpus || {};
+
+            // 🔧 标准化chatId用于匹配
+            const normalizedChatId = this.normalizeChatIdForMatching(chatId);
+
+            // 查找匹配的语料库文件
+            for (const [fileName, corpus] of Object.entries(corpusData)) {
+                if (corpus.collectionId) {
+                    // 从collectionId中提取chatId并标准化
+                    let collectionChatId = '';
+                    if (corpus.collectionId.includes('{cuerpo}')) {
+                        collectionChatId = corpus.collectionId.replace('{cuerpo}', '');
+                    } else if (corpus.collectionId.includes('/')) {
+                        collectionChatId = corpus.collectionId.split('/')[0];
+                    }
+
+                    const normalizedCollectionChatId = this.normalizeChatIdForMatching(collectionChatId);
+
+                    if (normalizedCollectionChatId === normalizedChatId) {
+                        // 调用现有的删除方法
+                        await this.deleteCorpus(fileName);
+                        break;
+                    }
+                }
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除语料库文件失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🗑️ 根据索引删除总结文件
+     */
+    async deleteSummaryFileByIndex(chatId, recordIndex) {
+        try {
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const vectorizedSummary = extCfg.vectorizedSummary || {};
+
+            // 🔧 标准化chatId用于匹配
+            const normalizedChatId = this.normalizeChatIdForMatching(chatId);
+
+            // 🔧 查找匹配的chatId（使用标准化匹配）
+            let matchedChatId = null;
+            for (const storedChatId of Object.keys(vectorizedSummary)) {
+                if (storedChatId === 'settings') continue;
+                const normalizedStoredChatId = this.normalizeChatIdForMatching(storedChatId);
+                if (normalizedStoredChatId === normalizedChatId) {
+                    matchedChatId = storedChatId;
+                    break;
+                }
+            }
+
+            if (!matchedChatId) {
+                console.warn('[InfoBarSettings] ⚠️ 未找到匹配的聊天ID:', chatId);
+                return;
+            }
+
+            const chatData = vectorizedSummary[matchedChatId] || {};
+            const vectorizedRecords = chatData.vectorizedRecords || [];
+
+            if (!isNaN(recordIndex) && vectorizedRecords[recordIndex]) {
+                const record = vectorizedRecords[recordIndex];
+
+                // 清理后端向量数据
+                if (record.collectionId) {
+                    const purgePayload = {
+                        collectionId: record.collectionId,
+                        source: 'vectorized_summary'
+                    };
+
+                    const response = await fetch('/api/vector/purge', {
+                        method: 'POST',
+                        headers: context.getRequestHeaders(),
+                        body: JSON.stringify(purgePayload)
+                    });
+
+                    if (!response.ok) {
+                        console.warn('[InfoBarSettings] ⚠️ 清理向量数据失败');
+                    }
+                }
+
+                // 从数组中删除
+                vectorizedRecords.splice(recordIndex, 1);
+
+                // 保存配置
+                context.saveSettingsDebounced();
+
+                console.log(`[InfoBarSettings] ✅ 已删除总结 #${recordIndex + 1}`);
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除总结文件失败:', error);
+            throw error;
+        }
+    }
+
+    // ==================== 预设管理功能 ====================
+
+    /**
+     * 🆕 刷新预设列表
+     */
+    async refreshPresetList() {
+        try {
+            console.log('[InfoBarSettings] 🔄 刷新预设列表...');
+
+            const container = this.modal.querySelector('#preset-list-container');
+            if (!container) {
+                console.warn('[InfoBarSettings] ⚠️ 预设列表容器未找到');
+                return;
+            }
+
+            // 获取已保存的预设
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const presets = extensionSettings.presets || {};
+            const activePresetId = extensionSettings.activePreset || null;
+
+            // 如果没有预设，显示提示信息
+            if (Object.keys(presets).length === 0) {
+                container.innerHTML = `
+                    <div style="padding: 16px; text-align: center; color: var(--SmartThemeTextSecondaryColor, #aaa);">
+                        <p>暂无导入的预设</p>
+                        <p style="font-size: 12px; margin-top: 8px;">点击"导入预设"按钮导入配置预设</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // 生成预设列表HTML
+            let html = '<div class="preset-list" style="display: flex; flex-direction: column; gap: 8px;">';
+
+            for (const [presetId, preset] of Object.entries(presets)) {
+                const isActive = presetId === activePresetId;
+                const timestamp = preset.timestamp ? new Date(preset.timestamp).toLocaleString('zh-CN') : '未知时间';
+
+                html += `
+                    <div class="preset-item" style="
+                        padding: 12px;
+                        border: 1px solid var(--SmartThemeBorderColor, #333);
+                        border-radius: 6px;
+                        background: ${isActive ? 'var(--SmartThemeQuoteColor, rgba(255,255,255,.03))' : 'transparent'};
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; margin-bottom: 4px;">
+                                ${this.escapeHtml(preset.name || presetId)}
+                                ${isActive ? '<span style="color: var(--SmartThemeAccentColor, #4a9eff); font-size: 12px; margin-left: 8px;">[当前]</span>' : ''}
+                            </div>
+                            <div style="font-size: 12px; color: var(--SmartThemeTextSecondaryColor, #aaa);">
+                                导入时间: ${timestamp}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            ${!isActive ? `<button class="btn btn-small" data-action="switch-preset" data-preset-id="${presetId}">切换</button>` : ''}
+                            <button class="btn btn-small btn-danger" data-action="delete-preset" data-preset-id="${presetId}">删除</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+
+            console.log('[InfoBarSettings] ✅ 预设列表刷新完成，共', Object.keys(presets).length, '个预设');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 刷新预设列表失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 导出预设
+     */
+    async exportPreset() {
+        try {
+            console.log('[InfoBarSettings] 📤 开始导出预设...');
+
+            // 使用现有的导出配置功能
+            const exportData = await this.configManager.exportConfigs();
+
+            // 添加预设元数据
+            exportData.presetMetadata = {
+                name: `预设_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}`,
+                exportedAt: new Date().toISOString(),
+                version: '1.0'
+            };
+
+            // 生成文件名
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            const filename = `infobar_preset_${timestamp}.json`;
+
+            // 下载文件
+            const jsonString = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            this.showMessage('预设导出成功: ' + filename, 'success');
+            console.log('[InfoBarSettings] ✅ 预设导出成功:', filename);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 导出预设失败:', error);
+            this.showMessage('导出预设失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 导入预设
+     */
+    async importPreset() {
+        try {
+            console.log('[InfoBarSettings] 📥 开始导入预设...');
+
+            // 创建文件选择器
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                try {
+                    const text = await file.text();
+                    const importData = JSON.parse(text);
+
+                    // 验证预设数据
+                    if (!importData.configs) {
+                        throw new Error('无效的预设文件格式');
+                    }
+
+                    // 生成预设ID
+                    const presetId = `preset_${Date.now()}`;
+                    const presetName = importData.presetMetadata?.name || file.name.replace('.json', '');
+
+                    // 保存预设到extensionSettings
+                    const context = SillyTavern.getContext();
+                    const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+
+                    if (!extensionSettings.presets) {
+                        extensionSettings.presets = {};
+                    }
+
+                    extensionSettings.presets[presetId] = {
+                        name: presetName,
+                        timestamp: new Date().toISOString(),
+                        data: importData
+                    };
+
+                    // 保存到SillyTavern
+                    context.extensionSettings['Information bar integration tool'] = extensionSettings;
+                    await context.saveSettingsDebounced();
+
+                    this.showMessage(`预设导入成功: ${presetName}`, 'success');
+                    console.log('[InfoBarSettings] ✅ 预设导入成功:', presetName);
+
+                    // 刷新预设列表
+                    await this.refreshPresetList();
+
+                } catch (error) {
+                    console.error('[InfoBarSettings] ❌ 导入预设失败:', error);
+                    this.showMessage('导入预设失败: ' + error.message, 'error');
+                }
+            };
+
+            input.click();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 导入预设失败:', error);
+            this.showMessage('导入预设失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 切换预设
+     */
+    async switchPreset(presetId) {
+        try {
+            console.log('[InfoBarSettings] 🔄 切换预设:', presetId);
+
+            if (!confirm('切换预设将覆盖当前配置，是否继续？')) {
+                return;
+            }
+
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const presets = extensionSettings.presets || {};
+            const preset = presets[presetId];
+
+            if (!preset || !preset.data) {
+                throw new Error('预设不存在或数据无效');
+            }
+
+            // 应用预设配置
+            await this.configManager.importConfigs(preset.data);
+
+            // 设置为当前激活的预设
+            extensionSettings.activePreset = presetId;
+            context.extensionSettings['Information bar integration tool'] = extensionSettings;
+            await context.saveSettingsDebounced();
+
+            // 重新加载设置
+            await this.loadSettings();
+
+            this.showMessage(`已切换到预设: ${preset.name}`, 'success');
+            console.log('[InfoBarSettings] ✅ 预设切换成功:', preset.name);
+
+            // 刷新预设列表
+            await this.refreshPresetList();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换预设失败:', error);
+            this.showMessage('切换预设失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 删除预设
+     */
+    async deletePreset(presetId) {
+        try {
+            console.log('[InfoBarSettings] 🗑️ 删除预设:', presetId);
+
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const presets = extensionSettings.presets || {};
+            const preset = presets[presetId];
+
+            if (!preset) {
+                throw new Error('预设不存在');
+            }
+
+            if (!confirm(`确定要删除预设"${preset.name}"吗？`)) {
+                return;
+            }
+
+            // 删除预设
+            delete presets[presetId];
+
+            // 如果删除的是当前激活的预设，清除激活状态
+            if (extensionSettings.activePreset === presetId) {
+                delete extensionSettings.activePreset;
+            }
+
+            // 保存到SillyTavern
+            context.extensionSettings['Information bar integration tool'] = extensionSettings;
+            await context.saveSettingsDebounced();
+
+            this.showMessage(`预设已删除: ${preset.name}`, 'success');
+            console.log('[InfoBarSettings] ✅ 预设删除成功:', preset.name);
+
+            // 刷新预设列表
+            await this.refreshPresetList();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 删除预设失败:', error);
+            this.showMessage('删除预设失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 加载预设面板（重新加载15个预设面板）
+     */
+    async loadPresetPanels() {
+        try {
+            console.log('[InfoBarSettings] 🔄 开始加载预设面板...');
+
+            if (!confirm('此操作将重新加载15个预设面板，可能会覆盖您的自定义修改。是否继续？')) {
+                return;
+            }
+
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+
+            // 获取PresetPanelsManager
+            const PresetPanelsManager = window.SillyTavernInfobar?.PresetPanelsManager;
+            if (!PresetPanelsManager) {
+                throw new Error('PresetPanelsManager未找到');
+            }
+
+            // 获取预设面板配置
+            const presets = PresetPanelsManager.getPresets();
+            let customPanels = extensionSettings.customPanels || {};
+
+            // 重新加载所有预设面板
+            let loadedCount = 0;
+            for (const [key, preset] of Object.entries(presets)) {
+                customPanels[key] = JSON.parse(JSON.stringify(preset)); // 深拷贝
+                loadedCount++;
+                console.log(`[InfoBarSettings] ✅ 加载预设面板: ${key}`);
+            }
+
+            // 保存到extensionSettings
+            extensionSettings.customPanels = customPanels;
+            context.extensionSettings['Information bar integration tool'] = extensionSettings;
+            await context.saveSettingsDebounced();
+
+            this.showMessage(`成功加载 ${loadedCount} 个预设面板`, 'success');
+            console.log('[InfoBarSettings] ✅ 预设面板加载完成，共', loadedCount, '个');
+
+            // 重新加载设置界面
+            await this.loadSettings();
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载预设面板失败:', error);
+            this.showMessage('加载预设面板失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 加载预设规则（重新加载15个预设面板的规则）
+     */
+    async loadPresetRules() {
+        try {
+            console.log('[InfoBarSettings] 📋 开始加载预设规则...');
+
+            if (!confirm('此操作将重新加载15个预设面板的规则（prompts字段），可能会覆盖您的自定义规则。是否继续？')) {
+                return;
+            }
+
+            const context = SillyTavern.getContext();
+            const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+
+            // 获取PresetPanelsManager
+            const PresetPanelsManager = window.SillyTavernInfobar?.PresetPanelsManager;
+            if (!PresetPanelsManager) {
+                throw new Error('PresetPanelsManager未找到');
+            }
+
+            // 获取预设面板配置
+            const presets = PresetPanelsManager.getPresets();
+            let customPanels = extensionSettings.customPanels || {};
+
+            // 只更新预设面板的prompts字段
+            let updatedCount = 0;
+            for (const [key, preset] of Object.entries(presets)) {
+                if (customPanels[key] && preset.prompts) {
+                    customPanels[key].prompts = JSON.parse(JSON.stringify(preset.prompts)); // 深拷贝
+                    updatedCount++;
+                    console.log(`[InfoBarSettings] ✅ 更新预设规则: ${key}`);
+                }
+            }
+
+            // 保存到extensionSettings
+            extensionSettings.customPanels = customPanels;
+            context.extensionSettings['Information bar integration tool'] = extensionSettings;
+            await context.saveSettingsDebounced();
+
+            // 🔧 同步规则到 PanelRuleManager
+            const panelRuleManager = window.SillyTavernInfobar?.modules?.panelRuleManager;
+            if (panelRuleManager) {
+                console.log('[InfoBarSettings] 📝 开始同步规则到 PanelRuleManager...');
+
+                for (const [key, preset] of Object.entries(presets)) {
+                    if (customPanels[key] && preset.prompts) {
+                        // 构建规则对象
+                        const rule = {
+                            description: preset.prompts.description || '',
+                            updateRule: preset.prompts.update || '',
+                            addRule: preset.prompts.insert || '',
+                            deleteRule: preset.prompts.delete || '',
+                            initRule: preset.prompts.init || '',
+                            updatedAt: new Date().toISOString()
+                        };
+
+                        // 保存到规则管理器
+                        const success = await panelRuleManager.setPanelRule(key, rule);
+                        if (success) {
+                            console.log(`[InfoBarSettings] ✅ 面板 ${key} 的规则已同步到 PanelRuleManager`);
+                        } else {
+                            console.error(`[InfoBarSettings] ❌ 面板 ${key} 的规则同步失败`);
+                        }
+                    }
+                }
+
+                console.log('[InfoBarSettings] ✅ 规则同步完成');
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ PanelRuleManager 不可用，规则未同步');
+            }
+
+            this.showMessage(`成功更新 ${updatedCount} 个面板的规则`, 'success');
+            console.log('[InfoBarSettings] ✅ 预设规则加载完成，共更新', updatedCount, '个');
+
+            // 🔧 刷新数据表格显示
+            const dataTable = window.SillyTavernInfobar?.modules?.dataTable;
+            if (dataTable) {
+                console.log('[InfoBarSettings] 🔄 刷新数据表格显示...');
+                // 清除面板缓存
+                dataTable.clearPanelsCache();
+                // 刷新表格结构
+                dataTable.refreshTableStructure();
+                console.log('[InfoBarSettings] ✅ 数据表格已刷新');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载预设规则失败:', error);
+            this.showMessage('加载预设规则失败: ' + error.message, 'error');
         }
     }
 }
