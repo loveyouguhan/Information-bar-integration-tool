@@ -18,11 +18,12 @@ export class UnifiedVectorRetrieval {
         this.vectorizedMemoryRetrieval = dependencies.vectorizedMemoryRetrieval;
         this.aiMemoryDatabase = dependencies.aiMemoryDatabase;
         this.unifiedDataCore = dependencies.unifiedDataCore || window.InfoBarData;
-        
+        this.multiRecallReranker = dependencies.multiRecallReranker; // 🆕 多路召回+重排序
+
         // 🔧 获取SillyTavern的原生事件系统
         this.sillyTavernEventSource = null;
         this.sillyTavernEventTypes = null;
-        
+
         // 📊 状态管理
         this.initialized = false;
         this.enabled = true;
@@ -30,13 +31,16 @@ export class UnifiedVectorRetrieval {
         this.lastQuery = null;
         this.lastResults = null;
         this.lastQueryTime = 0;
-        
+
         // ⚙️ 配置
         this.config = {
             // 检索源配置
             enableCorpusRetrieval: true,      // 启用语料库检索
             enableMemoryRetrieval: true,      // 启用记忆检索
             enableSummaryRetrieval: true,     // 启用总结检索
+
+            // 🆕 多路召回配置
+            enableMultiRecall: false,         // 启用多路召回+重排序
 
             // 性能优化
             cacheTimeout: 5000,               // 缓存超时时间(ms)
@@ -51,7 +55,7 @@ export class UnifiedVectorRetrieval {
             injectionDepth: 0,                // 注入深度（0=system, 1=after_character, 2=before_examples, 4=chat_history）
             injectionPriority: 1              // 注入优先级（position参数，数字越小越靠前，建议1-5）
         };
-        
+
         console.log('[UnifiedVectorRetrieval] 🔍 统一向量检索管理器初始化');
         this.init();
     }
@@ -95,10 +99,18 @@ export class UnifiedVectorRetrieval {
             // 读取启用状态
             this.enabled = vectorCfg.enableAIRetrieval || false;
 
+            // 🆕 同步VectorizedMemoryRetrieval的enabled状态
+            // 因为向量化检索已合并到AI自动检索中，需要同步状态
+            if (this.vectorizedMemoryRetrieval && this.vectorizedMemoryRetrieval.settings) {
+                this.vectorizedMemoryRetrieval.settings.enabled = this.enabled;
+                console.log('[UnifiedVectorRetrieval] 🔄 已同步VectorizedMemoryRetrieval状态:', this.enabled);
+            }
+
             // 读取检索参数
             this.config.enableCorpusRetrieval = vectorCfg.enableCorpusRetrieval !== undefined ? vectorCfg.enableCorpusRetrieval : true;
             this.config.enableMemoryRetrieval = vectorCfg.enableMemoryRetrieval !== undefined ? vectorCfg.enableMemoryRetrieval : true;
             this.config.enableSummaryRetrieval = vectorCfg.enableSummaryRetrieval !== undefined ? vectorCfg.enableSummaryRetrieval : true;
+            this.config.enableMultiRecall = vectorCfg.enableMultiRecall !== undefined ? vectorCfg.enableMultiRecall : false; // 🆕 多路召回
             this.config.topK = vectorCfg.retrievalTopK || 10;
             this.config.threshold = vectorCfg.retrievalThreshold || 0.3;
             this.config.cacheTimeout = vectorCfg.retrievalCacheTimeout || 5000;
@@ -275,9 +287,18 @@ export class UnifiedVectorRetrieval {
     async performUnifiedRetrieval(query) {
         try {
             console.log('[UnifiedVectorRetrieval] 🔍 开始统一检索...');
-            
+
+            // 🆕 如果启用了多路召回+重排序，使用新系统
+            if (this.config.enableMultiRecall && this.multiRecallReranker) {
+                console.log('[UnifiedVectorRetrieval] 🎯 使用多路召回+重排序系统');
+                const results = await this.multiRecallReranker.execute(query);
+                console.log(`[UnifiedVectorRetrieval] ✅ 多路召回完成: ${results.length} 条结果`);
+                return results;
+            }
+
+            // 传统检索流程
             const allResults = [];
-            
+
             // 1️⃣ 语料库检索
             if (this.config.enableCorpusRetrieval && this.corpusRetrieval) {
                 try {
@@ -294,7 +315,7 @@ export class UnifiedVectorRetrieval {
                     console.error('[UnifiedVectorRetrieval] ❌ 语料库检索失败:', error);
                 }
             }
-            
+
             // 2️⃣ 记忆检索
             if (this.config.enableMemoryRetrieval && this.vectorizedMemoryRetrieval) {
                 try {
@@ -319,13 +340,13 @@ export class UnifiedVectorRetrieval {
                     console.error('[UnifiedVectorRetrieval] ❌ 记忆检索失败:', error);
                 }
             }
-            
+
             // 3️⃣ 去重和排序
             const uniqueResults = this.deduplicateAndSort(allResults);
-            
+
             console.log(`[UnifiedVectorRetrieval] ✅ 统一检索完成: ${uniqueResults.length} 条结果`);
             return uniqueResults;
-            
+
         } catch (error) {
             console.error('[UnifiedVectorRetrieval] ❌ 统一检索失败:', error);
             return [];

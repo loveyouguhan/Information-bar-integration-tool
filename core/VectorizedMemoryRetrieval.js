@@ -1378,6 +1378,7 @@ export class VectorizedMemoryRetrieval {
 
     /**
      * 语义搜索记忆
+     * 注意：此模块的向量化检索功能已合并到AI自动检索中，由UnifiedVectorRetrieval统一管理
      */
     async semanticSearch(query, options = {}) {
         try {
@@ -1389,12 +1390,14 @@ export class VectorizedMemoryRetrieval {
                 similarityThreshold = this.settings.similarityThreshold,
                 includeMetadata = true,
                 filterByType = null,
-                filterByTimeRange = null
+                filterByTimeRange = null,
+                topK = maxResults  // 🆕 支持topK参数
             } = options;
 
-            // 🔧 新增：检查是否启用
+            // 🔧 修复：检查是否启用
+            // 注意：向量化检索已合并到AI自动检索中，此处的enabled状态仅用于独立调用
             if (!this.settings.enabled) {
-                console.log('[VectorizedMemoryRetrieval] ⚠️ 向量化检索已禁用，使用基础搜索');
+                console.log('[VectorizedMemoryRetrieval] ℹ️ 独立向量化检索未启用（已由AI自动检索统一管理），使用基础搜索');
                 return await this.basicSearch(query, options);
             }
 
@@ -1408,12 +1411,66 @@ export class VectorizedMemoryRetrieval {
                 throw new Error('查询向量化失败');
             }
 
-            // 🔧 修复：使用SillyTavern向量API查询存储的向量数据
+            // 🔧 修复：查询多个collection（memory + 总结向量化）
             console.log('[VectorizedMemoryRetrieval] 🌐 使用SillyTavern向量API查询存储的向量');
-            const results = await this.vectorAPI.queryVectors(query, queryVector, 'memory', maxResults, similarityThreshold);
+            const allResults = [];
+
+            // 1️⃣ 查询memory collection
+            try {
+                const memoryResults = await this.vectorAPI.queryVectors(query, queryVector, 'memory', topK, similarityThreshold);
+                console.log(`[VectorizedMemoryRetrieval] 📚 Memory检索: ${memoryResults.length} 条`);
+                allResults.push(...memoryResults.map(r => ({ ...r, collectionType: 'memory' })));
+            } catch (error) {
+                console.warn('[VectorizedMemoryRetrieval] ⚠️ Memory检索失败:', error.message);
+            }
+
+            // 2️⃣ 查询总结向量化collections
+            try {
+                const vectorizedSummaryManager = window.SillyTavernInfobar?.modules?.vectorizedSummaryManager;
+                const summaryManager = window.SillyTavernInfobar?.modules?.summaryManager;
+
+                if (vectorizedSummaryManager) {
+                    const vectorizedRecords = vectorizedSummaryManager.vectorizedRecords || [];
+                    console.log(`[VectorizedMemoryRetrieval] 📊 找到 ${vectorizedRecords.length} 个总结向量化记录`);
+
+                    // 查询每个总结向量化collection
+                    for (const record of vectorizedRecords) {
+                        try {
+                            const summaryResults = await this.querySummaryCollection(record.collectionId, query, queryVector, topK, similarityThreshold);
+                            console.log(`[VectorizedMemoryRetrieval] 📝 总结检索 (${record.collectionId}): ${summaryResults.length} 条`);
+                            allResults.push(...summaryResults.map(r => ({ ...r, collectionType: 'summary', collectionId: record.collectionId })));
+                        } catch (error) {
+                            console.warn(`[VectorizedMemoryRetrieval] ⚠️ 总结检索失败 (${record.collectionId}):`, error.message);
+                        }
+                    }
+                }
+
+                // 3️⃣ 查询传统总结向量化collections
+                if (summaryManager) {
+                    const traditionalVectorizedRecords = summaryManager.vectorizedRecords || [];
+                    console.log(`[VectorizedMemoryRetrieval] 📊 找到 ${traditionalVectorizedRecords.length} 个传统总结向量化记录`);
+
+                    for (const record of traditionalVectorizedRecords) {
+                        try {
+                            const summaryResults = await this.querySummaryCollection(record.collectionId, query, queryVector, topK, similarityThreshold);
+                            console.log(`[VectorizedMemoryRetrieval] 📝 传统总结检索 (${record.collectionId}): ${summaryResults.length} 条`);
+                            allResults.push(...summaryResults.map(r => ({ ...r, collectionType: 'traditional_summary', collectionId: record.collectionId })));
+                        } catch (error) {
+                            console.warn(`[VectorizedMemoryRetrieval] ⚠️ 传统总结检索失败 (${record.collectionId}):`, error.message);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('[VectorizedMemoryRetrieval] ⚠️ 总结检索失败:', error.message);
+            }
+
+            // 4️⃣ 合并结果并按相似度排序
+            const sortedResults = allResults
+                .sort((a, b) => (b.score || 0) - (a.score || 0))
+                .slice(0, topK);
 
             const searchTime = Date.now() - startTime;
-            console.log(`[VectorizedMemoryRetrieval] ✅ 语义搜索完成，找到 ${results.length} 个结果，耗时 ${searchTime}ms`);
+            console.log(`[VectorizedMemoryRetrieval] ✅ 语义搜索完成，找到 ${sortedResults.length} 个结果（总共查询 ${allResults.length} 条），耗时 ${searchTime}ms`);
 
             // 🔧 修复：更新统计
             this.stats.searchCount++;
@@ -1423,7 +1480,7 @@ export class VectorizedMemoryRetrieval {
             if (this.eventSystem) {
                 this.eventSystem.emit('vectorized-memory-retrieval:search-completed', {
                     query: query,
-                    resultCount: results.length,
+                    resultCount: sortedResults.length,
                     searchTime: searchTime,
                     timestamp: Date.now()
                 });
@@ -1431,8 +1488,8 @@ export class VectorizedMemoryRetrieval {
 
             return {
                 query: query,
-                results: results,
-                totalResults: results.length,
+                results: sortedResults,
+                totalResults: sortedResults.length,
                 searchTime: searchTime,
                 timestamp: Date.now()
             };
@@ -1446,6 +1503,47 @@ export class VectorizedMemoryRetrieval {
                 error: error.message,
                 timestamp: Date.now()
             };
+        }
+    }
+
+    /**
+     * 🆕 查询总结向量化collection
+     */
+    async querySummaryCollection(collectionId, query, queryVector, topK, threshold) {
+        try {
+            const context = window.SillyTavern?.getContext?.();
+            if (!context) {
+                throw new Error('SillyTavern context未找到');
+            }
+
+            const response = await fetch('/api/vector/query', {
+                method: 'POST',
+                headers: context.getRequestHeaders(),
+                body: JSON.stringify({
+                    collectionId: collectionId,
+                    searchText: query,
+                    topK: topK,
+                    threshold: threshold,
+                    source: 'webllm',  // 总结向量化使用webllm作为source
+                    embeddings: { [query]: queryVector }
+                })
+            });
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    // 集合不存在，返回空结果
+                    return [];
+                }
+                const errorText = await response.text();
+                throw new Error(`向量查询失败 (${response.status}): ${errorText}`);
+            }
+
+            const data = await response.json();
+            return data.results || data.metadata || data || [];
+
+        } catch (error) {
+            console.error(`[VectorizedMemoryRetrieval] ❌ 查询collection失败 (${collectionId}):`, error);
+            return [];
         }
     }
 

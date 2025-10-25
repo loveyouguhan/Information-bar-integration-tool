@@ -473,12 +473,39 @@ export class VectorizedSummaryManager {
 
             console.log('[VectorizedSummaryManager] 📦 集合ID:', collectionId);
 
+            // 🔧 修复：去重 - 过滤重复的AI记忆总结内容
+            const uniqueSummaries = [];
+            const seenContents = new Set();
+            let duplicateCount = 0;
+
+            for (const summaryData of this.pendingSummaries) {
+                const summaryContent = summaryData.summary?.content || summaryData.content || '';
+
+                // 🔧 使用内容的哈希值进行去重
+                const contentHash = this.generateHash(summaryContent);
+
+                if (!seenContents.has(contentHash)) {
+                    seenContents.add(contentHash);
+                    uniqueSummaries.push(summaryData);
+                } else {
+                    duplicateCount++;
+                    console.log(`[VectorizedSummaryManager] ⚠️ 跳过重复总结 (楼层${summaryData.floorNumber}): ${summaryContent.substring(0, 50)}...`);
+                }
+            }
+
+            console.log(`[VectorizedSummaryManager] 📊 去重结果: 原始${totalSummaries}个，去重后${uniqueSummaries.length}个，过滤${duplicateCount}个重复`);
+
+            if (uniqueSummaries.length === 0) {
+                console.log('[VectorizedSummaryManager] ℹ️ 去重后没有有效的总结需要向量化');
+                return;
+            }
+
             // 🔧 准备向量化数据项
             const items = [];
             const embeddings = {}; // 🔧 修复：embeddings应该是对象，键是文本，值是向量
 
-            for (let i = 0; i < totalSummaries; i++) {
-                const summaryData = this.pendingSummaries[i];
+            for (let i = 0; i < uniqueSummaries.length; i++) {
+                const summaryData = uniqueSummaries[i];
 
                 // 🔧 修复：从summary对象中提取content
                 const summaryContent = summaryData.summary?.content || summaryData.content || '';
@@ -486,8 +513,8 @@ export class VectorizedSummaryManager {
                 const text = `【总结 #${i + 1}${floorInfo ? ` (${floorInfo})` : ''}】\n${summaryContent}`;
 
                 if (progressCallback) {
-                    const progress = 10 + (i / totalSummaries) * 60; // 10% - 70%
-                    progressCallback(progress, `正在向量化总结 ${i + 1}/${totalSummaries}...`);
+                    const progress = 10 + (i / uniqueSummaries.length) * 60; // 10% - 70%
+                    progressCallback(progress, `正在向量化总结 ${i + 1}/${uniqueSummaries.length}...`);
                 }
 
                 try {
@@ -507,7 +534,7 @@ export class VectorizedSummaryManager {
                     // 🔧 修复：embeddings是对象，键是文本内容，值是向量数组
                     embeddings[text] = vector;
 
-                    console.log(`[VectorizedSummaryManager] ✅ 总结 ${i + 1} 向量化成功`);
+                    console.log(`[VectorizedSummaryManager] ✅ 总结 ${i + 1}/${uniqueSummaries.length} 向量化成功`);
 
                 } catch (error) {
                     console.error(`[VectorizedSummaryManager] ❌ 总结 ${i + 1} 向量化失败:`, error);
@@ -551,7 +578,7 @@ export class VectorizedSummaryManager {
 
             // 🔧 创建向量化记录（只保存元数据，不保存向量数据）
             // 🔧 修复：使用UI期望的数据结构（startFloor, endFloor, vectorCount）
-            const floorNumbers = this.pendingSummaries.map(s => s.floorNumber || 0);
+            const floorNumbers = uniqueSummaries.map(s => s.floorNumber || 0);
             const minFloor = Math.min(...floorNumbers);
             const maxFloor = Math.max(...floorNumbers);
 
@@ -560,9 +587,11 @@ export class VectorizedSummaryManager {
                 collectionId: collectionId,
                 startFloor: minFloor,  // 🔧 修复：使用startFloor而不是floorRange.min
                 endFloor: maxFloor,    // 🔧 修复：使用endFloor而不是floorRange.max
-                vectorCount: totalSummaries,  // 🔧 修复：使用vectorCount而不是summaryCount
+                vectorCount: uniqueSummaries.length,  // 🔧 修复：使用去重后的数量
+                duplicateCount: duplicateCount,  // 🔧 新增：记录过滤的重复数量
+                originalCount: totalSummaries,  // 🔧 新增：记录原始总结数量
                 timestamp: Date.now(),
-                summaries: this.pendingSummaries.map(s => ({
+                summaries: uniqueSummaries.map(s => ({
                     content: s.summary?.content || s.content || '',
                     floorNumber: s.floorNumber,
                     timestamp: s.timestamp,
@@ -584,19 +613,25 @@ export class VectorizedSummaryManager {
             await this.savePendingSummaries();
 
             if (progressCallback) {
-                progressCallback(100, '向量化完成！');
+                progressCallback(100, `向量化完成！(${uniqueSummaries.length}个有效，${duplicateCount}个重复已过滤)`);
             }
 
             // 🔧 触发向量化完成事件
             if (this.eventSystem) {
                 this.eventSystem.emit('vectorized-summary:completed', {
                     record: vectorizedRecord,
-                    summaryCount: totalSummaries,
+                    summaryCount: uniqueSummaries.length,
+                    duplicateCount: duplicateCount,
+                    originalCount: totalSummaries,
                     timestamp: Date.now()
                 });
             }
 
-            console.log('[VectorizedSummaryManager] ✅ 向量化总结完成');
+            console.log('[VectorizedSummaryManager] ✅ 向量化总结完成:', {
+                uniqueCount: uniqueSummaries.length,
+                duplicateCount: duplicateCount,
+                originalCount: totalSummaries
+            });
 
         } catch (error) {
             console.error('[VectorizedSummaryManager] ❌ 向量化总结失败:', error);

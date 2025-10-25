@@ -1,12 +1,13 @@
 /**
  * 🚀 自定义向量API适配器
  * 用于连接外部向量化API服务
- * 
+ *
  * 功能增强：
  * - 获取API提供的模型列表
  * - 筛选embedding模型
  * - 向量化数据处理
  * - 支持OpenAI兼容API
+ * - 🆕 向量缓存机制
  */
 export class CustomVectorAPIAdapter {
     constructor(config = {}) {
@@ -19,27 +20,37 @@ export class CustomVectorAPIAdapter {
             // 🆕 新增：API类型配置
             apiType: config.apiType || 'openai', // openai, ollama, custom
             modelsEndpoint: config.modelsEndpoint || '/v1/models', // 模型列表端点
-            embeddingsEndpoint: config.embeddingsEndpoint || '/v1/embeddings' // 向量化端点
+            embeddingsEndpoint: config.embeddingsEndpoint || '/v1/embeddings', // 向量化端点
+            // 🆕 向量缓存配置
+            enableCache: config.enableCache !== false, // 默认启用缓存
+            cacheMaxSize: config.cacheMaxSize || 1000, // 最大缓存条目数
+            cacheTTL: config.cacheTTL || 3600000 // 缓存过期时间（1小时）
         };
 
         this.stats = {
             requestCount: 0,
             successCount: 0,
             errorCount: 0,
-            totalLatency: 0
+            totalLatency: 0,
+            cacheHits: 0,
+            cacheMisses: 0
         };
 
         // 🆕 模型缓存
         this.cachedModels = null;
         this.cachedEmbeddingModels = null;
+        this.cachedRerankModels = null; // 🆕 reranker模型缓存
         this.modelsCacheTime = 0;
         this.modelsCacheDuration = 5 * 60 * 1000; // 5分钟缓存
 
+        // 🆕 向量缓存
+        this.vectorCache = new Map(); // key: text, value: {vector, timestamp}
+
         // 🔧 SillyTavern上下文（用于获取请求头）
         this.context = null;
-        
+
         this.initialized = false;
-        console.log('[CustomVectorAPIAdapter] 🚀 自定义向量API适配器初始化');
+        console.log('[CustomVectorAPIAdapter] 🚀 自定义向量API适配器初始化（向量缓存已启用）');
     }
     
     /**
@@ -270,11 +281,77 @@ export class CustomVectorAPIAdapter {
     }
 
     /**
+     * 🆕 获取reranker模型列表（筛选）
+     * @param {boolean} refresh - 是否强制刷新缓存
+     * @returns {Promise<Array>} reranker模型列表
+     */
+    async getRerankModels(refresh = false) {
+        if (!refresh && this.cachedRerankModels &&
+            (Date.now() - this.modelsCacheTime) < this.modelsCacheDuration) {
+            console.log('[CustomVectorAPIAdapter] 📦 使用缓存的reranker模型列表');
+            return this.cachedRerankModels;
+        }
+
+        try {
+            const allModels = await this.getModels(refresh);
+
+            // 筛选reranker模型的关键词
+            const rerankKeywords = [
+                'rerank',
+                'reranker',
+                'bge-reranker',
+                'jina-reranker',
+                'cohere-rerank'
+            ];
+
+            const rerankModels = allModels.filter(model => {
+                const modelId = (model.id || model.name || '').toLowerCase();
+
+                // 检查是否包含reranker关键词
+                const isReranker = rerankKeywords.some(keyword =>
+                    modelId.includes(keyword)
+                );
+
+                return isReranker;
+            });
+
+            // 缓存结果
+            this.cachedRerankModels = rerankModels;
+
+            console.log(`[CustomVectorAPIAdapter] ✅ 筛选出 ${rerankModels.length} 个reranker模型`);
+            console.log('[CustomVectorAPIAdapter] 📋 模型列表:',
+                rerankModels.map(m => m.id).join(', '));
+
+            return rerankModels;
+
+        } catch (error) {
+            console.error('[CustomVectorAPIAdapter] ❌ 获取reranker模型列表失败:', error);
+            throw error;
+        }
+    }
+
+    /**
      * 向量化文本
+     * 🆕 支持向量缓存机制
      */
     async vectorizeText(text) {
         if (!this.isConfigValid()) {
             throw new Error('自定义向量API配置无效：缺少URL或API密钥');
+        }
+
+        // 🆕 检查缓存
+        if (this.config.enableCache) {
+            const cached = this.getCachedVector(text);
+            if (cached) {
+                this.stats.cacheHits++;
+                console.log('[CustomVectorAPIAdapter] 💾 使用缓存的向量:', {
+                    textLength: text.length,
+                    cacheHits: this.stats.cacheHits,
+                    cacheSize: this.vectorCache.size
+                });
+                return cached;
+            }
+            this.stats.cacheMisses++;
         }
 
         const startTime = Date.now();
@@ -283,7 +360,9 @@ export class CustomVectorAPIAdapter {
         try {
             console.log('[CustomVectorAPIAdapter] 📤 发送向量化请求:', {
                 textLength: text.length,
-                model: this.config.model
+                model: this.config.model,
+                cacheEnabled: this.config.enableCache,
+                cacheMisses: this.stats.cacheMisses
             });
 
             // 🔧 修复：智能检测API类型和构建请求
@@ -380,8 +459,14 @@ export class CustomVectorAPIAdapter {
 
             console.log('[CustomVectorAPIAdapter] ✅ 向量化成功:', {
                 vectorDimensions: vector.length,
-                latency: `${latency}ms`
+                latency: `${latency}ms`,
+                cacheEnabled: this.config.enableCache
             });
+
+            // 🆕 保存到缓存
+            if (this.config.enableCache) {
+                this.cacheVector(text, vector);
+            }
 
             return vector;
 
@@ -714,6 +799,67 @@ export class CustomVectorAPIAdapter {
     }
 
     /**
+     * 🆕 获取缓存的向量
+     */
+    getCachedVector(text) {
+        if (!this.config.enableCache) return null;
+
+        const cached = this.vectorCache.get(text);
+        if (!cached) return null;
+
+        // 检查是否过期
+        const now = Date.now();
+        if (now - cached.timestamp > this.config.cacheTTL) {
+            this.vectorCache.delete(text);
+            return null;
+        }
+
+        return cached.vector;
+    }
+
+    /**
+     * 🆕 缓存向量
+     */
+    cacheVector(text, vector) {
+        if (!this.config.enableCache) return;
+
+        // 检查缓存大小限制
+        if (this.vectorCache.size >= this.config.cacheMaxSize) {
+            // 删除最旧的缓存项
+            const firstKey = this.vectorCache.keys().next().value;
+            this.vectorCache.delete(firstKey);
+        }
+
+        this.vectorCache.set(text, {
+            vector: vector,
+            timestamp: Date.now()
+        });
+    }
+
+    /**
+     * 🆕 清除向量缓存
+     */
+    clearVectorCache() {
+        this.vectorCache.clear();
+        console.log('[CustomVectorAPIAdapter] 🧹 向量缓存已清除');
+    }
+
+    /**
+     * 🆕 获取缓存统计
+     */
+    getCacheStats() {
+        return {
+            size: this.vectorCache.size,
+            maxSize: this.config.cacheMaxSize,
+            hits: this.stats.cacheHits,
+            misses: this.stats.cacheMisses,
+            hitRate: this.stats.cacheHits + this.stats.cacheMisses > 0
+                ? (this.stats.cacheHits / (this.stats.cacheHits + this.stats.cacheMisses) * 100).toFixed(2) + '%'
+                : '0%'
+        };
+    }
+
+    /**
      * 获取状态
      */
     getStatus() {
@@ -724,8 +870,9 @@ export class CustomVectorAPIAdapter {
             model: this.config.model,
             stats: this.getStats(),
             cachedModelsCount: this.cachedEmbeddingModels?.length || 0,
-            cacheValid: this.modelsCacheTime > 0 && 
-                       (Date.now() - this.modelsCacheTime) < this.modelsCacheDuration
+            cacheValid: this.modelsCacheTime > 0 &&
+                       (Date.now() - this.modelsCacheTime) < this.modelsCacheDuration,
+            vectorCache: this.getCacheStats()
         };
     }
 }

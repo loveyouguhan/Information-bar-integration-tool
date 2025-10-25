@@ -129,8 +129,8 @@ export class VectorAPIAdapter {
 
             // 准备items
             const items = vectors.map((v, index) => ({
-                hash: this.generateHash(v.content + Date.now() + index + Math.random()),
-                text: v.content,
+                hash: this.generateHash((v.content || v.text) + Date.now() + index + Math.random()),
+                text: v.content || v.text, // 🔧 修复：支持text字段
                 metadata: {
                     ...v.metadata,
                     // 🔧 新增：记忆相关元数据
@@ -142,26 +142,46 @@ export class VectorAPIAdapter {
                 }
             }));
 
-            // 准备embeddings
-            const embeddings = vectors.reduce((acc, v) => {
-                acc[v.content] = v.vector;
-                return acc;
-            }, {});
+            // 🔧 修复：构建请求体
+            const requestBody = {
+                collectionId: collectionId,
+                items: items,
+                source: 'transformers' // 🔧 修复：使用SillyTavern的默认向量源
+            };
+
+            // 🔧 修复：只有当所有向量都提供了vector字段时，才添加embeddings
+            // 否则让SillyTavern自动生成embeddings
+            const hasAllVectors = vectors.every(v => v.vector && Array.isArray(v.vector));
+            if (hasAllVectors) {
+                const embeddings = vectors.reduce((acc, v) => {
+                    const text = v.content || v.text;
+                    acc[text] = v.vector;
+                    return acc;
+                }, {});
+                requestBody.embeddings = embeddings;
+                console.log(`[VectorAPIAdapter] 📦 使用预计算的embeddings`);
+            } else {
+                console.log(`[VectorAPIAdapter] 📦 让SillyTavern自动生成embeddings`);
+            }
+
+            console.log(`[VectorAPIAdapter] 📦 插入请求体:`, {
+                collectionId,
+                itemsCount: items.length,
+                hasEmbeddings: !!requestBody.embeddings
+            });
 
             // 调用API
             const response = await fetch('/api/vector/insert', {
                 method: 'POST',
                 headers: this.context?.getRequestHeaders?.() || { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    collectionId: collectionId,
-                    items: items,
-                    source: 'infobar_memory',
-                    embeddings: embeddings
-                })
+                body: JSON.stringify(requestBody)
             });
+
+            console.log(`[VectorAPIAdapter] 📡 插入响应状态: ${response.status}`);
 
             if (!response.ok) {
                 const errorText = await response.text();
+                console.error(`[VectorAPIAdapter] ❌ 插入失败响应:`, errorText);
                 throw new Error(`向量插入失败 (${response.status}): ${errorText}`);
             }
 
@@ -198,7 +218,7 @@ export class VectorAPIAdapter {
                 searchText: queryText,
                 topK: topK,
                 threshold: threshold,
-                source: 'infobar_memory'
+                source: 'transformers' // 🔧 修复：使用SillyTavern的默认向量源
             };
 
             // 如果提供了queryVector，添加到embeddings中
@@ -206,11 +226,15 @@ export class VectorAPIAdapter {
                 requestBody.embeddings = { [queryText]: queryVector };
             }
 
+            console.log(`[VectorAPIAdapter] 📦 查询请求体:`, requestBody);
+
             const response = await fetch('/api/vector/query', {
                 method: 'POST',
                 headers: this.context?.getRequestHeaders?.() || { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody)
             });
+
+            console.log(`[VectorAPIAdapter] 📡 响应状态: ${response.status}`);
 
             if (!response.ok) {
                 if (response.status === 404) {
@@ -219,6 +243,14 @@ export class VectorAPIAdapter {
                     return [];
                 }
                 const errorText = await response.text();
+                console.error(`[VectorAPIAdapter] ❌ 查询失败响应:`, errorText);
+
+                // 🔧 修复：如果是500错误且集合不存在，返回空数组而不是抛出错误
+                if (response.status === 500 && errorText.includes('not found')) {
+                    console.log(`[VectorAPIAdapter] ℹ️ 集合可能不存在，返回空结果`);
+                    return [];
+                }
+
                 throw new Error(`向量查询失败 (${response.status}): ${errorText}`);
             }
 
@@ -242,6 +274,7 @@ export class VectorAPIAdapter {
         } catch (error) {
             console.error('[VectorAPIAdapter] ❌ 查询向量失败:', error);
             this.stats.errorCount++;
+            // 🔧 修复：返回空数组而不是抛出错误，避免阻塞检索流程
             return [];
         }
     }

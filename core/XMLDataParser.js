@@ -672,6 +672,10 @@ export class XMLDataParser {
 
             const [, operation, panelName, rowNumber, dataParams] = match;
 
+            // 🔧 修复：在验证面板名称之前，先更新支持的面板列表
+            // 这确保了即使XMLDataParser在早期初始化，也能获取到最新的面板配置
+            this.updateSupportedPanels();
+
             // 🚨 新增：严格验证面板名称是否在支持列表中
             if (!this.isValidPanelName(panelName)) {
                 const errorMsg = `🚨🚨🚨 CRITICAL ERROR: AI尝试操作不存在的面板 "${panelName}"！

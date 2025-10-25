@@ -2410,11 +2410,11 @@ ${summaryContent}
     }
 
     /**
-     * 🆕 检查并向量化传统总结
+     * 🔧 修复：检查并向量化传统总结 - 总结完成后立即向量化
      */
     async checkAndVectorizeTraditionalSummary(currentSummaryRecord) {
         try {
-            console.log('[SummaryManager] 🔍 检查是否需要向量化传统总结...');
+            console.log('[SummaryManager] 🔍 传统总结完成，开始向量化...');
 
             if (!this.settings.vectorizeSummaryEnabled) {
                 console.log('[SummaryManager] ⏸️ 传统总结向量化未启用');
@@ -2426,72 +2426,48 @@ ${summaryContent}
                 return;
             }
 
-            const context = window.SillyTavern?.getContext?.();
-            if (!context) {
-                throw new Error('SillyTavern上下文未找到');
+            if (!currentSummaryRecord) {
+                console.warn('[SummaryManager] ⚠️ 当前总结记录为空，跳过向量化');
+                return;
             }
 
-            const currentMessageCount = context.chat?.length || 0;
-            const messagesSinceLastVectorize = currentMessageCount - this.lastVectorizeMessageId;
-
-            console.log('[SummaryManager] 📊 向量化检查:', {
-                currentMessageCount,
-                lastVectorizeMessageId: this.lastVectorizeMessageId,
-                messagesSinceLastVectorize,
-                vectorizeFloorCount: this.settings.vectorizeSummaryFloorCount
+            console.log('[SummaryManager] 📊 向量化当前总结:', {
+                summaryId: currentSummaryRecord.id,
+                messageRange: currentSummaryRecord.messageRange,
+                contentLength: currentSummaryRecord.content?.length || 0
             });
 
-            // 检查是否达到向量化楼层
-            if (messagesSinceLastVectorize >= this.settings.vectorizeSummaryFloorCount) {
-                console.log('[SummaryManager] 🎯 达到向量化楼层，开始向量化传统总结...');
-                await this.vectorizeTraditionalSummaries(currentMessageCount);
-            } else {
-                console.log('[SummaryManager] ℹ️ 未达到向量化楼层，当前进度:',
-                    `${messagesSinceLastVectorize}/${this.settings.vectorizeSummaryFloorCount}`);
-            }
+            // 🔧 修复：直接向量化当前总结，不再使用楼层间隔
+            await this.vectorizeTraditionalSummaries([currentSummaryRecord]);
 
         } catch (error) {
-            console.error('[SummaryManager] ❌ 检查向量化传统总结失败:', error);
+            console.error('[SummaryManager] ❌ 向量化传统总结失败:', error);
             throw error;
         }
     }
 
     /**
-     * 🆕 向量化传统总结
+     * 🔧 修复：向量化传统总结 - 接受总结数组参数
+     * @param {Array} summariesToVectorize - 需要向量化的总结数组
      */
-    async vectorizeTraditionalSummaries(currentMessageCount) {
+    async vectorizeTraditionalSummaries(summariesToVectorize) {
         try {
             this.vectorizationInProgress = true;
             console.log('[SummaryManager] 🔮 开始向量化传统总结...');
+
+            // 🔧 修复：验证输入参数
+            if (!summariesToVectorize || summariesToVectorize.length === 0) {
+                console.log('[SummaryManager] ℹ️ 没有总结需要向量化');
+                return;
+            }
+
+            console.log(`[SummaryManager] 📊 待向量化总结数量: ${summariesToVectorize.length}`);
 
             // 获取当前聊天ID
             const currentChatId = this.getCurrentChatId();
             if (!currentChatId) {
                 throw new Error('无法获取当前聊天ID');
             }
-
-            // 获取当前聊天的总结历史
-            const chatData = await this.unifiedDataCore.getChatData(currentChatId) || {};
-            const summaryHistory = chatData.summary_history || [];
-
-            if (summaryHistory.length === 0) {
-                console.log('[SummaryManager] ℹ️ 没有总结记录，跳过向量化');
-                return;
-            }
-
-            // 获取需要向量化的总结（从上次向量化位置到当前）
-            const summariesToVectorize = summaryHistory.filter(summary => {
-                const summaryEndMessage = summary.messageRange?.end || 0;
-                return summaryEndMessage > this.lastVectorizeMessageId &&
-                       summaryEndMessage <= currentMessageCount;
-            });
-
-            if (summariesToVectorize.length === 0) {
-                console.log('[SummaryManager] ℹ️ 没有新的总结需要向量化');
-                return;
-            }
-
-            console.log('[SummaryManager] 📊 找到 ${summariesToVectorize.length} 个总结需要向量化');
 
             // 获取向量化API
             const infoBarTool = window.SillyTavernInfobar;
@@ -2571,13 +2547,14 @@ ${summaryContent}
             const insertPayload = {
                 collectionId: collectionId,
                 items: items,
-                source: 'infobar_summary',
+                source: 'webllm',  // 🔧 修复：使用webllm作为source，与向量化总结保持一致
                 embeddings: embeddings
             };
 
             console.log('[SummaryManager] 📤 开始保存向量数据到后端API...');
             console.log('[SummaryManager] 📊 集合ID:', collectionId);
             console.log('[SummaryManager] 📊 数据项数:', items.length);
+            console.log('[SummaryManager] 📦 完整payload:', JSON.stringify(insertPayload, null, 2));
 
             const response = await fetch('/api/vector/insert', {
                 method: 'POST',
@@ -2609,15 +2586,48 @@ ${summaryContent}
                 }))
             };
 
-            // 保存向量化记录到聊天数据
-            if (!chatData.vectorized_summary_records) {
-                chatData.vectorized_summary_records = [];
+            // 🔧 修复：保存向量化记录到vectorizedSummary（总结文件区域）
+            // 复用之前获取的context和extCfg
+            if (!extCfg.vectorizedSummary) {
+                extCfg.vectorizedSummary = {};
             }
-            chatData.vectorized_summary_records.push(vectorizedRecord);
-            await this.unifiedDataCore.setChatData(currentChatId, chatData);
+            if (!extCfg.vectorizedSummary[currentChatId]) {
+                extCfg.vectorizedSummary[currentChatId] = {};
+            }
+            if (!extCfg.vectorizedSummary[currentChatId].vectorizedRecords) {
+                extCfg.vectorizedSummary[currentChatId].vectorizedRecords = [];
+            }
 
-            // 更新lastVectorizeMessageId
-            this.lastVectorizeMessageId = currentMessageCount;
+            // 🔧 创建向量化总结记录（与向量化总结格式一致）
+            const summaryRecord = {
+                id: vectorizedRecord.id,
+                collectionId: collectionId,
+                type: 'traditional_summary',  // 标记为传统总结
+                startFloor: vectorizedRecord.messageRangeStart,
+                endFloor: vectorizedRecord.messageRangeEnd,
+                vectorCount: items.length,
+                timestamp: vectorizedRecord.timestamp,
+                summaries: vectorizedRecord.summaries
+            };
+
+            // 🔧 添加到向量化记录列表
+            extCfg.vectorizedSummary[currentChatId].vectorizedRecords.push(summaryRecord);
+
+            // 🔧 保存配置
+            const stContext = window.SillyTavern?.getContext?.();
+            if (stContext?.saveSettingsDebounced) {
+                await stContext.saveSettingsDebounced();
+            }
+
+            console.log('[SummaryManager] ✅ 传统总结向量化记录已保存到vectorizedSummary:', {
+                chatId: currentChatId,
+                collectionId: collectionId,
+                summaryCount: items.length
+            });
+
+            // 🔧 修复：更新lastVectorizeMessageId为最新总结的结束位置
+            const maxEndMessage = Math.max(...summariesToVectorize.map(s => s.messageRange?.end || 0));
+            this.lastVectorizeMessageId = maxEndMessage;
 
             // 触发向量化完成事件
             if (this.eventSystem) {
@@ -2632,7 +2642,8 @@ ${summaryContent}
             console.log('[SummaryManager] ✅ 传统总结向量化完成:', {
                 summaryCount: items.length,
                 collectionId: collectionId,
-                recordId: vectorizedRecord.id
+                recordId: vectorizedRecord.id,
+                lastVectorizeMessageId: this.lastVectorizeMessageId
             });
 
         } catch (error) {

@@ -418,14 +418,16 @@ export class ContextualRetrieval {
 
     /**
      * 🔧 向量检索
+     * 注意：此方法已被UnifiedVectorRetrieval统一管理，仅作为备用
      */
     async vectorSearch(query, options = {}) {
         try {
             if (!this.vectorizedMemoryRetrieval) return [];
 
             // 🔧 修复：检查向量化检索是否启用
+            // 注意：向量化检索已合并到AI自动检索中，由UnifiedVectorRetrieval统一管理
             if (!this.vectorizedMemoryRetrieval.settings?.enabled) {
-                console.log('[ContextualRetrieval] ⏸️ 向量化记忆检索已禁用，跳过向量搜索');
+                console.log('[ContextualRetrieval] ℹ️ 向量化记忆检索未单独启用（已由AI自动检索统一管理），跳过独立向量搜索');
                 return [];
             }
 
