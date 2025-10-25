@@ -60,6 +60,7 @@ import { NovelAnalyzer } from './core/NovelAnalyzer.js';
 import { CorpusRetrieval } from './core/CorpusRetrieval.js';
 import { VectorizedSummaryManager } from './core/VectorizedSummaryManager.js';
 import { UnifiedVectorRetrieval } from './core/UnifiedVectorRetrieval.js';
+import { MultiRecallReranker } from './core/MultiRecallReranker.js'; // 🆕 多路召回+重排序
 
 // 🔧 修复：初始化控制台门禁，默认禁用日志收集，避免在配置加载前收集日志
 (function bootstrapInfobarConsoleGate() {
@@ -608,17 +609,30 @@ class InformationBarIntegrationTool {
         });
         console.log('[InfoBarTool] ✅ 语料库检索系统初始化完成');
 
-        // 🔍 新增：初始化统一向量检索管理器
-        this.unifiedVectorRetrieval = new UnifiedVectorRetrieval({
+        // 🎯 新增：初始化多路召回+重排序系统
+        this.multiRecallReranker = new MultiRecallReranker({
             corpusRetrieval: this.corpusRetrieval,
             vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
             aiMemoryDatabase: this.aiMemoryDatabase,
             unifiedDataCore: this.dataCore
         });
+        console.log('[InfoBarTool] ✅ 多路召回+重排序系统初始化完成');
+
+        // 🔍 新增：初始化统一向量检索管理器
+        this.unifiedVectorRetrieval = new UnifiedVectorRetrieval({
+            corpusRetrieval: this.corpusRetrieval,
+            vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
+            aiMemoryDatabase: this.aiMemoryDatabase,
+            unifiedDataCore: this.dataCore,
+            multiRecallReranker: this.multiRecallReranker // 🆕 注入多路召回系统
+        });
         console.log('[InfoBarTool] ✅ 统一向量检索管理器初始化完成');
 
         // 🔧 立即添加到全局modules
         if (window.SillyTavernInfobar && window.SillyTavernInfobar.modules) {
+            window.SillyTavernInfobar.modules.multiRecallReranker = this.multiRecallReranker;
+            console.log('[InfoBarTool] ✅ multiRecallReranker 已添加到全局 modules');
+
             window.SillyTavernInfobar.modules.unifiedVectorRetrieval = this.unifiedVectorRetrieval;
             console.log('[InfoBarTool] ✅ unifiedVectorRetrieval 已添加到全局 modules');
         }
@@ -650,10 +664,13 @@ class InformationBarIntegrationTool {
             vectorizedMemoryRetrieval: this.vectorizedMemoryRetrieval,
             deepMemoryManager: this.deepMemoryManager,
             aiMemoryDatabase: this.aiMemoryDatabase, // 🗄️ AI记忆数据库
+            vectorAPI: this.vectorizedMemoryRetrieval?.vectorAPI, // 🔧 修复：暴露VectorAPIAdapter
+            customVectorAPI: this.vectorizedMemoryRetrieval?.customVectorAPI, // 🔧 修复：暴露CustomVectorAPIAdapter
             intelligentMemoryClassifier: this.intelligentMemoryClassifier,
             ragMemoryFormatter: this.ragMemoryFormatter, // 🎨 RAG优化：记忆格式化器
             aiMemoryDatabaseInjector: this.aiMemoryDatabaseInjector,
             frontendDisplayManager: this.frontendDisplayManager,
+            multiRecallReranker: this.multiRecallReranker, // 🎯 多路召回+重排序
             fieldRuleManager: this.fieldRuleManager,
             presetPanelsManager: PresetPanelsManager, // 🔧 新增：预设面板管理器（静态类）
             panelRuleManager: this.panelRuleManager,
@@ -1005,10 +1022,14 @@ class InformationBarIntegrationTool {
                 storyPlanningAssistant: this.storyPlanningAssistant, // 📖 新增：剧情规划助手
                 novelAnalyzer: this.novelAnalyzer, // 📚 新增：小说分析器
                 corpusRetrieval: this.corpusRetrieval, // 🔍 新增：语料库检索系统
+                multiRecallReranker: this.multiRecallReranker, // 🎯 新增：多路召回+重排序系统
                 unifiedVectorRetrieval: this.unifiedVectorRetrieval, // 🔍 新增：统一向量检索管理器
                 vectorizedSummaryManager: this.vectorizedSummaryManager, // 🔮 新增：向量化总结管理器
                 // 🔧 修复：添加自定义API任务队列模块
-                customAPITaskQueue: this.infoBarSettings?.customAPITaskQueue
+                customAPITaskQueue: this.infoBarSettings?.customAPITaskQueue,
+                // 🔧 修复：暴露向量API适配器
+                vectorAPI: this.vectorizedMemoryRetrieval?.vectorAPI,
+                customVectorAPI: this.vectorizedMemoryRetrieval?.customVectorAPI
             };
 
             // 确保eventSource也被设置
@@ -1090,6 +1111,12 @@ setTimeout(() => {
     if (!window.SillyTavernInfobar.modules.panelRuleManager && informationBarTool.panelRuleManager) {
         window.SillyTavernInfobar.modules.panelRuleManager = informationBarTool.panelRuleManager;
         console.log('[InfoBarTool] 🔧 备用机制：panelRuleManager 已添加到全局 modules');
+    }
+
+    // 🔧 新增：添加多路召回+重排序系统到全局
+    if (informationBarTool.multiRecallReranker) {
+        window.SillyTavernInfobar.modules.multiRecallReranker = informationBarTool.multiRecallReranker;
+        console.log('[InfoBarTool] ✅ multiRecallReranker 已添加到全局 modules');
     }
 
     // 🔧 新增：添加统一向量检索管理器到全局
