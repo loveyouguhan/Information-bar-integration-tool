@@ -56,6 +56,13 @@ export class CustomAPITaskQueue {
                 maxRetries: 2,
                 timeout: 9999000  // 默认9999秒
             },
+            AI_MEMORY_SUMMARY: {
+                name: 'ai_memory_summary',
+                priority: this.priorities.MEDIUM,
+                debounceDelay: 3000,
+                maxRetries: 2,
+                timeout: 9999000  // 默认9999秒
+            },
             MANUAL: {
                 name: 'manual',
                 priority: this.priorities.CRITICAL,
@@ -557,6 +564,8 @@ export class CustomAPITaskQueue {
                 return await this.executeSummaryTask(task);
             case 'MEMORY':
                 return await this.executeMemoryTask(task);
+            case 'AI_MEMORY_SUMMARY':
+                return await this.executeAIMemorySummaryTask(task);
             case 'MANUAL':
                 return await this.executeManualTask(task);
             default:
@@ -692,6 +701,69 @@ export class CustomAPITaskQueue {
 
         } catch (error) {
             console.error('[CustomAPITaskQueue] ❌ 记忆处理任务失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🆕 执行AI记忆总结任务
+     */
+    async executeAIMemorySummaryTask(task) {
+        console.log('[CustomAPITaskQueue] 🧠 执行AI记忆总结任务');
+
+        try {
+            const content = task.data?.content;
+            if (!content || content.length < 10) {
+                console.log('[CustomAPITaskQueue] ⚠️ 消息内容太短，跳过AI记忆总结');
+                return;
+            }
+
+            // 获取AIMemorySummarizer实例
+            const aiMemorySummarizer = window.SillyTavernInfobar?.modules?.summaryManager?.aiMemorySummarizer;
+            if (!aiMemorySummarizer) {
+                console.warn('[CustomAPITaskQueue] ⚠️ AIMemorySummarizer不可用，无法生成AI记忆总结');
+                return;
+            }
+
+            console.log('[CustomAPITaskQueue] 🤖 调用自定义API生成AI记忆总结...');
+
+            // 构建AI记忆总结提示词
+            const summaryPrompt = `请为以下对话内容生成AI记忆总结：
+
+${content}
+
+请按照以下格式输出：
+
+<ai_memory_summary>
+<!--
+"type": "ai_memory",
+"content": "简洁的剧情总结内容（100-200字）",
+"importance": 0.8,
+"tags": ["关键词1", "关键词2"],
+"category": "剧情发展"
+-->
+</ai_memory_summary>
+
+要求：
+- 提取核心剧情要点和重要对话
+- 突出角色行为和情感变化
+- 保持客观中性的叙述
+- 长度控制在100-200字`;
+
+            // 调用自定义API
+            const summaryContent = await aiMemorySummarizer.summaryManager.callSummaryAPI(summaryPrompt);
+
+            console.log('[CustomAPITaskQueue] ✅ AI记忆总结生成完成，长度:', summaryContent.length);
+
+            // 解析并处理总结内容
+            const smartPromptSystem = window.SillyTavernInfobar?.modules?.smartPromptSystem;
+            if (smartPromptSystem && typeof smartPromptSystem.handleGeneratedMessage === 'function') {
+                await smartPromptSystem.handleGeneratedMessage({ message: summaryContent });
+                console.log('[CustomAPITaskQueue] ✅ AI记忆总结已处理');
+            }
+
+        } catch (error) {
+            console.error('[CustomAPITaskQueue] ❌ AI记忆总结任务失败:', error);
             throw error;
         }
     }

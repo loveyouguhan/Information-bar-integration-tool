@@ -497,12 +497,64 @@ export class AIMemoryDatabaseInjector {
     }
 
     /**
+     * 🆕 获取AI记忆总结的API模式配置
+     * @returns {'main' | 'custom'} - 返回应该使用的API类型
+     */
+    getAIMemorySummaryAPIMode() {
+        try {
+            const extensionSettings = this.context.extensionSettings?.['Information bar integration tool'];
+            const memoryEnhancement = extensionSettings?.memoryEnhancement;
+            const aiConfig = memoryEnhancement?.ai;
+
+            // 获取AI记忆总结的API模式配置
+            const apiMode = aiConfig?.apiMode || 'auto';
+
+            console.log('[AIMemoryDatabaseInjector] 🔧 AI记忆总结API模式:', apiMode);
+
+            // 如果是auto模式，检查全局自定义API配置
+            if (apiMode === 'auto') {
+                const globalAPIConfig = extensionSettings?.apiConfig;
+                const isCustomAPIEnabled = globalAPIConfig?.enabled && globalAPIConfig?.apiKey && globalAPIConfig?.model;
+
+                if (isCustomAPIEnabled) {
+                    console.log('[AIMemoryDatabaseInjector] 🔧 Auto模式：检测到全局自定义API已启用，使用自定义API');
+                    return 'custom';
+                } else {
+                    console.log('[AIMemoryDatabaseInjector] 🔧 Auto模式：全局自定义API未启用，使用主API');
+                    return 'main';
+                }
+            }
+
+            // 返回明确配置的模式
+            return apiMode === 'custom' ? 'custom' : 'main';
+
+        } catch (error) {
+            console.error('[AIMemoryDatabaseInjector] ❌ 获取API模式失败:', error);
+            return 'main'; // 默认使用主API
+        }
+    }
+
+    /**
      * 检测是否为主API请求
      * 🔧 核心功能：独立检测，不受自定义API配置影响
+     * 🆕 新增：支持根据AI记忆总结的API模式配置决定注入目标
      */
     async detectMainAPI() {
         try {
             console.log('[AIMemoryDatabaseInjector] 🔍 开始主API检测...');
+
+            // 🆕 新增：检查AI记忆总结的API模式配置
+            const aiMemoryAPIMode = this.getAIMemorySummaryAPIMode();
+
+            if (aiMemoryAPIMode === 'custom') {
+                console.log('[AIMemoryDatabaseInjector] 🔧 AI记忆总结配置为使用自定义API，跳过主API注入');
+                return false;
+            }
+
+            if (aiMemoryAPIMode === 'main') {
+                console.log('[AIMemoryDatabaseInjector] 🔧 AI记忆总结配置为使用主API，继续主API注入');
+                // 继续执行原有的主API检测逻辑
+            }
 
             // 🚀 方法1：检查当前使用的API类型
             const currentAPI = this.context.main_api;
@@ -566,7 +618,7 @@ export class AIMemoryDatabaseInjector {
             // 检查扩展设置中的自定义API配置
             const extensionSettings = this.context.extensionSettings?.['Information bar integration tool'];
             const apiConfig = extensionSettings?.apiConfig;
-            
+
             return apiConfig?.enabled && apiConfig?.apiKey && apiConfig?.model;
         } catch {
             return false;

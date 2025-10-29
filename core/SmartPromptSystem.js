@@ -1304,92 +1304,133 @@ ${panelRulesSection}
 
     /**
      * 生成智能提示词
+     * @param {Object} options - 生成选项
+     * @param {boolean} options.includeTableRecords - 是否包含表格记录提示词
+     * @param {boolean} options.includeAIMemorySummary - 是否包含AI记忆总结提示词
      */
-    async generateSmartPrompt() {
+    async generateSmartPrompt(options = {}) {
         try {
-            console.log('[SmartPromptSystem] 🔍 开始生成智能提示词...');
+            // 🆕 新增：默认包含所有功能（向后兼容）
+            const {
+                includeTableRecords = true,
+                includeAIMemorySummary = true
+            } = options;
 
-            // 获取启用的面板配置
-            const enabledPanels = await this.getEnabledPanels();
+            console.log('[SmartPromptSystem] 🔍 开始生成智能提示词...', {
+                includeTableRecords,
+                includeAIMemorySummary
+            });
 
-            if (enabledPanels.length === 0) {
-                console.log('[SmartPromptSystem] ℹ️ 没有启用的面板，跳过提示词生成');
+            // 🆕 新增：如果两个功能都不包含，返回空
+            if (!includeTableRecords && !includeAIMemorySummary) {
+                console.log('[SmartPromptSystem] ℹ️ 无需生成提示词（两个功能都不包含）');
                 return '';
             }
 
-            // 🔧 新增：检查总结功能需求
-            const summaryInstructions = await this.generateSummaryInstructions();
-            console.log('[SmartPromptSystem] 📝 总结指令生成:', summaryInstructions ? '已添加' : '无需添加');
-
-            // 🚀 增强：获取AI记忆增强数据（包含历史记忆）
-            const memoryEnhancedData = await this.getAIMemoryEnhancedData(enabledPanels);
-            const currentPanelData = memoryEnhancedData.current;
-
-            // 🔧 新增：智能分析更新策略
-            const updateStrategy = await this.analyzeUpdateStrategy(enabledPanels, currentPanelData);
-
-            // 检测是否有新启用的子项需要补充数据
-            const missingDataFields = await this.detectMissingDataFields(enabledPanels);
-
-            // 🎯 新增：分析自定义面板缺失情况
-            const customPanelsMissing = missingDataFields.filter(field => {
-                // 通过面板类型识别自定义面板
-                const panel = enabledPanels.find(p => p.id === field.panelId);
-                return panel && panel.type === 'custom';
-            });
-
-            if (customPanelsMissing.length > 0) {
-                console.log(`[SmartPromptSystem] 🎯 检测到 ${customPanelsMissing.length} 个自定义面板缺失数据:`,
-                    customPanelsMissing.map(p => p.panelName));
+            // 获取启用的面板配置（仅在需要表格记录时）
+            let enabledPanels = [];
+            if (includeTableRecords) {
+                enabledPanels = await this.getEnabledPanels();
+                if (enabledPanels.length === 0) {
+                    console.log('[SmartPromptSystem] ℹ️ 没有启用的面板，跳过表格记录提示词生成');
+                }
             }
 
-            // 🆕 获取破甲提示词
-            const armorBreakingPrompt = await this.getArmorBreakingPrompt();
-            if (armorBreakingPrompt) {
-                console.log('[SmartPromptSystem] 🛡️ 已获取破甲提示词，将添加到提示词顶部');
+            // 🔧 新增：检查总结功能需求（仅在需要AI记忆总结时）
+            let summaryInstructions = null;
+            if (includeAIMemorySummary) {
+                summaryInstructions = await this.generateSummaryInstructions();
+                console.log('[SmartPromptSystem] 📝 总结指令生成:', summaryInstructions ? '已添加' : '无需添加');
             }
 
-            // 🔧 新增：根据更新策略智能选择对应的模板
+            // 🚀 增强：获取AI记忆增强数据（仅在需要表格记录时）
+            let memoryEnhancedData = { current: {}, historical: {}, persistent: {}, context: {}, metadata: {} };
+            let currentPanelData = {};
+            let updateStrategy = { type: 'full', reason: '默认全量更新' };
+            let missingDataFields = [];
+
+            if (includeTableRecords && enabledPanels.length > 0) {
+                memoryEnhancedData = await this.getAIMemoryEnhancedData(enabledPanels);
+                currentPanelData = memoryEnhancedData.current;
+
+                // 🔧 新增：智能分析更新策略
+                updateStrategy = await this.analyzeUpdateStrategy(enabledPanels, currentPanelData);
+
+                // 检测是否有新启用的子项需要补充数据
+                missingDataFields = await this.detectMissingDataFields(enabledPanels);
+            }
+
+            // 🎯 新增：分析自定义面板缺失情况（仅在需要表格记录时）
+            let customPanelsMissing = [];
+            if (includeTableRecords && enabledPanels.length > 0) {
+                customPanelsMissing = missingDataFields.filter(field => {
+                    // 通过面板类型识别自定义面板
+                    const panel = enabledPanels.find(p => p.id === field.panelId);
+                    return panel && panel.type === 'custom';
+                });
+
+                if (customPanelsMissing.length > 0) {
+                    console.log(`[SmartPromptSystem] 🎯 检测到 ${customPanelsMissing.length} 个自定义面板缺失数据:`,
+                        customPanelsMissing.map(p => p.panelName));
+                }
+            }
+
+            // 🆕 获取破甲提示词（仅在需要表格记录时）
+            let armorBreakingPrompt = null;
+            if (includeTableRecords) {
+                armorBreakingPrompt = await this.getArmorBreakingPrompt();
+                if (armorBreakingPrompt) {
+                    console.log('[SmartPromptSystem] 🛡️ 已获取破甲提示词，将添加到提示词顶部');
+                }
+            }
+
+            // 🔧 新增：根据更新策略智能选择对应的模板（仅在需要表格记录时）
             let prompt = '';
-            const templateSelectionReason = this.getTemplateSelectionReason(updateStrategy, missingDataFields);
+            if (includeTableRecords && enabledPanels.length > 0) {
+                const templateSelectionReason = this.getTemplateSelectionReason(updateStrategy, missingDataFields);
 
-            if (updateStrategy.type === 'incremental') {
-                prompt = await this.buildIncrementalPrompt(enabledPanels, memoryEnhancedData, updateStrategy, missingDataFields);
-                console.log('[SmartPromptSystem] 📊 使用增量更新模板 -', templateSelectionReason);
-            } else {
-                prompt = await this.buildFullUpdatePrompt(enabledPanels, memoryEnhancedData, updateStrategy);
-                console.log('[SmartPromptSystem] 📊 使用全量更新模板 -', templateSelectionReason);
+                if (updateStrategy.type === 'incremental') {
+                    prompt = await this.buildIncrementalPrompt(enabledPanels, memoryEnhancedData, updateStrategy, missingDataFields);
+                    console.log('[SmartPromptSystem] 📊 使用增量更新模板 -', templateSelectionReason);
+                } else {
+                    prompt = await this.buildFullUpdatePrompt(enabledPanels, memoryEnhancedData, updateStrategy);
+                    console.log('[SmartPromptSystem] 📊 使用全量更新模板 -', templateSelectionReason);
+                }
+
+                // 🆕 如果有破甲提示词，添加到提示词最顶部
+                if (armorBreakingPrompt) {
+                    prompt = armorBreakingPrompt + '\n\n' + prompt;
+                    console.log('[SmartPromptSystem] 🛡️ 破甲提示词已添加到提示词最顶部');
+                }
+
+                // 检测输出模式
+                const outputMode = this.getOutputMode();
+                prompt = prompt.replace('{{OUTPUT_MODE}}', outputMode);
+
+                console.log('[SmartPromptSystem] 🔍 模板替换结果:');
+                console.log('原始模板长度:', this.promptTemplate.length);
+                console.log('更新策略:', updateStrategy.type, `(数据覆盖率: ${updateStrategy.dataPercentage}%)`);
+                console.log('最终提示词长度:', prompt.length);
             }
 
-            // 🆕 如果有破甲提示词，添加到提示词最顶部
-            if (armorBreakingPrompt) {
-                prompt = armorBreakingPrompt + '\n\n' + prompt;
-                console.log('[SmartPromptSystem] 🛡️ 破甲提示词已添加到提示词最顶部');
-            }
-
-            // 检测输出模式
-            const outputMode = this.getOutputMode();
-            prompt = prompt.replace('{{OUTPUT_MODE}}', outputMode);
-
-            console.log('[SmartPromptSystem] 🔍 模板替换结果:');
-            console.log('原始模板长度:', this.promptTemplate.length);
-            console.log('更新策略:', updateStrategy.type, `(数据覆盖率: ${updateStrategy.dataPercentage}%)`);
-            console.log('最终提示词长度:', prompt.length);
-
-            // 🔧 新增：将总结指令添加到提示词末尾
-            if (summaryInstructions) {
-                prompt += '\n\n' + summaryInstructions;
+            // 🔧 新增：将总结指令添加到提示词末尾（仅在需要AI记忆总结时）
+            if (includeAIMemorySummary && summaryInstructions) {
+                if (prompt) {
+                    prompt += '\n\n' + summaryInstructions;
+                } else {
+                    prompt = summaryInstructions;
+                }
                 console.log('[SmartPromptSystem] 📝 已将总结指令添加到智能提示词');
             }
 
-            // 📖 新增：将剧情规划建议添加到提示词
-            if (this.storyPlanningCache && this.storyPlanningCache.prompt) {
+            // 📖 新增：将剧情规划建议添加到提示词（仅在需要表格记录时）
+            if (includeTableRecords && this.storyPlanningCache && this.storyPlanningCache.prompt) {
                 // 检查缓存是否过期（5分钟）
                 const cacheAge = Date.now() - this.storyPlanningCache.timestamp;
                 if (cacheAge < 300000) {
                     // 🔧 修复：检查提示词长度，防止重复内容导致过长
                     const planningPrompt = this.storyPlanningCache.prompt;
-                    
+
                     // 🔧 新增：限制剧情规划提示词的最大长度（防止重复）
                     const maxPlanningPromptLength = 2000; // 2000字符限制
                     if (planningPrompt.length > maxPlanningPromptLength) {
@@ -1399,9 +1440,9 @@ ${panelRulesSection}
                     } else {
                         prompt = planningPrompt + '\n\n' + prompt;
                     }
-                    
+
                     console.log('[SmartPromptSystem] 📖 已将剧情规划建议添加到智能提示词 (长度:', planningPrompt.length, '字符)');
-                    
+
                     // 使用后清除缓存
                     this.storyPlanningCache = null;
                 } else {
@@ -1414,7 +1455,12 @@ ${panelRulesSection}
             // 智能提示词是格式说明和要求，里面的<aiThinkProcess>等是示例，不应该被过滤
             // 正则表达式只应该应用于主API返回的实际消息内容
 
-            console.log(`[SmartPromptSystem] ✅ 智能提示词生成完成，包含 ${enabledPanels.length} 个面板`);
+            console.log(`[SmartPromptSystem] ✅ 智能提示词生成完成`, {
+                includeTableRecords,
+                includeAIMemorySummary,
+                panelCount: enabledPanels.length,
+                promptLength: prompt.length
+            });
 
             return prompt;
 
@@ -1477,6 +1523,48 @@ ${aiMemoryInstruction}
         } catch (error) {
             console.warn('[SmartPromptSystem] ⚠️ 检测输出模式失败，默认为主API:', error);
             return '主API';
+        }
+    }
+
+    /**
+     * 🆕 获取目标API类型
+     * @param {string} apiMode - API模式配置 ('main' | 'custom' | 'auto')
+     * @param {boolean} isGlobalCustomAPIEnabled - 全局自定义API是否启用
+     * @returns {'main' | 'custom'} - 目标API类型
+     */
+    getTargetAPI(apiMode, isGlobalCustomAPIEnabled) {
+        try {
+            console.log('[SmartPromptSystem] 🔍 判断目标API:', { apiMode, isGlobalCustomAPIEnabled });
+
+            // 如果明确指定了API类型
+            if (apiMode === 'main') {
+                console.log('[SmartPromptSystem] 🎯 明确配置：使用主API');
+                return 'main';
+            }
+
+            if (apiMode === 'custom') {
+                console.log('[SmartPromptSystem] 🎯 明确配置：使用自定义API');
+                return 'custom';
+            }
+
+            // auto模式：跟随全局配置
+            if (apiMode === 'auto') {
+                if (isGlobalCustomAPIEnabled) {
+                    console.log('[SmartPromptSystem] 🎯 Auto模式：全局自定义API已启用，使用自定义API');
+                    return 'custom';
+                } else {
+                    console.log('[SmartPromptSystem] 🎯 Auto模式：全局自定义API未启用，使用主API');
+                    return 'main';
+                }
+            }
+
+            // 默认使用主API
+            console.log('[SmartPromptSystem] 🎯 默认：使用主API');
+            return 'main';
+
+        } catch (error) {
+            console.error('[SmartPromptSystem] ❌ 判断目标API失败:', error);
+            return 'main'; // 默认使用主API
         }
     }
 
@@ -3106,46 +3194,51 @@ ${aiMemoryInstruction}
 
             // 🔧 检查是否启用表格记录（使用之前的 basicSettings 变量）
             const tableRecordsEnabled = basicSettings.tableRecords?.enabled !== false;
-            
+            const tableRecordsAPIMode = basicSettings.tableRecords?.apiMode || 'auto';
+
             // 检查是否启用AI记忆总结
             const memoryEnhancementSettings = extensionSettings?.memoryEnhancement?.ai || {};
             const aiMemorySummaryEnabled = memoryEnhancementSettings.enabled === true;
-            
+            const aiMemorySummaryAPIMode = memoryEnhancementSettings.apiMode || 'auto';
+
             console.log('[SmartPromptSystem] 🔧 功能启用状态:', {
                 tableRecordsEnabled,
-                aiMemorySummaryEnabled
+                tableRecordsAPIMode,
+                aiMemorySummaryEnabled,
+                aiMemorySummaryAPIMode
             });
 
             // 🔧 新增：执行面板记忆注入（独立于API模式，始终执行）
             await this.injectPanelDataToMemory();
 
-            // 🔧 修复：检查是否启用了自定义API模式，并清理错误的禁止规则
+            // 🔧 修复：检查全局自定义API配置
             const apiConfig = extensionSettings.apiConfig || {};
-            const isCustomAPIEnabled = apiConfig.enabled && apiConfig.apiKey && apiConfig.model;
+            const isGlobalCustomAPIEnabled = apiConfig.enabled && apiConfig.apiKey && apiConfig.model;
 
-            if (isCustomAPIEnabled) {
-                console.log('[SmartPromptSystem] 🔧 检测到自定义API模式已启用');
-                console.log('[SmartPromptSystem] 📊 自定义API提供商:', apiConfig.provider);
-                console.log('[SmartPromptSystem] 📊 自定义API模型:', apiConfig.model);
-                console.log('[SmartPromptSystem] ℹ️ 自定义API模式下不注入主API提示词');
+            // 🆕 新增：智能判断各功能应该注入到哪个API
+            const tableRecordsTargetAPI = this.getTargetAPI(tableRecordsAPIMode, isGlobalCustomAPIEnabled);
+            const aiMemorySummaryTargetAPI = this.getTargetAPI(aiMemorySummaryAPIMode, isGlobalCustomAPIEnabled);
 
-                // 🔧 修复：清除可能存在的禁止规则，避免影响主API
-                await this.clearMainAPIProhibitionRules();
+            console.log('[SmartPromptSystem] 🎯 API注入目标:', {
+                tableRecords: tableRecordsTargetAPI,
+                aiMemorySummary: aiMemorySummaryTargetAPI,
+                globalCustomAPI: isGlobalCustomAPIEnabled
+            });
 
-                // 🔧 修复：清除主API提示词，避免填报提示词出现在主API中
-                if (typeof this.context.setExtensionPrompt === 'function') {
-                    this.context.setExtensionPrompt('Information bar integration tool', '', 1, 0);
-                    console.log('[SmartPromptSystem] 🧹 已清除主API提示词（自定义API模式）');
-                }
+            // 🆕 新增：判断是否需要注入主API
+            const needMainAPIInjection =
+                (tableRecordsEnabled && tableRecordsTargetAPI === 'main') ||
+                (aiMemorySummaryEnabled && aiMemorySummaryTargetAPI === 'main');
 
-                // 🔧 修复：自定义API模式下，直接返回，不生成和注入智能提示词
-                console.log('[SmartPromptSystem] ✅ 自定义API模式下，跳过主API智能提示词生成');
-                return;
-            } else {
-                // 🆕 自定义API未启用时，向主API注入必须输出标签的规则
-                await this.injectMainAPIRequiredRules();
-                console.log('[SmartPromptSystem] ✅ 自定义API未启用，已注入主API必须输出规则');
-            }
+            // 🆕 新增：判断是否需要注入自定义API
+            const needCustomAPIInjection =
+                (tableRecordsEnabled && tableRecordsTargetAPI === 'custom') ||
+                (aiMemorySummaryEnabled && aiMemorySummaryTargetAPI === 'custom');
+
+            console.log('[SmartPromptSystem] 🎯 注入需求:', {
+                needMainAPIInjection,
+                needCustomAPIInjection
+            });
 
             // 🔧 修复：如果表格记录和AI记忆总结都未启用，不生成智能提示词
             if (!tableRecordsEnabled && !aiMemorySummaryEnabled) {
@@ -3158,17 +3251,43 @@ ${aiMemoryInstruction}
                 return;
             }
 
-            // 生成智能提示词
-            const smartPrompt = await this.generateSmartPrompt();
+            // 🆕 新增：根据需求生成和注入提示词
+            if (needMainAPIInjection) {
+                console.log('[SmartPromptSystem] 📝 生成主API提示词...');
 
-            if (smartPrompt) {
-                // 注入到API请求中
-                await this.injectPromptToAPI(smartPrompt);
-                this.lastInjectionTime = Date.now();
-                this.injectionActive = true;
+                // 生成主API提示词（包含需要注入到主API的功能）
+                const mainAPIPrompt = await this.generateSmartPrompt({
+                    includeTableRecords: tableRecordsEnabled && tableRecordsTargetAPI === 'main',
+                    includeAIMemorySummary: aiMemorySummaryEnabled && aiMemorySummaryTargetAPI === 'main'
+                });
 
-                console.log('[SmartPromptSystem] ✅ 智能提示词注入成功');
+                if (mainAPIPrompt) {
+                    // 注入主API必须输出规则
+                    await this.injectMainAPIRequiredRules();
+
+                    // 注入到主API
+                    await this.injectPromptToAPI(mainAPIPrompt);
+                    console.log('[SmartPromptSystem] ✅ 主API提示词注入成功');
+                }
+            } else {
+                // 清除主API提示词
+                if (typeof this.context.setExtensionPrompt === 'function') {
+                    this.context.setExtensionPrompt('Information bar integration tool', '', 1, 0);
+                    console.log('[SmartPromptSystem] 🧹 已清除主API提示词（无需注入）');
+                }
+
+                // 清除禁止规则
+                await this.clearMainAPIProhibitionRules();
             }
+
+            // 🆕 新增：如果需要注入自定义API，这里可以添加相应逻辑
+            // 注意：自定义API的注入由CustomAPITaskQueue处理，这里只需要确保提示词生成正确
+            if (needCustomAPIInjection) {
+                console.log('[SmartPromptSystem] ℹ️ 检测到需要注入自定义API，由CustomAPITaskQueue处理');
+            }
+
+            this.lastInjectionTime = Date.now();
+            this.injectionActive = true;
 
         } catch (error) {
             console.error('[SmartPromptSystem] ❌ 处理生成开始事件失败:', error);
@@ -3229,6 +3348,39 @@ ${aiMemoryInstruction}
                     }
 
                     console.log('[SmartPromptSystem] ✅ 数据解析和更新完成');
+                }
+
+                // 🆕 新增：检查是否需要调用自定义API生成AI记忆总结
+                const memoryEnhancementSettings = extensionSettings?.memoryEnhancement?.ai || {};
+                const aiMemorySummaryEnabled = memoryEnhancementSettings.enabled === true;
+                const aiMemorySummaryAPIMode = memoryEnhancementSettings.apiMode || 'auto';
+
+                if (aiMemorySummaryEnabled) {
+                    // 判断AI记忆总结的目标API
+                    const apiConfig = extensionSettings.apiConfig || {};
+                    const isGlobalCustomAPIEnabled = apiConfig.enabled && apiConfig.apiKey && apiConfig.model;
+                    const aiMemorySummaryTargetAPI = this.getTargetAPI(aiMemorySummaryAPIMode, isGlobalCustomAPIEnabled);
+
+                    console.log('[SmartPromptSystem] 🔍 AI记忆总结目标API:', aiMemorySummaryTargetAPI);
+
+                    if (aiMemorySummaryTargetAPI === 'custom') {
+                        console.log('[SmartPromptSystem] 🚀 AI记忆总结使用自定义API模式，准备调用自定义API生成总结...');
+
+                        // 添加自定义API任务到队列
+                        const customAPITaskQueue = window.SillyTavernInfobar?.modules?.customAPITaskQueue;
+                        if (customAPITaskQueue && typeof customAPITaskQueue.addTask === 'function') {
+                            customAPITaskQueue.addTask({
+                                type: 'MEMORY',  // 使用MEMORY类型
+                                data: {
+                                    content: messageContent
+                                },
+                                source: 'ai_memory_summary_custom_api'
+                            });
+                            console.log('[SmartPromptSystem] ✅ AI记忆总结自定义API任务已添加到队列');
+                        } else {
+                            console.warn('[SmartPromptSystem] ⚠️ CustomAPITaskQueue不可用，无法添加AI记忆总结任务');
+                        }
+                    }
                 }
 
                 this.injectionActive = false;
@@ -5676,8 +5828,8 @@ infobar_data标签（独立输出，必须后输出）`;
                 this.handleSillyTavernMessage(data);
             });
 
-            // 监听AI消息接收事件
-            $(document).on('CHARACTER_MESSAGE_RENDERED', (event, data) => {
+            // 🔧 修复：监听AI消息接收事件（使用小写事件名）
+            $(document).on('character_message_rendered', (event, data) => {
                 this.handleSillyTavernMessage(data);
             });
 
@@ -5925,9 +6077,46 @@ infobar_data标签（独立输出，必须后输出）`;
                 return;
             }
 
+            // 🆕 新增：检查AI记忆总结是否使用自定义API模式
+            const extensionSettings = this.context.extensionSettings['Information bar integration tool'] || {};
+            const memoryEnhancementSettings = extensionSettings?.memoryEnhancement?.ai || {};
+            const aiMemorySummaryEnabled = memoryEnhancementSettings.enabled === true;
+            const aiMemorySummaryAPIMode = memoryEnhancementSettings.apiMode || 'auto';
+
+            if (aiMemorySummaryEnabled) {
+                // 判断AI记忆总结的目标API
+                const apiConfig = extensionSettings.apiConfig || {};
+                const isGlobalCustomAPIEnabled = apiConfig.enabled && apiConfig.apiKey && apiConfig.model;
+                const aiMemorySummaryTargetAPI = this.getTargetAPI(aiMemorySummaryAPIMode, isGlobalCustomAPIEnabled);
+
+                console.log('[SmartPromptSystem] 🔍 AI记忆总结目标API:', aiMemorySummaryTargetAPI);
+
+                if (aiMemorySummaryTargetAPI === 'custom') {
+                    console.log('[SmartPromptSystem] 🚀 AI记忆总结使用自定义API模式，准备调用自定义API生成总结...');
+
+                    // 添加自定义API任务到队列
+                    const customAPITaskQueue = window.SillyTavernInfobar?.modules?.customAPITaskQueue;
+                    if (customAPITaskQueue && typeof customAPITaskQueue.addTask === 'function') {
+                        customAPITaskQueue.addTask({
+                            type: 'AI_MEMORY_SUMMARY',  // 🆕 使用AI_MEMORY_SUMMARY类型
+                            data: {
+                                content: messageContent
+                            },
+                            source: 'ai_memory_summary_custom_api'
+                        });
+                        console.log('[SmartPromptSystem] ✅ AI记忆总结自定义API任务已添加到队列');
+                    } else {
+                        console.warn('[SmartPromptSystem] ⚠️ CustomAPITaskQueue不可用，无法添加AI记忆总结任务');
+                    }
+
+                    // 自定义API模式下，不处理主API回复中的AI记忆总结
+                    return;
+                }
+            }
+
             // 检查消息是否包含AI记忆总结标签（支持新旧格式）
-            if (!messageContent.includes('<ai_memory_summary>') && 
-                !messageContent.includes('<AI_MEMORY_SUMMARY>') && 
+            if (!messageContent.includes('<ai_memory_summary>') &&
+                !messageContent.includes('<AI_MEMORY_SUMMARY>') &&
                 !messageContent.includes('[AI_MEMORY_SUMMARY]')) {
                 return;
             }

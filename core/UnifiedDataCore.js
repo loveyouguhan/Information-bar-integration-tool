@@ -61,14 +61,36 @@ export class UnifiedDataCore {
             enableTableRecord: true,
             enableMemoryAssist: true,
             defaultCollapsed: true,  // 🔧 修复：默认启用折叠状态
-            
+
+            // 🆕 基础功能配置（新增）
+            basic: {
+                // 表格记录配置
+                tableRecords: {
+                    enabled: true,
+                    apiMode: 'auto'  // 'main' | 'custom' | 'auto' (auto=跟随全局apiConfig)
+                },
+                // 集成系统配置
+                integrationSystem: {
+                    enabled: true
+                }
+            },
+
+            // 🆕 记忆增强配置（新增）
+            memoryEnhancement: {
+                // AI记忆总结配置
+                ai: {
+                    enabled: false,
+                    apiMode: 'auto'  // 'main' | 'custom' | 'auto' (auto=跟随全局apiConfig)
+                }
+            },
+
             // 提示词插入位置配置
             promptPosition: {
                 mode: 'afterCharacter', // 'beforeCharacter' | 'afterCharacter' | 'atDepthSystem' | 'atDepthUser' | 'atDepthAssistant'
                 depth: 0 // 用于 @D 模式的深度控制
             },
-            
-            // API配置
+
+            // API配置（全局自定义API配置）
             apiConfig: {
                 enabled: false,
                 provider: 'gemini',
@@ -87,16 +109,16 @@ export class UnifiedDataCore {
                 delayedGeneration: false,
                 delayFloors: 1
             },
-            
+
             // 界面配置
             theme: {
                 current: 'default',
                 custom: {}
             },
-            
+
             // 面板配置
             panels: {},
-            
+
             // 数据管理配置
             dataManagement: {
                 autoBackup: true,
