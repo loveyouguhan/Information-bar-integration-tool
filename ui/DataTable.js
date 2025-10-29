@@ -1553,37 +1553,27 @@ export class DataTable {
                 'currentLocation': '当前位置'
             };
 
-            // 构建可能的字段名列表
+            // 🔄 新架构：优先使用中文字段名读取数据
+            // 构建可能的字段名列表（按优先级排序）
             const possibleFieldNames = [
-                item.key,           // 原始key（可能是中文）
-                item.name,          // 显示名称（可能是中文）
+                // 1. 优先：中文字段名（新架构）
+                item.displayName,   // 显示名称（中文）
+                item.name,          // 名称（中文）
+                item.key,           // 键名（可能是中文）
+
+                // 2. 其次：col_X格式（旧架构，向后兼容）
+                // 稍后根据字段索引添加
+
+                // 3. 最后：英文字段名（最旧架构，向后兼容）
+                // 稍后添加
+
                 item.id,            // ID
                 item.fieldName,     // 字段名
                 item.originalKey    // 原始键名
             ].filter(name => name); // 过滤掉空值
 
-            // 🔧 修复：如果item.key或item.name是中文，添加对应的英文key
-            // 这样可以在旧数据（英文key）中查找值
-            [item.key, item.name].forEach(fieldName => {
-                if (fieldName && /[\u4e00-\u9fa5]/.test(fieldName)) {
-                    // 是中文字段名，查找对应的英文key
-                    const englishKey = this.mapDisplayNameToLegacyField(fieldName);
-                    if (englishKey && !possibleFieldNames.includes(englishKey)) {
-                        possibleFieldNames.push(englishKey);
-                        console.log(`[DataTable] 🔄 中文字段映射到英文key: ${fieldName} -> ${englishKey}`);
-                    }
-                }
-            });
-
-            // 🔧 修复：添加中文映射字段名（反向映射）
-            possibleFieldNames.forEach(fieldName => {
-                if (fieldMapping[fieldName]) {
-                    possibleFieldNames.push(fieldMapping[fieldName]);
-                }
-            });
-
-            // 🔧 新增：添加对col_X格式字段的支持
-            // 检查是否有col_X格式的字段，如果有，根据字段顺序映射
+            // 🔄 向后兼容：添加col_X格式字段支持
+            // 检查数据中是否有col_X格式的字段
             const availableKeys = Object.keys(panelData);
             const colKeys = availableKeys.filter(key => key.startsWith('col_')).sort((a, b) => {
                 const numA = parseInt(a.replace('col_', ''));
@@ -1592,8 +1582,7 @@ export class DataTable {
             });
 
             if (colKeys.length > 0) {
-                // 如果数据使用col_X格式，尝试根据字段顺序映射
-                // 获取当前字段在面板配置中的索引
+                // 如果数据使用col_X格式，根据字段顺序映射
                 const fieldIndex = this.getFieldIndexInPanel(item, panelData);
                 if (fieldIndex >= 0 && fieldIndex < colKeys.length) {
                     const mappedColKey = colKeys[fieldIndex];
@@ -1601,6 +1590,28 @@ export class DataTable {
                     console.log(`[DataTable] 🔧 col_X格式映射: 字段索引${fieldIndex} -> ${mappedColKey}`);
                 }
             }
+
+            // 🔄 向后兼容：添加英文字段名支持（最旧架构）
+            [item.key, item.name, item.displayName].forEach(fieldName => {
+                if (fieldName && /[\u4e00-\u9fa5]/.test(fieldName)) {
+                    // 是中文字段名，查找对应的英文key（用于读取旧数据）
+                    const englishKey = this.mapDisplayNameToLegacyField(fieldName);
+                    if (englishKey && !possibleFieldNames.includes(englishKey)) {
+                        possibleFieldNames.push(englishKey);
+                        console.log(`[DataTable] 🔄 中文字段映射到英文key（向后兼容）: ${fieldName} -> ${englishKey}`);
+                    }
+                }
+            });
+
+            // 🔄 添加字段映射表中的映射
+            possibleFieldNames.forEach(fieldName => {
+                if (fieldMapping[fieldName]) {
+                    const mappedName = fieldMapping[fieldName];
+                    if (!possibleFieldNames.includes(mappedName)) {
+                        possibleFieldNames.push(mappedName);
+                    }
+                }
+            });
 
             // 对于自定义面板，需要特殊处理字段名匹配
             if (item.name && typeof item.name === 'string') {
@@ -4123,7 +4134,17 @@ export class DataTable {
                 '情绪': 'emotion',
                 '关系': 'relationship',
                 '备注': 'notes',
-                
+                // 能力/属性相关（个人信息）
+                '智力': 'intelligence',
+                '体力': 'strength',
+                '力量': 'strength',
+                '魅力': 'charisma',
+                '运气': 'luck',
+                '感知': 'perception',
+                '意志力': 'willpower',
+                '反应速度': 'reactionSpeed',
+                '学习能力': 'learningAbility',
+
                 // 世界信息面板
                 '世界名称': 'name',
                 '类型': 'type',
@@ -7355,53 +7376,25 @@ export class DataTable {
             const extensionSettings = context.extensionSettings;
             const configs = extensionSettings['Information bar integration tool'] || {};
 
-            // 检查是否是基础面板的自定义子项
-            const panelConfig = configs[cellInfo.panelId];
-            if (panelConfig && panelConfig.subItems && Array.isArray(panelConfig.subItems)) {
-                // 查找匹配的自定义子项
-                const subItem = panelConfig.subItems.find(item => {
-                    const itemKey = item.key || item.name?.toLowerCase().replace(/\s+/g, '_');
-                    const itemName = item.displayName || item.name;
-
-                    // 匹配字段名
-                    return itemKey === cellInfo.property ||
-                           itemName === cellInfo.property ||
-                           item.name === cellInfo.property;
-                });
-
-                if (subItem) {
-                    // 更新子项的值
-                    subItem.value = newValue;
-
-                    // 保存配置
-                    context.saveSettingsDebounced();
-
-                    console.log(`[DataTable] ✅ 已更新自定义子项值: ${cellInfo.panelId}.${cellInfo.property} = "${newValue}"`);
-                    return true;
-                }
+            // 仅对真正的“自定义面板”更新子项值，避免污染基础/预设面板配置
+            const customPanelConfig = configs.customPanels?.[cellInfo.panelId];
+            const isCustomPanel = !!customPanelConfig && (customPanelConfig.type === 'custom' || String(cellInfo.panelId).startsWith('custom'));
+            if (!isCustomPanel) {
+                // 基础/预设面板的字段值应存入聊天数据，不应写入配置项
+                return false;
             }
 
-            // 检查是否是自定义面板的子项
-            const customPanelConfig = configs.customPanels?.[cellInfo.panelId];
-            if (customPanelConfig && customPanelConfig.subItems && Array.isArray(customPanelConfig.subItems)) {
-                // 查找匹配的自定义子项
+            if (customPanelConfig && Array.isArray(customPanelConfig.subItems)) {
+                // 查找匹配的自定义子项（支持多种命名）
                 const subItem = customPanelConfig.subItems.find(item => {
                     const itemKey = item.key || item.name?.toLowerCase().replace(/\s+/g, '_');
                     const itemName = item.displayName || item.name;
-
-                    // 匹配字段名
-                    return itemKey === cellInfo.property ||
-                           itemName === cellInfo.property ||
-                           item.name === cellInfo.property;
+                    return itemKey === cellInfo.property || itemName === cellInfo.property || item.name === cellInfo.property;
                 });
 
                 if (subItem) {
-                    // 更新子项的值
                     subItem.value = newValue;
-
-                    // 保存配置
                     context.saveSettingsDebounced();
-
                     console.log(`[DataTable] ✅ 已更新自定义面板子项值: ${cellInfo.panelId}.${cellInfo.property} = "${newValue}"`);
                     return true;
                 }
@@ -8497,6 +8490,12 @@ export class DataTable {
 
             if (!renamed) {
                 console.warn('[DataTable] ⚠️ 未在subItems中找到可重命名的自定义字段，尝试基础字段映射');
+            }
+
+            // 🔧 新增：清除字段映射缓存，确保下次生成智能提示词时使用最新的字段名
+            if (infoBarSettings._cachedCompleteMapping) {
+                console.log('[DataTable] 🧹 清除字段映射缓存');
+                infoBarSettings._cachedCompleteMapping = null;
             }
 
             // 持久化保存设置
@@ -10962,11 +10961,19 @@ export class DataTable {
     }
 
     /**
-     * 🆕 生成子项键名 - 直接使用 col_X 格式，保持纯粹性
+     * 🆕 生成子项键名 - 新架构：直接使用中文字段名
+     * @param {string} columnName - 列名（中文）
+     * @param {number} index - 索引（仅用于向后兼容）
+     * @returns {string} 字段键名
      */
     generateSubItemKey(columnName, index) {
-        // 🔧 修复：不进行任何中英文转换，直接使用 col_X 格式作为键名
-        // name 和 displayName 保持中文，key 使用统一的 col_X 格式
+        // 🔄 新架构：直接使用中文字段名作为键名
+        // 这样存储的数据就是 { "姓名": "零", "年龄": "25" } 而不是 { "col_1": "零", "col_2": "25" }
+        if (columnName && typeof columnName === 'string' && columnName.trim()) {
+            return columnName.trim();
+        }
+
+        // 降级方案：如果没有列名，使用col_X格式（向后兼容）
         return `col_${index + 1}`;
     }
 

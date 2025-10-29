@@ -582,7 +582,7 @@ ${'='.repeat(80)}
                         typeof v === 'object' ? JSON.stringify(v) : String(v)
                     ).join(' ');
                     rt.push({ level: logLevel, time: Date.now(), message });
-                    if (rt.length > 500) rt.shift();
+                    // 🔧 修复：完全移除500条限制，允许收集和导出所有日志
                 } catch {}
             };
 
@@ -892,6 +892,9 @@ ${'='.repeat(80)}
                             <div class="nav-item" data-nav="npc-management">
                                 NPC管理
                             </div>
+                            <div class="nav-item" data-nav="plot-optimization">
+                                剧情优化
+                            </div>
                             <!-- 🔧 重构：删除15个硬编码的基础面板导航项 -->
                             <!-- 现在通过refreshNavigation()动态创建所有面板的导航项 -->
                             <div class="nav-item" data-nav="theme">
@@ -935,6 +938,9 @@ ${'='.repeat(80)}
                             </div>
                             <div class="content-panel" data-content="npc-management">
                                 ${this.createNPCManagementPanel()}
+                            </div>
+                            <div class="content-panel" data-content="plot-optimization">
+                                ${this.createPlotOptimizationPanel()}
                             </div>
                             <div class="content-panel" data-content="theme">
                                 ${this.createThemePanel()}
@@ -6217,6 +6223,11 @@ ${'='.repeat(80)}
                 this.initNPCManagementPanelContent();
             }
 
+            // 📖 新增：剧情优化面板特殊处理
+            if (contentType === 'plot-optimization') {
+                this.initPlotOptimizationPanelContent();
+            }
+
             // 🔮 新增：向量功能面板特殊处理
             if (contentType === 'vectorFunction') {
                 this.initVectorFunctionPanelContent();
@@ -6754,16 +6765,16 @@ ${'='.repeat(80)}
 
                 <!-- API提供商选择 -->
                 <div class="settings-group">
-                    <h4>选择API提供商</h4>
+                    <h4>API连接模式</h4>
                     <div class="form-group">
-                        <label>API提供商</label>
+                        <label>API连接模式</label>
                         <select id="infobar-api-provider" name="apiConfig.provider">
-                            <option value="">请选择提供商</option>
+                            <option value="">请选择连接模式</option>
                             <option value="gemini">Google Gemini</option>
                             <option value="localproxy">通用全兼容（Silly Tavern后端）</option>
                             <option value="custom">自定义API</option>
                         </select>
-                        <small>选择您要使用的AI模型提供商</small>
+                        <small>Gemini可直接使用谷歌官方密钥。通用全兼容可适配市面上大部分自定义，反代等等API。自定义API可兼容部分API连接，部分API无法正常获取模型。</small>
                     </div>
                 </div>
 
@@ -6780,7 +6791,7 @@ ${'='.repeat(80)}
                 </div>
 
                 <!-- 基础URL配置 -->
-                <div class="settings-group">
+                <div class="settings-group" id="infobar-base-url-group">
                     <h4>基础URL</h4>
                     <div class="form-group">
                         <label>API基础URL</label>
@@ -6969,14 +6980,15 @@ ${'='.repeat(80)}
                             <select id="infobar-vector-api-provider" name="vectorAPIConfig.provider">
                                 <option value="">请选择连接模式</option>
                                 <option value="localproxy">通用全兼容（Silly Tavern后端）</option>
+                                <option value="siliconflow">流动硅基</option>
                                 <option value="custom">自定义API</option>
                             </select>
-                            <small>选择向量化API的连接方式（通用全兼容使用SillyTavern后端代理，自定义API直接连接）</small>
+                            <small>选择向量化API的连接方式（通用全兼容使用SillyTavern后端代理，流动硅基使用官方API，自定义API直接连接）</small>
                         </div>
                     </div>
 
                     <!-- 基础URL配置 -->
-                    <div class="settings-group">
+                    <div class="settings-group" id="vector-base-url-group">
                         <h4>基础URL</h4>
                         <div class="form-group">
                             <label>API基础URL</label>
@@ -10638,6 +10650,21 @@ ${'='.repeat(80)}
                 console.log('[InfoBarSettings] 🎭 已收集NPC管理设置并写入配置:', npcSettings);
             }
 
+            // 📖 新增：收集剧情优化配置
+            const plotOptimizationSettings = this.collectPlotOptimizationSettings();
+            if (plotOptimizationSettings && typeof plotOptimizationSettings === 'object') {
+                extensionSettings['Information bar integration tool'].plotOptimization = plotOptimizationSettings;
+                console.log('[InfoBarSettings] 📖 已收集剧情优化配置:', plotOptimizationSettings);
+
+                // 同步到剧情优化系统
+                const plotOptimizationSystem = window.SillyTavernInfobar?.modules?.plotOptimizationSystem;
+                if (plotOptimizationSystem) {
+                    Object.assign(plotOptimizationSystem.config, plotOptimizationSettings);
+                    await plotOptimizationSystem.setEnabled(plotOptimizationSettings.enabled);
+                    console.log('[InfoBarSettings] ✅ 已同步剧情优化配置到PlotOptimizationSystem模块');
+                }
+            }
+
             // 🆕 收集向量化API配置
             const vectorAPIConfig = this.collectVectorAPIConfig();
             if (vectorAPIConfig && typeof vectorAPIConfig === 'object') {
@@ -11265,56 +11292,63 @@ ${'='.repeat(80)}
 
     /**
      * 更新自定义面板子项的勾选状态
+     * 🔧 修复：直接从DOM读取复选框状态，而不是依赖formData
      */
     updateCustomPanelSubItemStates(customPanels, formData) {
         try {
             console.log('[InfoBarSettings] 🔄 开始更新自定义面板子项状态...');
-            
+
             // 遍历所有自定义面板
             for (const [panelId, panel] of Object.entries(customPanels)) {
                 if (!panel.subItems || !Array.isArray(panel.subItems)) {
                     continue;
                 }
-                
+
                 console.log(`[InfoBarSettings] 📊 处理面板: ${panelId}, ${panel.subItems.length} 个字段`);
-                
-                    // 更新每个子项的enabled状态
+
+                // 更新每个子项的enabled状态
                 panel.subItems.forEach((subItem, index) => {
-                    // 🔧 重要修复：尝试多种可能的字段名格式
-                    // 1. 中文name（新版格式）
-                    // 2. 英文key（旧版格式）
-                    // 3. id（备用）
-                    const possibleFieldNames = [
-                        subItem.name,           // 中文name，如 "姓名"
-                        subItem.key,            // 英文key，如 "name"
-                        subItem.id,             // id
-                        `${panelId}.${subItem.key}.enabled`, // 旧格式
-                        `${panelId}.${subItem.name}.enabled`  // 备用格式
-                    ].filter(Boolean); // 过滤掉undefined
-                    
-                    let found = false;
-                    for (const fieldName of possibleFieldNames) {
-                        if (formData.hasOwnProperty(fieldName)) {
-                            const newState = formData[fieldName];
-                            if (subItem.enabled !== newState) {
-                                console.log(`[InfoBarSettings] 📊 更新字段 [${index}] "${subItem.name}" (${fieldName}): ${subItem.enabled} -> ${newState}`);
-                                subItem.enabled = newState;
+                    // 🔧 重要修复：优先从DOM读取复选框的实际checked状态
+                    // 这样可以确保用户在UI中的勾选操作被正确保存
+                    const fieldName = subItem.name || subItem.key || subItem.id;
+                    const checkbox = this.modal.querySelector(`input[type="checkbox"][name="${fieldName}"]`);
+
+                    let newState = subItem.enabled; // 默认保持原状态
+                    let source = 'default';
+
+                    if (checkbox) {
+                        // 从DOM读取实际的checked状态
+                        newState = checkbox.checked;
+                        source = 'DOM';
+                    } else {
+                        // 备用方案：从formData读取
+                        const possibleFieldNames = [
+                            subItem.name,
+                            subItem.key,
+                            subItem.id,
+                            `${panelId}.${subItem.key}.enabled`,
+                            `${panelId}.${subItem.name}.enabled`
+                        ].filter(Boolean);
+
+                        for (const fname of possibleFieldNames) {
+                            if (formData.hasOwnProperty(fname)) {
+                                newState = formData[fname];
+                                source = 'formData';
+                                break;
                             }
-                            found = true;
-                            break;
                         }
                     }
-                    
-                    if (!found) {
-                        console.warn(`[InfoBarSettings] ⚠️ 未找到字段状态: ${subItem.name} (尝试: ${possibleFieldNames.join(', ')})`);
-                        // 🔧 修复：未找到时保持原状态，不要修改
-                        console.log(`[InfoBarSettings] 📊 保持原状态: ${subItem.name} = ${subItem.enabled}`);
+
+                    // 更新状态
+                    if (subItem.enabled !== newState) {
+                        console.log(`[InfoBarSettings] 📊 更新字段 [${index}] "${subItem.name}": ${subItem.enabled} -> ${newState} (来源: ${source})`);
+                        subItem.enabled = newState;
                     }
                 });
             }
-            
+
             console.log('[InfoBarSettings] ✅ 自定义面板子项状态更新完成');
-            
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 更新自定义面板子项状态失败:', error);
         }
@@ -14134,6 +14168,282 @@ ${'='.repeat(80)}
                 </div>
             </div>
         `;
+    }
+
+    /**
+     * 创建剧情优化面板
+     */
+    createPlotOptimizationPanel() {
+        const config = this.getPlotOptimizationConfig();
+
+        return `
+            <div class="content-header">
+                <h3>剧情优化系统</h3>
+                <p class="content-description">使用通用API对剧情进行优化建议，以小说平台编辑"Guhan 3号"的身份提升AI生成内容的质量</p>
+            </div>
+
+            <!-- 启用剧情优化 -->
+            <div class="settings-group">
+                <h4>基础设置</h4>
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="plot-optimization-enabled" ${config.enabled ? 'checked' : ''}>
+                        <label for="plot-optimization-enabled" class="checkbox-label">启用剧情优化</label>
+                    </div>
+                    <small>启用后，每次发送消息时会先调用通用API获取剧情优化建议（使用API配置面板中的通用API）</small>
+
+                    <!-- 🔧 新增：502超时风险提示 -->
+                    <div style="
+                        margin-top: 12px;
+                        padding: 12px;
+                        background: rgba(255, 152, 0, 0.1);
+                        border-left: 4px solid #ff9800;
+                        border-radius: 4px;
+                        color: var(--theme-text-primary, #ddd);
+                    ">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <span style="font-size: 18px;">⚠️</span>
+                            <strong style="color: #ff9800;">重要提示</strong>
+                        </div>
+                        <p style="margin: 0; font-size: 13px; line-height: 1.6;">
+                            本功能可能会导致SillyTavern出现502等待超时报错，如果报错，请重新发送消息。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 故事设定 -->
+            <div class="settings-group">
+                <h4>故事设定</h4>
+
+                <div class="form-group">
+                    <label>故事主题</label>
+                    <input type="text" id="plot-optimization-story-theme" class="setting-input"
+                           value="${config.storyTheme || ''}"
+                           placeholder="例如：科幻、奇幻、现代都市、历史架空等">
+                    <small>定义故事的核心主题和背景</small>
+                </div>
+
+                <div class="form-group">
+                    <label>故事类型</label>
+                    <input type="text" id="plot-optimization-story-type" class="setting-input"
+                           value="${config.storyType || ''}"
+                           placeholder="例如：冒险、爱情、悬疑、战争等">
+                    <small>故事的主要类型和风格</small>
+                </div>
+
+                <div class="form-group">
+                    <label>参考作品</label>
+                    <input type="text" id="plot-optimization-reference-works" class="setting-input"
+                           value="${config.referenceWorks || ''}"
+                           placeholder="例如：《三体》、《冰与火之歌》等">
+                    <small>可以参考的优秀作品（可选）</small>
+                </div>
+
+                <div class="form-group">
+                    <label>字数要求</label>
+                    <input type="text" id="plot-optimization-word-count" class="setting-input"
+                           value="${config.wordCountRequirement || ''}"
+                           placeholder="例如：每章3000-5000字">
+                    <small>每次生成的字数要求</small>
+                </div>
+            </div>
+
+            <!-- 剧情强度参数 -->
+            <div class="settings-group">
+                <h4>剧情强度参数</h4>
+                <small style="display: block; margin-bottom: 12px; color: var(--theme-text-secondary, #888);">
+                    调整各项剧情元素的强度（1-10），数值越大强度越高
+                </small>
+
+                <div class="form-group">
+                    <label>剧情推进强度: <span id="plot-progress-value">${config.plotProgressIntensity || 5}</span>/10</label>
+                    <input type="range" id="plot-optimization-progress-intensity" class="setting-range"
+                           value="${config.plotProgressIntensity || 5}" min="1" max="10"
+                           oninput="document.getElementById('plot-progress-value').textContent = this.value">
+                </div>
+
+                <div class="form-group">
+                    <label>剧情冲突强度: <span id="plot-conflict-value">${config.plotConflictIntensity || 5}</span>/10</label>
+                    <input type="range" id="plot-optimization-conflict-intensity" class="setting-range"
+                           value="${config.plotConflictIntensity || 5}" min="1" max="10"
+                           oninput="document.getElementById('plot-conflict-value').textContent = this.value">
+                </div>
+
+                <div class="form-group">
+                    <label>剧情悬念强度: <span id="plot-suspense-value">${config.plotSuspenseIntensity || 5}</span>/10</label>
+                    <input type="range" id="plot-optimization-suspense-intensity" class="setting-range"
+                           value="${config.plotSuspenseIntensity || 5}" min="1" max="10"
+                           oninput="document.getElementById('plot-suspense-value').textContent = this.value">
+                </div>
+
+                <div class="form-group">
+                    <label>剧情反转强度: <span id="plot-twist-value">${config.plotTwistIntensity || 5}</span>/10</label>
+                    <input type="range" id="plot-optimization-twist-intensity" class="setting-range"
+                           value="${config.plotTwistIntensity || 5}" min="1" max="10"
+                           oninput="document.getElementById('plot-twist-value').textContent = this.value">
+                </div>
+
+                <div class="form-group">
+                    <label>剧情高潮强度: <span id="plot-climax-value">${config.plotClimaxIntensity || 5}</span>/10</label>
+                    <input type="range" id="plot-optimization-climax-intensity" class="setting-range"
+                           value="${config.plotClimaxIntensity || 5}" min="1" max="10"
+                           oninput="document.getElementById('plot-climax-value').textContent = this.value">
+                </div>
+
+                <div class="form-group">
+                    <label>剧情低谷强度: <span id="plot-low-value">${config.plotLowIntensity || 5}</span>/10</label>
+                    <input type="range" id="plot-optimization-low-intensity" class="setting-range"
+                           value="${config.plotLowIntensity || 5}" min="1" max="10"
+                           oninput="document.getElementById('plot-low-value').textContent = this.value">
+                </div>
+
+                <div class="form-group">
+                    <label>剧情转折强度: <span id="plot-turn-value">${config.plotTurnIntensity || 5}</span>/10</label>
+                    <input type="range" id="plot-optimization-turn-intensity" class="setting-range"
+                           value="${config.plotTurnIntensity || 5}" min="1" max="10"
+                           oninput="document.getElementById('plot-turn-value').textContent = this.value">
+                </div>
+            </div>
+
+            <!-- 上下文设置 -->
+            <div class="settings-group">
+                <h4>上下文设置</h4>
+
+                <div class="form-group">
+                    <label>上下文消息数量</label>
+                    <input type="number" id="plot-optimization-max-context" class="setting-input"
+                           value="${config.maxContextMessages || 10}" min="1" max="50">
+                    <small>提取最近N条消息作为上下文</small>
+                </div>
+            </div>
+
+            <!-- 提示词模板 -->
+            <div class="settings-group">
+                <h4>提示词模板</h4>
+                <div class="form-group">
+                    <button type="button" id="plot-optimization-edit-template-btn" class="btn btn-primary" style="
+                        width: 100%;
+                        padding: 10px 16px;
+                        background: var(--theme-primary-color, #4CAF50);
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                    " onmouseover="this.style.background='#45a049'" onmouseout="this.style.background='var(--theme-primary-color, #4CAF50)'">
+                        📝 编辑提示词模板
+                    </button>
+                    <small>自定义剧情优化的提示词模板</small>
+                </div>
+            </div>
+
+            <!-- 注入设置 -->
+            <div class="settings-group">
+                <h4>注入设置</h4>
+
+                <div class="form-group">
+                    <label>注入位置</label>
+                    <select id="plot-optimization-injection-position" class="setting-select">
+                        <option value="system" ${config.injectionPosition === 'system' ? 'selected' : ''}>系统提示词</option>
+                        <option value="user" ${config.injectionPosition === 'user' ? 'selected' : ''}>用户消息</option>
+                        <option value="assistant" ${config.injectionPosition === 'assistant' ? 'selected' : ''}>助手消息</option>
+                    </select>
+                    <small>优化建议注入到主API提示词的位置</small>
+                </div>
+
+                <div class="form-group">
+                    <label>注入优先级</label>
+                    <input type="number" id="plot-optimization-injection-priority" class="setting-input"
+                           value="${config.injectionPriority || 100}" min="0" max="1000">
+                    <small>数值越大优先级越高</small>
+                </div>
+            </div>
+
+            <!-- 状态显示 -->
+            <div class="settings-group">
+                <h4>系统状态</h4>
+                <div class="form-group">
+                    <div id="plot-optimization-status" style="
+                        padding: 12px;
+                        background: var(--theme-bg-secondary, #2a2a2a);
+                        border: 1px solid var(--theme-border-color, #333);
+                        border-radius: 6px;
+                        font-size: 13px;
+                        color: var(--theme-text-secondary, #888);
+                    ">
+                        <div>状态: <span id="plot-optimization-status-text">${config.enabled ? '已启用' : '未启用'}</span></div>
+                        <div>成功次数: <span id="plot-optimization-success-count">0</span></div>
+                        <div>失败次数: <span id="plot-optimization-error-count">0</span></div>
+                        <div>最后优化: <span id="plot-optimization-last-time">从未</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔧 新增：剧情优化预览 -->
+            <div class="settings-group">
+                <h4>剧情优化预览</h4>
+                <div class="form-group">
+                    <button id="plot-optimization-preview-btn" class="menu_button" style="
+                        width: 100%;
+                        padding: 10px;
+                        background: var(--theme-primary-color, #4CAF50);
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        transition: background 0.3s;
+                    " onmouseover="this.style.background='#45a049'" onmouseout="this.style.background='var(--theme-primary-color, #4CAF50)'">
+                        📋 查看剧情优化记录
+                    </button>
+                    <small>查看、编辑、删除或重新生成所有用户消息的剧情优化建议</small>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 获取剧情优化配置
+     */
+    getPlotOptimizationConfig() {
+        try {
+            const context = window.SillyTavern?.getContext?.() || SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings || {};
+            const configs = extensionSettings['Information bar integration tool'] || {};
+            return configs.plotOptimization || {
+                enabled: false,
+                maxContextMessages: 10,
+                promptTemplate: '',
+                injectionPosition: 'system',
+                injectionPriority: 100,
+                storyTheme: '',
+                storyType: '',
+                referenceWorks: '',
+                wordCountRequirement: '',
+                plotProgressIntensity: 5,
+                plotConflictIntensity: 5,
+                plotSuspenseIntensity: 5,
+                plotTwistIntensity: 5,
+                plotClimaxIntensity: 5,
+                plotLowIntensity: 5,
+                plotTurnIntensity: 5
+            };
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取剧情优化配置失败:', error);
+            return {
+                enabled: false,
+                customApiUrl: '',
+                customApiKey: '',
+                customApiModel: '',
+                minMessageLength: 10,
+                maxContextMessages: 10,
+                promptTemplate: '',
+                injectionPosition: 'system',
+                injectionPriority: 100,
+                timeout: 30000
+            };
+        }
     }
 
     /**
@@ -20803,6 +21113,7 @@ ${'='.repeat(80)}
         const interfaceTypeSelect = this.modal.querySelector('#infobar-interface-type');
         const interfaceTypeGroup = this.modal.querySelector('#infobar-interface-type-group');
         const baseUrlInput = this.modal.querySelector('#infobar-api-base-url');
+        const baseUrlGroup = this.modal.querySelector('#infobar-base-url-group');
 
         if (!interfaceTypeSelect || !baseUrlInput) return;
 
@@ -20814,19 +21125,28 @@ ${'='.repeat(80)}
         baseUrlInput.value = '';
 
         if (provider === 'gemini') {
-            // Gemini提供商的接口类型 - 显示接口类型选择
+            // 🔧 修复：Gemini提供商 - 默认选择原生接口，隐藏基础URL
             if (interfaceTypeGroup) {
                 interfaceTypeGroup.style.display = '';
             }
+            if (baseUrlGroup) {
+                baseUrlGroup.style.display = 'none'; // 隐藏基础URL配置
+            }
             interfaceTypeSelect.innerHTML = `
-                <option value="">请选择接口类型</option>
-                <option value="native">Gemini原生接口</option>
+                <option value="native" selected>Gemini原生接口</option>
                 <option value="openai-compatible">OpenAI兼容接口</option>
             `;
+            interfaceTypeSelect.value = 'native'; // 默认选择原生接口
+            baseUrlInput.value = 'https://generativelanguage.googleapis.com'; // 设置默认URL
+
+            console.log('[InfoBarSettings] Gemini模式：已自动选择原生接口，隐藏基础URL配置');
         } else if (provider === 'localproxy') {
             // 通用全兼容提供商 - 隐藏接口类型选择，自动设置为OpenAI兼容
             if (interfaceTypeGroup) {
                 interfaceTypeGroup.style.display = 'none';
+            }
+            if (baseUrlGroup) {
+                baseUrlGroup.style.display = ''; // 显示基础URL配置
             }
             interfaceTypeSelect.innerHTML = `
                 <option value="openai-compatible" selected>OpenAI兼容接口</option>
@@ -20835,23 +21155,29 @@ ${'='.repeat(80)}
             // 设置默认端点
             baseUrlInput.value = 'http://127.0.0.1:7861/v1';
             baseUrlInput.placeholder = 'http://127.0.0.1:7861/v1';
-            
+
             console.log('[InfoBarSettings] 通用全兼容模式：已自动选择OpenAI兼容接口');
         } else if (provider === 'custom') {
             // 自定义API提供商 - 隐藏接口类型选择，自动设置为OpenAI兼容
             if (interfaceTypeGroup) {
                 interfaceTypeGroup.style.display = 'none';
             }
+            if (baseUrlGroup) {
+                baseUrlGroup.style.display = ''; // 显示基础URL配置
+            }
             interfaceTypeSelect.innerHTML = `
                 <option value="openai-compatible" selected>OpenAI兼容接口</option>
             `;
             interfaceTypeSelect.value = 'openai-compatible';
-            
+
             console.log('[InfoBarSettings] 自定义API模式：已自动选择OpenAI兼容接口');
         } else {
-            // 其他情况，显示接口类型选择
+            // 其他情况，显示接口类型选择和基础URL
             if (interfaceTypeGroup) {
                 interfaceTypeGroup.style.display = '';
+            }
+            if (baseUrlGroup) {
+                baseUrlGroup.style.display = '';
             }
         }
     }
@@ -20870,15 +21196,26 @@ ${'='.repeat(80)}
 
         const provider = this.modal.querySelector('#infobar-api-provider')?.value;
         const baseUrlInput = this.modal.querySelector('#infobar-api-base-url');
+        const baseUrlGroup = this.modal.querySelector('#infobar-base-url-group');
 
         if (!baseUrlInput) return;
 
         // 根据提供商和接口类型设置默认URL
         if (provider === 'gemini') {
             if (interfaceType === 'native') {
+                // 🔧 修复：Gemini原生接口 - 隐藏基础URL
+                if (baseUrlGroup) {
+                    baseUrlGroup.style.display = 'none';
+                }
                 baseUrlInput.value = 'https://generativelanguage.googleapis.com';
+                console.log('[InfoBarSettings] Gemini原生接口：已隐藏基础URL配置');
             } else if (interfaceType === 'openai-compatible') {
+                // 🔧 修复：Gemini OpenAI兼容接口 - 显示基础URL
+                if (baseUrlGroup) {
+                    baseUrlGroup.style.display = '';
+                }
                 baseUrlInput.value = 'https://generativelanguage.googleapis.com/v1beta/openai';
+                console.log('[InfoBarSettings] Gemini OpenAI兼容接口：已显示基础URL配置');
             }
         } else if (provider === 'localproxy') {
             if (interfaceType === 'openai-compatible') {
@@ -20906,6 +21243,7 @@ ${'='.repeat(80)}
         }
 
         const baseUrlInput = this.modal.querySelector('#infobar-vector-api-base-url');
+        const baseUrlGroup = this.modal.querySelector('#vector-base-url-group');
         if (!baseUrlInput) return;
 
         // 根据连接模式设置默认URL（用户可以自行修改）
@@ -20914,18 +21252,28 @@ ${'='.repeat(80)}
             baseUrlInput.value = 'http://127.0.0.1:7861';
             baseUrlInput.placeholder = 'http://127.0.0.1:7861';
             baseUrlInput.readOnly = false;
+            if (baseUrlGroup) baseUrlGroup.style.display = 'block';
             console.log('[InfoBarSettings] 向量化API：通用全兼容模式，已设置默认端点（可修改）');
+        } else if (provider === 'siliconflow') {
+            // 🆕 流动硅基模式 - 自动设置官方API地址，隐藏URL输入框
+            baseUrlInput.value = 'https://api.siliconflow.cn/v1';
+            baseUrlInput.placeholder = 'https://api.siliconflow.cn/v1';
+            baseUrlInput.readOnly = true;
+            if (baseUrlGroup) baseUrlGroup.style.display = 'none';
+            console.log('[InfoBarSettings] 向量化API：流动硅基模式，已自动设置官方API地址');
         } else if (provider === 'custom') {
             // 自定义API模式 - 用户手动输入
             baseUrlInput.value = '';
             baseUrlInput.placeholder = 'https://your-api.com';
             baseUrlInput.readOnly = false;
+            if (baseUrlGroup) baseUrlGroup.style.display = 'block';
             console.log('[InfoBarSettings] 向量化API：自定义API模式，请手动输入端点');
         } else {
             // 未选择模式
             baseUrlInput.value = '';
             baseUrlInput.placeholder = '请先选择连接模式';
             baseUrlInput.readOnly = true;
+            if (baseUrlGroup) baseUrlGroup.style.display = 'block';
         }
     }
 
@@ -26270,6 +26618,109 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
     }
 
     /**
+     * 📖 收集剧情优化配置
+     */
+    collectPlotOptimizationSettings() {
+        const settings = {};
+
+        try {
+            // 1. 收集启用状态
+            const enabledEl = this.modal?.querySelector('#plot-optimization-enabled');
+            if (enabledEl) {
+                settings.enabled = enabledEl.checked;
+            }
+
+            // 2. 收集故事设定
+            const storyThemeEl = this.modal?.querySelector('#plot-optimization-story-theme');
+            if (storyThemeEl) {
+                settings.storyTheme = storyThemeEl.value;
+            }
+
+            const storyTypeEl = this.modal?.querySelector('#plot-optimization-story-type');
+            if (storyTypeEl) {
+                settings.storyType = storyTypeEl.value;
+            }
+
+            const referenceWorksEl = this.modal?.querySelector('#plot-optimization-reference-works');
+            if (referenceWorksEl) {
+                settings.referenceWorks = referenceWorksEl.value;
+            }
+
+            const wordCountEl = this.modal?.querySelector('#plot-optimization-word-count');
+            if (wordCountEl) {
+                settings.wordCountRequirement = wordCountEl.value;
+            }
+
+            // 3. 收集剧情强度参数
+            const progressIntensityEl = this.modal?.querySelector('#plot-optimization-progress-intensity');
+            if (progressIntensityEl) {
+                settings.plotProgressIntensity = parseInt(progressIntensityEl.value) || 5;
+            }
+
+            const conflictIntensityEl = this.modal?.querySelector('#plot-optimization-conflict-intensity');
+            if (conflictIntensityEl) {
+                settings.plotConflictIntensity = parseInt(conflictIntensityEl.value) || 5;
+            }
+
+            const suspenseIntensityEl = this.modal?.querySelector('#plot-optimization-suspense-intensity');
+            if (suspenseIntensityEl) {
+                settings.plotSuspenseIntensity = parseInt(suspenseIntensityEl.value) || 5;
+            }
+
+            const twistIntensityEl = this.modal?.querySelector('#plot-optimization-twist-intensity');
+            if (twistIntensityEl) {
+                settings.plotTwistIntensity = parseInt(twistIntensityEl.value) || 5;
+            }
+
+            const climaxIntensityEl = this.modal?.querySelector('#plot-optimization-climax-intensity');
+            if (climaxIntensityEl) {
+                settings.plotClimaxIntensity = parseInt(climaxIntensityEl.value) || 5;
+            }
+
+            const lowIntensityEl = this.modal?.querySelector('#plot-optimization-low-intensity');
+            if (lowIntensityEl) {
+                settings.plotLowIntensity = parseInt(lowIntensityEl.value) || 5;
+            }
+
+            const turnIntensityEl = this.modal?.querySelector('#plot-optimization-turn-intensity');
+            if (turnIntensityEl) {
+                settings.plotTurnIntensity = parseInt(turnIntensityEl.value) || 5;
+            }
+
+            // 4. 收集上下文设置
+            const maxContextEl = this.modal?.querySelector('#plot-optimization-max-context');
+            if (maxContextEl) {
+                settings.maxContextMessages = parseInt(maxContextEl.value) || 10;
+            }
+
+            // 5. 收集注入设置
+            const injectionPositionEl = this.modal?.querySelector('#plot-optimization-injection-position');
+            if (injectionPositionEl) {
+                settings.injectionPosition = injectionPositionEl.value;
+            }
+
+            const injectionPriorityEl = this.modal?.querySelector('#plot-optimization-injection-priority');
+            if (injectionPriorityEl) {
+                settings.injectionPriority = parseInt(injectionPriorityEl.value) || 100;
+            }
+
+            // 6. 保留现有的提示词模板（不从DOM收集，因为是通过编辑器单独保存的）
+            const context = SillyTavern.getContext();
+            const existingConfig = context.extensionSettings?.['Information bar integration tool']?.plotOptimization;
+            if (existingConfig?.promptTemplate) {
+                settings.promptTemplate = existingConfig.promptTemplate;
+            }
+
+            console.log('[InfoBarSettings] 📖 收集到剧情优化配置:', settings);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 收集剧情优化配置失败:', error);
+        }
+
+        return settings;
+    }
+
+    /**
      * 🆕 收集向量化API配置
      */
     collectVectorAPIConfig() {
@@ -27519,8 +27970,8 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
                     panelConfig.subItems.forEach(subItem => {
                         if (subItem.key) {
-                            // 🔧 修复：使用 getSubItemDisplayName 方法获取正确的中文显示名称
-                            const displayName = this.getSubItemDisplayName(panelId, subItem.key);
+                            // 🔧 修复：直接使用subItem的displayName或name，避免循环依赖
+                            const displayName = subItem.displayName || subItem.name || subItem.key;
 
                             // 使用字段的key作为映射键
                             customPanelMapping[subItem.key] = displayName;
@@ -27529,11 +27980,9 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                             if (subItem.name && subItem.name !== subItem.key) {
                                 customPanelMapping[subItem.name] = displayName;
                             }
-                            
-                            // 🔧 兼容性：如果displayName是中文，也添加中文->中文的映射
-                            if (displayName && displayName !== subItem.key) {
-                                customPanelMapping[displayName] = displayName;
-                            }
+
+                            // 🔧 移除错误的反向映射逻辑
+                            // 反向映射会导致中文字段名被错误映射到col_X
                         }
                     });
 
@@ -27579,8 +28028,8 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                     if (Array.isArray(panelConfig.subItems)) {
                         panelConfig.subItems.forEach(subItem => {
                             if (subItem.key) {
-                                // 🔧 修复：使用 getSubItemDisplayName 方法获取正确的中文显示名称
-                                const displayName = this.getSubItemDisplayName(panelId, subItem.key);
+                                // 🔧 修复：直接使用subItem的displayName或name，避免循环依赖
+                                const displayName = subItem.displayName || subItem.name || subItem.key;
 
                                 // 使用字段的key作为映射键
                                 customFieldMapping[subItem.key] = displayName;
@@ -27589,11 +28038,9 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                                 if (subItem.name && subItem.name !== subItem.key) {
                                     customFieldMapping[subItem.name] = displayName;
                                 }
-                                
-                                // 🔧 兼容性：如果displayName是中文，也添加中文->中文的映射
-                                if (displayName && displayName !== subItem.key) {
-                                    customFieldMapping[displayName] = displayName;
-                                }
+
+                                // 🔧 移除错误的反向映射逻辑
+                                // 反向映射会导致中文字段名被错误映射到col_X
                             }
                         });
                     }
@@ -35065,11 +35512,35 @@ ${dataExamples}
         try {
             console.log('[InfoBarSettings] 🤖 调用AI进行状态栏创作...');
 
-            // 复用现有的AI调用逻辑
-            const result = await this.callCustomAI(prompt);
+            // 🔧 修复：使用通用API集成模块而不是自定义实现
+            if (!this.apiIntegration || !this.apiIntegration.initialized) {
+                throw new Error('AI API未配置或未初始化，请在扩展设置中配置API');
+            }
+
+            // 检查API是否启用
+            if (!this.apiIntegration.apiConfig || !this.apiIntegration.apiConfig.enabled) {
+                throw new Error('AI API未启用，请在扩展设置中启用API');
+            }
+
+            console.log('[InfoBarSettings] 🔄 使用通用API集成模块调用AI...');
+
+            // 使用APIIntegration的generateText方法
+            const response = await this.apiIntegration.generateText(prompt, {
+                maxTokens: this.apiIntegration.apiConfig.maxTokens || 20000,
+                temperature: this.apiIntegration.apiConfig.temperature || 0.7,
+                systemPrompt: '你是一个专业的HTML模板开发助手，专注于生成高质量、语义化的HTML代码。'
+            });
+
+            if (!response || !response.success) {
+                throw new Error(response?.error || 'AI API返回失败');
+            }
+
+            if (!response.text) {
+                throw new Error('AI API返回空响应');
+            }
 
             // 清理AI返回的内容
-            const cleanedResult = this.cleanAIResponse(result);
+            const cleanedResult = this.cleanAIResponse(response.text);
 
             console.log('[InfoBarSettings] ✅ AI状态栏创作完成');
             return cleanedResult;
@@ -38913,6 +39384,731 @@ ${dataExamples}
             console.log('[InfoBarSettings] ✅ NPC管理面板内容初始化完成');
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 初始化NPC管理面板内容失败:', error);
+        }
+    }
+
+    /**
+     * 📖 初始化剧情优化面板内容
+     */
+    initPlotOptimizationPanelContent() {
+        try {
+            console.log('[InfoBarSettings] 📖 初始化剧情优化面板内容...');
+
+            // 🔧 修复：移除旧的事件监听器，防止重复绑定
+            const enabledCheckbox = this.modal.querySelector('#plot-optimization-enabled');
+            if (enabledCheckbox) {
+                // 克隆节点替换，移除所有旧的事件监听器
+                const newCheckbox = enabledCheckbox.cloneNode(true);
+                enabledCheckbox.parentNode.replaceChild(newCheckbox, enabledCheckbox);
+
+                newCheckbox.addEventListener('change', (e) => {
+                    this.handlePlotOptimizationEnabledChange(e.target.checked);
+                });
+            }
+
+            // 🔧 修复：移除旧的事件监听器
+            const editTemplateBtn = this.modal.querySelector('#plot-optimization-edit-template-btn');
+            if (editTemplateBtn) {
+                const newEditBtn = editTemplateBtn.cloneNode(true);
+                editTemplateBtn.parentNode.replaceChild(newEditBtn, editTemplateBtn);
+
+                newEditBtn.addEventListener('click', () => {
+                    this.showPlotOptimizationTemplateEditor();
+                });
+            }
+
+            // 🔧 修复：移除旧的事件监听器
+            const previewBtn = this.modal.querySelector('#plot-optimization-preview-btn');
+            if (previewBtn) {
+                const newPreviewBtn = previewBtn.cloneNode(true);
+                previewBtn.parentNode.replaceChild(newPreviewBtn, previewBtn);
+
+                newPreviewBtn.addEventListener('click', () => {
+                    this.showPlotOptimizationPreview();
+                });
+            }
+
+            // 更新状态显示
+            this.updatePlotOptimizationStatus();
+
+            console.log('[InfoBarSettings] ✅ 剧情优化面板内容初始化完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化剧情优化面板内容失败:', error);
+        }
+    }
+
+    /**
+     * 📖 处理剧情优化启用状态变化
+     */
+    handlePlotOptimizationEnabledChange(enabled) {
+        try {
+            console.log(`[InfoBarSettings] 📖 剧情优化${enabled ? '已启用' : '已禁用'}`);
+
+            // 更新状态显示
+            const statusText = this.modal.querySelector('#plot-optimization-status-text');
+            if (statusText) {
+                statusText.textContent = enabled ? '已启用' : '未启用';
+            }
+
+            // 通知剧情优化系统
+            const plotOptimizationSystem = window.SillyTavernInfobar?.modules?.plotOptimizationSystem;
+            if (plotOptimizationSystem) {
+                plotOptimizationSystem.setEnabled(enabled);
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 处理剧情优化启用状态变化失败:', error);
+        }
+    }
+
+    /**
+     * 📖 显示剧情优化模板编辑器
+     */
+    async showPlotOptimizationTemplateEditor() {
+        try {
+            console.log('[InfoBarSettings] 📖 打开剧情优化模板编辑器...');
+
+            // 🔧 修复：检查是否已经存在对话框，如果存在则先移除
+            const existingDialog = document.querySelector('.plot-optimization-template-editor-dialog');
+            if (existingDialog) {
+                console.log('[InfoBarSettings] ⚠️ 检测到已存在的模板编辑器对话框，先移除');
+                existingDialog.parentElement.remove();
+            }
+
+            // 读取模板文件
+            const templatePath = 'scripts/extensions/third-party/Information bar integration tool/剧情优化提示词';
+            let templateContent = '';
+
+            try {
+                const response = await fetch(templatePath);
+                if (response.ok) {
+                    templateContent = await response.text();
+                } else {
+                    console.warn('[InfoBarSettings] ⚠️ 无法读取模板文件，使用默认模板');
+                    templateContent = '# 剧情优化提示词\n\n请在这里编辑剧情优化的提示词模板...';
+                }
+            } catch (error) {
+                console.warn('[InfoBarSettings] ⚠️ 读取模板文件失败:', error);
+                templateContent = '# 剧情优化提示词\n\n请在这里编辑剧情优化的提示词模板...';
+            }
+
+            // 创建编辑器对话框
+            const dialog = document.createElement('div');
+            dialog.className = 'plot-optimization-template-editor-dialog';
+            dialog.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 99999;
+                backdrop-filter: blur(4px);
+            `;
+
+            dialog.innerHTML = `
+                <div class="plot-optimization-template-dialog" style="
+                    background: var(--theme-bg-primary, #2a2a2a);
+                    color: var(--theme-text-primary, #ffffff);
+                    border-radius: 12px;
+                    padding: 24px;
+                    width: 90%;
+                    max-width: 800px;
+                    max-height: 80vh;
+                    display: flex;
+                    flex-direction: column;
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+                ">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3 style="margin: 0; font-size: 20px;">📖 编辑剧情优化提示词模板</h3>
+                        <button class="dialog-close-btn" style="
+                            background: transparent;
+                            border: none;
+                            color: var(--theme-text-secondary, #888);
+                            font-size: 24px;
+                            cursor: pointer;
+                            padding: 0;
+                            width: 32px;
+                            height: 32px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        ">×</button>
+                    </div>
+
+                    <textarea id="plot-optimization-template-editor" style="
+                        flex: 1;
+                        width: 100%;
+                        padding: 12px;
+                        background: var(--theme-bg-secondary, #1a1a1a);
+                        color: var(--theme-text-primary, #e0e0e0);
+                        border: 1px solid var(--theme-border-color, #333);
+                        border-radius: 6px;
+                        font-family: 'Consolas', 'Monaco', monospace;
+                        font-size: 13px;
+                        line-height: 1.5;
+                        resize: none;
+                    ">${this.escapeHtml(templateContent)}</textarea>
+
+                    <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;">
+                        <button class="btn-cancel" style="
+                            padding: 10px 20px;
+                            background: var(--theme-bg-secondary, #2a2a2a);
+                            color: var(--theme-text-primary, #e0e0e0);
+                            border: 1px solid var(--theme-border-color, #333);
+                            border-radius: 6px;
+                            cursor: pointer;
+                        ">取消</button>
+                        <button class="btn-save" style="
+                            padding: 10px 20px;
+                            background: var(--theme-primary-color, #4CAF50);
+                            color: white;
+                            border: none;
+                            border-radius: 6px;
+                            cursor: pointer;
+                        ">保存</button>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            if (!document.body) {
+                console.error('[InfoBarSettings] ❌ document.body不存在，无法添加对话框');
+                return;
+            }
+            const dialogElement = dialog.firstElementChild;
+            document.body.appendChild(dialogElement);
+
+            // 绑定事件
+            const closeBtn = dialogElement.querySelector('.dialog-close-btn');
+            const cancelBtn = dialogElement.querySelector('.btn-cancel');
+            const saveBtn = dialogElement.querySelector('.btn-save');
+            const editor = dialogElement.querySelector('#plot-optimization-template-editor');
+
+            const closeDialog = () => {
+                dialogElement.remove();
+            };
+
+            closeBtn.addEventListener('click', closeDialog);
+            cancelBtn.addEventListener('click', closeDialog);
+            dialog.addEventListener('click', (e) => {
+                if (e.target === dialog) closeDialog();
+            });
+
+            saveBtn.addEventListener('click', () => {
+                const newTemplate = editor.value;
+                // 保存到配置
+                const context = SillyTavern.getContext();
+                const settings = context.extensionSettings['Information bar integration tool'] || {};
+                if (!settings.plotOptimization) {
+                    settings.plotOptimization = {};
+                }
+                settings.plotOptimization.promptTemplate = newTemplate;
+                context.saveSettingsDebounced();
+
+                // 通知剧情优化系统
+                const plotOptimizationSystem = window.SillyTavernInfobar?.modules?.plotOptimizationSystem;
+                if (plotOptimizationSystem) {
+                    plotOptimizationSystem.config.promptTemplate = newTemplate;
+                }
+
+                this.showNotification('✅ 模板已保存', 'success');
+                closeDialog();
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示剧情优化模板编辑器失败:', error);
+            this.showNotification('❌ 打开编辑器失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 📖 更新剧情优化状态显示
+     */
+    updatePlotOptimizationStatus() {
+        try {
+            const plotOptimizationSystem = window.SillyTavernInfobar?.modules?.plotOptimizationSystem;
+            if (!plotOptimizationSystem) {
+                return;
+            }
+
+            const status = plotOptimizationSystem.getStatus();
+
+            // 更新状态文本
+            const statusText = this.modal.querySelector('#plot-optimization-status-text');
+            if (statusText) {
+                statusText.textContent = status.enabled ? '已启用' : '未启用';
+            }
+
+            // 更新成功次数
+            const successCount = this.modal.querySelector('#plot-optimization-success-count');
+            if (successCount) {
+                successCount.textContent = status.successCount || 0;
+            }
+
+            // 更新失败次数
+            const errorCount = this.modal.querySelector('#plot-optimization-error-count');
+            if (errorCount) {
+                errorCount.textContent = status.errorCount || 0;
+            }
+
+            // 更新最后优化时间
+            const lastTime = this.modal.querySelector('#plot-optimization-last-time');
+            if (lastTime) {
+                if (status.lastOptimizationTime) {
+                    const date = new Date(status.lastOptimizationTime);
+                    lastTime.textContent = date.toLocaleString();
+                } else {
+                    lastTime.textContent = '从未';
+                }
+            }
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 更新剧情优化状态失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：显示剧情优化预览对话框
+     */
+    async showPlotOptimizationPreview() {
+        try {
+            console.log('[InfoBarSettings] 📋 打开剧情优化预览...');
+
+            // 🔧 修复：检查是否已经存在对话框，如果存在则先移除
+            const existingDialog = document.querySelector('.plot-optimization-preview-dialog');
+            if (existingDialog) {
+                console.log('[InfoBarSettings] ⚠️ 检测到已存在的预览对话框，先移除');
+                existingDialog.remove();
+            }
+
+            const plotOptimizationSystem = window.SillyTavernInfobar?.modules?.plotOptimizationSystem;
+            if (!plotOptimizationSystem) {
+                this.showNotification('❌ 剧情优化系统未初始化', 'error');
+                return;
+            }
+
+            const ctx = window.SillyTavern?.getContext?.();
+            if (!ctx || !ctx.chat) {
+                this.showNotification('❌ 无法获取聊天上下文', 'error');
+                return;
+            }
+
+            // 获取所有用户消息（保留原始楼层号）和对应的剧情优化建议
+            const userEntries = ctx.chat
+                .map((msg, idx) => ({ msg, floorNumber: idx + 1 }))
+                .filter(e => e.msg && e.msg.is_user);
+            const suggestions = plotOptimizationSystem.plotSuggestions || new Map();
+
+            // 创建预览对话框
+            const dialog = document.createElement('div');
+            dialog.className = 'plot-optimization-preview-dialog';
+            dialog.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                padding: 20px;
+            `;
+
+            dialog.innerHTML = `
+                <div style="
+                    background: var(--theme-bg-primary, var(--SmartThemeBlurTintColor, #1a1a1a));
+                    border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
+                    border-radius: 12px;
+                    width: 90%;
+                    max-width: 1200px;
+                    max-height: 90vh;
+                    display: flex;
+                    flex-direction: column;
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+                ">
+                    <!-- 标题栏 -->
+                    <div style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 20px;
+                        border-bottom: 1px solid var(--theme-border-color, #333);
+                    ">
+                        <h3 style="margin: 0; font-size: 20px; color: var(--theme-text-primary, #ddd);">
+                            📋 剧情优化记录 (共 ${userEntries.length} 条用户消息)
+                        </h3>
+                        <button class="dialog-close-btn" style="
+                            background: transparent;
+                            border: none;
+                            color: var(--theme-text-secondary, #888);
+                            font-size: 24px;
+                            cursor: pointer;
+                            padding: 0;
+                            width: 32px;
+                            height: 32px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        ">✕</button>
+                    </div>
+
+                    <!-- 内容区域 -->
+                    <div style="
+                        display: flex;
+                        flex: 1;
+                        overflow: hidden;
+                    ">
+                        <!-- 左侧：消息列表 -->
+                        <div style="
+                            width: 350px;
+                            border-right: 1px solid var(--theme-border-color, #333);
+                            overflow-y: auto;
+                            padding: 16px;
+                        " id="plot-preview-message-list">
+                            ${this.renderPlotPreviewMessageList(userEntries, suggestions)}
+                        </div>
+
+                        <!-- 右侧：详情编辑区 -->
+                        <div style="
+                            flex: 1;
+                            display: flex;
+                            flex-direction: column;
+                            padding: 20px;
+                            overflow-y: auto;
+                        " id="plot-preview-detail">
+                            <div style="
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                height: 100%;
+                                color: var(--theme-text-secondary, #888);
+                            ">
+                                请从左侧选择一条消息查看详情
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 添加到页面
+            if (!document.body) {
+                console.error('[InfoBarSettings] ❌ document.body不存在，无法添加对话框');
+                return;
+            }
+            document.body.appendChild(dialog);
+
+            // 绑定关闭事件
+            const closeBtn = dialog.querySelector('.dialog-close-btn');
+            const closeDialog = () => {
+                document.body.removeChild(dialog);
+            };
+            closeBtn.addEventListener('click', closeDialog);
+            dialog.addEventListener('click', (e) => {
+                if (e.target === dialog) closeDialog();
+            });
+
+            // 绑定消息列表点击事件
+            const messageList = dialog.querySelector('#plot-preview-message-list');
+            messageList.addEventListener('click', (e) => {
+                const messageItem = e.target.closest('.plot-preview-message-item');
+                if (messageItem) {
+                    const messageId = messageItem.dataset.messageId;
+                    const floorNumber = parseInt(messageItem.dataset.floorNumber);
+                    this.showPlotPreviewDetail(dialog, messageId, floorNumber, plotOptimizationSystem);
+                }
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示剧情优化预览失败:', error);
+            this.showNotification('❌ 打开预览失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🔧 新增：渲染消息列表
+     */
+    renderPlotPreviewMessageList(userEntries, suggestions) {
+        return userEntries.map((entry) => {
+            const floorNumber = entry.floorNumber;
+            const msg = entry.msg || {};
+            const messageId = `floor_${floorNumber}`;
+            const hasSuggestion = suggestions.has(messageId);
+            const raw = msg.mes || '';
+            const preview = raw.substring(0, 50) + (raw.length > 50 ? '...' : '');
+
+            return `
+                <div class="plot-preview-message-item"
+                     data-message-id="${messageId}"
+                     data-floor-number="${floorNumber}"
+                     style="
+                        padding: 12px;
+                        margin-bottom: 8px;
+                        background: var(--theme-bg-secondary, #2a2a2a);
+                        border: 1px solid var(--theme-border-color, #333);
+                        border-radius: 6px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                    "
+                    onmouseover="this.style.background='var(--theme-bg-hover, #333)'"
+                    onmouseout="this.style.background='var(--theme-bg-secondary, #2a2a2a)'">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-weight: bold; color: var(--theme-text-primary, #ddd);">
+                            #${floorNumber}
+                        </span>
+                        <span style="
+                            padding: 2px 8px;
+                            border-radius: 4px;
+                            font-size: 11px;
+                            ${hasSuggestion
+                                ? 'background: rgba(76, 175, 80, 0.2); color: #4CAF50;'
+                                : 'background: rgba(158, 158, 158, 0.2); color: #9e9e9e;'}
+                        ">
+                            ${hasSuggestion ? '✓ 已优化' : '未优化'}
+                        </span>
+                    </div>
+                    <div style="
+                        font-size: 13px;
+                        color: var(--theme-text-secondary, #888);
+                        line-height: 1.4;
+                    ">
+                        ${preview}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    /**
+     * 🔧 新增：显示详情编辑区
+     */
+    async showPlotPreviewDetail(dialog, messageId, floorNumber, plotOptimizationSystem) {
+        try {
+            const detailContainer = dialog.querySelector('#plot-preview-detail');
+            const suggestion = plotOptimizationSystem.plotSuggestions?.get(messageId);
+            const ctx = window.SillyTavern?.getContext?.();
+            const userMessage = Array.isArray(ctx.chat) ? ctx.chat[floorNumber - 1] : null;
+
+            if (!userMessage) {
+                detailContainer.innerHTML = '<div style="color: var(--theme-text-secondary, #888);">消息未找到</div>';
+                return;
+            }
+
+            detailContainer.innerHTML = `
+                <div style="display: flex; flex-direction: column; height: 100%;">
+                    <!-- 消息信息 -->
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 12px 0; color: var(--theme-text-primary, #ddd);">
+                            消息 #${floorNumber}
+                        </h4>
+                        <div style="
+                            padding: 12px;
+                            background: var(--theme-bg-secondary, #2a2a2a);
+                            border: 1px solid var(--theme-border-color, #333);
+                            border-radius: 6px;
+                            color: var(--theme-text-secondary, #888);
+                            max-height: 150px;
+                            overflow-y: auto;
+                        ">
+                            ${userMessage.mes}
+                        </div>
+                    </div>
+
+                    <!-- 剧情优化建议 -->
+                    <div style="flex: 1; display: flex; flex-direction: column;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h4 style="margin: 0; color: var(--theme-text-primary, #ddd);">
+                                剧情优化建议
+                            </h4>
+                            <div style="display: flex; gap: 8px;">
+                                ${suggestion ? `
+                                    <button class="plot-preview-edit-btn" style="
+                                        padding: 6px 12px;
+                                        background: var(--theme-primary-color, #4CAF50);
+                                        color: white;
+                                        border: none;
+                                        border-radius: 4px;
+                                        cursor: pointer;
+                                        font-size: 12px;
+                                    ">✏️ 编辑</button>
+                                    <button class="plot-preview-delete-btn" style="
+                                        padding: 6px 12px;
+                                        background: #f44336;
+                                        color: white;
+                                        border: none;
+                                        border-radius: 4px;
+                                        cursor: pointer;
+                                        font-size: 12px;
+                                    ">🗑️ 删除</button>
+                                ` : ''}
+                                <button class="plot-preview-regenerate-btn" style="
+                                    padding: 6px 12px;
+                                    background: #2196F3;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                    font-size: 12px;
+                                ">🔄 ${suggestion ? '重新生成' : '生成'}</button>
+                            </div>
+                        </div>
+                        <textarea id="plot-preview-suggestion-text" style="
+                            flex: 1;
+                            padding: 12px;
+                            background: var(--theme-bg-secondary, #2a2a2a);
+                            border: 1px solid var(--theme-border-color, #333);
+                            border-radius: 6px;
+                            color: var(--theme-text-primary, #ddd);
+                            font-family: monospace;
+                            font-size: 13px;
+                            resize: none;
+                            ${!suggestion ? 'opacity: 0.5;' : ''}
+                        " ${!suggestion ? 'readonly' : ''}>${suggestion?.suggestion || '暂无剧情优化建议'}</textarea>
+                    </div>
+                </div>
+            `;
+
+            // 绑定按钮事件
+            const editBtn = detailContainer.querySelector('.plot-preview-edit-btn');
+            const deleteBtn = detailContainer.querySelector('.plot-preview-delete-btn');
+            const regenerateBtn = detailContainer.querySelector('.plot-preview-regenerate-btn');
+            const textArea = detailContainer.querySelector('#plot-preview-suggestion-text');
+
+            if (editBtn) {
+                editBtn.addEventListener('click', async () => {
+                    if (textArea.hasAttribute('readonly')) {
+                        textArea.removeAttribute('readonly');
+                        textArea.style.opacity = '1';
+                        editBtn.textContent = '💾 保存';
+                    } else {
+                        // 保存编辑（同步到内存与消息对象）
+                        const newSuggestion = textArea.value;
+                        const now = Date.now();
+                        plotOptimizationSystem.plotSuggestions.set(messageId, {
+                            suggestion: newSuggestion,
+                            timestamp: now,
+                            floorNumber: floorNumber
+                        });
+                        try {
+                            const ctx = window.SillyTavern?.getContext?.();
+                            if (ctx) {
+                                const userMessage = ctx.chat.find(msg => (msg.send_date || msg.mes) === messageId);
+                                if (userMessage && userMessage.is_user) {
+                                    userMessage.infobar_plot_optimization = {
+                                        ...(userMessage.infobar_plot_optimization || {}),
+                                        suggestion: newSuggestion,
+                                        timestamp: now,
+                                        floorNumber,
+                                        messageId,
+                                        version: 1,
+                                    };
+                                    if (typeof ctx.saveChat === 'function') {
+                                        await ctx.saveChat();
+                                        console.log('[InfoBarSettings] 💾 已保存聊天（编辑建议）');
+                                    }
+                                }
+                            }
+                        } catch (persistErr) {
+                            console.warn('[InfoBarSettings] ⚠️ 持久化编辑后的建议失败:', persistErr);
+                        }
+                        textArea.setAttribute('readonly', 'true');
+                        editBtn.textContent = '✏️ 编辑';
+                        this.showNotification('✅ 已保存修改', 'success');
+                    }
+                });
+            }
+
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', async () => {
+                    if (confirm('确定要删除这条剧情优化建议吗？')) {
+                        plotOptimizationSystem.plotSuggestions.delete(messageId);
+                        try {
+                            const ctx = window.SillyTavern?.getContext?.();
+                            if (ctx) {
+                                const userMessage = ctx.chat.find(msg => (msg.send_date || msg.mes) === messageId);
+                                if (userMessage && userMessage.is_user) {
+                                    delete userMessage.infobar_plot_optimization;
+                                    if (typeof ctx.saveChat === 'function') {
+                                        await ctx.saveChat();
+                                        console.log('[InfoBarSettings] 💾 已保存聊天（删除建议）');
+                                    }
+                                }
+                            }
+                        } catch (persistErr) {
+                            console.warn('[InfoBarSettings] ⚠️ 删除建议持久化失败:', persistErr);
+                        }
+                        this.showNotification('✅ 已删除剧情优化建议', 'success');
+                        // 刷新列表和详情
+                        const messageList = dialog.querySelector('#plot-preview-message-list');
+                        const ctx = window.SillyTavern?.getContext?.();
+                        const userEntries = ctx.chat
+                            .map((msg, idx) => ({ msg, floorNumber: idx + 1 }))
+                            .filter(e => e.msg && e.msg.is_user);
+                        messageList.innerHTML = this.renderPlotPreviewMessageList(userEntries, plotOptimizationSystem.plotSuggestions);
+                        this.showPlotPreviewDetail(dialog, messageId, floorNumber, plotOptimizationSystem);
+                    }
+                });
+            }
+
+            if (regenerateBtn) {
+                regenerateBtn.addEventListener('click', async () => {
+                    try {
+                        regenerateBtn.disabled = true;
+                        regenerateBtn.textContent = '⏳ 生成中...';
+
+                        const contextMessages = await plotOptimizationSystem.getContextMessages();
+                        const newSuggestion = await plotOptimizationSystem.getPlotSuggestion(contextMessages);
+
+                        if (newSuggestion) {
+                            const now = Date.now();
+                            plotOptimizationSystem.plotSuggestions.set(messageId, {
+                                suggestion: newSuggestion,
+                                timestamp: now,
+                                floorNumber: floorNumber
+                            });
+                            try {
+                                const ctx = window.SillyTavern?.getContext?.();
+                                if (ctx) {
+                                    const userMessage = ctx.chat.find(msg => (msg.send_date || msg.mes) === messageId);
+                                    if (userMessage && userMessage.is_user) {
+                                        userMessage.infobar_plot_optimization = {
+                                            ...(userMessage.infobar_plot_optimization || {}),
+                                            suggestion: newSuggestion,
+                                            timestamp: now,
+                                            floorNumber,
+                                            messageId,
+                                            version: 1,
+                                        };
+                                        if (typeof ctx.saveChat === 'function') {
+                                            await ctx.saveChat();
+                                            console.log('[InfoBarSettings] 💾 已保存聊天（重新生成建议）');
+                                        }
+                                    }
+                                }
+                            } catch (persistErr) {
+                                console.warn('[InfoBarSettings] ⚠️ 重新生成建议持久化失败:', persistErr);
+                            }
+                            this.showNotification('✅ 剧情优化建议已重新生成', 'success');
+                            // 刷新详情
+                            this.showPlotPreviewDetail(dialog, messageId, floorNumber, plotOptimizationSystem);
+                        } else {
+                            this.showNotification('❌ 生成失败', 'error');
+                        }
+                    } catch (error) {
+                        console.error('[InfoBarSettings] ❌ 重新生成失败:', error);
+                        this.showNotification('❌ 生成失败: ' + error.message, 'error');
+                    } finally {
+                        regenerateBtn.disabled = false;
+                        regenerateBtn.textContent = '🔄 重新生成';
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示详情失败:', error);
         }
     }
 
