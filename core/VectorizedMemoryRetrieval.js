@@ -334,16 +334,32 @@ export class VectorizedMemoryRetrieval {
                 throw new Error('自定义向量API配置无效：缺少URL或API密钥');
             }
 
-            // 测试API连通性
-            const models = await this.customVectorAPI.getModels();
-            console.log('[VectorizedMemoryRetrieval] 📋 自定义API可用模型数:', models.length);
+            // 🔧 修复：添加超时保护，避免长时间阻塞初始化
+            console.log('[VectorizedMemoryRetrieval] 🔍 测试API连通性（超时时间: 10秒）...');
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('API连通性测试超时(10秒)')), 10000);
+            });
 
-            console.log('[VectorizedMemoryRetrieval] ✅ 自定义向量API初始化成功');
-            return true;
+            try {
+                // 使用Promise.race实现超时控制
+                const models = await Promise.race([
+                    this.customVectorAPI.getModels(),
+                    timeoutPromise
+                ]);
+                console.log('[VectorizedMemoryRetrieval] 📋 自定义API可用模型数:', models.length);
+                console.log('[VectorizedMemoryRetrieval] ✅ 自定义向量API初始化成功');
+                return true;
+            } catch (testError) {
+                // API测试失败，但不阻塞初始化
+                console.warn('[VectorizedMemoryRetrieval] ⚠️ API连通性测试失败:', testError.message);
+                console.log('[VectorizedMemoryRetrieval] 💡 将在首次使用时再次尝试连接');
+                // 标记为部分初始化成功，允许后续使用时重试
+                return true;
+            }
 
         } catch (error) {
             console.error('[VectorizedMemoryRetrieval] ❌ 自定义向量API初始化失败:', error);
-            
+
             // 降级到本地引擎
             if (this.settings.fallbackMode) {
                 console.log('[VectorizedMemoryRetrieval] 🔄 降级到本地Transformers.js引擎');

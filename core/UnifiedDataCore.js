@@ -57,10 +57,10 @@ export class UnifiedDataCore {
         this.defaultSettings = Object.freeze({
             // 基础设置
             enabled: true,
-            renderInChat: true,
+            renderInChat: false,  // 🔧 修复：默认禁用在聊天中渲染信息栏
             enableTableRecord: true,
             enableMemoryAssist: true,
-            defaultCollapsed: false,
+            defaultCollapsed: true,  // 🔧 修复：默认启用折叠状态
             
             // 提示词插入位置配置
             promptPosition: {
@@ -2933,7 +2933,7 @@ export class UnifiedDataCore {
     /**
      * 🆕 更新面板字段
      * @param {string} panelId - 面板ID
-     * @param {string} fieldName - 字段名（可能是中文显示名）
+     * @param {string} fieldName - 字段名（可能是中文显示名或col_X格式）
      * @param {any} newValue - 新值
      */
     async updatePanelField(panelId, fieldName, newValue) {
@@ -2946,21 +2946,33 @@ export class UnifiedDataCore {
                 throw new Error('无法获取当前聊天ID');
             }
 
-            // 🆕 将中文字段名转换为英文字段名
-            const englishFieldName = this.getEnglishFieldName(fieldName, panelId);
-            const actualFieldName = englishFieldName || fieldName;
+            // 🔄 新架构：直接使用中文字段名存储，不再转换为英文
+            // 如果传入的是col_X格式，转换为中文字段名
+            let actualFieldName = fieldName;
 
-            console.log('[UnifiedDataCore] 🔄 字段名映射:', {
+            if (/^col_\d+$/.test(fieldName)) {
+                // 是col_X格式，需要转换为中文字段名
+                const chineseFieldName = this.getChineseFieldName(fieldName, panelId);
+                if (chineseFieldName) {
+                    actualFieldName = chineseFieldName;
+                    console.log('[UnifiedDataCore] 🔄 col_X转中文:', {
+                        original: fieldName,
+                        chinese: chineseFieldName
+                    });
+                }
+            }
+
+            console.log('[UnifiedDataCore] 🔄 字段名处理:', {
                 original: fieldName,
-                english: englishFieldName,
-                actual: actualFieldName
+                actual: actualFieldName,
+                isColFormat: /^col_\d+$/.test(fieldName)
             });
 
             // 获取当前面板数据
             const panelData = await this.getPanelData(panelId) || {};
             const oldValue = panelData[actualFieldName];
 
-            // 更新字段值
+            // 更新字段值（使用中文字段名）
             panelData[actualFieldName] = newValue;
 
             // 保存面板数据
@@ -3904,10 +3916,60 @@ export class UnifiedDataCore {
     }
 
     /**
+     * 🔄 获取中文字段名（从col_X格式映射到中文字段名）
+     * @param {string} colKey - col_X格式的键名
+     * @param {string} panelId - 面板ID
+     * @returns {string|null} 对应的中文字段名
+     */
+    getChineseFieldName(colKey, panelId) {
+        try {
+            // 获取面板配置
+            const infoBarTool = window.SillyTavernInfobar;
+            const infoBarSettings = infoBarTool?.modules?.infoBarSettings || infoBarTool?.modules?.settings;
+            if (!infoBarSettings) {
+                console.warn('[UnifiedDataCore] ⚠️ InfoBarSettings 不可用');
+                return null;
+            }
+
+            // 使用getCustomPanels方法获取面板配置
+            const customPanels = infoBarSettings.getCustomPanels();
+            const panelConfig = customPanels[panelId];
+
+            if (!panelConfig || !panelConfig.subItems) {
+                console.warn(`[UnifiedDataCore] ⚠️ 面板 ${panelId} 配置不存在或没有subItems`);
+                return null;
+            }
+
+            // 从col_X提取索引
+            const match = colKey.match(/^col_(\d+)$/);
+            if (!match) {
+                return null;
+            }
+
+            const colIndex = parseInt(match[1]) - 1; // col_1对应索引0
+            const subItem = panelConfig.subItems[colIndex];
+
+            if (subItem) {
+                const chineseName = subItem.displayName || subItem.name || subItem.key;
+                console.log(`[UnifiedDataCore] 🔄 col_X -> 中文: ${colKey} -> ${chineseName} (面板: ${panelId})`);
+                return chineseName;
+            }
+
+            console.warn(`[UnifiedDataCore] ⚠️ 未找到索引 ${colIndex} 的字段 (面板: ${panelId})`);
+            return null;
+
+        } catch (error) {
+            console.error('[UnifiedDataCore] ❌ 获取中文字段名失败:', error);
+            return null;
+        }
+    }
+
+    /**
      * 🔄 获取英文字段名（从中文字段名映射到英文键名）
      * @param {string} chineseDisplayName - 中文字段名
      * @param {string} panelId - 面板ID
      * @returns {string|null} 对应的英文字段键名
+     * @deprecated 新架构不再使用英文字段名，保留此方法仅用于向后兼容
      */
     getEnglishFieldName(chineseDisplayName, panelId) {
         try {
