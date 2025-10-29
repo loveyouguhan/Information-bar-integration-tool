@@ -34,6 +34,7 @@ import { AIMemoryDatabaseInjector } from './core/AIMemoryDatabaseInjector.js';
 import { ContentFilterManager } from './core/ContentFilterManager.js';
 import { MessageFilterHook } from './core/MessageFilterHook.js';
 import { PresetPanelsManager } from './core/PresetPanelsManager.js';
+import { DataMigrationTool } from './core/DataMigrationTool.js'; // 🆕 数据迁移工具
 
 // 导入UI组件
 import { InfoBarSettings } from './ui/InfoBarSettings.js';
@@ -47,6 +48,7 @@ import { AIMemoryDatabase } from './core/AIMemoryDatabase.js';
 import { IntelligentMemoryClassifier } from './core/IntelligentMemoryClassifier.js';
 import { MemoryMaintenanceSystem } from './core/MemoryMaintenanceSystem.js';
 import { ContextualRetrieval } from './core/ContextualRetrieval.js';
+import { initPlotOptimizationInterceptor, createGenerateInterceptor } from './core/PlotOptimizationInterceptor.js';
 import { UserProfileManager } from './core/UserProfileManager.js';
 import { KnowledgeGraphManager } from './core/KnowledgeGraphManager.js';
 import { RAGMemoryFormatter } from './core/RAGMemoryFormatter.js';
@@ -55,7 +57,7 @@ import { SillyTavernIntegration } from './core/SillyTavernIntegration.js';
 import { FrontendDisplayManager } from './ui/FrontendDisplayManager.js';
 import { RegexScriptManager } from './core/RegexScriptManager.js';
 import { RegexScriptPanel } from './ui/RegexScriptPanel.js';
-import { StoryPlanningAssistant } from './core/StoryPlanningAssistant.js';
+import { PlotOptimizationSystem } from './core/PlotOptimizationSystem.js';
 import { NovelAnalyzer } from './core/NovelAnalyzer.js';
 import { CorpusRetrieval } from './core/CorpusRetrieval.js';
 import { VectorizedSummaryManager } from './core/VectorizedSummaryManager.js';
@@ -77,16 +79,16 @@ import { MultiRecallReranker } from './core/MultiRecallReranker.js'; // 🆕 多
         window.__InfobarConsoleOriginal = original;
         if (!window.SillyTavernInfobar) window.SillyTavernInfobar = {};
         const rt = (window.SillyTavernInfobar.runtimeLogs = window.SillyTavernInfobar.runtimeLogs || []);
-        
+
         // 🔧 修复：添加收集开关，默认禁用
         window.SillyTavernInfobar.logCollectionEnabled = false;
-        
+
         const push = (level, args) => {
             // 🔧 只在启用收集时才记录日志
             if (!window.SillyTavernInfobar.logCollectionEnabled) return;
             try {
                 rt.push({ level, time: Date.now(), message: Array.from(args).map(v => (typeof v === 'string' ? v : JSON.stringify(v))).join(' ') });
-                if (rt.length > 500) rt.shift();
+                // 🔧 修复：完全移除500条限制，允许收集和导出所有日志
             } catch {}
         };
 
@@ -153,7 +155,7 @@ class InformationBarIntegrationTool {
         this.variableSystemPrompt = null;
         this.contentFilterManager = null;
         this.messageFilterHook = null;
-        this.storyPlanningAssistant = null;
+        this.plotOptimizationSystem = null;
 
         // UI组件
         this.infoBarSettings = null;
@@ -271,6 +273,13 @@ class InformationBarIntegrationTool {
         this.configManager = new ConfigManager(this.dataCore);
         await this.configManager.init();
 
+        // 🆕 初始化数据迁移工具
+        this.dataMigrationTool = new DataMigrationTool({
+            unifiedDataCore: this.dataCore,
+            infoBarSettings: null // 稍后在infoBarSettings初始化后设置
+        });
+        console.log('[InfoBarTool] ✅ 数据迁移工具初始化完成');
+
         // 初始化API集成
         this.apiIntegration = new APIIntegration(this.configManager);
         await this.apiIntegration.init();
@@ -339,6 +348,25 @@ class InformationBarIntegrationTool {
         await this.regexScriptManager.init();
         console.log('[InfoBarTool] ✅ 正则表达式脚本管理器初始化完成');
 
+        // 📖 关键修复：提前初始化剧情优化系统（必须在SmartPromptSystem之前）
+        // 这样可以确保剧情优化系统的事件监听器先于SmartPromptSystem注册
+        // 从而在generation_started事件中先执行剧情优化，再执行智能提示词注入
+        // 注意：此时infoBarSettings还未初始化，稍后在InfoBarSettings初始化后设置
+        this.plotOptimizationSystem = new PlotOptimizationSystem({
+            unifiedDataCore: this.dataCore,
+            eventSystem: this.eventSystem,
+            configManager: this.configManager,
+            apiIntegration: this.apiIntegration,
+            infoBarSettings: null, // 稍后设置
+            context: this.context
+        });
+        await this.plotOptimizationSystem.init();
+        console.log('[InfoBarTool] ✅ 剧情优化系统初始化完成（提前初始化，infoBarSettings稍后设置）');
+
+        // 🔧 初始化剧情优化拦截器（提前触发机制）
+        initPlotOptimizationInterceptor(this.plotOptimizationSystem);
+        console.log('[InfoBarTool] ✅ 剧情优化拦截器初始化完成（提前触发 + 缓存机制）');
+
         // 初始化智能提示词系统（需要在fieldRuleManager和panelRuleManager之后）
         this.smartPromptSystem = new SmartPromptSystem(this.configManager, this.eventSystem, this.dataCore, this.fieldRuleManager, this.panelRuleManager);
         await this.smartPromptSystem.init();
@@ -386,6 +414,12 @@ class InformationBarIntegrationTool {
 
         // 🔧 修复：调用InfoBarSettings的init方法，确保CustomAPITaskQueue被正确初始化
         await this.infoBarSettings.init();
+
+        // 📖 关键修复：InfoBarSettings初始化完成后，设置到PlotOptimizationSystem
+        if (this.plotOptimizationSystem) {
+            this.plotOptimizationSystem.infoBarSettings = this.infoBarSettings;
+            console.log('[InfoBarTool] ✅ InfoBarSettings已设置到PlotOptimizationSystem');
+        }
 
         // InfoBarSettings初始化完成后，检查并自动设置自定义API Hook
         await this.checkAndSetupCustomAPIHookAfterInit();
@@ -555,17 +589,7 @@ class InformationBarIntegrationTool {
         });
         await this.sillyTavernIntegration.init();
 
-        // 📖 新增：初始化剧情规划助手
-        this.storyPlanningAssistant = new StoryPlanningAssistant({
-            unifiedDataCore: this.dataCore,
-            eventSystem: this.eventSystem,
-            configManager: this.configManager,
-            aiMemoryDatabase: this.aiMemoryDatabase,
-            smartPromptSystem: this.smartPromptSystem,
-            contextualRetrieval: this.contextualRetrieval,
-            deepMemoryManager: this.deepMemoryManager
-        });
-        await this.storyPlanningAssistant.init();
+        // 📖 剧情优化系统已在SmartPromptSystem之前初始化（见第348-362行）
 
         // 🧠 新增：初始化AI记忆数据库注入器
         this.aiMemoryDatabaseInjector = new AIMemoryDatabaseInjector({
@@ -646,6 +670,9 @@ class InformationBarIntegrationTool {
         await this.vectorizedSummaryManager.init();
         console.log('[InfoBarTool] ✅ 向量化总结管理器初始化完成');
 
+        // 🔧 设置dataMigrationTool的infoBarSettings引用
+        this.dataMigrationTool.infoBarSettings = this.infoBarSettings;
+
         // 创建modules对象以便外部访问
         this.modules = {
             settings: this.infoBarSettings,
@@ -678,7 +705,8 @@ class InformationBarIntegrationTool {
             aiTemplateAssistant: this.aiTemplateAssistant,
             templateManager: this.templateManager,
             npcDatabaseManager: this.npcDatabaseManager,
-            storyPlanningAssistant: this.storyPlanningAssistant, // 📖 剧情规划助手
+            dataMigrationTool: this.dataMigrationTool, // 🆕 数据迁移工具
+            plotOptimizationSystem: this.plotOptimizationSystem, // 📖 剧情优化系统
             novelAnalyzer: this.novelAnalyzer, // 📚 小说分析器
             corpusRetrieval: this.corpusRetrieval, // 🔍 语料库检索系统
             vectorizedSummaryManager: this.vectorizedSummaryManager // 🔮 向量化总结管理器
@@ -835,7 +863,7 @@ class InformationBarIntegrationTool {
     onAppReady() {
         console.log('[InfoBarTool] 🎯 SillyTavern应用就绪');
         this.eventSystem.emit('app:ready');
-        
+
         // 🔧 新增：安装消息过滤Hook，在发送到主API之前应用正则表达式过滤
         if (this.messageFilterHook) {
             try {
@@ -959,12 +987,12 @@ class InformationBarIntegrationTool {
      */
     disable() {
         this.initialized = false;
-        
+
         // 🔧 新增：禁用时清理所有错误UI元素
         if (this.messageInfoBarRenderer && typeof this.messageInfoBarRenderer.cleanupErrorUI === 'function') {
             this.messageInfoBarRenderer.cleanupErrorUI();
         }
-        
+
         console.log('[InfoBarTool] 🚫 扩展已禁用');
     }
 
@@ -1019,12 +1047,13 @@ class InformationBarIntegrationTool {
                 regexScriptPanel: this.regexScriptPanel, // 🆕 新增：正则表达式脚本面板
                 contentFilterManager: this.contentFilterManager, // 🔧 新增：内容过滤管理器
                 messageFilterHook: this.messageFilterHook, // 🔧 新增：消息过滤Hook
-                storyPlanningAssistant: this.storyPlanningAssistant, // 📖 新增：剧情规划助手
+                plotOptimizationSystem: this.plotOptimizationSystem, // 📖 新增：剧情优化系统
                 novelAnalyzer: this.novelAnalyzer, // 📚 新增：小说分析器
                 corpusRetrieval: this.corpusRetrieval, // 🔍 新增：语料库检索系统
                 multiRecallReranker: this.multiRecallReranker, // 🎯 新增：多路召回+重排序系统
                 unifiedVectorRetrieval: this.unifiedVectorRetrieval, // 🔍 新增：统一向量检索管理器
                 vectorizedSummaryManager: this.vectorizedSummaryManager, // 🔮 新增：向量化总结管理器
+                dataMigrationTool: this.dataMigrationTool, // 🆕 新增：数据迁移工具
                 // 🔧 修复：添加自定义API任务队列模块
                 customAPITaskQueue: this.infoBarSettings?.customAPITaskQueue,
                 // 🔧 修复：暴露向量API适配器
@@ -1139,3 +1168,119 @@ setTimeout(() => {
 }, 1000);
 
 console.log('[InfoBarTool] 📦 Information Bar Integration Tool 加载完成');
+
+
+//  : SillyTavern         generate                     
+//      manifest.json      "generate_interceptor": "infobar_generate_interceptor"
+//     :                                        (quiet/swipe/impersonate/regenerate/continue)
+//                     API                    
+globalThis.infobar_generate_interceptor = async function (coreChat, contextSize, abort, type) {
+    try {
+        const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
+        const modules = window.SillyTavernInfobar?.modules || {};
+        const pos = modules.plotOptimizationSystem;
+
+        //             /        
+        if (!ctx || !pos || !pos.config?.enabled) {
+            return; //          
+        }
+
+        //                  
+        const blockedTypes = new Set(['quiet', 'swipe', 'impersonate', 'regenerate', 'continue']);
+        if (blockedTypes.has(String(type))) {
+            console.debug('[InfoBarTool][Interceptor]            , skip:', type);
+            return;
+        }
+
+        //                 
+        const runtimeChat = ctx.chat;
+        if (!Array.isArray(runtimeChat) || runtimeChat.length === 0) return;
+
+        //                 
+        let userIndex = runtimeChat.length - 1;
+        const last = runtimeChat[userIndex];
+        const secondLast = runtimeChat[userIndex - 1];
+        let userMessage = null;
+        if (last?.is_user) {
+            userMessage = last;
+        } else if (secondLast?.is_user) {
+            userIndex = userIndex - 1;
+            userMessage = secondLast;
+        } else {
+            console.debug('[InfoBarTool][Interceptor]         , skip');
+            return;
+        }
+
+        // 🔧 修复：使用统一的messageId格式（floor_N），与新系统保持一致
+        const floorNumber = userIndex + 1; // 1-based
+        const messageId = `floor_${floorNumber}`;
+
+        //        
+        let suggestion = null;
+        const existing = pos.plotSuggestions?.get?.(messageId);
+        if (existing && existing.suggestion) {
+            suggestion = existing.suggestion;
+            console.log('[InfoBarTool][Interceptor] ♻️ 使用已存在的剧情建议, floor:', floorNumber);
+            await pos.injectSuggestion(suggestion, messageId, floorNumber);
+            console.debug('[InfoBarTool][Interceptor]        , floor:', floorNumber);
+            return;
+        }
+
+        // 🔧 修复：检查预优化结果表（零等待）
+        if (pos.preOptimizationResults && pos.preOptimizationResults.has(messageId)) {
+            const cached = pos.preOptimizationResults.get(messageId);
+            if (cached && cached.suggestion) {
+                suggestion = cached.suggestion;
+                console.log('[InfoBarTool][Interceptor] ✅ 预优化结果命中（零等待）, floor:', floorNumber);
+                // 🔧 修复：注入预优化的建议
+                await pos.injectSuggestion(suggestion, messageId, floorNumber);
+                // 清理预优化缓存
+                pos.preOptimizationResults.delete(messageId);
+                if (pos.preOptimizationCache) pos.preOptimizationCache.delete(messageId);
+                return;
+            }
+        }
+
+        console.debug('[InfoBarTool][Interceptor]        , floor:', floorNumber, 'type:', type);
+
+        //       
+        const contextMessages = await pos.getContextMessages();
+        if (!contextMessages?.length) {
+            console.debug('[InfoBarTool][Interceptor]        , skip');
+            return;
+        }
+
+        //     API           
+        const start = Date.now();
+        try {
+            suggestion = await pos.getPlotSuggestion(contextMessages);
+        } catch (e) {
+            console.error('[InfoBarTool][Interceptor]     API     :', e);
+        }
+
+        if (suggestion) {
+            await pos.injectSuggestion(suggestion, messageId, floorNumber);
+            pos.stats.totalOptimizations = (pos.stats.totalOptimizations || 0) + 1;
+            pos.stats.successCount = (pos.stats.successCount || 0) + 1;
+            pos.lastProcessedChatLength = runtimeChat.length;
+            pos.lastProcessedMessageId = messageId;
+            pos.lastOptimizationTime = Date.now();
+            // 为可能的主API网络错误准备一次自动重试的挂起标记
+            if (pos) {
+                pos.pendingRetry = { messageId, floorNumber, chatLengthBefore: runtimeChat.length, attempted: false };
+            }
+            console.debug('[InfoBarTool][Interceptor]       ,   :', Date.now() - start, 'ms');
+        } else {
+            pos.stats.totalOptimizations = (pos.stats.totalOptimizations || 0) + 1;
+            pos.stats.failureCount = (pos.stats.failureCount || 0) + 1;
+            console.warn('[InfoBarTool][Interceptor]                ');
+        }
+
+        //                 (      )     
+        // abort(false);
+    } catch (err) {
+        const pos = window.SillyTavernInfobar?.modules?.plotOptimizationSystem;
+        if (pos) pos.errorCount = (pos.errorCount || 0) + 1;
+        console.error('[InfoBarTool][Interceptor]     :', err);
+    }
+};
