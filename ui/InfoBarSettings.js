@@ -1021,6 +1021,50 @@ ${'='.repeat(80)}
                             <label for="table-records-checkbox" class="checkbox-label">启用数据表格</label>
                         </div>
                         <div class="setting-desc">启用后在扩展内增加数据表格按钮，用于查看和管理数据</div>
+
+                        <!-- 🆕 API模式选择（仅在启用数据表格时显示） -->
+                        <div class="api-mode-selection" id="api-mode-selection" style="display: none; margin-top: 15px; margin-left: 30px; padding: 15px; background: var(--theme-bg-secondary, #2a2a2a); border-radius: 8px; border-left: 3px solid #667eea;">
+                            <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--theme-text-primary, #e0e0e0);">📊 数据生成模式</h4>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                                    <button type="button" class="api-mode-btn" data-mode="main" style="
+                                        flex: 1;
+                                        padding: 12px 16px;
+                                        background: linear-gradient(135deg, #667eea, #764ba2);
+                                        color: white;
+                                        border: none;
+                                        border-radius: 6px;
+                                        cursor: pointer;
+                                        transition: all 0.2s;
+                                        font-weight: 500;
+                                        font-size: 13px;
+                                    ">
+                                        🎯 主API模式
+                                    </button>
+                                    <button type="button" class="api-mode-btn" data-mode="custom" style="
+                                        flex: 1;
+                                        padding: 12px 16px;
+                                        background: var(--theme-bg-tertiary, #1a1a1a);
+                                        color: var(--theme-text-primary, #e0e0e0);
+                                        border: 1px solid var(--theme-border-color, #333);
+                                        border-radius: 6px;
+                                        cursor: pointer;
+                                        transition: all 0.2s;
+                                        font-size: 13px;
+                                    ">
+                                        🔌 自定义API模式
+                                    </button>
+                                </div>
+                                <div class="mode-description" style="font-size: 12px; color: var(--theme-text-secondary, #999); line-height: 1.5;">
+                                    <div class="main-mode-desc" style="display: block;">
+                                        <strong style="color: #667eea;">主API模式：</strong>使用SillyTavern主API生成数据表格内容，智能提示词会注入到主API对话中
+                                    </div>
+                                    <div class="custom-mode-desc" style="display: none;">
+                                        <strong style="color: #f59e0b;">自定义API模式：</strong>使用独立的自定义API生成数据表格和AI记忆总结，智能提示词不会注入主API（需在API配置面板中设置）
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="setting-item">
@@ -1722,6 +1766,18 @@ ${'='.repeat(80)}
                     e.preventDefault();
                     e.stopPropagation();
                     this.handleAction(action, e);
+                }
+
+                // 🆕 API模式切换按钮
+                if (e.target.classList.contains('api-mode-btn')) {
+                    const mode = e.target.dataset.mode;
+                    this.handleAPIModeChange(mode);
+                }
+
+                // 🆕 AI记忆总结API模式切换按钮
+                if (e.target.classList.contains('ai-memory-api-mode-btn')) {
+                    const mode = e.target.dataset.mode;
+                    this.handleAIMemoryAPIModeChange(mode);
                 }
 
                 // API配置相关按钮
@@ -6537,9 +6593,21 @@ ${'='.repeat(80)}
 
             console.log(`[InfoBarSettings] ☑️ 复选框变更: ${name} = ${checked}`);
 
-            // 🆕 特殊处理"启用数据表格"复选框 - 实时创建/删除菜单按钮
+            // 🆕 特殊处理"启用数据表格"复选框 - 实时创建/删除菜单按钮并显示/隐藏API模式选择
             if (name === 'basic.tableRecords.enabled') {
                 this.handleTableRecordsToggle(checked);
+
+                // 显示/隐藏API模式选择区域
+                const apiModeSelection = this.modal.querySelector('#api-mode-selection');
+                if (apiModeSelection) {
+                    apiModeSelection.style.display = checked ? 'block' : 'none';
+                    console.log(`[InfoBarSettings] 📊 API模式选择区域${checked ? '显示' : '隐藏'}`);
+
+                    // 如果显示，恢复按钮状态
+                    if (checked) {
+                        this.restoreAPIModeButtonState();
+                    }
+                }
             }
 
             // 🔧 修复：处理自定义面板启用/禁用状态
@@ -6623,6 +6691,160 @@ ${'='.repeat(80)}
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 处理复选框变更失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 恢复API模式按钮状态
+     */
+    restoreAPIModeButtonState() {
+        try {
+            const context = SillyTavern.getContext();
+            const apiConfig = context.extensionSettings['Information bar integration tool']?.apiConfig;
+            const currentMode = apiConfig?.enabled === true ? 'custom' : 'main';
+
+            const buttons = this.modal.querySelectorAll('.api-mode-btn');
+            buttons.forEach(btn => {
+                const isActive = btn.dataset.mode === currentMode;
+                if (isActive) {
+                    btn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+                    btn.style.color = 'white';
+                    btn.style.border = 'none';
+                } else {
+                    btn.style.background = 'var(--theme-bg-tertiary, #1a1a1a)';
+                    btn.style.color = 'var(--theme-text-primary, #e0e0e0)';
+                    btn.style.border = '1px solid var(--theme-border-color, #333)';
+                }
+            });
+
+            // 恢复描述文本显示状态
+            const mainDesc = this.modal.querySelector('.main-mode-desc');
+            const customDesc = this.modal.querySelector('.custom-mode-desc');
+            if (mainDesc && customDesc) {
+                mainDesc.style.display = currentMode === 'main' ? 'block' : 'none';
+                customDesc.style.display = currentMode === 'custom' ? 'block' : 'none';
+            }
+
+            console.log('[InfoBarSettings] 🔄 已恢复API模式按钮状态:', currentMode);
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 恢复API模式按钮状态失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理API模式切换
+     */
+    async handleAPIModeChange(mode) {
+        try {
+            console.log('[InfoBarSettings] 🔄 切换API模式:', mode);
+
+            // 更新按钮样式
+            const buttons = this.modal.querySelectorAll('.api-mode-btn');
+            buttons.forEach(btn => {
+                const isActive = btn.dataset.mode === mode;
+                if (isActive) {
+                    btn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+                    btn.style.color = 'white';
+                    btn.style.border = 'none';
+                } else {
+                    btn.style.background = 'var(--theme-bg-tertiary, #1a1a1a)';
+                    btn.style.color = 'var(--theme-text-primary, #e0e0e0)';
+                    btn.style.border = '1px solid var(--theme-border-color, #333)';
+                }
+            });
+
+            // 更新描述文本
+            const mainDesc = this.modal.querySelector('.main-mode-desc');
+            const customDesc = this.modal.querySelector('.custom-mode-desc');
+            if (mainDesc && customDesc) {
+                mainDesc.style.display = mode === 'main' ? 'block' : 'none';
+                customDesc.style.display = mode === 'custom' ? 'block' : 'none';
+            }
+
+            // 更新配置
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            if (!extensionSettings['Information bar integration tool']) {
+                extensionSettings['Information bar integration tool'] = {};
+            }
+            if (!extensionSettings['Information bar integration tool'].apiConfig) {
+                extensionSettings['Information bar integration tool'].apiConfig = {};
+            }
+
+            const enabled = (mode === 'custom');
+            extensionSettings['Information bar integration tool'].apiConfig.enabled = enabled;
+
+            // 调用API启用状态变更处理
+            await this.handleAPIEnabledChange(enabled);
+
+            // 保存配置
+            context.saveSettingsDebounced();
+
+            console.log('[InfoBarSettings] ✅ API模式已切换:', mode, '(enabled:', enabled, ')');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换API模式失败:', error);
+            this.showNotification('❌ 切换API模式失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 处理AI记忆总结API模式切换
+     */
+    async handleAIMemoryAPIModeChange(mode) {
+        try {
+            console.log('[InfoBarSettings] 🔄 切换AI记忆总结API模式:', mode);
+
+            // 更新按钮样式
+            const buttons = this.modal.querySelectorAll('.ai-memory-api-mode-btn');
+            buttons.forEach(btn => {
+                const isActive = btn.dataset.mode === mode;
+                if (isActive) {
+                    btn.style.background = 'linear-gradient(135deg, #4CAF50, #45a049)';
+                    btn.style.color = 'white';
+                    btn.style.border = 'none';
+                } else {
+                    btn.style.background = 'var(--theme-bg-tertiary, #1a1a1a)';
+                    btn.style.color = 'var(--theme-text-primary, #e0e0e0)';
+                    btn.style.border = '1px solid var(--theme-border-color, #333)';
+                }
+            });
+
+            // 更新描述文本
+            const autoDesc = this.modal.querySelector('.ai-memory-mode-description .auto-mode-desc');
+            const mainDesc = this.modal.querySelector('.ai-memory-mode-description .main-mode-desc');
+            const customDesc = this.modal.querySelector('.ai-memory-mode-description .custom-mode-desc');
+            if (autoDesc && mainDesc && customDesc) {
+                autoDesc.style.display = mode === 'auto' ? 'block' : 'none';
+                mainDesc.style.display = mode === 'main' ? 'block' : 'none';
+                customDesc.style.display = mode === 'custom' ? 'block' : 'none';
+            }
+
+            // 更新配置
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            if (!extensionSettings['Information bar integration tool']) {
+                extensionSettings['Information bar integration tool'] = {};
+            }
+            if (!extensionSettings['Information bar integration tool'].memoryEnhancement) {
+                extensionSettings['Information bar integration tool'].memoryEnhancement = {};
+            }
+            if (!extensionSettings['Information bar integration tool'].memoryEnhancement.ai) {
+                extensionSettings['Information bar integration tool'].memoryEnhancement.ai = {};
+            }
+
+            // 保存API模式配置
+            extensionSettings['Information bar integration tool'].memoryEnhancement.ai.apiMode = mode;
+
+            // 保存配置
+            context.saveSettingsDebounced();
+
+            console.log('[InfoBarSettings] ✅ AI记忆总结API模式已切换:', mode);
+            this.showMessage(`✅ AI记忆总结API模式已切换为: ${mode === 'auto' ? '自动模式' : mode === 'main' ? '主API模式' : '自定义API模式'}`, 'success');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换AI记忆总结API模式失败:', error);
+            this.showNotification('❌ 切换API模式失败: ' + error.message, 'error');
         }
     }
 
@@ -6717,9 +6939,8 @@ ${'='.repeat(80)}
         return `
             <div class="content-header">
                 <h3>🔌 自定义API配置</h3>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="api-enabled" name="apiConfig.enabled" />
-                    <label for="api-enabled" class="switch-slider"></label>
+                <div style="font-size: 13px; color: var(--theme-text-secondary, #999); margin-top: 8px;">
+                    💡 提示：在"基础设置"中启用数据表格后，可选择使用自定义API模式
                 </div>
             </div>
 
@@ -7518,6 +7739,66 @@ ${'='.repeat(80)}
                             <span class="input-unit" id="memory-ai-importance-value">60%</span>
                         </div>
                         <div class="setting-hint">只总结重要性超过此阈值的消息</div>
+                    </div>
+                </div>
+
+                <!-- 🆕 AI记忆总结API模式选择 -->
+                <div class="setting-row ai-memory-options ai-memory-api-mode-selection" id="ai-memory-api-mode-selection" style="display: none; margin-left: 20px; border-left: 2px solid #4CAF50; padding-left: 15px;">
+                    <div class="setting-group">
+                        <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--theme-text-primary, #e0e0e0);">📊 数据生成模式</h4>
+                        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                            <button type="button" class="ai-memory-api-mode-btn" data-mode="auto" style="
+                                flex: 1;
+                                padding: 10px 14px;
+                                background: linear-gradient(135deg, #4CAF50, #45a049);
+                                color: white;
+                                border: none;
+                                border-radius: 6px;
+                                cursor: pointer;
+                                transition: all 0.2s;
+                                font-weight: 500;
+                                font-size: 12px;
+                            ">
+                                🔄 自动模式
+                            </button>
+                            <button type="button" class="ai-memory-api-mode-btn" data-mode="main" style="
+                                flex: 1;
+                                padding: 10px 14px;
+                                background: var(--theme-bg-tertiary, #1a1a1a);
+                                color: var(--theme-text-primary, #e0e0e0);
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 6px;
+                                cursor: pointer;
+                                transition: all 0.2s;
+                                font-size: 12px;
+                            ">
+                                🎯 主API模式
+                            </button>
+                            <button type="button" class="ai-memory-api-mode-btn" data-mode="custom" style="
+                                flex: 1;
+                                padding: 10px 14px;
+                                background: var(--theme-bg-tertiary, #1a1a1a);
+                                color: var(--theme-text-primary, #e0e0e0);
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 6px;
+                                cursor: pointer;
+                                transition: all 0.2s;
+                                font-size: 12px;
+                            ">
+                                🔌 自定义API模式
+                            </button>
+                        </div>
+                        <div class="ai-memory-mode-description" style="font-size: 12px; color: var(--theme-text-secondary, #999); line-height: 1.5;">
+                            <div class="auto-mode-desc" style="display: block;">
+                                <strong style="color: #4CAF50;">自动模式：</strong>跟随全局自定义API配置，如果全局启用自定义API则使用自定义API，否则使用主API
+                            </div>
+                            <div class="main-mode-desc" style="display: none;">
+                                <strong style="color: #667eea;">主API模式：</strong>强制使用SillyTavern主API生成AI记忆总结，智能提示词会注入到主API对话中
+                            </div>
+                            <div class="custom-mode-desc" style="display: none;">
+                                <strong style="color: #f59e0b;">自定义API模式：</strong>强制使用独立的自定义API生成AI记忆总结，智能提示词不会注入主API（需在API配置面板中设置）
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -10250,6 +10531,41 @@ ${'='.repeat(80)}
                 this.updateAPIStatus();
             }
 
+            // 🆕 恢复API模式状态
+            const tableRecordsEnabled = configs.basic?.tableRecords?.enabled === true;
+            const apiModeSelection = this.modal.querySelector('#api-mode-selection');
+            if (apiModeSelection) {
+                apiModeSelection.style.display = tableRecordsEnabled ? 'block' : 'none';
+                console.log('[InfoBarSettings] 📊 API模式选择区域初始状态:', tableRecordsEnabled ? '显示' : '隐藏');
+            }
+
+            // 恢复API模式按钮状态
+            const apiEnabled = configs.apiConfig?.enabled === true;
+            const currentMode = apiEnabled ? 'custom' : 'main';
+            const buttons = this.modal.querySelectorAll('.api-mode-btn');
+            buttons.forEach(btn => {
+                const isActive = btn.dataset.mode === currentMode;
+                if (isActive) {
+                    btn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+                    btn.style.color = 'white';
+                    btn.style.border = 'none';
+                } else {
+                    btn.style.background = 'var(--theme-bg-tertiary, #1a1a1a)';
+                    btn.style.color = 'var(--theme-text-primary, #e0e0e0)';
+                    btn.style.border = '1px solid var(--theme-border-color, #333)';
+                }
+            });
+
+            // 恢复描述文本显示状态
+            const mainDesc = this.modal.querySelector('.main-mode-desc');
+            const customDesc = this.modal.querySelector('.custom-mode-desc');
+            if (mainDesc && customDesc) {
+                mainDesc.style.display = currentMode === 'main' ? 'block' : 'none';
+                customDesc.style.display = currentMode === 'custom' ? 'block' : 'none';
+            }
+
+            console.log('[InfoBarSettings] 🔄 已恢复API模式状态:', currentMode);
+
             // 🆕 加载向量化API配置
             if (configs.vectorAPIConfig) {
                 console.log('[InfoBarSettings] 🧠 加载向量化API配置...', configs.vectorAPIConfig);
@@ -11170,11 +11486,19 @@ ${'='.repeat(80)}
             // 优先使用后端模块的当前设置，确保与实际状态同步
             const aiSettings = aiMemorySummarizer?.settings || {};
 
+            // 🆕 获取AI记忆总结API模式
+            const getAPIMode = () => {
+                const context = SillyTavern.getContext();
+                const savedMode = context.extensionSettings['Information bar integration tool']?.memoryEnhancement?.ai?.apiMode;
+                return savedMode || 'auto';
+            };
+
             const data = {
                 ai: {
                     enabled: aiSettings.enabled !== undefined ? aiSettings.enabled : getBool('memory-ai-memory-enabled'),
                     messageLevelSummary: aiSettings.messageLevelSummary !== undefined ? aiSettings.messageLevelSummary : getBool('memory-ai-message-level-summary'),
-                    importanceThreshold: aiSettings.importanceThreshold !== undefined ? aiSettings.importanceThreshold : getNum('memory-ai-importance-threshold')
+                    importanceThreshold: aiSettings.importanceThreshold !== undefined ? aiSettings.importanceThreshold : getNum('memory-ai-importance-threshold'),
+                    apiMode: getAPIMode()  // 🆕 添加API模式配置
                 },
                 aiDatabase: {
                     enabled: getBool('memory-ai-memory-database-enabled'),
@@ -38115,6 +38439,34 @@ ${dataExamples}
                 opt.style.display = aiSettings.enabled ? 'block' : 'none';
             });
 
+            // 🆕 恢复AI记忆总结API模式按钮状态
+            const aiApiMode = aiSettings.apiMode || 'auto';
+            const aiMemoryApiModeButtons = this.modal.querySelectorAll('.ai-memory-api-mode-btn');
+            aiMemoryApiModeButtons.forEach(btn => {
+                const isActive = btn.dataset.mode === aiApiMode;
+                if (isActive) {
+                    btn.style.background = 'linear-gradient(135deg, #4CAF50, #45a049)';
+                    btn.style.color = 'white';
+                    btn.style.border = 'none';
+                } else {
+                    btn.style.background = 'var(--theme-bg-tertiary, #1a1a1a)';
+                    btn.style.color = 'var(--theme-text-primary, #e0e0e0)';
+                    btn.style.border = '1px solid var(--theme-border-color, #333)';
+                }
+            });
+
+            // 更新AI记忆总结API模式描述文本
+            const aiAutoDesc = this.modal.querySelector('.ai-memory-mode-description .auto-mode-desc');
+            const aiMainDesc = this.modal.querySelector('.ai-memory-mode-description .main-mode-desc');
+            const aiCustomDesc = this.modal.querySelector('.ai-memory-mode-description .custom-mode-desc');
+            if (aiAutoDesc && aiMainDesc && aiCustomDesc) {
+                aiAutoDesc.style.display = aiApiMode === 'auto' ? 'block' : 'none';
+                aiMainDesc.style.display = aiApiMode === 'main' ? 'block' : 'none';
+                aiCustomDesc.style.display = aiApiMode === 'custom' ? 'block' : 'none';
+            }
+
+            console.log('[InfoBarSettings] 🔧 已恢复AI记忆总结API模式按钮状态:', aiApiMode);
+
             // 🗄️ AI记忆数据库设置
             const aiDatabaseSettings = savedMem.aiDatabase || {};
             const aiDbEnabledEl = this.modal.querySelector('#memory-ai-memory-database-enabled');
@@ -40024,23 +40376,37 @@ ${dataExamples}
             if (deleteBtn) {
                 deleteBtn.addEventListener('click', async () => {
                     if (confirm('确定要删除这条剧情优化建议吗？')) {
+                        // 🔧 修复：从内存中删除建议
                         plotOptimizationSystem.plotSuggestions.delete(messageId);
+
+                        // 🔧 修复：使用楼层号定位用户消息并删除持久化数据
                         try {
                             const ctx = window.SillyTavern?.getContext?.();
-                            if (ctx) {
-                                const userMessage = ctx.chat.find(msg => (msg.send_date || msg.mes) === messageId);
-                                if (userMessage && userMessage.is_user) {
+                            if (ctx && Array.isArray(ctx.chat)) {
+                                // 使用楼层号定位消息（楼层号从1开始，数组索引从0开始）
+                                const messageIndex = floorNumber - 1;
+                                const userMessage = ctx.chat[messageIndex];
+
+                                if (userMessage && userMessage.is_user && userMessage.infobar_plot_optimization) {
+                                    // 删除持久化数据
                                     delete userMessage.infobar_plot_optimization;
+                                    console.log('[InfoBarSettings] 🗑️ 已删除消息对象上的持久化数据, floorNumber:', floorNumber);
+
+                                    // 保存聊天
                                     if (typeof ctx.saveChat === 'function') {
                                         await ctx.saveChat();
                                         console.log('[InfoBarSettings] 💾 已保存聊天（删除建议）');
                                     }
+                                } else {
+                                    console.warn('[InfoBarSettings] ⚠️ 未找到对应的用户消息或持久化数据, floorNumber:', floorNumber);
                                 }
                             }
                         } catch (persistErr) {
-                            console.warn('[InfoBarSettings] ⚠️ 删除建议持久化失败:', persistErr);
+                            console.error('[InfoBarSettings] ❌ 删除建议持久化失败:', persistErr);
                         }
+
                         this.showNotification('✅ 已删除剧情优化建议', 'success');
+
                         // 刷新列表和详情
                         const messageList = dialog.querySelector('#plot-preview-message-list');
                         const ctx = window.SillyTavern?.getContext?.();
