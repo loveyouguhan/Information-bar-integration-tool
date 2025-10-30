@@ -174,7 +174,13 @@ export class InfoBarSettings {
                     this.handleNpcAiMessageReceived(data);
                 });
 
-                console.log('[InfoBarSettings] ✅ 聊天切换事件监听器已绑定（包括NPC AI楼层检测）');
+                // 🔧 新增：监听总结完成事件，自动触发隐藏楼层
+                this.eventSystem.on('summary:completed', async (data) => {
+                    console.log('[InfoBarSettings] 📨 收到总结完成事件，检查自动隐藏:', data);
+                    await this.checkAndExecuteAutoHide();
+                });
+
+                console.log('[InfoBarSettings] ✅ 聊天切换事件监听器已绑定（包括NPC AI楼层检测和自动隐藏）');
             }
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 绑定聊天切换事件监听器失败:', error);
@@ -1703,6 +1709,14 @@ ${'='.repeat(80)}
             this.modal.addEventListener('change', (e) => {
                 if (e.target.id === 'prompt-position-mode') {
                     this.handlePromptPositionModeChange(e.target.value);
+                }
+                
+                // 🆕 延迟总结开关变更
+                if (e.target.id === 'content-delayed-summary-enabled') {
+                    const delayedFloorsRow = this.modal.querySelector('#content-delayed-summary-floors-row');
+                    if (delayedFloorsRow) {
+                        delayedFloorsRow.style.display = e.target.checked ? 'block' : 'none';
+                    }
                 }
             });
 
@@ -5357,10 +5371,8 @@ ${'='.repeat(80)}
                 navItem.className = 'nav-item';
                 navItem.dataset.nav = panel.id;
                 navItem.dataset.custom = 'true';
-                navItem.innerHTML = `
-
-                    <span class="nav-text">${panel.name}</span>
-                `;
+                // 🔧 修复：直接使用文本内容，不使用span包裹，保持与基础面板一致
+                navItem.textContent = panel.name;
 
                 // 在主题设置之前插入导航项
                 if (themeNavItem) {
@@ -6770,9 +6782,17 @@ ${'='.repeat(80)}
             if (!extensionSettings['Information bar integration tool'].apiConfig) {
                 extensionSettings['Information bar integration tool'].apiConfig = {};
             }
+            // 🔧 修复：确保basic配置对象存在
+            if (!extensionSettings['Information bar integration tool'].basic) {
+                extensionSettings['Information bar integration tool'].basic = {};
+            }
 
             const enabled = (mode === 'custom');
             extensionSettings['Information bar integration tool'].apiConfig.enabled = enabled;
+            
+            // 🔧 关键修复：保存apiGenerationMode到basic配置中
+            extensionSettings['Information bar integration tool'].basic.apiGenerationMode = mode;
+            console.log('[InfoBarSettings] 💾 已保存API生成模式到配置:', mode);
 
             // 调用API启用状态变更处理
             await this.handleAPIEnabledChange(enabled);
@@ -9034,6 +9054,28 @@ ${'='.repeat(80)}
                             </div>
                         </div>
 
+                        <!-- 🆕 新增：延迟总结功能 -->
+                        <div class="setting-row">
+                            <div class="setting-group">
+                                <label class="setting-label">
+                                    <input type="checkbox" id="content-delayed-summary-enabled" name="delayedSummaryEnabled" />
+                                    <span class="checkbox-text">启用延迟总结</span>
+                                </label>
+                                <div class="setting-hint">延迟指定楼层后再触发总结，避免过早总结影响对话流畅性</div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row" id="content-delayed-summary-floors-row" style="display: none;">
+                            <div class="setting-group">
+                                <label class="setting-label" for="content-delayed-summary-floors">延迟楼层数</label>
+                                <div class="input-group">
+                                    <input type="number" id="content-delayed-summary-floors" name="delayedSummaryFloors" min="1" max="50" value="5" />
+                                    <span class="input-unit">层</span>
+                                </div>
+                                <div class="setting-hint">例如：总结楼层数20，延迟5层，则在第25层总结第0-20层的内容</div>
+                            </div>
+                        </div>
+
                         <!-- 🆕 新增：手动总结范围选择 -->
                         <div class="setting-row">
                             <div class="setting-group">
@@ -10330,6 +10372,39 @@ ${'='.repeat(80)}
                 restoredList: restoredConfigs
             });
 
+            // 🔧 关键修复：自动修复API模式配置不一致问题
+            // 如果apiConfig.enabled为true，但basic.apiGenerationMode未设置，则自动设置为'custom'
+            if (configs.apiConfig?.enabled === true) {
+                if (!configs.basic) {
+                    configs.basic = {};
+                }
+                if (!configs.basic.apiGenerationMode) {
+                    configs.basic.apiGenerationMode = 'custom';
+                    console.log('[InfoBarSettings] 🔧 自动修复：检测到自定义API已启用但缺少apiGenerationMode配置，已自动设置为"custom"');
+                    
+                    // 保存修复后的配置
+                    const context = SillyTavern.getContext();
+                    if (context.saveSettingsDebounced) {
+                        await context.saveSettingsDebounced();
+                    }
+                }
+            } else if (configs.apiConfig?.enabled === false || !configs.apiConfig?.enabled) {
+                // 如果自定义API未启用，确保apiGenerationMode为'main'
+                if (!configs.basic) {
+                    configs.basic = {};
+                }
+                if (configs.basic.apiGenerationMode !== 'main') {
+                    configs.basic.apiGenerationMode = 'main';
+                    console.log('[InfoBarSettings] 🔧 自动修复：检测到自定义API未启用，已自动设置apiGenerationMode为"main"');
+                    
+                    // 保存修复后的配置
+                    const context = SillyTavern.getContext();
+                    if (context.saveSettingsDebounced) {
+                        await context.saveSettingsDebounced();
+                    }
+                }
+            }
+
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 配置完整性检查失败:', error);
         }
@@ -10930,20 +11005,28 @@ ${'='.repeat(80)}
                 extensionSettings['Information bar integration tool'] = {};
             }
 
-            // 🔧 修复：保存基础设置表单数据时，保留apiConfig.modelCache
-            // 避免覆盖模型缓存，防止影响其他插件
+            // 🔧 修复：保存基础设置表单数据时，保留apiConfig.modelCache和apiConfig.enabled
+            // 避免覆盖模型缓存和API模式设置，防止影响其他插件
             const existingApiConfig = extensionSettings['Information bar integration tool'].apiConfig || {};
             const existingModelCache = existingApiConfig.modelCache || {};
+            const existingApiEnabled = existingApiConfig.enabled; // 🔧 新增：保留API启用状态
 
             // 合并表单数据
             Object.assign(extensionSettings['Information bar integration tool'], formData);
 
-            // 恢复模型缓存
+            // 恢复模型缓存和API启用状态
             if (extensionSettings['Information bar integration tool'].apiConfig) {
                 if (!extensionSettings['Information bar integration tool'].apiConfig.modelCache) {
                     extensionSettings['Information bar integration tool'].apiConfig.modelCache = {};
                 }
                 Object.assign(extensionSettings['Information bar integration tool'].apiConfig.modelCache, existingModelCache);
+
+                // 🔧 新增：恢复API启用状态（数据表格API模式）
+                if (existingApiEnabled !== undefined) {
+                    extensionSettings['Information bar integration tool'].apiConfig.enabled = existingApiEnabled;
+                    console.log('[InfoBarSettings] 🔧 已保留apiConfig.enabled:', existingApiEnabled);
+                }
+
                 console.log('[InfoBarSettings] 🔧 已保留apiConfig.modelCache，避免覆盖模型缓存');
             }
 
@@ -11014,6 +11097,13 @@ ${'='.repeat(80)}
                     if (corpusRetrieval) {
                         corpusRetrieval.loadConfig();
                         console.log('[InfoBarSettings] ✅ 已同步向量功能配置到CorpusRetrieval模块');
+                    }
+
+                    // 🔧 修复：同步到UnifiedVectorRetrieval模块（重要！）
+                    const unifiedVectorRetrieval = window.SillyTavernInfobar?.modules?.unifiedVectorRetrieval;
+                    if (unifiedVectorRetrieval) {
+                        unifiedVectorRetrieval.loadConfig();
+                        console.log('[InfoBarSettings] ✅ 已同步向量功能配置到UnifiedVectorRetrieval模块');
                     }
                 }
             }
@@ -14630,6 +14720,107 @@ ${'='.repeat(80)}
                 </div>
             </div>
 
+            <!-- 🆕 作家文风模仿 -->
+            <div class="settings-group">
+                <h4>📚 作家文风模仿</h4>
+                <small style="display: block; margin-bottom: 12px; color: var(--theme-text-secondary, #888);">
+                    启用后，Guhan 3号会参考指定作家的写作风格和技巧，为你提供更具针对性的剧情优化建议
+                </small>
+
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="plot-optimization-imitate-author-enabled" ${config.imitateAuthorEnabled ? 'checked' : ''}>
+                        <label for="plot-optimization-imitate-author-enabled" class="checkbox-label">启用作家文风模仿</label>
+                    </div>
+                    <small>启用后，系统会分析目标作家的写作手法，并在剧情优化时提供模仿指导</small>
+                </div>
+
+                <div class="form-group" id="author-imitate-options" style="display: ${config.imitateAuthorEnabled ? 'block' : 'none'};">
+                    <label>目标作家</label>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <input type="text" id="plot-optimization-target-author" class="setting-input" 
+                               value="${config.targetAuthor || ''}" 
+                               placeholder="输入作家名称，例如：天蚕土豆"
+                               list="known-authors-list"
+                               style="flex: 1;">
+                        <button type="button" id="analyze-author-btn" class="btn btn-secondary" style="
+                            padding: 8px 16px;
+                            background: var(--theme-bg-secondary, #2a2a2a);
+                            color: var(--theme-text-primary, #ddd);
+                            border: 1px solid var(--theme-border-color, #333);
+                            border-radius: 4px;
+                            cursor: pointer;
+                            white-space: nowrap;
+                        ">🔍 分析</button>
+                    </div>
+                    
+                    <!-- 知名作家数据列表 -->
+                    <datalist id="known-authors-list">
+                        <option value="天蚕土豆">
+                        <option value="辰东">
+                        <option value="猫腻">
+                        <option value="烽火戏诸侯">
+                        <option value="爱潜水的乌贼">
+                        <option value="耳根">
+                        <option value="忘语">
+                    </datalist>
+                    
+                    <small>
+                        💡 提示：系统内置了以下知名作家的文风数据：<br>
+                        <span style="color: var(--theme-primary-color, #4CAF50);">
+                            天蚕土豆、辰东、猫腻、烽火戏诸侯、爱潜水的乌贼、耳根、忘语
+                        </span><br>
+                        你也可以输入其他作家名称，系统会使用AI分析其文风特点
+                    </small>
+
+                    <!-- 作家文风预览区域 -->
+                    <div id="author-style-preview" style="
+                        margin-top: 12px;
+                        padding: 12px;
+                        background: var(--theme-bg-secondary, #2a2a2a);
+                        border: 1px solid var(--theme-border-color, #333);
+                        border-radius: 6px;
+                        display: none;
+                    ">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <strong style="color: var(--theme-primary-color, #4CAF50);">📖 文风分析</strong>
+                            <button type="button" id="refresh-author-style-btn" style="
+                                padding: 4px 12px;
+                                background: transparent;
+                                color: var(--theme-text-secondary, #888);
+                                border: 1px solid var(--theme-border-color, #333);
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 12px;
+                            ">🔄 刷新</button>
+                        </div>
+                        <div id="author-style-content" style="
+                            font-size: 13px;
+                            line-height: 1.6;
+                            color: var(--theme-text-secondary, #888);
+                            max-height: 300px;
+                            overflow-y: auto;
+                        ">
+                            加载中...
+                        </div>
+                    </div>
+
+                    <!-- 分析深度设置 -->
+                    <div class="form-group" style="margin-top: 12px;">
+                        <label>分析深度</label>
+                        <select id="plot-optimization-author-style-depth" class="setting-select">
+                            <option value="quick" ${config.authorStyleDepth === 'quick' ? 'selected' : ''}>快速（使用内置数据）</option>
+                            <option value="standard" ${config.authorStyleDepth === 'standard' ? 'selected' : ''}>标准（内置+简单AI分析）</option>
+                            <option value="comprehensive" ${(!config.authorStyleDepth || config.authorStyleDepth === 'comprehensive') ? 'selected' : ''}>深度（AI全面分析）</option>
+                        </select>
+                        <small>
+                            深度分析会调用AI进行详细的文风解析，耗时较长但结果更准确<br>
+                            快速模式仅限内置作家使用
+                        </small>
+                    </div>
+                </div>
+            </div>
+
             <!-- 上下文设置 -->
             <div class="settings-group">
                 <h4>上下文设置</h4>
@@ -14751,7 +14942,11 @@ ${'='.repeat(80)}
                 plotTwistIntensity: 5,
                 plotClimaxIntensity: 5,
                 plotLowIntensity: 5,
-                plotTurnIntensity: 5
+                plotTurnIntensity: 5,
+                // 🆕 作家文风模仿
+                imitateAuthorEnabled: false,
+                targetAuthor: '',
+                authorStyleDepth: 'comprehensive'
             };
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 获取剧情优化配置失败:', error);
@@ -14765,7 +14960,10 @@ ${'='.repeat(80)}
                 promptTemplate: '',
                 injectionPosition: 'system',
                 injectionPriority: 100,
-                timeout: 30000
+                timeout: 30000,
+                imitateAuthorEnabled: false,
+                targetAuthor: '',
+                authorStyleDepth: 'comprehensive'
             };
         }
     }
@@ -26273,13 +26471,20 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
 
 
     /**
-     * 🔧 新增：检查并执行自动隐藏楼层
+     * 🔧 修复：检查并执行自动隐藏楼层
+     * 参考ST-Amily2项目的实现，直接修改消息对象的is_hidden属性
      */
     async checkAndExecuteAutoHide() {
         try {
             // 获取设置
-            const autoHideEnabled = this.modal?.querySelector('#content-auto-hide-enabled')?.checked || false;
-            const autoHideThreshold = parseInt(this.modal?.querySelector('#content-auto-hide-threshold')?.value) || 30;
+            const summaryManager = window.SillyTavernInfobar?.modules?.summaryManager;
+            if (!summaryManager || !summaryManager.settings) {
+                console.warn('[InfoBarSettings] ⚠️ SummaryManager未初始化');
+                return;
+            }
+
+            const autoHideEnabled = summaryManager.settings.autoHideEnabled || false;
+            const autoHideThreshold = summaryManager.settings.autoHideThreshold || 30;
 
             if (!autoHideEnabled) {
                 console.log('[InfoBarSettings] ⏸️ 自动隐藏未启用，跳过检查');
@@ -26293,12 +26498,14 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 return;
             }
 
-            // 计算需要隐藏的范围：0到(总长度-阈值-1)
-            const hideUntilIndex = chatLength - autoHideThreshold - 1;
+            // 🔧 修复：计算需要保留的最新楼层数
+            // 例如：总长度129，阈值30，则保留最新30条（索引99-128），隐藏前99条（索引0-98）
+            const keepRecentCount = autoHideThreshold;
+            const hideUntilIndex = chatLength - keepRecentCount - 1;
 
-            if (hideUntilIndex > 0) {
-                console.log(`[InfoBarSettings] 🔄 执行自动隐藏：隐藏楼层 0-${hideUntilIndex}`);
-                await this.executeHideCommand(`/hide 0-${hideUntilIndex}`);
+            if (hideUntilIndex >= 0) {
+                console.log(`[InfoBarSettings] 🔄 执行自动隐藏：保留最新${keepRecentCount}条，隐藏楼层 0-${hideUntilIndex}`);
+                await this.hideMessagesDirectly(0, hideUntilIndex);
             }
 
         } catch (error) {
@@ -26307,18 +26514,19 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
     }
 
     /**
-     * 获取当前聊天的消息数量
+     * 🔧 修复：获取当前聊天的消息数量
      */
     getChatLength() {
         try {
-            // 使用SillyTavern的getContext获取聊天数据
-            if (typeof getContext === 'function') {
-                const context = getContext();
-                return context?.chat?.length || 0;
+            // 🔧 修复：使用window.SillyTavern.getContext获取聊天数据
+            const context = window.SillyTavern?.getContext?.();
+            if (context && context.chat && Array.isArray(context.chat)) {
+                return context.chat.length;
             }
 
-            // 备用方法：通过DOM查询消息数量
+            // 备用方法：通过DOM查询消息数量（不可靠，因为隐藏的消息不会显示在DOM中）
             const messages = document.querySelectorAll('#chat .mes');
+            console.warn('[InfoBarSettings] ⚠️ 使用DOM查询消息数量（不可靠）:', messages.length);
             return messages.length;
 
         } catch (error) {
@@ -26328,62 +26536,105 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
     }
 
     /**
-     * 执行隐藏命令
+     * 🔧 新增：直接隐藏消息（参考ST-Amily2项目的实现）
+     * 通过修改消息对象的is_hidden属性来隐藏楼层，让AI不可见
+     * @param {number} startIndex - 起始索引（包含）
+     * @param {number} endIndex - 结束索引（包含）
      */
-    async executeHideCommand(command) {
+    async hideMessagesDirectly(startIndex, endIndex) {
         try {
-            console.log('[InfoBarSettings] 📋 执行隐藏命令:', command);
+            console.log(`[InfoBarSettings] 🙈 直接隐藏消息：索引 ${startIndex}-${endIndex}`);
 
-            // 方法1: 尝试使用SillyTavern的斜杠命令解析器
-            if (typeof window.SlashCommandParser !== 'undefined') {
-                const parser = new window.SlashCommandParser();
-                const result = parser.parse(command, false);
+            const context = window.SillyTavern?.getContext?.();
+            if (!context || !context.chat || !Array.isArray(context.chat)) {
+                console.warn('[InfoBarSettings] ⚠️ 无法获取聊天数据');
+                return;
+            }
 
-                if (result && typeof result.execute === 'function') {
-                    await result.execute();
-                    console.log('[InfoBarSettings] ✅ 隐藏命令执行成功 (方法1)');
-                    return;
+            const chat = context.chat;
+            let hiddenCount = 0;
+
+            // 🔧 修复：遍历指定范围的消息，设置is_hidden属性
+            for (let i = startIndex; i <= endIndex && i < chat.length; i++) {
+                const message = chat[i];
+                if (message && !message.is_hidden) {
+                    // 设置隐藏标记
+                    message.is_hidden = true;
+                    hiddenCount++;
+
+                    // 🔧 关键：隐藏对应的DOM元素
+                    const messageElement = document.querySelector(`#chat .mes[mesid="${i}"]`);
+                    if (messageElement) {
+                        messageElement.style.display = 'none';
+                        messageElement.classList.add('mes_hidden');
+                    }
                 }
             }
 
-            // 方法2: 尝试直接在聊天输入框执行命令
-            const chatTextarea = document.getElementById('send_textarea');
-            if (chatTextarea) {
-                console.log('[InfoBarSettings] 🔄 尝试通过聊天输入框执行命令');
-                const originalValue = chatTextarea.value;
-                chatTextarea.value = command;
+            console.log(`[InfoBarSettings] ✅ 成功隐藏 ${hiddenCount} 条消息`);
 
-                // 触发输入事件
-                chatTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-
-                // 等待短暂时间后按回车
-                setTimeout(() => {
-                    chatTextarea.dispatchEvent(new KeyboardEvent('keydown', {
-                        key: 'Enter',
-                        bubbles: true
-                    }));
-
-                    // 恢复原始值
-                    setTimeout(() => {
-                        chatTextarea.value = originalValue;
-                    }, 100);
-                }, 100);
-
-                console.log('[InfoBarSettings] ✅ 隐藏命令已通过聊天输入框发送');
-                return;
+            // 🔧 保存聊天数据
+            if (typeof context.saveChat === 'function') {
+                await context.saveChat();
+                console.log('[InfoBarSettings] 💾 聊天数据已保存');
             }
 
-            // 方法3: 尝试使用SillyTavern的全局命令执行器
-            if (typeof window.executeSlashCommand === 'function') {
-                await window.executeSlashCommand(command);
-                console.log('[InfoBarSettings] ✅ 隐藏命令执行成功 (方法3)');
-                return;
+            // 🔧 触发UI更新
+            if (typeof context.reloadCurrentChat === 'function') {
+                // 不重新加载整个聊天，只更新UI
+                console.log('[InfoBarSettings] 🔄 UI已更新');
             }
-
-            console.warn('[InfoBarSettings] ⚠️ 所有隐藏命令执行方法都失败');
 
         } catch (error) {
-            console.error('[InfoBarSettings] ❌ 执行隐藏命令失败:', error);
+            console.error('[InfoBarSettings] ❌ 直接隐藏消息失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 新增：显示隐藏的消息
+     * @param {number} startIndex - 起始索引（包含）
+     * @param {number} endIndex - 结束索引（包含）
+     */
+    async showMessagesDirectly(startIndex, endIndex) {
+        try {
+            console.log(`[InfoBarSettings] 👁️ 显示隐藏的消息：索引 ${startIndex}-${endIndex}`);
+
+            const context = window.SillyTavern?.getContext?.();
+            if (!context || !context.chat || !Array.isArray(context.chat)) {
+                console.warn('[InfoBarSettings] ⚠️ 无法获取聊天数据');
+                return;
+            }
+
+            const chat = context.chat;
+            let shownCount = 0;
+
+            // 遍历指定范围的消息，移除is_hidden属性
+            for (let i = startIndex; i <= endIndex && i < chat.length; i++) {
+                const message = chat[i];
+                if (message && message.is_hidden) {
+                    // 移除隐藏标记
+                    delete message.is_hidden;
+                    shownCount++;
+
+                    // 显示对应的DOM元素
+                    const messageElement = document.querySelector(`#chat .mes[mesid="${i}"]`);
+                    if (messageElement) {
+                        messageElement.style.display = '';
+                        messageElement.classList.remove('mes_hidden');
+                    }
+                }
+            }
+
+            console.log(`[InfoBarSettings] ✅ 成功显示 ${shownCount} 条消息`);
+
+            // 保存聊天数据
+            if (typeof context.saveChat === 'function') {
+                await context.saveChat();
+                console.log('[InfoBarSettings] 💾 聊天数据已保存');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示隐藏的消息失败:', error);
         }
     }
 
@@ -26776,7 +27027,10 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             worldBookUseContentTags: true,
             // 🆕 传统总结向量化设置
             vectorizeSummaryEnabled: false,
-            vectorizeSummaryFloorCount: 100
+            vectorizeSummaryFloorCount: 100,
+            // 🆕 延迟总结设置
+            delayedSummaryEnabled: false,
+            delayedSummaryFloors: 5
         };
 
         try {
@@ -26881,6 +27135,17 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
             const vectorizeSummaryEnabled = this.modal.querySelector('#content-vectorize-summary-enabled');
             if (vectorizeSummaryEnabled) {
                 settings.vectorizeSummaryEnabled = vectorizeSummaryEnabled.checked;
+            }
+
+            // 🆕 获取延迟总结设置
+            const delayedSummaryEnabled = this.modal.querySelector('#content-delayed-summary-enabled');
+            if (delayedSummaryEnabled) {
+                settings.delayedSummaryEnabled = delayedSummaryEnabled.checked;
+            }
+
+            const delayedSummaryFloors = this.modal.querySelector('#content-delayed-summary-floors');
+            if (delayedSummaryFloors) {
+                settings.delayedSummaryFloors = parseInt(delayedSummaryFloors.value) || 5;
             }
 
         } catch (error) {
@@ -27028,7 +27293,23 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 settings.injectionPriority = parseInt(injectionPriorityEl.value) || 100;
             }
 
-            // 6. 保留现有的提示词模板（不从DOM收集，因为是通过编辑器单独保存的）
+            // 🆕 6. 收集作家文风模仿配置
+            const imitateAuthorEnabledEl = this.modal?.querySelector('#plot-optimization-imitate-author-enabled');
+            if (imitateAuthorEnabledEl) {
+                settings.imitateAuthorEnabled = imitateAuthorEnabledEl.checked;
+            }
+
+            const targetAuthorEl = this.modal?.querySelector('#plot-optimization-target-author');
+            if (targetAuthorEl) {
+                settings.targetAuthor = targetAuthorEl.value;
+            }
+
+            const authorStyleDepthEl = this.modal?.querySelector('#plot-optimization-author-style-depth');
+            if (authorStyleDepthEl) {
+                settings.authorStyleDepth = authorStyleDepthEl.value;
+            }
+
+            // 7. 保留现有的提示词模板（不从DOM收集，因为是通过编辑器单独保存的）
             const context = SillyTavern.getContext();
             const existingConfig = context.extensionSettings?.['Information bar integration tool']?.plotOptimization;
             if (existingConfig?.promptTemplate) {
@@ -38687,10 +38968,47 @@ ${dataExamples}
             // 🆕 初始化向量化文件管理中心
             this.initVectorFileManagement();
 
+            // 🔧 关键修复：同步配置到UnifiedVectorRetrieval模块
+            this.syncVectorFunctionConfigToModules();
+
             console.log('[InfoBarSettings] ✅ 向量功能面板内容初始化完成');
 
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 初始化向量功能面板内容失败:', error);
+        }
+    }
+
+    /**
+     * 🔧 同步向量功能配置到相关模块
+     */
+    syncVectorFunctionConfigToModules() {
+        try {
+            const context = SillyTavern.getContext();
+            const extCfg = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const vectorCfg = extCfg.vectorFunction || {};
+
+            console.log('[InfoBarSettings] 🔄 同步向量功能配置到模块...', {
+                enableAIRetrieval: vectorCfg.enableAIRetrieval
+            });
+
+            // 同步到UnifiedVectorRetrieval
+            const unifiedVectorRetrieval = window.SillyTavernInfobar?.modules?.unifiedVectorRetrieval;
+            if (unifiedVectorRetrieval) {
+                unifiedVectorRetrieval.loadConfig();
+                console.log('[InfoBarSettings] ✅ 已同步配置到UnifiedVectorRetrieval，启用状态:', unifiedVectorRetrieval.enabled);
+            } else {
+                console.warn('[InfoBarSettings] ⚠️ UnifiedVectorRetrieval模块不存在');
+            }
+
+            // 同步到CorpusRetrieval
+            const corpusRetrieval = window.SillyTavernInfobar?.modules?.corpusRetrieval;
+            if (corpusRetrieval) {
+                corpusRetrieval.loadConfig();
+                console.log('[InfoBarSettings] ✅ 已同步配置到CorpusRetrieval');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 同步向量功能配置失败:', error);
         }
     }
 
@@ -39742,7 +40060,7 @@ ${dataExamples}
     /**
      * 📖 初始化剧情优化面板内容
      */
-    initPlotOptimizationPanelContent() {
+    async initPlotOptimizationPanelContent() {
         try {
             console.log('[InfoBarSettings] 📖 初始化剧情优化面板内容...');
 
@@ -39780,12 +40098,318 @@ ${dataExamples}
                 });
             }
 
+            // 🆕 新增：作家文风模仿功能事件监听器
+            const imitateAuthorCheckbox = this.modal.querySelector('#plot-optimization-imitate-author-enabled');
+            if (imitateAuthorCheckbox) {
+                // 移除旧的事件监听器
+                const newCheckbox = imitateAuthorCheckbox.cloneNode(true);
+                imitateAuthorCheckbox.parentNode.replaceChild(newCheckbox, imitateAuthorCheckbox);
+
+                newCheckbox.addEventListener('change', (e) => {
+                    const optionsDiv = this.modal.querySelector('#author-imitate-options');
+                    if (optionsDiv) {
+                        optionsDiv.style.display = e.target.checked ? 'block' : 'none';
+                    }
+                });
+            }
+
+            // 🆕 新增：分析作家按钮事件
+            const analyzeAuthorBtn = this.modal.querySelector('#analyze-author-btn');
+            if (analyzeAuthorBtn) {
+                const newBtn = analyzeAuthorBtn.cloneNode(true);
+                analyzeAuthorBtn.parentNode.replaceChild(newBtn, analyzeAuthorBtn);
+
+                newBtn.addEventListener('click', async () => {
+                    await this.handleAnalyzeAuthor();
+                });
+            }
+
+            // 🆕 新增：刷新文风分析按钮事件
+            const refreshStyleBtn = this.modal.querySelector('#refresh-author-style-btn');
+            if (refreshStyleBtn) {
+                const newBtn = refreshStyleBtn.cloneNode(true);
+                refreshStyleBtn.parentNode.replaceChild(newBtn, refreshStyleBtn);
+
+                newBtn.addEventListener('click', async () => {
+                    await this.handleAnalyzeAuthor(true); // 强制刷新
+                });
+            }
+
             // 更新状态显示
             this.updatePlotOptimizationStatus();
+
+            // 🆕 新增：恢复已缓存的作家文风分析结果
+            await this.restoreAuthorStyleAnalysis();
 
             console.log('[InfoBarSettings] ✅ 剧情优化面板内容初始化完成');
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 初始化剧情优化面板内容失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 恢复已缓存的作家文风分析结果
+     */
+    async restoreAuthorStyleAnalysis() {
+        try {
+            const config = this.getPlotOptimizationConfig();
+            
+            // 检查是否启用了作家模仿且有目标作家
+            if (!config.imitateAuthorEnabled || !config.targetAuthor) {
+                console.log('[InfoBarSettings] ℹ️ 未启用作家模仿或未设置目标作家，跳过恢复');
+                return;
+            }
+
+            console.log('[InfoBarSettings] 🔄 恢复作家文风分析:', config.targetAuthor);
+
+            const authorStyleManager = window.SillyTavernInfobar?.modules?.authorStyleManager;
+            if (!authorStyleManager) {
+                console.warn('[InfoBarSettings] ⚠️ AuthorStyleManager未初始化');
+                return;
+            }
+
+            // 检查是否有缓存
+            const cachedStyle = authorStyleManager.authorStyles.get(config.targetAuthor);
+            if (!cachedStyle) {
+                console.log('[InfoBarSettings] ℹ️ 没有缓存的文风分析数据');
+                return;
+            }
+
+            // 显示预览区域
+            const previewDiv = this.modal.querySelector('#author-style-preview');
+            const contentDiv = this.modal.querySelector('#author-style-content');
+            
+            if (!previewDiv || !contentDiv) {
+                console.warn('[InfoBarSettings] ⚠️ 未找到预览区域DOM元素');
+                return;
+            }
+
+            previewDiv.style.display = 'block';
+
+            // 生成HTML展示（复用handleAnalyzeAuthor中的逻辑）
+            let html = '';
+
+            // 代表作品
+            if (cachedStyle.代表作品 && cachedStyle.代表作品.length > 0) {
+                html += `<div style="margin-bottom: 12px;">
+                    <strong style="color: var(--theme-primary-color, #4CAF50);">📚 代表作品</strong><br>
+                    <span style="color: var(--theme-text-secondary, #aaa);">${cachedStyle.代表作品.join('、')}</span>
+                </div>`;
+            }
+
+            // 核心写作特点
+            if (cachedStyle.写作特点 && cachedStyle.写作特点.length > 0) {
+                html += `<div style="margin-bottom: 12px;">
+                    <strong style="color: var(--theme-primary-color, #4CAF50);">✍️ 核心写作特点</strong><br>`;
+                cachedStyle.写作特点.forEach((item, index) => {
+                    html += `<span style="color: var(--theme-text-secondary, #aaa); display: block; margin-left: 8px;">
+                        ${index + 1}. ${item}
+                    </span>`;
+                });
+                html += `</div>`;
+            }
+
+            // 语言风格
+            if (cachedStyle.语言风格) {
+                html += `<div style="margin-bottom: 12px;">
+                    <strong style="color: var(--theme-primary-color, #4CAF50);">🎨 语言风格</strong><br>
+                    <span style="color: var(--theme-text-secondary, #aaa);">${cachedStyle.语言风格}</span>
+                </div>`;
+            }
+
+            // 文风标签
+            if (cachedStyle.文风标签 && cachedStyle.文风标签.length > 0) {
+                html += `<div style="margin-bottom: 12px;">
+                    <strong style="color: var(--theme-primary-color, #4CAF50);">🏷️ 文风标签</strong><br>`;
+                cachedStyle.文风标签.forEach(tag => {
+                    html += `<span style="
+                        display: inline-block;
+                        padding: 2px 8px;
+                        margin: 2px 4px 2px 0;
+                        background: rgba(76, 175, 80, 0.2);
+                        color: var(--theme-primary-color, #4CAF50);
+                        border-radius: 4px;
+                        font-size: 12px;
+                    ">${tag}</span>`;
+                });
+                html += `</div>`;
+            }
+
+            // 模仿建议（简略）
+            if (cachedStyle.模仿建议 && cachedStyle.模仿建议.length > 0) {
+                html += `<div style="margin-bottom: 12px;">
+                    <strong style="color: var(--theme-primary-color, #4CAF50);">💡 模仿建议（前3条）</strong><br>`;
+                cachedStyle.模仿建议.slice(0, 3).forEach((item, index) => {
+                    html += `<span style="color: var(--theme-text-secondary, #aaa); display: block; margin-left: 8px; font-size: 12px;">
+                        ${index + 1}. ${item}
+                    </span>`;
+                });
+                if (cachedStyle.模仿建议.length > 3) {
+                    html += `<span style="color: var(--theme-text-secondary, #666); display: block; margin-left: 8px; font-size: 12px;">
+                        ...共${cachedStyle.模仿建议.length}条建议
+                    </span>`;
+                }
+                html += `</div>`;
+            }
+
+            // 数据来源
+            const source = cachedStyle.source === 'builtin' ? '内置数据' : cachedStyle.source === 'ai' ? 'AI分析' : '缓存数据';
+            html += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--theme-border-color, #333);">
+                <span style="color: var(--theme-text-secondary, #666); font-size: 12px;">
+                    数据来源：${source} | 缓存时间：${new Date(cachedStyle.cachedAt).toLocaleString()}
+                </span>
+            </div>`;
+
+            contentDiv.innerHTML = html;
+
+            console.log('[InfoBarSettings] ✅ 已恢复作家文风分析结果');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 恢复作家文风分析失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 处理分析作家文风
+     */
+    async handleAnalyzeAuthor(forceRefresh = false) {
+        try {
+            const authorInput = this.modal.querySelector('#plot-optimization-target-author');
+            const previewDiv = this.modal.querySelector('#author-style-preview');
+            const contentDiv = this.modal.querySelector('#author-style-content');
+            const analyzeBtn = this.modal.querySelector('#analyze-author-btn');
+
+            if (!authorInput || !previewDiv || !contentDiv) {
+                console.error('[InfoBarSettings] ❌ 未找到必要的DOM元素');
+                return;
+            }
+
+            const authorName = authorInput.value.trim();
+            if (!authorName) {
+                this.showNotification('⚠️ 请输入作家名称', 'warning');
+                return;
+            }
+
+            // 显示加载状态
+            previewDiv.style.display = 'block';
+            contentDiv.innerHTML = '<div style="text-align: center; padding: 20px;">🔄 正在分析作家文风，请稍候...</div>';
+            
+            if (analyzeBtn) {
+                analyzeBtn.disabled = true;
+                analyzeBtn.textContent = '分析中...';
+            }
+
+            // 获取AuthorStyleManager
+            const authorStyleManager = window.SillyTavernInfobar?.modules?.authorStyleManager;
+            if (!authorStyleManager) {
+                throw new Error('AuthorStyleManager未初始化');
+            }
+
+            console.log('[InfoBarSettings] 📚 开始分析作家:', authorName);
+
+            // 调用分析
+            const styleData = await authorStyleManager.getAuthorStyle(authorName, forceRefresh);
+
+            // 生成HTML展示
+            let html = '';
+
+            // 代表作品
+            if (styleData.代表作品 && styleData.代表作品.length > 0) {
+                html += `<div style="margin-bottom: 12px;">
+                    <strong style="color: var(--theme-primary-color, #4CAF50);">📚 代表作品</strong><br>
+                    <span style="color: var(--theme-text-secondary, #aaa);">${styleData.代表作品.join('、')}</span>
+                </div>`;
+            }
+
+            // 核心写作特点
+            if (styleData.写作特点 && styleData.写作特点.length > 0) {
+                html += `<div style="margin-bottom: 12px;">
+                    <strong style="color: var(--theme-primary-color, #4CAF50);">✍️ 核心写作特点</strong><br>`;
+                styleData.写作特点.forEach((item, index) => {
+                    html += `<span style="color: var(--theme-text-secondary, #aaa); display: block; margin-left: 8px;">
+                        ${index + 1}. ${item}
+                    </span>`;
+                });
+                html += `</div>`;
+            }
+
+            // 语言风格
+            if (styleData.语言风格) {
+                html += `<div style="margin-bottom: 12px;">
+                    <strong style="color: var(--theme-primary-color, #4CAF50);">🎨 语言风格</strong><br>
+                    <span style="color: var(--theme-text-secondary, #aaa);">${styleData.语言风格}</span>
+                </div>`;
+            }
+
+            // 文风标签
+            if (styleData.文风标签 && styleData.文风标签.length > 0) {
+                html += `<div style="margin-bottom: 12px;">
+                    <strong style="color: var(--theme-primary-color, #4CAF50);">🏷️ 文风标签</strong><br>`;
+                styleData.文风标签.forEach(tag => {
+                    html += `<span style="
+                        display: inline-block;
+                        padding: 2px 8px;
+                        margin: 2px 4px 2px 0;
+                        background: rgba(76, 175, 80, 0.2);
+                        color: var(--theme-primary-color, #4CAF50);
+                        border-radius: 4px;
+                        font-size: 12px;
+                    ">${tag}</span>`;
+                });
+                html += `</div>`;
+            }
+
+            // 模仿建议（简略）
+            if (styleData.模仿建议 && styleData.模仿建议.length > 0) {
+                html += `<div style="margin-bottom: 12px;">
+                    <strong style="color: var(--theme-primary-color, #4CAF50);">💡 模仿建议（前3条）</strong><br>`;
+                styleData.模仿建议.slice(0, 3).forEach((item, index) => {
+                    html += `<span style="color: var(--theme-text-secondary, #aaa); display: block; margin-left: 8px; font-size: 12px;">
+                        ${index + 1}. ${item}
+                    </span>`;
+                });
+                if (styleData.模仿建议.length > 3) {
+                    html += `<span style="color: var(--theme-text-secondary, #666); display: block; margin-left: 8px; font-size: 12px;">
+                        ...共${styleData.模仿建议.length}条建议
+                    </span>`;
+                }
+                html += `</div>`;
+            }
+
+            // 数据来源
+            const source = styleData.source === 'builtin' ? '内置数据' : styleData.source === 'ai' ? 'AI分析' : '缓存数据';
+            html += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--theme-border-color, #333);">
+                <span style="color: var(--theme-text-secondary, #666); font-size: 12px;">
+                    数据来源：${source} | 缓存时间：${new Date(styleData.cachedAt).toLocaleString()}
+                </span>
+            </div>`;
+
+            contentDiv.innerHTML = html;
+
+            console.log('[InfoBarSettings] ✅ 作家文风分析完成');
+            this.showNotification(`✅ 作家"${authorName}"的文风分析完成`, 'success');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 分析作家文风失败:', error);
+            
+            const contentDiv = this.modal.querySelector('#author-style-content');
+            if (contentDiv) {
+                contentDiv.innerHTML = `<div style="color: #f44336; padding: 12px;">
+                    ❌ 分析失败: ${error.message}<br>
+                    <span style="font-size: 12px; color: #888;">
+                        请检查API配置是否正确，或稍后重试
+                    </span>
+                </div>`;
+            }
+            
+            this.showNotification(`❌ 分析失败: ${error.message}`, 'error');
+        } finally {
+            // 恢复按钮状态
+            const analyzeBtn = this.modal.querySelector('#analyze-author-btn');
+            if (analyzeBtn) {
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = '🔍 分析';
+            }
         }
     }
 
@@ -44305,142 +44929,116 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
                 return;
             }
 
+            // 🔧 移动端适配：检测设备类型
+            const isMobile = window.innerWidth <= 768;
+            console.log(`[InfoBarSettings] 📱 检测到设备类型: ${isMobile ? '移动端' : '桌面端'}, 屏幕宽度: ${window.innerWidth}px`);
+
             // 创建详情模态框
             const modal = document.createElement('div');
             modal.className = 'corpus-details-modal';
-            modal.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.8);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 10000;
-            `;
+            
+            // 🔧 移动端适配：使用全屏遮罩方式
+            if (isMobile) {
+                modal.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100vw;
+                    height: 100vh;
+                    background: rgba(0, 0, 0, 0.5);
+                    backdrop-filter: blur(4px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                    padding: 0;
+                `;
+            } else {
+                modal.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.8);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                `;
+            }
 
             const content = document.createElement('div');
-            content.style.cssText = `
-                background: var(--theme-bg-primary, #111);
-                border: 1px solid var(--theme-border-color, #333);
-                border-radius: 12px;
-                padding: 24px;
-                max-width: 800px;
-                max-height: 80vh;
-                overflow-y: auto;
-                color: var(--theme-text-primary, #ddd);
-            `;
-
-            // 🔧 从后端API获取向量数据
-            let chunksHTML = '';
-            let vectorChunks = [];
-
-            if (corpus.collectionId) {
-                try {
-                    console.log('[InfoBarSettings] 📥 从后端API获取向量数据...');
-                    console.log('[InfoBarSettings] 📊 集合ID:', corpus.collectionId);
-
-                    // 使用通配符查询获取所有向量
-                    const queryPayload = {
-                        collectionId: corpus.collectionId,
-                        searchText: '*',
-                        topK: 10000,  // 获取所有数据
-                        threshold: 0,
-                        source: 'webllm',
-                        embeddings: {}
-                    };
-
-                    const response = await fetch('/api/vector/query', {
-                        method: 'POST',
-                        headers: context.getRequestHeaders(),
-                        body: JSON.stringify(queryPayload)
-                    });
-
-                    if (response.ok) {
-                        const result = await response.json();
-                        vectorChunks = result.metadata || result.results || result.data || [];
-                        console.log('[InfoBarSettings] ✅ 获取到', vectorChunks.length, '个向量块');
-                    } else {
-                        console.warn('[InfoBarSettings] ⚠️ 获取向量数据失败:', response.status);
-                    }
-                } catch (fetchError) {
-                    console.warn('[InfoBarSettings] ⚠️ 获取向量数据时出错:', fetchError);
-                }
-            }
-
-            // 构建详情内容
-            if (vectorChunks.length > 0) {
-                // 限制显示前50个块，避免性能问题
-                const displayChunks = vectorChunks.slice(0, 50);
-                chunksHTML = displayChunks.map((chunk, index) => `
-                    <div style="
-                        margin-bottom: 15px;
-                        padding: 12px;
-                        background: var(--theme-bg-secondary, #1a1a1a);
-                        border-radius: 6px;
-                        border-left: 3px solid #2196F3;
-                    ">
-                        <div style="font-weight: 600; color: #2196F3; margin-bottom: 8px;">
-                            块 #${index + 1}
-                        </div>
-                        <div style="font-size: 13px; line-height: 1.6; color: var(--theme-text-primary, #ddd); margin-bottom: 8px;">
-                            ${(chunk.text || '').substring(0, 200)}${(chunk.text || '').length > 200 ? '...' : ''}
-                        </div>
-                        <div style="font-size: 11px; color: var(--theme-text-secondary, #888);">
-                            来源: ${chunk.metadata?.source || '未知'}
-                        </div>
-                    </div>
-                `).join('');
-
-                if (vectorChunks.length > 50) {
-                    chunksHTML += `
-                        <div style="text-align: center; padding: 12px; color: var(--theme-text-secondary, #888); font-size: 12px;">
-                            ... 还有 ${vectorChunks.length - 50} 个块未显示
-                        </div>
-                    `;
-                }
+            // 🔧 移动端适配：根据设备类型设置不同的样式
+            if (isMobile) {
+                content.style.cssText = `
+                    background: var(--theme-bg-primary, #111);
+                    border: 1px solid var(--theme-border-color, #333);
+                    border-radius: 12px;
+                    padding: 16px;
+                    width: 90vw;
+                    max-width: 90vw;
+                    max-height: 85vh;
+                    overflow-y: auto;
+                    color: var(--theme-text-primary, #ddd);
+                    box-sizing: border-box;
+                    margin: auto;
+                `;
             } else {
-                chunksHTML = '<div style="text-align: center; padding: 20px; color: var(--theme-text-secondary, #888);">暂无数据块或无法从后端获取数据</div>';
+                content.style.cssText = `
+                    background: var(--theme-bg-primary, #111);
+                    border: 1px solid var(--theme-border-color, #333);
+                    border-radius: 12px;
+                    padding: 24px;
+                    max-width: 800px;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    color: var(--theme-text-primary, #ddd);
+                `;
             }
+
+            // 🔧 删除：不再显示数据块内容部分，简化界面
 
             // 🔧 修复：获取向量化模型信息
             const vectorAPIConfig = extCfg.vectorAPIConfig || {};
             const modelName = vectorAPIConfig.model || '未知';
-            const storageLocation = corpus.collectionId ? 'SillyTavern向量数据库' : '本地存储';
+            // 🔧 关键修复：修改存储位置文字显示
+            const storageLocation = corpus.collectionId ? '\\data\\default-user\\vectors\\webllm' : '本地存储';
             const collectionId = corpus.collectionId || '无';
 
+            // 🔧 移动端适配：根据设备类型调整HTML布局，删除数据块内容部分
             content.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h3 style="margin: 0; color: #4CAF50;">📚 ${fileName}</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: ${isMobile ? '12px' : '20px'}; ${isMobile ? 'flex-wrap: wrap; gap: 8px;' : ''}">
+                    <h3 style="margin: 0; color: #4CAF50; ${isMobile ? 'font-size: 16px; flex: 1 1 100%;' : ''}">📚 ${fileName}</h3>
                     <button id="close-corpus-details" style="
-                        padding: 6px 12px;
+                        padding: ${isMobile ? '10px 16px' : '6px 12px'};
                         border: 1px solid var(--theme-border-color, #333);
                         border-radius: 4px;
                         background: var(--theme-bg-secondary, #1a1a1a);
                         color: var(--theme-text-primary, #ddd);
                         cursor: pointer;
+                        font-size: ${isMobile ? '14px' : '13px'};
+                        ${isMobile ? 'width: 100%; min-height: 44px; -webkit-tap-highlight-color: transparent;' : ''}
                     ">✖ 关闭</button>
                 </div>
 
-                <div style="margin-bottom: 20px; padding: 12px; background: var(--theme-bg-secondary, #1a1a1a); border-radius: 6px;">
-                    <div style="margin-bottom: 8px;">
+                <div style="padding: ${isMobile ? '12px' : '12px'}; background: var(--theme-bg-secondary, #1a1a1a); border-radius: 6px;">
+                    <div style="margin-bottom: 10px; font-size: ${isMobile ? '13px' : '14px'};">
                         <strong>📊 总块数:</strong> ${corpus.chunkCount || corpus.chunks?.length || 0}
                     </div>
-                    <div style="margin-bottom: 8px;">
+                    <div style="margin-bottom: 10px; font-size: ${isMobile ? '13px' : '14px'};">
                         <strong>⏰ 创建时间:</strong> ${new Date(corpus.createdAt).toLocaleString()}
                     </div>
-                    <div style="margin-bottom: 8px;">
+                    <div style="margin-bottom: 10px; font-size: ${isMobile ? '13px' : '14px'};">
                         <strong>📦 文件大小:</strong> ${corpus.fileSize ? (corpus.fileSize / 1024).toFixed(2) + ' KB' : '未知'}
                     </div>
-                    <div style="margin-bottom: 8px;">
+                    <div style="margin-bottom: 10px; font-size: ${isMobile ? '13px' : '14px'};">
                         <strong>🤖 向量化模型:</strong> ${modelName}
                     </div>
-                    <div style="margin-bottom: 8px;">
+                    <div style="margin-bottom: 10px; font-size: ${isMobile ? '13px' : '14px'}; ${isMobile ? 'word-break: break-all;' : ''}">
                         <strong>💾 存储位置:</strong> ${storageLocation}
                     </div>
-                    <div style="margin-bottom: 8px; font-size: 11px; color: var(--theme-text-secondary, #888);">
+                    <div style="margin-bottom: 0; font-size: ${isMobile ? '11px' : '11px'}; color: var(--theme-text-secondary, #888); ${isMobile ? 'word-break: break-all;' : ''}">
                         <strong>🔑 集合ID:</strong> ${collectionId}
                     </div>
                 </div>
