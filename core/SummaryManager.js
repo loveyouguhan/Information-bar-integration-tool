@@ -51,7 +51,10 @@ export class SummaryManager {
             worldBookUseContentTags: true,
             // 🆕 传统总结向量化设置
             vectorizeSummaryEnabled: false,  // 启用传统总结向量化
-            vectorizeSummaryFloorCount: 100  // 向量化楼层间隔
+            vectorizeSummaryFloorCount: 100,  // 向量化楼层间隔
+            // 🆕 延迟总结设置
+            delayedSummaryEnabled: false,  // 启用延迟总结
+            delayedSummaryFloors: 5  // 延迟楼层数，默认5层
         };
 
         // 状态管理
@@ -252,7 +255,8 @@ export class SummaryManager {
                             'autoSummaryEnabled', 'summaryFloorCount', 'summaryType', 'summaryWordCount',
                             'injectSummaryEnabled', 'autoHideEnabled', 'autoHideThreshold',
                             'autoUploadNewSummary', 'worldBookEntryFormat', 'worldBookCustomEntryName',
-                            'worldBookAddTimestamp', 'worldBookUseContentTags'
+                            'worldBookAddTimestamp', 'worldBookUseContentTags',
+                            'delayedSummaryEnabled', 'delayedSummaryFloors'  // 🆕 延迟总结配置
                         ];
 
                         summaryKeys.forEach(key => {
@@ -507,13 +511,28 @@ export class SummaryManager {
 
             // 检查是否达到总结楼层数
             const messagesSinceLastSummary = currentMessageCount - this.lastSummaryMessageId;
-            const shouldTrigger = messagesSinceLastSummary >= this.settings.summaryFloorCount;
+            
+            // 🆕 延迟总结逻辑：如果启用延迟总结，需要额外等待指定楼层数
+            let requiredFloors = this.settings.summaryFloorCount;
+            if (this.settings.delayedSummaryEnabled && this.settings.delayedSummaryFloors > 0) {
+                requiredFloors += this.settings.delayedSummaryFloors;
+                console.log('[SummaryManager] ⏱️ 延迟总结已启用，实际需要楼层数:', {
+                    基础楼层: this.settings.summaryFloorCount,
+                    延迟楼层: this.settings.delayedSummaryFloors,
+                    总计需要: requiredFloors
+                });
+            }
+            
+            const shouldTrigger = messagesSinceLastSummary >= requiredFloors;
 
             console.log('[SummaryManager] 🤔 总结触发检查:', {
                 currentMessageCount,
                 lastSummaryMessageId: this.lastSummaryMessageId,
                 messagesSinceLastSummary,
                 summaryFloorCount: this.settings.summaryFloorCount,
+                delayedSummaryEnabled: this.settings.delayedSummaryEnabled,
+                delayedSummaryFloors: this.settings.delayedSummaryFloors,
+                requiredFloors,
                 shouldTrigger,
                 failedAttempts: this.failedSummaryAttempts.length
             });

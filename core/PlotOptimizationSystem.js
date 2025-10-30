@@ -29,6 +29,8 @@ export class PlotOptimizationSystem {
         // 🔧 修复：infoBarSettings在modules中注册为settings
         this.infoBarSettings = dependencies.infoBarSettings || window.SillyTavernInfobar?.modules?.settings;
         this.context = dependencies.context || window.SillyTavern?.getContext?.();
+        // 🆕 新增：作家文风管理器
+        this.authorStyleManager = dependencies.authorStyleManager || window.SillyTavernInfobar?.modules?.authorStyleManager;
 
         // 🚀 配置
         this.config = {
@@ -49,7 +51,11 @@ export class PlotOptimizationSystem {
             plotTwistIntensity: 5,                  // 剧情反转强度 (1-10)
             plotClimaxIntensity: 5,                 // 剧情高潮强度 (1-10)
             plotLowIntensity: 5,                    // 剧情低谷强度 (1-10)
-            plotTurnIntensity: 5                    // 剧情转折强度 (1-10)
+            plotTurnIntensity: 5,                   // 剧情转折强度 (1-10)
+            // 🆕 新增：作家文风模仿
+            imitateAuthorEnabled: false,            // 是否启用作家文风模仿
+            targetAuthor: '',                       // 目标作家名称
+            authorStyleDepth: 'comprehensive'       // 文风分析深度：quick/standard/comprehensive
         };
 
         // 📊 状态
@@ -815,8 +821,8 @@ export class PlotOptimizationSystem {
         try {
             console.log('[PlotOptimizationSystem] 🔍 调用自定义API获取剧情建议...');
 
-            // 构建完整提示词
-            const fullPrompt = this.buildPrompt(contextMessages);
+            // 构建完整提示词（支持异步）
+            const fullPrompt = await this.buildPrompt(contextMessages);
 
             // 🔍 添加提示词调试信息
             console.log('[PlotOptimizationSystem] 📝 提示词长度:', fullPrompt?.length || 0);
@@ -843,7 +849,7 @@ export class PlotOptimizationSystem {
     /**
      * 构建提示词
      */
-    buildPrompt(contextMessages) {
+    async buildPrompt(contextMessages) {
         try {
             // 构建上下文
             const contextText = contextMessages.map((msg, index) => {
@@ -871,8 +877,38 @@ export class PlotOptimizationSystem {
             prompt = prompt.replace(/- 剧情低谷强度：.*$/m, `- 剧情低谷强度：${this.config.plotLowIntensity}/10`);
             prompt = prompt.replace(/- 剧情转折强度：.*$/m, `- 剧情转折强度：${this.config.plotTurnIntensity}/10`);
 
+            // 🆕 新增：如果启用了作家文风模仿，添加文风指导
+            let authorStyleGuidance = '';
+            
+            // 🔍 添加调试日志
+            console.log('[PlotOptimizationSystem] 🔍 作家文风模仿配置:', {
+                imitateAuthorEnabled: this.config.imitateAuthorEnabled,
+                targetAuthor: this.config.targetAuthor,
+                hasAuthorStyleManager: !!this.authorStyleManager
+            });
+            
+            if (this.config.imitateAuthorEnabled && this.config.targetAuthor && this.authorStyleManager) {
+                try {
+                    console.log('[PlotOptimizationSystem] 📚 正在获取作家文风指导:', this.config.targetAuthor);
+                    authorStyleGuidance = await this.authorStyleManager.generateStyleGuidance(this.config.targetAuthor);
+                    console.log('[PlotOptimizationSystem] ✅ 作家文风指导已添加，长度:', authorStyleGuidance?.length || 0);
+                } catch (error) {
+                    console.error('[PlotOptimizationSystem] ⚠️ 获取作家文风指导失败:', error);
+                    authorStyleGuidance = `\n⚠️ 无法获取作家"${this.config.targetAuthor}"的文风指导\n`;
+                }
+            } else {
+                console.log('[PlotOptimizationSystem] ℹ️ 未启用作家文风模仿或配置不完整');
+            }
+
             // 组合完整提示词
-            const fullPrompt = `${prompt}\n\n═══════════════════════════════════════════════════════════════\n【当前剧情上下文】\n═══════════════════════════════════════════════════════════════\n\n${contextText}\n\n═══════════════════════════════════════════════════════════════\n【用户规划的剧情走向】\n═══════════════════════════════════════════════════════════════\n\n${userPlotDirection}\n\n⚠️ 重要提示：请根据用户规划的剧情走向进行优化建议，而不是自己规划剧情。你的职责是帮助用户优化他们的剧情构思，而不是替代用户创作。\n\n请根据以上剧情上下文、用户规划的剧情走向和剧情优化参数，提供下一章的剧情优化建议。`;
+            let fullPrompt = `${prompt}\n\n═══════════════════════════════════════════════════════════════\n【当前剧情上下文】\n═══════════════════════════════════════════════════════════════\n\n${contextText}\n\n═══════════════════════════════════════════════════════════════\n【用户规划的剧情走向】\n═══════════════════════════════════════════════════════════════\n\n${userPlotDirection}\n\n⚠️ 重要提示：请根据用户规划的剧情走向进行优化建议，而不是自己规划剧情。你的职责是帮助用户优化他们的剧情构思，而不是替代用户创作。`;
+
+            // 🆕 如果有作家文风指导，追加到提示词末尾
+            if (authorStyleGuidance) {
+                fullPrompt += `\n\n${authorStyleGuidance}\n\n⚠️ 重要：在提供剧情优化建议时，请参考上述作家"${this.config.targetAuthor}"的写作风格和技巧，帮助用户模仿该作家的文风进行创作。`;
+            }
+
+            fullPrompt += `\n\n请根据以上剧情上下文、用户规划的剧情走向和剧情优化参数，提供下一章的剧情优化建议。`;
 
             return fullPrompt;
 
