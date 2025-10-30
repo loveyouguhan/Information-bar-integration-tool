@@ -59,6 +59,7 @@ import { RegexScriptManager } from './core/RegexScriptManager.js';
 import { RegexScriptPanel } from './ui/RegexScriptPanel.js';
 import { PlotOptimizationSystem } from './core/PlotOptimizationSystem.js';
 import { NovelAnalyzer } from './core/NovelAnalyzer.js';
+import { AuthorStyleManager } from './core/AuthorStyleManager.js'; // 🆕 作家文风管理器
 import { CorpusRetrieval } from './core/CorpusRetrieval.js';
 import { VectorizedSummaryManager } from './core/VectorizedSummaryManager.js';
 import { UnifiedVectorRetrieval } from './core/UnifiedVectorRetrieval.js';
@@ -176,6 +177,7 @@ class InformationBarIntegrationTool {
 
         // 🆕 小说分析和语料库检索
         this.novelAnalyzer = null;
+        this.authorStyleManager = null; // 🆕 作家文风管理器
         this.corpusRetrieval = null;
 
         // 功能模块 (将在后续版本中添加)
@@ -626,6 +628,21 @@ class InformationBarIntegrationTool {
         });
         console.log('[InfoBarTool] ✅ 小说分析器初始化完成');
 
+        // 🎨 新增：初始化作家文风管理器
+        this.authorStyleManager = new AuthorStyleManager({
+            novelAnalyzer: this.novelAnalyzer,
+            infoBarSettings: this.infoBarSettings,
+            eventSystem: this.eventSystem
+        });
+        await this.authorStyleManager.init();
+        console.log('[InfoBarTool] ✅ 作家文风管理器初始化完成');
+
+        // 🔧 新增：将AuthorStyleManager设置到PlotOptimizationSystem
+        if (this.plotOptimizationSystem) {
+            this.plotOptimizationSystem.authorStyleManager = this.authorStyleManager;
+            console.log('[InfoBarTool] ✅ AuthorStyleManager已设置到PlotOptimizationSystem');
+        }
+
         // 🔍 新增：初始化语料库检索系统
         this.corpusRetrieval = new CorpusRetrieval({
             vectorRetrieval: this.vectorizedMemoryRetrieval,
@@ -708,6 +725,7 @@ class InformationBarIntegrationTool {
             dataMigrationTool: this.dataMigrationTool, // 🆕 数据迁移工具
             plotOptimizationSystem: this.plotOptimizationSystem, // 📖 剧情优化系统
             novelAnalyzer: this.novelAnalyzer, // 📚 小说分析器
+            authorStyleManager: this.authorStyleManager, // 🎨 作家文风管理器
             corpusRetrieval: this.corpusRetrieval, // 🔍 语料库检索系统
             vectorizedSummaryManager: this.vectorizedSummaryManager // 🔮 向量化总结管理器
         };
@@ -1049,6 +1067,7 @@ class InformationBarIntegrationTool {
                 messageFilterHook: this.messageFilterHook, // 🔧 新增：消息过滤Hook
                 plotOptimizationSystem: this.plotOptimizationSystem, // 📖 新增：剧情优化系统
                 novelAnalyzer: this.novelAnalyzer, // 📚 新增：小说分析器
+                authorStyleManager: this.authorStyleManager, // 🎨 新增：作家文风管理器
                 corpusRetrieval: this.corpusRetrieval, // 🔍 新增：语料库检索系统
                 multiRecallReranker: this.multiRecallReranker, // 🎯 新增：多路召回+重排序系统
                 unifiedVectorRetrieval: this.unifiedVectorRetrieval, // 🔍 新增：统一向量检索管理器
