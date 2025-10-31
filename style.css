@@ -5716,7 +5716,7 @@
 
 .infobar-item-label {
     font-weight: 600;
-    color: #ffffff;
+    color: var(--infobar-text, #ffffff);
     min-width: 100px;
     margin-right: 16px;
     flex-shrink: 0;
@@ -5724,7 +5724,7 @@
 }
 
 .infobar-item-value {
-    color: #ffffff;
+    color: var(--infobar-text, #ffffff);
     flex: 1;
     word-break: break-word;
     font-weight: 500;

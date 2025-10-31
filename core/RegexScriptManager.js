@@ -57,6 +57,9 @@ export class RegexScriptManager {
             // 加载已保存的正则表达式脚本
             await this.loadScripts();
             
+            // 🆕 加载内置默认正则脚本（如果不存在）
+            await this.loadBuiltInScripts();
+            
             // 监听事件
             this.setupEventListeners();
             
@@ -149,6 +152,69 @@ export class RegexScriptManager {
         } catch (error) {
             console.error('[RegexScriptManager] ❌ 加载脚本失败:', error);
             throw error;
+        }
+    }
+
+    /**
+     * 🆕 加载内置默认正则脚本
+     */
+    async loadBuiltInScripts() {
+        try {
+            console.log('[RegexScriptManager] 📦 加载内置默认正则脚本...');
+
+            // 内置默认脚本：过滤思考标签
+            const builtInScript = {
+                scriptName: "默认正则表达式（过滤思考标签）",
+                description: "系统内置：过滤AI输出中的思考过程标签，包括<thinking>、<aiThinkProcess>、<think>、<ai_memory_summary>、<infobar_data>等",
+                enabled: true,
+                findRegex: "<thinking>[\\s\\S]*?</thinking>|<aiThinkProcess>[\\s\\S]*?</aiThinkProcess>|<infobar_data>[\\s\\S]*?</infobar_data>|<ai_memory_summary>[\\s\\S]*?</ai_memory_summary>|<think>[\\s\\S]*?</think>",
+                replaceString: "",
+                trimStrings: false,
+                placement: ["INPUT", "OUTPUT"],
+                run: "AI_OUTPUT",
+                substituteRegex: true
+            };
+
+            // 检查是否已经存在同名脚本
+            const existingScript = Array.from(this.scripts.values()).find(
+                script => script.scriptName === builtInScript.scriptName
+            );
+
+            if (existingScript) {
+                console.log('[RegexScriptManager] ℹ️ 内置脚本已存在，跳过加载');
+                return;
+            }
+
+            // 添加内置脚本
+            const scriptId = `builtin-filter-tags-${Date.now()}`;
+            const fullScriptData = {
+                id: scriptId,
+                scriptName: builtInScript.scriptName,
+                description: builtInScript.description,
+                enabled: builtInScript.enabled,
+                findRegex: builtInScript.findRegex,
+                replaceString: builtInScript.replaceString,
+                trimStrings: builtInScript.trimStrings,
+                placement: builtInScript.placement,
+                run: builtInScript.run,
+                substituteRegex: builtInScript.substituteRegex,
+                builtIn: true, // 标记为内置脚本
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+            };
+
+            // 保存脚本
+            this.scripts.set(scriptId, fullScriptData);
+            this.scriptOrder.unshift(scriptId); // 放在最前面，优先执行
+
+            // 持久化
+            await this.saveScripts();
+
+            console.log('[RegexScriptManager] ✅ 内置默认正则脚本已加载:', scriptId);
+
+        } catch (error) {
+            console.error('[RegexScriptManager] ❌ 加载内置脚本失败:', error);
+            // 不抛出错误，允许系统继续运行
         }
     }
     

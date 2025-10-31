@@ -280,6 +280,13 @@ export class MessageInfoBarRenderer {
         try {
             console.log('[MessageInfoBarRenderer] 📨 收到消息接收事件');
 
+            // 🔧 修复：首先检查信息栏是否启用
+            const isEnabled = await this.isInfoBarEnabled();
+            if (!isEnabled) {
+                console.log('[MessageInfoBarRenderer] ⏸️ 信息栏未启用，跳过渲染');
+                return;
+            }
+
             // 检查是否为AI消息
             if (!data || data.is_user === true) {
                 console.log('[MessageInfoBarRenderer] ℹ️ 跳过用户消息');
@@ -980,7 +987,7 @@ export class MessageInfoBarRenderer {
             let html = `<div class="infobar-container infobar-style-end-generated" data-message-id="${messageId}"`;
             if (this.currentTheme && this.currentTheme.colors) {
                 const colors = this.currentTheme.colors;
-                html += ` style="--infobar-bg: ${colors.bg}; --infobar-text: ${colors.text}; --infobar-primary: ${colors.primary}; --infobar-border: ${colors.border};"`;
+                html += ` style="--infobar-bg: ${colors.bg}; --infobar-text: ${colors.text}; --infobar-primary: ${colors.primary}; --infobar-border: ${colors.border}; --infobar-label-color: ${colors.text};"`;
             }
             html += `>`;
             html += `<div class="infobar-panels">`;
@@ -1586,7 +1593,7 @@ export class MessageInfoBarRenderer {
     getThemeStyles() {
         if (this.currentTheme && this.currentTheme.colors) {
             const colors = this.currentTheme.colors;
-            return `style="--infobar-bg: ${colors.bg}; --infobar-text: ${colors.text}; --infobar-primary: ${colors.primary}; --infobar-border: ${colors.border};"`;
+            return `style="--infobar-bg: ${colors.bg}; --infobar-text: ${colors.text}; --infobar-primary: ${colors.primary}; --infobar-border: ${colors.border}; --infobar-label-color: ${colors.text};"`;
         }
         return '';
     }
@@ -4258,24 +4265,44 @@ export class MessageInfoBarRenderer {
             // 🔧 修复：检查插件是否启用
             const basicSettings = configs.basic || {};
             const integrationSystemSettings = basicSettings.integrationSystem || {};
-            const isPluginEnabled = integrationSystemSettings.enabled !== false; // 默认启用，除非明确设置为false
 
-            // 🔧 新增：检查"在聊天中渲染信息栏"设置
+            // 🔧 修复：只有明确设置为true才启用（不再使用 !== false 的宽松判断）
+            const isPluginEnabled = integrationSystemSettings.enabled === true;
+
+            // 🔧 新增：检查"启用状态栏显示"设置
             const renderInChatSettings = basicSettings.renderInChat || {};
-            const isRenderInChatEnabled = renderInChatSettings.enabled !== false; // 默认启用，除非明确设置为false
+
+            // 🔧 修复：只有明确设置为true才启用
+            // 注意：这个默认值应该是true（向后兼容），但需要明确配置
+            const isRenderInChatEnabled = renderInChatSettings.enabled === true;
+
+            // 🔧 新增：检查数据表格是否启用
+            const tableRecordsSettings = basicSettings.tableRecords || {};
+            const isTableRecordsEnabled = tableRecordsSettings.enabled === true;
 
             console.log('[MessageInfoBarRenderer] 🔍 启用状态检查:', {
                 pluginEnabled: isPluginEnabled,
                 renderInChatEnabled: isRenderInChatEnabled,
-                finalResult: isPluginEnabled && isRenderInChatEnabled
+                tableRecordsEnabled: isTableRecordsEnabled,
+                basicSettings: basicSettings,
+                integrationSystemSettings: integrationSystemSettings,
+                renderInChatSettings: renderInChatSettings,
+                tableRecordsSettings: tableRecordsSettings,
+                finalResult: isPluginEnabled && isRenderInChatEnabled && isTableRecordsEnabled
             });
 
-            // 只有当插件启用且允许在聊天中渲染时，才返回true
-            return isPluginEnabled && isRenderInChatEnabled;
+            // 🔧 新增：如果数据表格未启用，拒绝渲染信息栏
+            if (!isTableRecordsEnabled) {
+                console.log('[MessageInfoBarRenderer] 🚫 数据表格未启用，拒绝渲染信息栏');
+                return false;
+            }
+
+            // 只有当插件启用、允许在聊天中渲染、且数据表格启用时，才返回true
+            return isPluginEnabled && isRenderInChatEnabled && isTableRecordsEnabled;
 
         } catch (error) {
             console.error('[MessageInfoBarRenderer] ❌ 检查启用状态失败:', error);
-            return true; // 出错时默认启用
+            return false; // 🔧 修复：出错时默认禁用，更安全
         }
     }
 
@@ -5166,6 +5193,7 @@ export class MessageInfoBarRenderer {
             infoBarElement.style.setProperty('--infobar-border', colors.border);
             infoBarElement.style.setProperty('--infobar-hover', this.adjustColor(colors.bg, 10));
             infoBarElement.style.setProperty('--infobar-primary', colors.primary);
+            infoBarElement.style.setProperty('--infobar-label-color', colors.text); // 🔧 修复：添加label颜色设置
             infoBarElement.style.setProperty('--infobar-gradient-start', colors.primary);
             infoBarElement.style.setProperty('--infobar-gradient-end', this.adjustColor(colors.primary, -20));
             infoBarElement.style.setProperty('--infobar-header-text', '#ffffff');
@@ -5199,6 +5227,7 @@ export class MessageInfoBarRenderer {
             infoBarElement.style.setProperty('--infobar-border', fallbackColors.border);
             infoBarElement.style.setProperty('--infobar-hover', this.adjustColor(fallbackColors.bg, 10));
             infoBarElement.style.setProperty('--infobar-primary', fallbackColors.primary);
+            infoBarElement.style.setProperty('--infobar-label-color', fallbackColors.text); // 🔧 修复：添加label颜色设置
             infoBarElement.style.setProperty('--infobar-gradient-start', fallbackColors.primary);
             infoBarElement.style.setProperty('--infobar-gradient-end', this.adjustColor(fallbackColors.primary, -20));
             infoBarElement.style.setProperty('--infobar-header-text', '#ffffff');

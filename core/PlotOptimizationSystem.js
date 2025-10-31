@@ -55,7 +55,9 @@ export class PlotOptimizationSystem {
             // 🆕 新增：作家文风模仿
             imitateAuthorEnabled: false,            // 是否启用作家文风模仿
             targetAuthor: '',                       // 目标作家名称
-            authorStyleDepth: 'comprehensive'       // 文风分析深度：quick/standard/comprehensive
+            authorStyleDepth: 'comprehensive',      // 文风分析深度：quick/standard/comprehensive
+            // 🆕 新增：正则表达式过滤
+            useRegexFilter: false                   // 是否使用正则表达式过滤剧情内容
         };
 
         // 📊 状态
@@ -801,7 +803,34 @@ export class PlotOptimizationSystem {
             }
 
             // 获取最近的N条消息
-            const recentMessages = chat.slice(-this.config.maxContextMessages);
+            let recentMessages = chat.slice(-this.config.maxContextMessages);
+
+            // 🆕 新增：根据设置决定是否使用正则表达式过滤
+            if (this.config.useRegexFilter) {
+                console.log('[PlotOptimizationSystem] 📝 使用正则表达式过滤剧情消息...');
+                
+                // 使用RegexScriptManager应用INPUT正则过滤（过滤AI输出中的标签）
+                const regexScriptManager = window.SillyTavernInfobar?.modules?.regexScriptManager;
+                if (regexScriptManager) {
+                    recentMessages = recentMessages.map(msg => {
+                        if (msg.mes && !msg.is_user) { // 只过滤AI消息
+                            const originalLength = msg.mes.length;
+                            // 🔧 使用INPUT placement和AI_OUTPUT run类型
+                            const filtered = regexScriptManager.applyAllScripts(msg.mes, 'INPUT', 'AI_OUTPUT');
+                            if (filtered.length !== originalLength) {
+                                console.log('[PlotOptimizationSystem] 📝 AI消息已过滤:', originalLength, '->', filtered.length);
+                            }
+                            return { ...msg, mes: filtered };
+                        }
+                        return msg;
+                    });
+                    console.log('[PlotOptimizationSystem] ✅ 正则表达式过滤完成');
+                } else {
+                    console.warn('[PlotOptimizationSystem] ⚠️ RegexScriptManager不可用，跳过正则过滤');
+                }
+            } else {
+                console.log('[PlotOptimizationSystem] ℹ️ 正则表达式过滤已禁用');
+            }
 
             return recentMessages.map(msg => ({
                 role: msg.is_user ? 'user' : 'assistant',

@@ -864,7 +864,9 @@ ${'='.repeat(80)}
                         </div>
                         <div class="header-right">
                             <div class="success-notification" style="display: block;">
-                                <span class="success-text">信息栏系统已成功加载！</span>
+                                <span class="success-text" id="infobar-version-display">
+                                    <span id="current-version">加载中...</span> / <span id="latest-version">检测中...</span>
+                                </span>
                             </div>
                             <button class="modal-close" onclick="this.closest('.info-bar-settings-modal').style.display='none'">×</button>
                         </div>
@@ -900,6 +902,9 @@ ${'='.repeat(80)}
                             </div>
                             <div class="nav-item" data-nav="plot-optimization">
                                 剧情优化
+                            </div>
+                            <div class="nav-item" data-nav="data-table-config">
+                                数据表格配置
                             </div>
                             <!-- 🔧 重构：删除15个硬编码的基础面板导航项 -->
                             <!-- 现在通过refreshNavigation()动态创建所有面板的导航项 -->
@@ -948,6 +953,9 @@ ${'='.repeat(80)}
                             <div class="content-panel" data-content="plot-optimization">
                                 ${this.createPlotOptimizationPanel()}
                             </div>
+                            <div class="content-panel" data-content="data-table-config">
+                                ${this.createDataTableConfigPanel()}
+                            </div>
                             <div class="content-panel" data-content="theme">
                                 ${this.createThemePanel()}
                             </div>
@@ -965,7 +973,18 @@ ${'='.repeat(80)}
                     <!-- 底部操作栏 -->
                     <div class="modal-footer">
                         <div class="footer-left">
-                            <span class="status-text">就绪</span>
+                            <div id="announcement-display" style="
+                                max-width: 600px;
+                                font-size: 13px;
+                                color: var(--theme-text-secondary, #aaa);
+                                line-height: 1.5;
+                                overflow: hidden;
+                                text-overflow: ellipsis;
+                                white-space: nowrap;
+                            ">
+                                <span style="color: var(--theme-primary-color, #4CAF50);">📢</span>
+                                <span id="announcement-content">加载公告中...</span>
+                            </div>
                         </div>
                         <div class="footer-right">
                             <button class="btn-cancel" data-action="close">取消</button>
@@ -1013,64 +1032,11 @@ ${'='.repeat(80)}
                         <div class="setting-desc">启用信息栏插件的所有功能</div>
                     </div>
 
-                    <div class="setting-item">
-                        <div class="checkbox-wrapper">
+                    <!-- 🔧 隐藏的checkbox，用于向后兼容和双向同步 -->
+                    <div style="display: none;">
                             <input type="checkbox" id="render-in-chat-checkbox" name="basic.renderInChat.enabled" checked />
-                            <label for="render-in-chat-checkbox" class="checkbox-label">在聊天中渲染信息栏</label>
-                        </div>
-                        <div class="setting-desc">在聊天界面中显示信息栏内容</div>
-                    </div>
-
-                    <div class="setting-item">
-                        <div class="checkbox-wrapper">
                             <input type="checkbox" id="table-records-checkbox" name="basic.tableRecords.enabled" />
-                            <label for="table-records-checkbox" class="checkbox-label">启用数据表格</label>
-                        </div>
-                        <div class="setting-desc">启用后在扩展内增加数据表格按钮，用于查看和管理数据</div>
-
-                        <!-- 🆕 API模式选择（仅在启用数据表格时显示） -->
-                        <div class="api-mode-selection" id="api-mode-selection" style="display: none; margin-top: 15px; margin-left: 30px; padding: 15px; background: var(--theme-bg-secondary, #2a2a2a); border-radius: 8px; border-left: 3px solid #667eea;">
-                            <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--theme-text-primary, #e0e0e0);">📊 数据生成模式</h4>
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                                    <button type="button" class="api-mode-btn" data-mode="main" style="
-                                        flex: 1;
-                                        padding: 12px 16px;
-                                        background: linear-gradient(135deg, #667eea, #764ba2);
-                                        color: white;
-                                        border: none;
-                                        border-radius: 6px;
-                                        cursor: pointer;
-                                        transition: all 0.2s;
-                                        font-weight: 500;
-                                        font-size: 13px;
-                                    ">
-                                        🎯 主API模式
-                                    </button>
-                                    <button type="button" class="api-mode-btn" data-mode="custom" style="
-                                        flex: 1;
-                                        padding: 12px 16px;
-                                        background: var(--theme-bg-tertiary, #1a1a1a);
-                                        color: var(--theme-text-primary, #e0e0e0);
-                                        border: 1px solid var(--theme-border-color, #333);
-                                        border-radius: 6px;
-                                        cursor: pointer;
-                                        transition: all 0.2s;
-                                        font-size: 13px;
-                                    ">
-                                        🔌 自定义API模式
-                                    </button>
-                                </div>
-                                <div class="mode-description" style="font-size: 12px; color: var(--theme-text-secondary, #999); line-height: 1.5;">
-                                    <div class="main-mode-desc" style="display: block;">
-                                        <strong style="color: #667eea;">主API模式：</strong>使用SillyTavern主API生成数据表格内容，智能提示词会注入到主API对话中
-                                    </div>
-                                    <div class="custom-mode-desc" style="display: none;">
-                                        <strong style="color: #f59e0b;">自定义API模式：</strong>使用独立的自定义API生成数据表格和AI记忆总结，智能提示词不会注入主API（需在API配置面板中设置）
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <input type="checkbox" id="default-collapsed-checkbox" name="basic.defaultCollapsed.enabled" />
                     </div>
 
                     <div class="setting-item">
@@ -1079,14 +1045,6 @@ ${'='.repeat(80)}
                             <label for="memory-assist-checkbox" class="checkbox-label">启用记忆辅助</label>
                         </div>
                         <div class="setting-desc">AI记忆辅助和上下文管理</div>
-                    </div>
-
-                    <div class="setting-item">
-                        <div class="checkbox-wrapper">
-                            <input type="checkbox" id="default-collapsed-checkbox" name="basic.defaultCollapsed.enabled" />
-                            <label for="default-collapsed-checkbox" class="checkbox-label">信息栏默认折叠</label>
-                        </div>
-                        <div class="setting-desc">启动时信息栏默认为折叠状态</div>
                     </div>
 
 
@@ -1792,6 +1750,12 @@ ${'='.repeat(80)}
                 if (e.target.classList.contains('ai-memory-api-mode-btn')) {
                     const mode = e.target.dataset.mode;
                     this.handleAIMemoryAPIModeChange(mode);
+                }
+
+                // 🔧 新增：数据表格API模式切换按钮
+                if (e.target.classList.contains('data-table-api-mode-btn')) {
+                    const mode = e.target.dataset.mode;
+                    this.handleDataTableAPIModeChange(mode);
                 }
 
                 // API配置相关按钮
@@ -6296,6 +6260,16 @@ ${'='.repeat(80)}
                 this.initPlotOptimizationPanelContent();
             }
 
+            // 📊 新增：数据表格配置面板特殊处理
+            if (contentType === 'data-table-config') {
+                this.initDataTableConfigPanelContent();
+            }
+
+            // 🔌 新增：API配置面板特殊处理
+            if (contentType === 'api') {
+                this.initAPIPanelContent();
+            }
+
             // 🔮 新增：向量功能面板特殊处理
             if (contentType === 'vectorFunction') {
                 this.initVectorFunctionPanelContent();
@@ -6809,6 +6783,60 @@ ${'='.repeat(80)}
     }
 
     /**
+     * 🔧 新增：处理数据表格API模式切换
+     */
+    async handleDataTableAPIModeChange(mode) {
+        try {
+            console.log('[InfoBarSettings] 📊 切换数据表格API模式:', mode);
+
+            // 更新按钮样式
+            const buttons = this.modal.querySelectorAll('.data-table-api-mode-btn');
+            buttons.forEach(btn => {
+                const isActive = btn.dataset.mode === mode;
+                if (isActive) {
+                    btn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+                    btn.style.color = 'white';
+                    btn.style.border = 'none';
+                    btn.style.fontWeight = '500';
+                    btn.classList.add('active');
+                } else {
+                    btn.style.background = 'var(--theme-bg-tertiary, #1a1a1a)';
+                    btn.style.color = 'var(--theme-text-primary, #e0e0e0)';
+                    btn.style.border = '1px solid var(--theme-border-color, #333)';
+                    btn.style.fontWeight = 'normal';
+                    btn.classList.remove('active');
+                }
+            });
+
+            // 更新描述文本
+            const mainDesc = this.modal.querySelector('.main-mode-desc');
+            const customDesc = this.modal.querySelector('.custom-mode-desc');
+            if (mainDesc && customDesc) {
+                mainDesc.style.display = mode === 'main' ? 'block' : 'none';
+                customDesc.style.display = mode === 'custom' ? 'block' : 'none';
+            }
+
+            // 保存配置
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings['Information bar integration tool'] || {};
+
+            if (!configs.basic) configs.basic = {};
+            if (!configs.basic.tableRecords) configs.basic.tableRecords = {};
+
+            configs.basic.tableRecords.apiMode = mode;
+
+            extensionSettings['Information bar integration tool'] = configs;
+            await context.saveSettingsDebounced();
+
+            console.log('[InfoBarSettings] ✅ 数据表格API模式已保存:', mode);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 切换数据表格API模式失败:', error);
+        }
+    }
+
+    /**
      * 🆕 处理AI记忆总结API模式切换
      */
     async handleAIMemoryAPIModeChange(mode) {
@@ -7113,52 +7141,74 @@ ${'='.repeat(80)}
                         <input type="number" name="apiConfig.retryCount" min="0" max="10" step="1" value="3" />
                         <small>请求失败时的重试次数</small>
                     </div>
+                </div>
+
+                <!-- 🆕 通用功能设置 -->
+                <div class="settings-group">
+                    <h4>🌐 通用功能设置</h4>
+                    <small style="display: block; margin-bottom: 12px; color: var(--theme-text-secondary, #888);">
+                        以下设置适用于所有使用通用API的功能（数据表格、剧情优化、AI记忆总结等）
+                    </small>
+
+                    <!-- 读取世界书 -->
                     <div class="form-group">
-                        <label>最小消息字数阈值</label>
-                        <input type="number" id="api-min-message-length" name="apiConfig.minMessageLength" min="0" max="10000" step="50" value="500" />
-                        <small>AI消息字数低于此阈值时，跳过信息栏数据生成（默认500字）。设置为0表示不检查字数。</small>
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="api-include-worldbook" name="apiConfig.includeWorldBook" />
+                            <label for="api-include-worldbook" class="checkbox-label">读取世界书</label>
+                        </div>
+                        <small>启用时将SillyTavern世界书内容注入到通用API请求中</small>
                     </div>
-                    <!-- 🆕 数据表格功能区域 -->
-                    <div class="settings-group data-table-features-section">
-                        <h4 style="color: #2196F3; margin: 15px 0 10px 0;">📊 数据表格功能</h4>
 
-                        <div class="form-group">
-                            <div class="checkbox-wrapper">
-                                <input type="checkbox" id="api-merge-messages" name="apiConfig.mergeMessages" checked />
-                                <label for="api-merge-messages" class="checkbox-label">合并消息</label>
+                    <!-- 世界书来源选择 -->
+                    <div class="form-group" id="worldbook-source-selection" style="display: none; margin-left: 30px;">
+                        <label>世界书来源</label>
+                        <select id="api-worldbook-source" name="apiConfig.worldbookSource">
+                            <option value="default">默认世界书（使用当前角色绑定的世界书）</option>
+                            <option value="all">全部世界书（读取所有可用世界书）</option>
+                            <option value="custom">自定义选择（手动选择需要读取的世界书）</option>
+                        </select>
+                        <small>
+                            • 默认世界书：自动使用当前角色卡绑定的世界书<br>
+                            • 全部世界书：读取SillyTavern中所有可用的世界书<br>
+                            • 自定义选择：在下方手动选择需要读取的世界书
+                        </small>
+                    </div>
+
+                    <!-- 自定义世界书选择区域 -->
+                    <div class="form-group" id="custom-worldbook-selection" style="display: none; margin-left: 30px; margin-top: 12px;">
+                        <label>选择世界书</label>
+                        <div id="worldbook-list-container" style="
+                            max-height: 300px;
+                            overflow-y: auto;
+                            padding: 12px;
+                            background: var(--theme-bg-secondary, #2a2a2a);
+                            border: 1px solid var(--theme-border-color, #333);
+                            border-radius: 6px;
+                        ">
+                            <div style="text-align: center; color: var(--theme-text-secondary, #888); padding: 20px;">
+                                加载世界书列表中...
                             </div>
-                            <small>启用时将API返回数据合并到AI消息中再解析，禁用时直接解析API返回数据</small>
                         </div>
+                        <div style="margin-top: 8px; display: flex; gap: 8px;">
+                            <button type="button" id="worldbook-select-all-btn" class="btn btn-secondary" style="flex: 1; padding: 6px 12px; font-size: 12px;">
+                                ✅ 全选
+                            </button>
+                            <button type="button" id="worldbook-deselect-all-btn" class="btn btn-secondary" style="flex: 1; padding: 6px 12px; font-size: 12px;">
+                                ❌ 取消全选
+                            </button>
+                        </div>
+                        <small style="display: block; margin-top: 8px;">
+                            选中的世界书将在调用通用API时一起读取并注入到请求中
+                        </small>
+                    </div>
 
-                        <div class="form-group">
-                            <div class="checkbox-wrapper">
-                                <input type="checkbox" id="infobar-api-include-worldbook" name="apiConfig.includeWorldBook" />
-                                <label for="infobar-api-include-worldbook" class="checkbox-label">读取世界书</label>
-                            </div>
-                            <small>启用时将SillyTavern世界书内容注入到自定义API请求中</small>
+                    <!-- 请求询问 -->
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="api-request-confirmation" name="apiConfig.requestConfirmation" />
+                            <label for="api-request-confirmation" class="checkbox-label">请求询问</label>
                         </div>
-
-                        <div class="form-group">
-                            <div class="checkbox-wrapper">
-                                <input type="checkbox" id="api-request-confirmation" name="apiConfig.requestConfirmation" />
-                                <label for="api-request-confirmation" class="checkbox-label">请求询问</label>
-                            </div>
-                            <small>启用后，在调用自定义API生成数据前会弹出确认对话框，询问是否继续生成</small>
-                        </div>
-
-                        <div class="form-group">
-                            <div class="checkbox-wrapper">
-                                <input type="checkbox" id="api-delayed-generation" name="apiConfig.delayedGeneration" />
-                                <label for="api-delayed-generation" class="checkbox-label">延迟生成</label>
-                            </div>
-                            <small>启用后，AI消息生成后不立即执行数据生成，等待N层后再处理</small>
-                        </div>
-
-                        <div class="form-group delayed-generation-config" style="display: none; margin-left: 30px;">
-                            <label>延迟楼层数</label>
-                            <input type="number" id="api-delay-floors" name="apiConfig.delayFloors" min="1" max="10" step="1" value="1" />
-                            <small>设置延迟的楼层数。例如设置为1，则在下一层AI消息完成后，再对上一层消息进行数据生成</small>
-                        </div>
+                        <small>启用后，在调用通用API前会弹出确认对话框，询问是否继续</small>
                     </div>
 
                     <!-- 破甲提示词配置 -->
@@ -10224,6 +10274,12 @@ ${'='.repeat(80)}
             this.modal.style.display = 'flex';
             this.visible = true;
 
+            // 🆕 启动版本检测
+            this.checkVersion();
+
+            // 🆕 加载公告
+            this.loadAnnouncement();
+
             // 🔧 修复：延迟初始化基础面板自定义子项，确保DOM已准备好
             setTimeout(() => {
                 this.initAllBasicPanelCustomSubItems();
@@ -11005,16 +11061,17 @@ ${'='.repeat(80)}
                 extensionSettings['Information bar integration tool'] = {};
             }
 
-            // 🔧 修复：保存基础设置表单数据时，保留apiConfig.modelCache和apiConfig.enabled
+            // 🔧 修复：保存基础设置表单数据时，保留apiConfig.modelCache、apiConfig.enabled和customSelectedWorldbooks
             // 避免覆盖模型缓存和API模式设置，防止影响其他插件
             const existingApiConfig = extensionSettings['Information bar integration tool'].apiConfig || {};
             const existingModelCache = existingApiConfig.modelCache || {};
             const existingApiEnabled = existingApiConfig.enabled; // 🔧 新增：保留API启用状态
+            const existingCustomWorldbooks = existingApiConfig.customSelectedWorldbooks || []; // 🔧 新增：保留选中的世界书
 
             // 合并表单数据
             Object.assign(extensionSettings['Information bar integration tool'], formData);
 
-            // 恢复模型缓存和API启用状态
+            // 恢复模型缓存、API启用状态和选中的世界书
             if (extensionSettings['Information bar integration tool'].apiConfig) {
                 if (!extensionSettings['Information bar integration tool'].apiConfig.modelCache) {
                     extensionSettings['Information bar integration tool'].apiConfig.modelCache = {};
@@ -11025,6 +11082,12 @@ ${'='.repeat(80)}
                 if (existingApiEnabled !== undefined) {
                     extensionSettings['Information bar integration tool'].apiConfig.enabled = existingApiEnabled;
                     console.log('[InfoBarSettings] 🔧 已保留apiConfig.enabled:', existingApiEnabled);
+                }
+
+                // 🔧 新增：恢复选中的世界书列表
+                if (existingCustomWorldbooks.length > 0) {
+                    extensionSettings['Information bar integration tool'].apiConfig.customSelectedWorldbooks = existingCustomWorldbooks;
+                    console.log('[InfoBarSettings] 🔧 已保留customSelectedWorldbooks:', existingCustomWorldbooks.length, '本');
                 }
 
                 console.log('[InfoBarSettings] 🔧 已保留apiConfig.modelCache，避免覆盖模型缓存');
@@ -11062,6 +11125,42 @@ ${'='.repeat(80)}
                     await plotOptimizationSystem.setEnabled(plotOptimizationSettings.enabled);
                     console.log('[InfoBarSettings] ✅ 已同步剧情优化配置到PlotOptimizationSystem模块');
                 }
+            }
+
+            // 📊 新增：收集数据表格配置
+            const dataTableSettings = this.collectDataTableSettings();
+            if (dataTableSettings && typeof dataTableSettings === 'object') {
+                // 更新basic配置
+                if (!extensionSettings['Information bar integration tool'].basic) {
+                    extensionSettings['Information bar integration tool'].basic = {};
+                }
+                
+                extensionSettings['Information bar integration tool'].basic.renderInChat = {
+                    enabled: dataTableSettings.renderInChatEnabled
+                };
+
+                extensionSettings['Information bar integration tool'].basic.tableRecords = {
+                    enabled: dataTableSettings.enabled,
+                    apiMode: dataTableSettings.apiMode  // 🔧 修复：保存API模式配置
+                };
+
+                extensionSettings['Information bar integration tool'].basic.defaultCollapsed = {
+                    enabled: dataTableSettings.defaultCollapsedEnabled
+                };
+
+                // 更新apiConfig中的数据表格相关配置
+                Object.assign(extensionSettings['Information bar integration tool'].apiConfig, {
+                    mergeMessages: dataTableSettings.mergeMessages,
+                    delayedGeneration: dataTableSettings.delayedGeneration,
+                    delayFloors: dataTableSettings.delayFloors,
+                    minMessageLength: dataTableSettings.minMessageLength,
+                    tableRecordsAPIMode: dataTableSettings.apiMode,
+                    useRegexFilter: dataTableSettings.useRegexFilter
+                });
+                
+                // 注意：includeWorldBook和requestConfirmation现在通过API配置面板的name属性直接保存
+
+                console.log('[InfoBarSettings] 📊 已收集数据表格配置:', dataTableSettings);
             }
 
             // 🆕 收集向量化API配置
@@ -11578,6 +11677,13 @@ ${'='.repeat(80)}
 
             // 🆕 获取AI记忆总结API模式
             const getAPIMode = () => {
+                // 🔧 修复：从UI按钮状态读取API模式，而不是从扩展设置读取
+                const activeBtn = this.modal?.querySelector('.ai-memory-api-mode-btn[style*="linear-gradient"]');
+                if (activeBtn) {
+                    return activeBtn.dataset.mode || 'auto';
+                }
+
+                // 如果没有找到激活的按钮，从扩展设置读取
                 const context = SillyTavern.getContext();
                 const savedMode = context.extensionSettings['Information bar integration tool']?.memoryEnhancement?.ai?.apiMode;
                 return savedMode || 'auto';
@@ -14539,9 +14645,29 @@ ${'='.repeat(80)}
                         ">
                             已选中 <span class="npc-count-number">0</span> 个
                         </div>
-                        <button 
+                        <button
                             type="button"
-                            id="npc-batch-delete-btn" 
+                            id="npc-merge-btn"
+                            class="btn btn-sm"
+                            disabled
+                            style="
+                                padding: 4px 8px;
+                                font-size: 12px;
+                                background: var(--theme-primary-color, #4CAF50);
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                                opacity: 0.5;
+                                margin-right: 8px;
+                            "
+                        >
+                            🔀 合并角色
+                        </button>
+                        <button
+                            type="button"
+                            id="npc-batch-delete-btn"
                             class="btn btn-sm"
                             disabled
                             style="
@@ -14831,6 +14957,14 @@ ${'='.repeat(80)}
                            value="${config.maxContextMessages || 10}" min="1" max="50">
                     <small>提取最近N条消息作为上下文</small>
                 </div>
+
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="plot-optimization-use-regex" ${config.useRegexFilter ? 'checked' : ''}>
+                        <label for="plot-optimization-use-regex" class="checkbox-label">使用正则表达式过滤</label>
+                    </div>
+                    <small>启用后，在获取剧情上下文时应用OUTPUT正则表达式过滤标签内容（如AI记忆、思考过程等）</small>
+                </div>
             </div>
 
             <!-- 提示词模板 -->
@@ -14919,6 +15053,170 @@ ${'='.repeat(80)}
     }
 
     /**
+     * 🆕 创建数据表格配置面板
+     */
+    createDataTableConfigPanel() {
+        const context = window.SillyTavern?.getContext?.() || SillyTavern.getContext();
+        const extensionSettings = context.extensionSettings || {};
+        const configs = extensionSettings['Information bar integration tool'] || {};
+        const basicSettings = configs.basic || {};
+        const apiConfig = configs.apiConfig || {};
+
+        return `
+            <div class="content-header">
+                <h3>数据表格配置</h3>
+                <p class="content-description">管理数据表格功能的启用状态和相关设置</p>
+            </div>
+
+            <!-- 基础设置 -->
+            <div class="settings-group">
+                <h4>基础设置</h4>
+
+                <!-- 启用数据表格 -->
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="data-table-enabled" ${basicSettings.tableRecords?.enabled ? 'checked' : ''}>
+                        <label for="data-table-enabled" class="checkbox-label">启用数据表格</label>
+                    </div>
+                    <small>启用后在扩展内增加数据表格按钮，用于查看和管理数据</small>
+                </div>
+
+                <!-- 启用状态栏显示 -->
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="data-table-render-in-chat" ${basicSettings.renderInChat?.enabled ? 'checked' : ''}>
+                        <label for="data-table-render-in-chat" class="checkbox-label">启用状态栏显示</label>
+                    </div>
+                    <small>启用后将会在聊天中渲染信息栏/状态栏！！</small>
+                </div>
+
+                <!-- 信息栏默认折叠 -->
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="data-table-default-collapsed" ${basicSettings.defaultCollapsed?.enabled ? 'checked' : ''}>
+                        <label for="data-table-default-collapsed" class="checkbox-label">信息栏默认折叠</label>
+                    </div>
+                    <small>启动时信息栏默认为折叠状态</small>
+                </div>
+
+                <!-- 启用正则表达式过滤 -->
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="data-table-use-regex" ${apiConfig.useRegexFilter ? 'checked' : ''}>
+                        <label for="data-table-use-regex" class="checkbox-label">启用正则表达式过滤</label>
+                    </div>
+                    <small>启用后，在生成数据表格时使用正则表达式过滤AI输出中的标签内容（如思考过程、记忆标签等）</small>
+                </div>
+
+                <!-- API模式选择 -->
+                <div class="api-mode-selection-wrapper" id="data-table-api-mode-selection" style="display: ${basicSettings.tableRecords?.enabled ? 'block' : 'none'}; margin-top: 15px; margin-left: 15px; padding: 15px; background: var(--theme-bg-secondary, #2a2a2a); border-radius: 8px; border-left: 3px solid #667eea;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--theme-text-primary, #e0e0e0);">📊 数据生成模式</h4>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <button type="button" class="data-table-api-mode-btn ${apiConfig.tableRecordsAPIMode === 'main' ? 'active' : ''}" data-mode="main" style="
+                                flex: 1;
+                                padding: 12px 16px;
+                                background: ${apiConfig.tableRecordsAPIMode === 'main' ? 'linear-gradient(135deg, #667eea, #764ba2)' : 'var(--theme-bg-tertiary, #1a1a1a)'};
+                                color: white;
+                                border: ${apiConfig.tableRecordsAPIMode === 'main' ? 'none' : '1px solid var(--theme-border-color, #333)'};
+                                border-radius: 6px;
+                                cursor: pointer;
+                                transition: all 0.2s;
+                                font-weight: ${apiConfig.tableRecordsAPIMode === 'main' ? '500' : 'normal'};
+                                font-size: 13px;
+                            ">
+                                🎯 主API模式
+                            </button>
+                            <button type="button" class="data-table-api-mode-btn ${(!apiConfig.tableRecordsAPIMode || apiConfig.tableRecordsAPIMode === 'custom') ? 'active' : ''}" data-mode="custom" style="
+                                flex: 1;
+                                padding: 12px 16px;
+                                background: ${(!apiConfig.tableRecordsAPIMode || apiConfig.tableRecordsAPIMode === 'custom') ? 'linear-gradient(135deg, #667eea, #764ba2)' : 'var(--theme-bg-tertiary, #1a1a1a)'};
+                                color: white;
+                                border: ${(!apiConfig.tableRecordsAPIMode || apiConfig.tableRecordsAPIMode === 'custom') ? 'none' : '1px solid var(--theme-border-color, #333)'};
+                                border-radius: 6px;
+                                cursor: pointer;
+                                transition: all 0.2s;
+                                font-weight: ${(!apiConfig.tableRecordsAPIMode || apiConfig.tableRecordsAPIMode === 'custom') ? '500' : 'normal'};
+                                font-size: 13px;
+                            ">
+                                🔌 自定义API模式
+                            </button>
+                        </div>
+                        <div class="mode-description" style="font-size: 12px; color: var(--theme-text-secondary, #999); line-height: 1.5;">
+                            <div class="main-mode-desc" style="display: ${apiConfig.tableRecordsAPIMode === 'main' ? 'block' : 'none'};">
+                                💡 <strong>主API模式</strong>：使用SillyTavern的主API生成数据（依赖主API的JSON输出能力）
+                            </div>
+                            <div class="custom-mode-desc" style="display: ${(!apiConfig.tableRecordsAPIMode || apiConfig.tableRecordsAPIMode === 'custom') ? 'block' : 'none'};">
+                                💡 <strong>自定义API模式</strong>：使用通用API配置中的自定义API生成数据（推荐，更稳定）
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据表格功能设置 -->
+            <div class="settings-group" style="display: ${basicSettings.tableRecords?.enabled ? 'block' : 'none'};" id="data-table-features-section">
+                <h4 style="color: #2196F3;">📊 数据表格功能</h4>
+
+                <!-- 合并消息 -->
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="data-table-merge-messages" ${apiConfig.mergeMessages !== false ? 'checked' : ''}>
+                        <label for="data-table-merge-messages" class="checkbox-label">合并消息</label>
+                    </div>
+                    <small>启用时将API返回数据合并到AI消息中再解析，禁用时直接解析API返回数据</small>
+                </div>
+
+                <!-- 延迟生成 -->
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="data-table-delayed-generation" ${apiConfig.delayedGeneration ? 'checked' : ''}>
+                        <label for="data-table-delayed-generation" class="checkbox-label">延迟生成</label>
+                    </div>
+                    <small>启用后，AI消息生成后不立即执行数据生成，等待N层后再处理</small>
+                </div>
+
+                <!-- 延迟楼层数 -->
+                <div class="form-group data-table-delayed-config" style="display: ${apiConfig.delayedGeneration ? 'block' : 'none'}; margin-left: 30px;">
+                    <label>延迟楼层数</label>
+                    <input type="number" id="data-table-delay-floors" value="${apiConfig.delayFloors || 1}" min="1" max="10" step="1">
+                    <small>设置延迟的楼层数。例如设置为1，则在下一层AI消息完成后，再对上一层消息进行数据生成</small>
+                </div>
+
+                <!-- 最小消息字数阈值 -->
+                <div class="form-group">
+                    <label>最小消息字数阈值</label>
+                    <input type="number" id="data-table-min-message-length" value="${apiConfig.minMessageLength || 500}" min="0" max="10000" step="50">
+                    <small>AI消息字数低于此阈值时，跳过信息栏数据生成。设置为0表示不检查字数</small>
+                </div>
+            </div>
+
+            <!-- 帮助信息 -->
+            <div class="settings-group">
+                <h4>💡 使用说明</h4>
+                <div style="
+                    padding: 15px;
+                    background: var(--theme-bg-secondary, #2a2a2a);
+                    border-radius: 8px;
+                    border-left: 4px solid #2196F3;
+                    font-size: 13px;
+                    line-height: 1.8;
+                    color: var(--theme-text-secondary, #aaa);
+                ">
+                    <p style="margin: 0 0 10px 0;"><strong style="color: var(--theme-text-primary, #ddd);">数据表格功能说明：</strong></p>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li>启用后会在扩展菜单中显示"数据表格"按钮</li>
+                        <li>主API模式：依赖主API的JSON输出能力</li>
+                        <li>自定义API模式（推荐）：使用通用API配置中的自定义API</li>
+                        <li>合并消息：将API数据合并到AI消息中（推荐开启）</li>
+                        <li>延迟生成：避免过于频繁的API调用</li>
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
      * 获取剧情优化配置
      */
     getPlotOptimizationConfig() {
@@ -14946,7 +15244,9 @@ ${'='.repeat(80)}
                 // 🆕 作家文风模仿
                 imitateAuthorEnabled: false,
                 targetAuthor: '',
-                authorStyleDepth: 'comprehensive'
+                authorStyleDepth: 'comprehensive',
+                // 🆕 正则表达式过滤
+                useRegexFilter: false
             };
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 获取剧情优化配置失败:', error);
@@ -14963,7 +15263,8 @@ ${'='.repeat(80)}
                 timeout: 30000,
                 imitateAuthorEnabled: false,
                 targetAuthor: '',
-                authorStyleDepth: 'comprehensive'
+                authorStyleDepth: 'comprehensive',
+                useRegexFilter: false
             };
         }
     }
@@ -22863,25 +23164,9 @@ ${'='.repeat(80)}
      */
     async processWithCustomAPIInternal(plotContent) {
         try {
-            // 🔧 新增：检查是否启用了请求询问功能
-            const stContext = SillyTavern.getContext();
-            const extensionSettings = stContext.extensionSettings['Information bar integration tool'];
-            const requestConfirmation = extensionSettings?.apiConfig?.requestConfirmation === true;
-
-            if (requestConfirmation) {
-                console.log('[InfoBarSettings] 🔔 请求询问功能已启用，显示确认对话框...');
-                
-                // 🔧 使用右上角弹窗样式的确认对话框
-                const userConfirmed = await this.showAPIRequestConfirmation();
-
-                if (!userConfirmed) {
-                    console.log('[InfoBarSettings] 🚫 用户取消了API调用');
-                    this.showNotification('✅ 已取消自定义API调用', 'info');
-                    return;
-                }
-
-                console.log('[InfoBarSettings] ✅ 用户确认继续API调用');
-            }
+            // 🔧 修复：删除重复的请求确认逻辑
+            // 请求确认已由 CustomAPITaskQueue.executeInfobarDataTask() 统一处理
+            // 避免出现两个确认弹窗
 
             // 🔧 修复：在开始处理前检查中止标志
             if (this._customAPIAborted) {
@@ -22942,7 +23227,8 @@ ${'='.repeat(80)}
 
             // 🔧 新增：获取世界书内容
             let worldBookContent = '';
-            const apiConfig = stContext.extensionSettings['Information bar integration tool']?.apiConfig || {};
+            const context = SillyTavern.getContext();
+            const apiConfig = context.extensionSettings['Information bar integration tool']?.apiConfig || {};
             if (apiConfig.includeWorldBook) {
                 try {
                     worldBookContent = await this.getWorldBookContent();
@@ -22963,6 +23249,7 @@ ${'='.repeat(80)}
             if (variablePrompt) {
                 try {
                     // 手动调用SillyTavern的变量替换功能
+                    const stContext = SillyTavern.getContext();
                     if (typeof stContext.substituteParams === 'function') {
                         variablePrompt = stContext.substituteParams(variablePrompt);
                         console.log('[InfoBarSettings] ✅ 变量替换完成，处理后长度:', variablePrompt.length);
@@ -23011,7 +23298,7 @@ ${'='.repeat(80)}
             });
 
             // 发送自定义API请求（增强重试逻辑）
-            const cfg = stContext.extensionSettings['Information bar integration tool']?.apiConfig || {};
+            const cfg = context.extensionSettings['Information bar integration tool']?.apiConfig || {};
             const maxRetry = Number(cfg.retryCount ?? 5); // 增加默认重试次数
             const baseRetryDelayMs = 2000; // 增加基础延迟时间
 
@@ -27172,6 +27459,75 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
     }
 
     /**
+     * 📊 收集数据表格配置
+     */
+    collectDataTableSettings() {
+        const settings = {};
+
+        try {
+            // 1. 收集启用数据表格
+            const enabledEl = this.modal?.querySelector('#data-table-enabled');
+            if (enabledEl) {
+                settings.enabled = enabledEl.checked;
+            }
+
+            // 2. 收集启用状态栏显示
+            const renderInChatEl = this.modal?.querySelector('#data-table-render-in-chat');
+            if (renderInChatEl) {
+                settings.renderInChatEnabled = renderInChatEl.checked;
+            }
+
+            // 3. 收集信息栏默认折叠
+            const defaultCollapsedEl = this.modal?.querySelector('#data-table-default-collapsed');
+            if (defaultCollapsedEl) {
+                settings.defaultCollapsedEnabled = defaultCollapsedEl.checked;
+            }
+
+            // 4. 收集启用正则表达式过滤
+            const useRegexEl = this.modal?.querySelector('#data-table-use-regex');
+            if (useRegexEl) {
+                settings.useRegexFilter = useRegexEl.checked;
+            }
+
+            // 5. 收集API模式
+            const apiModeBtn = this.modal?.querySelector('.data-table-api-mode-btn.active');
+            if (apiModeBtn) {
+                settings.apiMode = apiModeBtn.getAttribute('data-mode') || 'custom';
+            } else {
+                settings.apiMode = 'custom'; // 默认自定义API模式
+            }
+
+            // 6. 收集数据表格功能设置
+            const mergeMessagesEl = this.modal?.querySelector('#data-table-merge-messages');
+            if (mergeMessagesEl) {
+                settings.mergeMessages = mergeMessagesEl.checked;
+            }
+
+            const delayedGenerationEl = this.modal?.querySelector('#data-table-delayed-generation');
+            if (delayedGenerationEl) {
+                settings.delayedGeneration = delayedGenerationEl.checked;
+            }
+
+            const delayFloorsEl = this.modal?.querySelector('#data-table-delay-floors');
+            if (delayFloorsEl) {
+                settings.delayFloors = parseInt(delayFloorsEl.value) || 1;
+            }
+
+            const minMessageLengthEl = this.modal?.querySelector('#data-table-min-message-length');
+            if (minMessageLengthEl) {
+                settings.minMessageLength = parseInt(minMessageLengthEl.value) || 500;
+            }
+
+            console.log('[InfoBarSettings] 📊 收集到数据表格配置:', settings);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 收集数据表格配置失败:', error);
+        }
+
+        return settings;
+    }
+
+    /**
      * 🔧 修复：收集NPC管理面板的设置
      * 这些控件没有 name 属性，需要单独收集
      */
@@ -27309,7 +27665,13 @@ add tasks(1 {"1","新任务创建","2","任务编辑中","3","进行中"})
                 settings.authorStyleDepth = authorStyleDepthEl.value;
             }
 
-            // 7. 保留现有的提示词模板（不从DOM收集，因为是通过编辑器单独保存的）
+            // 🆕 7. 收集正则表达式过滤配置
+            const useRegexFilterEl = this.modal?.querySelector('#plot-optimization-use-regex');
+            if (useRegexFilterEl) {
+                settings.useRegexFilter = useRegexFilterEl.checked;
+            }
+
+            // 8. 保留现有的提示词模板（不从DOM收集，因为是通过编辑器单独保存的）
             const context = SillyTavern.getContext();
             const existingConfig = context.extensionSettings?.['Information bar integration tool']?.plotOptimization;
             if (existingConfig?.promptTemplate) {
@@ -40148,6 +40510,368 @@ ${dataExamples}
     }
 
     /**
+     * 🆕 初始化API配置面板内容
+     */
+    async initAPIPanelContent() {
+        try {
+            console.log('[InfoBarSettings] 🔌 初始化API配置面板内容...');
+
+            // 🔧 读取配置
+            const context = window.SillyTavern?.getContext?.();
+            const apiConfig = context?.extensionSettings?.['Information bar integration tool']?.apiConfig || {};
+
+            // 绑定读取世界书checkbox事件
+            const includeWorldbookCheckbox = this.modal.querySelector('#api-include-worldbook');
+            if (includeWorldbookCheckbox) {
+                const newCheckbox = includeWorldbookCheckbox.cloneNode(true);
+                includeWorldbookCheckbox.parentNode.replaceChild(newCheckbox, includeWorldbookCheckbox);
+
+                newCheckbox.addEventListener('change', (e) => {
+                    const worldbookSourceSelection = this.modal.querySelector('#worldbook-source-selection');
+                    if (worldbookSourceSelection) {
+                        worldbookSourceSelection.style.display = e.target.checked ? 'block' : 'none';
+                    }
+
+                    console.log('[InfoBarSettings] 📚 读取世界书', e.target.checked ? '启用' : '禁用');
+                });
+
+                // 初始化时根据checkbox状态显示/隐藏世界书来源选择
+                const worldbookSourceSelection = this.modal.querySelector('#worldbook-source-selection');
+                if (worldbookSourceSelection) {
+                    worldbookSourceSelection.style.display = newCheckbox.checked ? 'block' : 'none';
+                }
+            }
+
+            // 绑定世界书来源选择事件
+            const worldbookSourceSelect = this.modal.querySelector('#api-worldbook-source');
+            if (worldbookSourceSelect) {
+                // 🔧 恢复保存的值
+                if (apiConfig.worldbookSource) {
+                    worldbookSourceSelect.value = apiConfig.worldbookSource;
+                    console.log('[InfoBarSettings] 🔄 恢复世界书来源配置:', apiConfig.worldbookSource);
+                }
+
+                const newSelect = worldbookSourceSelect.cloneNode(true);
+                // 🔧 保持恢复的值
+                newSelect.value = worldbookSourceSelect.value;
+                worldbookSourceSelect.parentNode.replaceChild(newSelect, worldbookSourceSelect);
+
+                newSelect.addEventListener('change', async (e) => {
+                    const customSelection = this.modal.querySelector('#custom-worldbook-selection');
+                    if (customSelection) {
+                        const isCustom = e.target.value === 'custom';
+                        customSelection.style.display = isCustom ? 'block' : 'none';
+                        
+                        // 如果切换到自定义模式，加载世界书列表
+                        if (isCustom) {
+                            await this.loadWorldbookListForAPI();
+                        }
+                    }
+
+                    console.log('[InfoBarSettings] 📚 世界书来源切换:', e.target.value);
+                });
+
+                // 初始化时根据选择显示/隐藏自定义世界书选择区域
+                const customSelection = this.modal.querySelector('#custom-worldbook-selection');
+                if (customSelection && newSelect.value === 'custom') {
+                    customSelection.style.display = 'block';
+                    await this.loadWorldbookListForAPI();
+                }
+            }
+
+            // 绑定全选/取消全选按钮
+            const selectAllBtn = this.modal.querySelector('#worldbook-select-all-btn');
+            if (selectAllBtn) {
+                const newBtn = selectAllBtn.cloneNode(true);
+                selectAllBtn.parentNode.replaceChild(newBtn, selectAllBtn);
+
+                newBtn.addEventListener('click', () => {
+                    const checkboxes = this.modal.querySelectorAll('#worldbook-list-container input[type="checkbox"]');
+                    checkboxes.forEach(cb => cb.checked = true);
+                    console.log('[InfoBarSettings] ✅ 已全选世界书');
+                });
+            }
+
+            const deselectAllBtn = this.modal.querySelector('#worldbook-deselect-all-btn');
+            if (deselectAllBtn) {
+                const newBtn = deselectAllBtn.cloneNode(true);
+                deselectAllBtn.parentNode.replaceChild(newBtn, deselectAllBtn);
+
+                newBtn.addEventListener('click', () => {
+                    const checkboxes = this.modal.querySelectorAll('#worldbook-list-container input[type="checkbox"]');
+                    checkboxes.forEach(cb => cb.checked = false);
+                    console.log('[InfoBarSettings] ❌ 已取消全选世界书');
+                });
+            }
+
+            console.log('[InfoBarSettings] ✅ API配置面板内容初始化完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化API配置面板内容失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 加载世界书列表（用于API配置）
+     */
+    async loadWorldbookListForAPI() {
+        try {
+            console.log('[InfoBarSettings] 📚 加载世界书列表...');
+
+            const container = this.modal.querySelector('#worldbook-list-container');
+            if (!container) {
+                console.warn('[InfoBarSettings] ⚠️ 未找到世界书列表容器');
+                return;
+            }
+
+            // 显示加载状态
+            container.innerHTML = '<div style="text-align: center; color: var(--theme-text-secondary, #888); padding: 20px;">加载世界书列表中...</div>';
+
+            // 获取世界书管理器
+            const worldBookManager = window.SillyTavernInfobar?.modules?.worldBookManager;
+            if (!worldBookManager) {
+                container.innerHTML = '<div style="text-align: center; color: #f44336; padding: 20px;">世界书管理器未初始化</div>';
+                return;
+            }
+
+            // 获取所有可用的世界书
+            const worldBooks = await worldBookManager.getAvailableWorldBooks();
+            
+            if (!worldBooks || worldBooks.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: var(--theme-text-secondary, #888); padding: 20px;">未找到可用的世界书</div>';
+                return;
+            }
+
+            // 读取已保存的选择
+            const context = window.SillyTavern?.getContext?.();
+            const apiConfig = context?.extensionSettings?.['Information bar integration tool']?.apiConfig || {};
+            const selectedWorldbooks = apiConfig.customSelectedWorldbooks || [];
+
+            // 生成世界书列表HTML
+            let html = '';
+            worldBooks.forEach(wb => {
+                const bookName = wb.name || wb.uid || 'Unknown';
+                const bookUid = wb.uid || wb.name;
+                const isSelected = selectedWorldbooks.includes(bookUid);
+                
+                html += `
+                    <div class="worldbook-item" style="
+                        padding: 8px 12px;
+                        margin-bottom: 6px;
+                        background: var(--infobar-bg, var(--theme-bg-tertiary, #1a1a1a));
+                        border: 1px solid var(--infobar-border, var(--theme-border-color, #333));
+                        border-radius: 4px;
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        transition: all 0.2s;
+                    " 
+                    onmouseover="this.style.background='var(--infobar-hover, var(--theme-bg-secondary, #2a2a2a))'"
+                    onmouseout="this.style.background='var(--infobar-bg, var(--theme-bg-tertiary, #1a1a1a))'">
+                        <input type="checkbox" 
+                               class="worldbook-checkbox" 
+                               data-worldbook-uid="${this.escapeHtml(bookUid)}" 
+                               ${isSelected ? 'checked' : ''}
+                               style="cursor: pointer; accent-color: var(--infobar-primary, var(--theme-primary-color, #4CAF50));">
+                        <label style="
+                            flex: 1;
+                            cursor: pointer;
+                            margin: 0;
+                            color: var(--infobar-text, var(--theme-text-primary, #ddd));
+                            font-size: 13px;
+                        " onclick="this.previousElementSibling.click()">
+                            📖 ${this.escapeHtml(bookName)}
+                        </label>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+
+            // 绑定checkbox事件
+            const checkboxes = container.querySelectorAll('.worldbook-checkbox');
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', () => {
+                    this.saveSelectedWorldbooks();
+                });
+            });
+
+            console.log('[InfoBarSettings] ✅ 世界书列表加载完成，共', worldBooks.length, '本');
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载世界书列表失败:', error);
+            const container = this.modal.querySelector('#worldbook-list-container');
+            if (container) {
+                container.innerHTML = '<div style="text-align: center; color: #f44336; padding: 20px;">加载失败: ' + error.message + '</div>';
+            }
+        }
+    }
+
+    /**
+     * 🆕 保存选中的世界书
+     */
+    saveSelectedWorldbooks() {
+        try {
+            const checkboxes = this.modal.querySelectorAll('.worldbook-checkbox:checked');
+            const selectedWorldbooks = Array.from(checkboxes).map(cb => cb.getAttribute('data-worldbook-uid'));
+
+            // 保存到配置
+            const context = window.SillyTavern?.getContext?.();
+            const extensionSettings = context?.extensionSettings;
+            if (!extensionSettings['Information bar integration tool'].apiConfig) {
+                extensionSettings['Information bar integration tool'].apiConfig = {};
+            }
+            
+            extensionSettings['Information bar integration tool'].apiConfig.customSelectedWorldbooks = selectedWorldbooks;
+            
+            console.log('[InfoBarSettings] 💾 已保存选中的世界书:', selectedWorldbooks);
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 保存选中世界书失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 初始化数据表格配置面板内容
+     */
+    initDataTableConfigPanelContent() {
+        try {
+            console.log('[InfoBarSettings] 📊 初始化数据表格配置面板内容...');
+
+            // 绑定启用数据表格checkbox事件
+            const enabledCheckbox = this.modal.querySelector('#data-table-enabled');
+            if (enabledCheckbox) {
+                const newCheckbox = enabledCheckbox.cloneNode(true);
+                enabledCheckbox.parentNode.replaceChild(newCheckbox, enabledCheckbox);
+
+                newCheckbox.addEventListener('change', (e) => {
+                    const apiModeSelection = this.modal.querySelector('#data-table-api-mode-selection');
+                    const featuresSection = this.modal.querySelector('#data-table-features-section');
+                    
+                    const display = e.target.checked ? 'block' : 'none';
+                    if (apiModeSelection) apiModeSelection.style.display = display;
+                    if (featuresSection) featuresSection.style.display = display;
+
+                    // 同步到基础设置的checkbox（如果存在）
+                    const basicCheckbox = this.modal.querySelector('#table-records-checkbox');
+                    if (basicCheckbox) {
+                        basicCheckbox.checked = e.target.checked;
+                    }
+
+                    console.log('[InfoBarSettings] 📊 数据表格功能', e.target.checked ? '启用' : '禁用');
+                });
+            }
+
+            // 绑定启用状态栏显示checkbox事件
+            const renderInChatCheckbox = this.modal.querySelector('#data-table-render-in-chat');
+            if (renderInChatCheckbox) {
+                const newCheckbox = renderInChatCheckbox.cloneNode(true);
+                renderInChatCheckbox.parentNode.replaceChild(newCheckbox, renderInChatCheckbox);
+
+                newCheckbox.addEventListener('change', (e) => {
+                    // 同步到基础设置的checkbox（如果存在）
+                    const basicCheckbox = this.modal.querySelector('#render-in-chat-checkbox');
+                    if (basicCheckbox) {
+                        basicCheckbox.checked = e.target.checked;
+                    }
+
+                    console.log('[InfoBarSettings] 📊 状态栏显示', e.target.checked ? '启用' : '禁用');
+                });
+            }
+
+            // 绑定信息栏默认折叠checkbox事件
+            const defaultCollapsedCheckbox = this.modal.querySelector('#data-table-default-collapsed');
+            if (defaultCollapsedCheckbox) {
+                const newCheckbox = defaultCollapsedCheckbox.cloneNode(true);
+                defaultCollapsedCheckbox.parentNode.replaceChild(newCheckbox, defaultCollapsedCheckbox);
+
+                newCheckbox.addEventListener('change', (e) => {
+                    // 同步到基础设置的checkbox（如果存在）
+                    const basicCheckbox = this.modal.querySelector('#default-collapsed-checkbox');
+                    if (basicCheckbox) {
+                        basicCheckbox.checked = e.target.checked;
+                    }
+
+                    console.log('[InfoBarSettings] 📊 信息栏默认折叠', e.target.checked ? '启用' : '禁用');
+                });
+            }
+
+            // 绑定API模式按钮事件
+            const apiModeButtons = this.modal.querySelectorAll('.data-table-api-mode-btn');
+            apiModeButtons.forEach(btn => {
+                const newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
+
+                newBtn.addEventListener('click', async () => {
+                    const mode = newBtn.getAttribute('data-mode');
+
+                    // 🔧 修复：重新查询所有按钮，而不是使用已失效的 NodeList
+                    const currentButtons = this.modal.querySelectorAll('.data-table-api-mode-btn');
+                    currentButtons.forEach(currentBtn => {
+                        if (currentBtn === newBtn) return;
+
+                        // 重置其他按钮的样式
+                        currentBtn.style.background = 'var(--theme-bg-tertiary, #1a1a1a)';
+                        currentBtn.style.border = '1px solid var(--theme-border-color, #333)';
+                        currentBtn.style.fontWeight = 'normal';
+                        currentBtn.classList.remove('active');
+                    });
+
+                    // 设置当前按钮的激活样式
+                    newBtn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+                    newBtn.style.border = 'none';
+                    newBtn.style.fontWeight = '500';
+                    newBtn.classList.add('active');
+
+                    // 更新描述显示
+                    const mainDesc = this.modal.querySelector('.main-mode-desc');
+                    const customDesc = this.modal.querySelector('.custom-mode-desc');
+                    if (mainDesc) mainDesc.style.display = mode === 'main' ? 'block' : 'none';
+                    if (customDesc) customDesc.style.display = mode === 'custom' ? 'block' : 'none';
+
+                    console.log('[InfoBarSettings] 📊 切换数据表格API模式:', mode);
+
+                    // 🔧 修复：保存配置到扩展设置
+                    try {
+                        const context = SillyTavern.getContext();
+                        const extensionSettings = context.extensionSettings;
+                        const configs = extensionSettings['Information bar integration tool'] || {};
+
+                        if (!configs.basic) configs.basic = {};
+                        if (!configs.basic.tableRecords) configs.basic.tableRecords = {};
+
+                        configs.basic.tableRecords.apiMode = mode;
+
+                        extensionSettings['Information bar integration tool'] = configs;
+                        await context.saveSettingsDebounced();
+
+                        console.log('[InfoBarSettings] ✅ 数据表格API模式已保存:', mode);
+                    } catch (error) {
+                        console.error('[InfoBarSettings] ❌ 保存数据表格API模式失败:', error);
+                    }
+                });
+            });
+
+            // 绑定延迟生成checkbox事件
+            const delayedGenCheckbox = this.modal.querySelector('#data-table-delayed-generation');
+            if (delayedGenCheckbox) {
+                const newCheckbox = delayedGenCheckbox.cloneNode(true);
+                delayedGenCheckbox.parentNode.replaceChild(newCheckbox, delayedGenCheckbox);
+
+                newCheckbox.addEventListener('change', (e) => {
+                    const delayedConfig = this.modal.querySelector('.data-table-delayed-config');
+                    if (delayedConfig) {
+                        delayedConfig.style.display = e.target.checked ? 'block' : 'none';
+                    }
+                });
+            }
+
+            console.log('[InfoBarSettings] ✅ 数据表格配置面板内容初始化完成');
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 初始化数据表格配置面板内容失败:', error);
+        }
+    }
+
+    /**
      * 🆕 恢复已缓存的作家文风分析结果
      */
     async restoreAuthorStyleAnalysis() {
@@ -43170,13 +43894,19 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
                 selectAllBtn.addEventListener('click', () => this.toggleSelectAllNpcs());
                 console.log('[InfoBarSettings] 🔗 已绑定全选按钮事件');
             }
-            
+
+            const mergeBtn = this.modal.querySelector('#npc-merge-btn');
+            if (mergeBtn) {
+                mergeBtn.addEventListener('click', () => this.showMergeNPCDialog());
+                console.log('[InfoBarSettings] 🔗 已绑定合并角色按钮事件');
+            }
+
             const batchDeleteBtn = this.modal.querySelector('#npc-batch-delete-btn');
             if (batchDeleteBtn) {
                 batchDeleteBtn.addEventListener('click', () => this.batchDeleteNpcs());
                 console.log('[InfoBarSettings] 🔗 已绑定批量删除按钮事件');
             }
-            
+
             this._batchOperationEventsBound = true;
         }
     }
@@ -43378,6 +44108,7 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
 
         const selectedCount = this.selectedNpcIds.size;
         const countElement = this.modal.querySelector('.npc-count-number');
+        const mergeBtn = this.modal.querySelector('#npc-merge-btn');
         const batchDeleteBtn = this.modal.querySelector('#npc-batch-delete-btn');
         const selectAllBtn = this.modal.querySelector('#npc-select-all-btn');
         const selectAllIcon = this.modal.querySelector('.select-all-icon');
@@ -43387,6 +44118,27 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
             countElement.textContent = selectedCount;
         }
 
+        // 🆕 更新合并按钮状态（只在选中恰好2个NPC时启用）
+        if (mergeBtn) {
+            if (selectedCount === 2) {
+                mergeBtn.disabled = false;
+                mergeBtn.style.opacity = '1';
+                mergeBtn.style.cursor = 'pointer';
+                mergeBtn.onmouseover = () => {
+                    mergeBtn.style.background = 'var(--theme-primary-hover, #45a049)';
+                };
+                mergeBtn.onmouseout = () => {
+                    mergeBtn.style.background = 'var(--theme-primary-color, #4CAF50)';
+                };
+            } else {
+                mergeBtn.disabled = true;
+                mergeBtn.style.opacity = '0.5';
+                mergeBtn.style.cursor = 'not-allowed';
+                mergeBtn.onmouseover = null;
+                mergeBtn.onmouseout = null;
+            }
+        }
+
         // 更新批量删除按钮状态
         if (batchDeleteBtn) {
             if (selectedCount > 0 && !this.batchDeleteInProgress) {
@@ -43394,11 +44146,11 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
                 batchDeleteBtn.style.opacity = '1';
                 batchDeleteBtn.style.cursor = 'pointer';
                 // 🔧 添加悬停效果（使用信息栏主题变量）
-                batchDeleteBtn.onmouseover = () => { 
-                    batchDeleteBtn.style.background = 'var(--theme-bg-danger-hover, #c82333)'; 
+                batchDeleteBtn.onmouseover = () => {
+                    batchDeleteBtn.style.background = 'var(--theme-bg-danger-hover, #c82333)';
                 };
-                batchDeleteBtn.onmouseout = () => { 
-                    batchDeleteBtn.style.background = 'var(--theme-bg-danger, #dc3545)'; 
+                batchDeleteBtn.onmouseout = () => {
+                    batchDeleteBtn.style.background = 'var(--theme-bg-danger, #dc3545)';
                 };
             } else {
                 batchDeleteBtn.disabled = true;
@@ -44186,161 +44938,9 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
         }
     }
 
-    /**
-     * 🔔 显示API请求确认对话框（右上角弹窗样式）
-     */
-    showAPIRequestConfirmation() {
-        return new Promise((resolve) => {
-            try {
-                console.log('[InfoBarSettings] 📋 显示API请求确认对话框（右上角样式）');
-
-                // 创建确认弹窗
-                const toast = document.createElement('div');
-                toast.className = 'custom-api-status-toast confirm';
-                toast.style.opacity = '0'; // 初始透明
-                toast.style.transition = 'opacity 0.3s ease';
-                toast.innerHTML = `
-                    <div class="toast-content">
-                        <div class="toast-header">
-                            <span class="toast-icon">🤖</span>
-                            <span class="toast-title">自定义API调用确认</span>
-                        </div>
-                        <div class="toast-body">
-                            <p>即将调用自定义API生成信息栏数据。</p>
-                            <p class="toast-hint">这将消耗API配额，是否继续？</p>
-                        </div>
-                        <div class="toast-actions">
-                            <button class="btn-cancel">取消</button>
-                            <button class="btn-confirm">确认调用</button>
-                        </div>
-                    </div>
-                `;
-
-                // 添加确认对话框专属样式
-                if (!document.getElementById('api-confirm-toast-styles')) {
-                    const style = document.createElement('style');
-                    style.id = 'api-confirm-toast-styles';
-                    style.textContent = `
-                        .custom-api-status-toast.confirm {
-                            position: fixed;
-                            top: 20px;
-                            right: 20px;
-                            z-index: 1000001;
-                            background: linear-gradient(135deg, #667eea, #764ba2);
-                            color: white;
-                            min-width: 320px;
-                            max-width: 400px;
-                            border-radius: 8px;
-                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-                            animation: slideInRight 0.3s ease-out;
-                        }
-                        @keyframes slideInRight {
-                            from {
-                                transform: translateX(100%);
-                                opacity: 0;
-                            }
-                            to {
-                                transform: translateX(0);
-                                opacity: 1;
-                            }
-                        }
-                        .custom-api-status-toast.confirm .toast-header {
-                            display: flex;
-                            align-items: center;
-                            gap: 8px;
-                            padding: 12px 16px;
-                            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-                        }
-                        .custom-api-status-toast.confirm .toast-icon {
-                            font-size: 20px;
-                        }
-                        .custom-api-status-toast.confirm .toast-title {
-                            font-size: 15px;
-                            font-weight: 600;
-                        }
-                        .custom-api-status-toast.confirm .toast-body {
-                            padding: 12px 16px;
-                        }
-                        .custom-api-status-toast.confirm .toast-body p {
-                            margin: 0 0 8px 0;
-                            font-size: 14px;
-                            line-height: 1.5;
-                        }
-                        .custom-api-status-toast.confirm .toast-body p:last-child {
-                            margin-bottom: 0;
-                        }
-                        .custom-api-status-toast.confirm .toast-hint {
-                            font-size: 13px;
-                            opacity: 0.9;
-                        }
-                        .custom-api-status-toast.confirm .toast-actions {
-                            display: flex;
-                            gap: 8px;
-                            padding: 12px 16px;
-                            border-top: 1px solid rgba(255, 255, 255, 0.2);
-                            justify-content: flex-end;
-                        }
-                        .custom-api-status-toast.confirm .btn-cancel,
-                        .custom-api-status-toast.confirm .btn-confirm {
-                            padding: 6px 16px;
-                            border: none;
-                            border-radius: 4px;
-                            font-size: 13px;
-                            cursor: pointer;
-                            transition: all 0.2s ease;
-                            font-weight: 500;
-                        }
-                        .custom-api-status-toast.confirm .btn-cancel {
-                            background: rgba(255, 255, 255, 0.2);
-                            color: white;
-                        }
-                        .custom-api-status-toast.confirm .btn-cancel:hover {
-                            background: rgba(255, 255, 255, 0.3);
-                        }
-                        .custom-api-status-toast.confirm .btn-confirm {
-                            background: white;
-                            color: #667eea;
-                        }
-                        .custom-api-status-toast.confirm .btn-confirm:hover {
-                            background: #f0f0f0;
-                            transform: translateY(-1px);
-                        }
-                    `;
-                    document.head.appendChild(style);
-                }
-
-                document.body.appendChild(toast);
-
-                // 绑定按钮事件
-                const cancelBtn = toast.querySelector('.btn-cancel');
-                const confirmBtn = toast.querySelector('.btn-confirm');
-
-                const cleanup = () => {
-                    toast.remove();
-                };
-
-                cancelBtn.onclick = () => {
-                    cleanup();
-                    resolve(false);
-                };
-
-                confirmBtn.onclick = () => {
-                    cleanup();
-                    resolve(true);
-                };
-
-                // 淡入动画
-                setTimeout(() => {
-                    toast.style.opacity = '1';
-                }, 10);
-
-            } catch (error) {
-                console.error('[InfoBarSettings] ❌ 显示API请求确认对话框失败:', error);
-                // 降级：返回true继续执行
-                resolve(true);
-            }
-        });
-    }
+    // 🔧 修复：删除重复的 showAPIRequestConfirmation() 方法
+    // 请求确认已由 CustomAPITaskQueue.showConfirmationDialog() 统一处理
+    // 避免出现两个确认弹窗
 
     /**
      * 🔮 处理小说文件上传
@@ -46707,6 +47307,837 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
         } catch (error) {
             console.error('[InfoBarSettings] ❌ 加载预设规则失败:', error);
             this.showMessage('加载预设规则失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 检查版本信息
+     */
+    async checkVersion() {
+        try {
+            console.log('[InfoBarSettings] 🔍 开始检查版本信息...');
+
+            // 1. 读取当前版本（从manifest.json）
+            const currentVersion = await this.getCurrentVersion();
+            
+            // 2. 更新当前版本显示
+            const currentVersionSpan = this.modal.querySelector('#current-version');
+            if (currentVersionSpan) {
+                currentVersionSpan.textContent = currentVersion || 'Unknown';
+                currentVersionSpan.style.color = 'var(--theme-primary-color, #4CAF50)';
+            }
+
+            // 3. 检测最新版本（从GitHub）
+            this.getLatestVersion().then(latestVersion => {
+                const latestVersionSpan = this.modal.querySelector('#latest-version');
+                if (latestVersionSpan) {
+                    latestVersionSpan.textContent = latestVersion || '检测失败';
+                    
+                    // 4. 比较版本并显示状态
+                    if (latestVersion && currentVersion) {
+                        if (this.compareVersions(currentVersion, latestVersion) < 0) {
+                            // 有新版本
+                            latestVersionSpan.style.color = '#ff9800';
+                            const versionDisplay = this.modal.querySelector('#infobar-version-display');
+                            if (versionDisplay) {
+                                versionDisplay.innerHTML = `
+                                    <span id="current-version" style="color: var(--theme-primary-color, #4CAF50);">${currentVersion}</span> / 
+                                    <span id="latest-version" style="color: #ff9800;">${latestVersion}</span>
+                                    <span style="color: #ff9800; margin-left: 8px;">🆕 有新版本</span>
+                                `;
+                            }
+                        } else {
+                            // 已是最新版本
+                            latestVersionSpan.style.color = 'var(--theme-primary-color, #4CAF50)';
+                        }
+                    }
+                }
+            }).catch(error => {
+                console.warn('[InfoBarSettings] ⚠️ 获取最新版本失败:', error);
+                const latestVersionSpan = this.modal.querySelector('#latest-version');
+                if (latestVersionSpan) {
+                    latestVersionSpan.textContent = '检测失败';
+                    latestVersionSpan.style.color = '#888';
+                }
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 检查版本信息失败:', error);
+        }
+    }
+
+    /**
+     * 🆕 获取当前版本（从manifest.json）
+     */
+    async getCurrentVersion() {
+        try {
+            const manifestPath = 'scripts/extensions/third-party/Information bar integration tool/manifest.json';
+            const response = await fetch(manifestPath);
+            
+            if (!response.ok) {
+                console.warn('[InfoBarSettings] ⚠️ 无法读取manifest.json');
+                return null;
+            }
+            
+            const manifest = await response.json();
+            return manifest.version || null;
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取当前版本失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🆕 获取最新版本（从GitHub）
+     */
+    async getLatestVersion() {
+        try {
+            const githubUrl = 'https://raw.githubusercontent.com/loveyouguhan/Information-bar-integration-tool/main/manifest.json';
+            
+            const response = await fetch(githubUrl, {
+                method: 'GET',
+                cache: 'no-cache',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                console.warn('[InfoBarSettings] ⚠️ 无法从GitHub获取最新版本');
+                return null;
+            }
+            
+            const manifest = await response.json();
+            return manifest.version || null;
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取最新版本失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🆕 比较版本号
+     * @returns {number} -1: v1 < v2, 0: v1 = v2, 1: v1 > v2
+     */
+    compareVersions(v1, v2) {
+        try {
+            const parts1 = v1.split('.').map(Number);
+            const parts2 = v2.split('.').map(Number);
+            
+            for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+                const part1 = parts1[i] || 0;
+                const part2 = parts2[i] || 0;
+                
+                if (part1 < part2) return -1;
+                if (part1 > part2) return 1;
+            }
+            
+            return 0;
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 比较版本号失败:', error);
+            return 0;
+        }
+    }
+
+    /**
+     * 🆕 加载公告信息
+     */
+    async loadAnnouncement() {
+        try {
+            console.log('[InfoBarSettings] 📢 开始加载公告信息...');
+
+            const announcementContent = this.modal.querySelector('#announcement-content');
+            if (!announcementContent) {
+                console.warn('[InfoBarSettings] ⚠️ 未找到公告显示元素');
+                return;
+            }
+
+            // 显示加载状态
+            announcementContent.textContent = '加载公告中...';
+            announcementContent.style.color = 'var(--theme-text-secondary, #888)';
+
+            // 从GitHub获取公告内容
+            const announcement = await this.getAnnouncementFromGitHub();
+            
+            if (announcement && announcementContent) {
+                announcementContent.textContent = announcement;
+                announcementContent.style.color = 'var(--theme-primary-color, #4CAF50)';
+                console.log('[InfoBarSettings] ✅ 公告加载成功:', announcement);
+            } else {
+                announcementContent.textContent = '暂无公告';
+                announcementContent.style.color = 'var(--theme-text-secondary, #666)';
+                console.log('[InfoBarSettings] ℹ️ 未获取到公告内容');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 加载公告信息失败:', error);
+            const announcementContent = this.modal.querySelector('#announcement-content');
+            if (announcementContent) {
+                announcementContent.textContent = '公告加载失败';
+                announcementContent.style.color = 'var(--theme-text-secondary, #666)';
+            }
+        }
+    }
+
+    /**
+     * 🆕 从GitHub获取公告内容
+     */
+    async getAnnouncementFromGitHub() {
+        try {
+            const githubUrl = 'https://raw.githubusercontent.com/loveyouguhan/Information-bar-integration-tool/main/gonggao';
+            
+            const response = await fetch(githubUrl, {
+                method: 'GET',
+                cache: 'no-cache',
+                headers: {
+                    'Accept': 'text/plain'
+                }
+            });
+            
+            if (!response.ok) {
+                console.warn('[InfoBarSettings] ⚠️ 无法从GitHub获取公告');
+                return null;
+            }
+            
+            const content = await response.text();
+            
+            // 解析公告格式: gonggao = 公告内容
+            const match = content.match(/gonggao\s*=\s*(.+)/);
+            if (match && match[1]) {
+                const announcement = match[1].trim();
+                console.log('[InfoBarSettings] 📢 解析到公告内容:', announcement);
+                return announcement;
+            }
+            
+            // 如果没有匹配到格式，返回整个内容
+            if (content && content.trim()) {
+                console.log('[InfoBarSettings] 📢 使用原始公告内容');
+                return content.trim();
+            }
+            
+            return null;
+            
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 获取GitHub公告失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 🆕 显示合并NPC对话框
+     */
+    async showMergeNPCDialog() {
+        try {
+            if (this.selectedNpcIds.size !== 2) {
+                this.showToast('请选择恰好2个NPC进行合并', 'warning');
+                return;
+            }
+
+            const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+            if (!npcDB) {
+                console.error('[InfoBarSettings] ❌ NPC数据库模块未找到');
+                return;
+            }
+
+            // 获取选中的两个NPC
+            const selectedIds = Array.from(this.selectedNpcIds);
+            const npc1 = npcDB.db.npcs[selectedIds[0]];
+            const npc2 = npcDB.db.npcs[selectedIds[1]];
+
+            if (!npc1 || !npc2) {
+                this.showToast('无法找到选中的NPC', 'error');
+                return;
+            }
+
+            console.log('[InfoBarSettings] 🔀 准备合并NPC:', npc1.name, '和', npc2.name);
+
+            // 创建合并窗口
+            const { html, styles } = this.createMergeNPCDialogHTML(npc1, npc2);
+
+            const container = document.createElement('div');
+            container.innerHTML = html;
+            document.body.appendChild(container.firstElementChild);
+
+            // 🔧 添加样式到head
+            const styleElement = document.createElement('style');
+            styleElement.id = 'merge-npc-dialog-styles';
+            styleElement.textContent = styles;
+            document.head.appendChild(styleElement);
+
+            const overlay = document.getElementById('merge-npc-overlay');
+
+            // 关闭对话框
+            const closeDialog = () => {
+                if (overlay && overlay.parentNode) {
+                    overlay.parentNode.removeChild(overlay);
+                }
+                // 🔧 移除样式
+                const styleEl = document.getElementById('merge-npc-dialog-styles');
+                if (styleEl && styleEl.parentNode) {
+                    styleEl.parentNode.removeChild(styleEl);
+                }
+            };
+
+            // 绑定关闭事件
+            overlay.querySelector('[data-action="close-merge"]').addEventListener('click', closeDialog);
+            overlay.querySelector('[data-action="cancel-merge"]').addEventListener('click', closeDialog);
+
+            // 点击遮罩层关闭
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    closeDialog();
+                }
+            });
+
+            // 绑定合并确认事件
+            overlay.querySelector('[data-action="confirm-merge"]').addEventListener('click', async () => {
+                await this.handleMergeNPCConfirm(npc1, npc2, overlay);
+            });
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 显示合并对话框失败:', error);
+            this.showToast('显示合并对话框失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 🆕 创建合并NPC对话框HTML
+     */
+    createMergeNPCDialogHTML(npc1, npc2) {
+        // 获取所有字段的并集
+        const allFields = new Set([
+            ...Object.keys(npc1.fields || {}),
+            ...Object.keys(npc2.fields || {})
+        ]);
+
+        // 生成字段对比HTML - 改为卡片式横向布局
+        let fieldsHtml = '';
+
+        // 基础信息：名称
+        fieldsHtml += `
+            <div class="merge-field-row">
+                <div class="merge-field-label">名称</div>
+                <div class="merge-field-cards">
+                    <label class="merge-card merge-card-npc1">
+                        <input type="radio" name="field_name" value="npc1" checked>
+                        <div class="merge-card-header">
+                            <span class="merge-card-badge">角色1</span>
+                        </div>
+                        <div class="merge-card-value">${this.escapeHtml(npc1.name)}</div>
+                    </label>
+                    <label class="merge-card merge-card-npc2">
+                        <input type="radio" name="field_name" value="npc2">
+                        <div class="merge-card-header">
+                            <span class="merge-card-badge">角色2</span>
+                        </div>
+                        <div class="merge-card-value">${this.escapeHtml(npc2.name)}</div>
+                    </label>
+                </div>
+            </div>
+        `;
+
+        // 其他字段
+        for (const fieldName of allFields) {
+            const value1 = npc1.fields[fieldName];
+            const value2 = npc2.fields[fieldName];
+
+            // 如果两个值相同，只显示一个选项
+            if (value1 === value2 && value1 !== undefined) {
+                fieldsHtml += `
+                    <div class="merge-field-row">
+                        <div class="merge-field-label">${this.escapeHtml(fieldName)}</div>
+                        <div class="merge-field-cards merge-field-same">
+                            <div class="merge-card merge-card-same">
+                                <input type="radio" name="field_${this.escapeHtml(fieldName)}" value="same" checked style="display: none;">
+                                <div class="merge-card-header">
+                                    <span class="merge-card-badge merge-badge-same">相同</span>
+                                </div>
+                                <div class="merge-card-value">${this.escapeHtml(String(value1))}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // 值不同，显示两个选项
+                const hasValue1 = value1 !== undefined && value1 !== null && value1 !== '';
+                const hasValue2 = value2 !== undefined && value2 !== null && value2 !== '';
+
+                fieldsHtml += `
+                    <div class="merge-field-row">
+                        <div class="merge-field-label">${this.escapeHtml(fieldName)}</div>
+                        <div class="merge-field-cards">
+                            <label class="merge-card merge-card-npc1 ${!hasValue1 ? 'merge-card-empty' : ''}">
+                                <input type="radio" name="field_${this.escapeHtml(fieldName)}" value="npc1" ${hasValue1 ? 'checked' : ''} ${!hasValue1 ? 'disabled' : ''}>
+                                <div class="merge-card-header">
+                                    <span class="merge-card-badge">角色1</span>
+                                </div>
+                                <div class="merge-card-value">${hasValue1 ? this.escapeHtml(String(value1)) : '<span class="merge-empty-text">无数据</span>'}</div>
+                            </label>
+                            <label class="merge-card merge-card-npc2 ${!hasValue2 ? 'merge-card-empty' : ''}">
+                                <input type="radio" name="field_${this.escapeHtml(fieldName)}" value="npc2" ${!hasValue1 && hasValue2 ? 'checked' : ''} ${!hasValue2 ? 'disabled' : ''}>
+                                <div class="merge-card-header">
+                                    <span class="merge-card-badge">角色2</span>
+                                </div>
+                                <div class="merge-card-value">${hasValue2 ? this.escapeHtml(String(value2)) : '<span class="merge-empty-text">无数据</span>'}</div>
+                            </label>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // 🔧 分离HTML和样式
+        const html = `
+            <div id="merge-npc-overlay" class="regex-overlay" style="
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                backdrop-filter: blur(4px);
+            ">
+                <div class="regex-modal" style="
+                    background: var(--theme-bg-primary, var(--SmartThemeBodyColor, #1a1a1a));
+                    border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
+                    border-radius: 8px;
+                    width: 90%;
+                    max-width: 800px;
+                    max-height: 90vh;
+                    display: flex;
+                    flex-direction: column;
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+                ">
+                    <div class="regex-modal-header" style="
+                        padding: 16px 20px;
+                        border-bottom: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                    ">
+                        <h3 style="margin: 0; color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));">
+                            🔀 合并角色
+                        </h3>
+                        <button data-action="close-merge" style="
+                            background: none;
+                            border: none;
+                            color: var(--theme-text-secondary, #999);
+                            font-size: 24px;
+                            cursor: pointer;
+                            padding: 0;
+                            width: 30px;
+                            height: 30px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        ">×</button>
+                    </div>
+
+                    <div class="regex-modal-body" style="
+                        padding: 20px;
+                        overflow-y: auto;
+                        flex: 1;
+                    ">
+                        <div class="merge-info" style="
+                            background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a));
+                            padding: 12px 16px;
+                            border-radius: 6px;
+                            margin-bottom: 20px;
+                            border-left: 3px solid var(--theme-primary-color, #4CAF50);
+                        ">
+                            <div style="color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd)); margin-bottom: 8px;">
+                                <strong>合并说明：</strong>
+                            </div>
+                            <div style="color: var(--theme-text-secondary, #999); font-size: 13px; line-height: 1.6;">
+                                • 正在合并：<strong>${this.escapeHtml(npc1.name)}</strong> 和 <strong>${this.escapeHtml(npc2.name)}</strong><br>
+                                • 请为每个字段选择要保留的值<br>
+                                • 合并后将保留第一个NPC，删除第二个NPC<br>
+                                • 此操作不可撤销，请谨慎选择
+                            </div>
+                        </div>
+
+                        <div class="merge-fields-container">
+                            ${fieldsHtml}
+                        </div>
+                    </div>
+
+                    <div class="regex-modal-footer" style="
+                        padding: 16px 20px;
+                        border-top: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
+                        display: flex;
+                        gap: 10px;
+                        justify-content: flex-end;
+                    ">
+                        <button data-action="cancel-merge" class="regex-btn regex-btn-secondary" style="
+                            padding: 8px 20px;
+                            background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a));
+                            color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                            border: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #444));
+                            border-radius: 4px;
+                            cursor: pointer;
+                        ">取消</button>
+                        <button data-action="confirm-merge" class="regex-btn regex-btn-primary" style="
+                            padding: 8px 20px;
+                            background: var(--theme-primary-color, #4CAF50);
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                        ">确认合并</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 🔧 样式单独定义
+        const styles = `
+            /* 🔧 合并对话框 - 卡片式横向布局 */
+            .merge-field-row {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                padding: 16px 12px;
+                border-bottom: 1px solid var(--theme-border-color, var(--SmartThemeBorderColor, #2a2a2a));
+            }
+
+            .merge-field-row:last-child {
+                border-bottom: none;
+            }
+
+            .merge-field-label {
+                font-weight: 600;
+                font-size: 14px;
+                color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                margin-bottom: 4px;
+            }
+
+            /* 卡片容器 - 横向布局 */
+            .merge-field-cards {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+            }
+
+            /* 相同值时只显示一个卡片 */
+            .merge-field-same {
+                grid-template-columns: 1fr;
+            }
+
+            /* 卡片样式 */
+            .merge-card {
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                padding: 12px;
+                background: var(--theme-bg-secondary, var(--SmartThemeSurfaceColor, #2a2a2a));
+                border: 2px solid var(--theme-border-color, var(--SmartThemeBorderColor, #333));
+                border-radius: 8px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                min-height: 80px;
+            }
+
+            .merge-card input[type="radio"] {
+                position: absolute;
+                opacity: 0;
+                pointer-events: none;
+            }
+
+            .merge-card:hover:not(.merge-card-empty) {
+                border-color: var(--theme-primary-color, var(--SmartThemePrimaryColor, #4CAF50));
+                background: var(--theme-bg-hover, var(--SmartThemeQuoteColor, #333));
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            }
+
+            /* 选中状态 */
+            .merge-card input[type="radio"]:checked ~ .merge-card-header .merge-card-badge {
+                background: var(--theme-primary-color, var(--SmartThemePrimaryColor, #4CAF50));
+                color: white;
+            }
+
+            .merge-card input[type="radio"]:checked ~ .merge-card-value {
+                font-weight: 500;
+                color: var(--theme-text-primary, var(--SmartThemeTextColor, #fff));
+            }
+
+            /* 空数据卡片 */
+            .merge-card-empty {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            .merge-card-empty:hover {
+                transform: none;
+                box-shadow: none;
+            }
+
+            /* 相同值卡片 */
+            .merge-card-same {
+                border-color: var(--theme-primary-color, var(--SmartThemePrimaryColor, #4CAF50));
+                cursor: default;
+            }
+
+            .merge-card-same:hover {
+                transform: none;
+            }
+
+            /* 卡片头部 */
+            .merge-card-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 8px;
+            }
+
+            /* 卡片标签 */
+            .merge-card-badge {
+                padding: 4px 10px;
+                background: var(--theme-bg-tertiary, var(--SmartThemeBlurTintColor, #444));
+                color: var(--theme-text-secondary, var(--SmartThemeQuoteColor, #999));
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                transition: all 0.2s ease;
+            }
+
+            .merge-badge-same {
+                background: var(--theme-primary-color, var(--SmartThemePrimaryColor, #4CAF50));
+                color: white;
+            }
+
+            /* 卡片值 */
+            .merge-card-value {
+                flex: 1;
+                color: var(--theme-text-primary, var(--SmartThemeTextColor, #ddd));
+                word-break: break-word;
+                line-height: 1.5;
+                font-size: 13px;
+            }
+
+            /* 空数据文本 */
+            .merge-empty-text {
+                color: var(--theme-text-secondary, var(--SmartThemeQuoteColor, #999));
+                font-style: italic;
+            }
+
+            /* 🔧 移动端适配 - 参考NPC详情窗口 */
+            @media (max-width: 768px) {
+                /* 🔧 修复：overlay全屏显示 */
+                #merge-npc-overlay {
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    z-index: 1000000 !important;
+                    display: flex !important;
+                    align-items: flex-start !important;
+                    justify-content: center !important;
+                    padding: 5vh 10px 10px 10px !important;
+                }
+
+                /* 🔧 修复：modal全屏显示 */
+                .regex-modal {
+                    width: 100% !important;
+                    max-width: none !important;
+                    max-height: 90vh !important;
+                    border-radius: 12px !important;
+                    overflow: hidden !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                }
+
+                /* 🔧 修复：header紧凑布局 */
+                .regex-modal-header {
+                    padding: 12px 16px !important;
+                    position: sticky !important;
+                    top: 0 !important;
+                    z-index: 10 !important;
+                    flex-shrink: 0 !important;
+                }
+
+                .regex-modal-header h3 {
+                    font-size: 16px !important;
+                }
+
+                /* 🔧 修复：关闭按钮可点击 */
+                [data-action="close-merge"] {
+                    width: 36px !important;
+                    height: 36px !important;
+                    font-size: 28px !important;
+                    border-radius: 6px !important;
+                    border: 1px solid var(--theme-border-color, #555) !important;
+                    z-index: 100 !important;
+                }
+
+                [data-action="close-merge"]:active {
+                    background: var(--theme-bg-danger, #dc3545) !important;
+                    transform: scale(0.95) !important;
+                }
+
+                /* 🔧 修复：body可滚动 */
+                .regex-modal-body {
+                    flex: 1 !important;
+                    overflow-y: auto !important;
+                    -webkit-overflow-scrolling: touch !important;
+                    padding: 12px 16px !important;
+                }
+
+                /* 🔧 修复：footer紧凑布局 */
+                .regex-modal-footer {
+                    padding: 12px 16px !important;
+                    position: sticky !important;
+                    bottom: 0 !important;
+                    z-index: 10 !important;
+                    flex-shrink: 0 !important;
+                    background: var(--theme-bg-primary, #1a1a1a) !important;
+                }
+
+                /* 🔧 修复：按钮全宽 */
+                .regex-modal-footer button {
+                    flex: 1 !important;
+                    padding: 12px 16px !important;
+                    font-size: 14px !important;
+                }
+
+                /* 🔧 合并说明紧凑布局 */
+                .merge-info {
+                    padding: 10px 12px !important;
+                    margin-bottom: 16px !important;
+                    font-size: 12px !important;
+                }
+
+                .merge-info strong {
+                    font-size: 13px !important;
+                }
+
+                /* 🔧 字段行紧凑布局 */
+                .merge-field-row {
+                    padding: 12px 8px !important;
+                    gap: 10px !important;
+                }
+
+                .merge-field-label {
+                    font-size: 13px !important;
+                    font-weight: 600 !important;
+                }
+
+                /* 🔧 卡片容器：保持横向布局（左右显示） */
+                .merge-field-cards {
+                    grid-template-columns: 1fr 1fr !important; /* 保持两列 */
+                    gap: 8px !important;
+                }
+
+                /* 🔧 卡片紧凑布局 */
+                .merge-card {
+                    min-height: 60px !important;
+                    padding: 8px !important;
+                }
+
+                .merge-card-badge {
+                    font-size: 10px !important;
+                    padding: 2px 6px !important;
+                }
+
+                .merge-card-value {
+                    font-size: 12px !important;
+                    line-height: 1.4 !important;
+                }
+
+                .merge-empty-text {
+                    font-size: 11px !important;
+                }
+            }
+        `;
+
+        return { html, styles };
+    }
+
+    /**
+     * 🆕 处理合并NPC确认
+     */
+    async handleMergeNPCConfirm(npc1, npc2, overlay) {
+        try {
+            console.log('[InfoBarSettings] 🔀 开始合并NPC...');
+
+            // 收集用户选择的字段值
+            const mergedData = {
+                name: npc1.name, // 默认使用npc1的名称
+                fields: {}
+            };
+
+            // 获取名称选择
+            const nameChoice = overlay.querySelector('input[name="field_name"]:checked')?.value;
+            if (nameChoice === 'npc2') {
+                mergedData.name = npc2.name;
+            }
+
+            // 获取所有字段的并集
+            const allFields = new Set([
+                ...Object.keys(npc1.fields || {}),
+                ...Object.keys(npc2.fields || {})
+            ]);
+
+            // 收集每个字段的选择
+            for (const fieldName of allFields) {
+                const radioName = `field_${fieldName}`;
+                const selectedRadio = overlay.querySelector(`input[name="${radioName}"]:checked`);
+
+                if (selectedRadio) {
+                    const choice = selectedRadio.value;
+
+                    if (choice === 'same') {
+                        // 相同值，使用任意一个
+                        mergedData.fields[fieldName] = npc1.fields[fieldName];
+                    } else if (choice === 'npc1') {
+                        mergedData.fields[fieldName] = npc1.fields[fieldName];
+                    } else if (choice === 'npc2') {
+                        mergedData.fields[fieldName] = npc2.fields[fieldName];
+                    }
+                }
+            }
+
+            console.log('[InfoBarSettings] 📊 合并后的数据:', mergedData);
+
+            // 调用NPCDatabaseManager的合并方法
+            const npcDB = window.SillyTavernInfobar?.modules?.npcDatabaseManager;
+            if (!npcDB) {
+                throw new Error('NPC数据库模块未找到');
+            }
+
+            // 执行合并
+            const success = await npcDB.mergeNPCs(npc1.id, npc2.id, mergedData);
+
+            if (success) {
+                console.log('[InfoBarSettings] ✅ NPC合并成功');
+                this.showToast(`成功合并 "${npc1.name}" 和 "${npc2.name}"`, 'success');
+
+                // 清空选中状态
+                this.selectedNpcIds.clear();
+
+                // 刷新NPC列表
+                await this.refreshNPCList();
+
+                // 关闭对话框
+                if (overlay && overlay.parentNode) {
+                    overlay.parentNode.removeChild(overlay);
+                }
+            } else {
+                throw new Error('合并操作失败');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarSettings] ❌ 合并NPC失败:', error);
+            this.showToast('合并NPC失败: ' + error.message, 'error');
         }
     }
 }

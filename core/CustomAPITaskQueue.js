@@ -101,8 +101,8 @@ export class CustomAPITaskQueue {
      */
     async init() {
         try {
-            // 🆕 恢复延迟生成状态
-            await this.restoreDelayedGenerationState();
+            // 🔧 修复：仅恢复状态，不立即处理任务
+            await this.restoreDelayedGenerationState(false);
 
             // 启动队列处理器
             this.startQueueProcessor();
@@ -157,7 +157,38 @@ export class CustomAPITaskQueue {
                 });
             }
 
+            // 🔧 新增：监听聊天切换事件
+            this.eventSystem.on('chat_changed', async (data) => {
+                await this.handleChatSwitch(data);
+            });
+
             console.log('[CustomAPITaskQueue] 🔗 事件监听器已绑定');
+        }
+    }
+
+    /**
+     * 🔧 新增：处理聊天切换事件
+     */
+    async handleChatSwitch(data) {
+        try {
+            console.log('[CustomAPITaskQueue] 🔄 检测到聊天切换，清理延迟生成状态...');
+
+            // 保存当前聊天的延迟生成状态
+            await this.saveDelayedGenerationState();
+
+            // 清空当前状态
+            this.aiMessageCounter = 0;
+            this.delayedTaskQueue = [];
+
+            console.log('[CustomAPITaskQueue] 🧹 延迟生成状态已清空');
+
+            // 恢复新聊天的延迟生成状态（不立即处理）
+            await this.restoreDelayedGenerationState(false);
+
+            console.log('[CustomAPITaskQueue] ✅ 聊天切换处理完成');
+
+        } catch (error) {
+            console.error('[CustomAPITaskQueue] ❌ 处理聊天切换失败:', error);
         }
     }
 
@@ -166,8 +197,27 @@ export class CustomAPITaskQueue {
      */
     async handleMainAPIResponse(data) {
         try {
+            // 🔧 修复：message_received事件传递的是消息ID（数字），需要获取消息对象
+            let messageData = data;
+
+            // 如果data是数字（消息ID），从聊天中获取消息对象
+            if (typeof data === 'number') {
+                const context = SillyTavern?.getContext?.();
+                const chat = context?.chat;
+                if (!chat || !Array.isArray(chat)) {
+                    console.log('[CustomAPITaskQueue] ⚠️ 无法获取聊天数据');
+                    return;
+                }
+
+                messageData = chat[data];
+                if (!messageData) {
+                    console.log('[CustomAPITaskQueue] ⚠️ 无法找到消息ID对应的消息:', data);
+                    return;
+                }
+            }
+
             // 检查是否为AI消息
-            if (!data || data.is_user === true) {
+            if (!messageData || messageData.is_user === true) {
                 return;
             }
 
@@ -186,8 +236,35 @@ export class CustomAPITaskQueue {
                 return;
             }
 
-            // 获取消息内容
-            const messageContent = data.mes || '';
+            // 🔧 新增：检查数据表格的API模式配置
+            const tableRecordsAPIMode = basicSettings.tableRecords?.apiMode || 'auto';
+            const apiConfig = extensionSettings.apiConfig || {};
+            const isGlobalCustomAPIEnabled = apiConfig.enabled && apiConfig.apiKey && apiConfig.model;
+
+            // 判断数据表格应该使用哪个API
+            let tableRecordsTargetAPI = 'main';
+            if (tableRecordsAPIMode === 'custom') {
+                tableRecordsTargetAPI = 'custom';
+            } else if (tableRecordsAPIMode === 'main') {
+                tableRecordsTargetAPI = 'main';
+            } else if (tableRecordsAPIMode === 'auto') {
+                tableRecordsTargetAPI = isGlobalCustomAPIEnabled ? 'custom' : 'main';
+            }
+
+            console.log('[CustomAPITaskQueue] 🎯 数据表格API模式配置:', {
+                apiMode: tableRecordsAPIMode,
+                targetAPI: tableRecordsTargetAPI,
+                globalCustomAPIEnabled: isGlobalCustomAPIEnabled
+            });
+
+            // 🔧 修复：如果数据表格配置为主API模式，不添加自定义API任务
+            if (tableRecordsTargetAPI === 'main') {
+                console.log('[CustomAPITaskQueue] ℹ️ 数据表格配置为主API模式，跳过自定义API任务');
+                return;
+            }
+
+            // 🔧 修复：从messageData获取消息内容
+            const messageContent = messageData.mes || '';
 
             // 🔧 新增：检查消息字数是否达到阈值
             const messageLength = messageContent.length;
@@ -216,16 +293,23 @@ export class CustomAPITaskQueue {
                 return;
             }
 
-            // 🆕 检查是否启用延迟生成
-            const apiConfig = extensionSettings.apiConfig || {};
+            // 🆕 检查是否启用延迟生成（apiConfig已在上面定义）
             const delayedGeneration = apiConfig.delayedGeneration === true;
             const delayFloors = parseInt(apiConfig.delayFloors) || 1;
 
             if (delayedGeneration) {
                 console.log(`[CustomAPITaskQueue] ⏱️ 延迟生成已启用，延迟 ${delayFloors} 层`);
 
+                // 🔧 修复：检查是否已经处理过这条消息（防止同层重复结算）
+                const existingTask = this.delayedTaskQueue.find(t => t.contentHash === contentHash);
+                if (existingTask) {
+                    console.log('[CustomAPITaskQueue] ⏸️ 该消息已在延迟队列中，跳过重复添加');
+                    return;
+                }
+
                 // 增加AI消息计数器
                 this.aiMessageCounter++;
+                console.log(`[CustomAPITaskQueue] 📊 AI消息计数器增加: ${this.aiMessageCounter}`);
 
                 // 将当前任务添加到延迟队列
                 this.delayedTaskQueue.push({
@@ -242,7 +326,8 @@ export class CustomAPITaskQueue {
                 // 🆕 保存延迟生成状态
                 await this.saveDelayedGenerationState();
 
-                // 处理延迟队列中符合条件的任务
+                // 🔧 修复：只有当计数器真正增加时才处理延迟队列
+                console.log(`[CustomAPITaskQueue] 🔄 检查是否有符合条件的延迟任务...`);
                 await this.processDelayedTasks(delayFloors);
 
             } else {
@@ -290,13 +375,127 @@ export class CustomAPITaskQueue {
 
     /**
      * 处理生成结束事件
+     * 🔧 修复：在generation_ended事件中检查是否需要添加自定义API任务
+     * 这是为了处理"两个功能都配置为自定义API"的情况，此时主API不会生成内容，也不会触发message_received事件
      */
     async handleGenerationEnded(data) {
         try {
             console.log('[CustomAPITaskQueue] 🏁 检测到生成结束事件');
 
-            // 可以在这里添加生成结束后的特殊处理逻辑
-            // 例如：清理过期任务、更新统计信息等
+            // 🔧 新增：检查是否需要添加自定义API任务
+            const context = SillyTavern?.getContext?.();
+            const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
+            const basicSettings = extensionSettings.basic || {};
+            const memoryEnhancementSettings = extensionSettings?.memoryEnhancement?.ai || {};
+
+            // 检查数据表格是否启用
+            const tableRecordsEnabled = basicSettings.tableRecords?.enabled !== false;
+            // 🔧 新增：检查AI记忆总结是否启用
+            const aiMemorySummaryEnabled = memoryEnhancementSettings.enabled === true;
+
+            // 如果两个功能都未启用，跳过
+            if (!tableRecordsEnabled && !aiMemorySummaryEnabled) {
+                console.log('[CustomAPITaskQueue] ℹ️ 数据表格和AI记忆总结都已禁用，跳过任务添加');
+                return;
+            }
+
+            // 检查API模式配置
+            const tableRecordsAPIMode = basicSettings.tableRecords?.apiMode || 'auto';
+            const aiMemorySummaryAPIMode = memoryEnhancementSettings.apiMode || 'auto';
+            const apiConfig = extensionSettings.apiConfig || {};
+            const isGlobalCustomAPIEnabled = apiConfig.enabled && apiConfig.apiKey && apiConfig.model;
+
+            // 判断数据表格应该使用哪个API
+            let tableRecordsTargetAPI = 'main';
+            if (tableRecordsAPIMode === 'custom') {
+                tableRecordsTargetAPI = 'custom';
+            } else if (tableRecordsAPIMode === 'main') {
+                tableRecordsTargetAPI = 'main';
+            } else if (tableRecordsAPIMode === 'auto') {
+                tableRecordsTargetAPI = isGlobalCustomAPIEnabled ? 'custom' : 'main';
+            }
+
+            // 🔧 新增：判断AI记忆总结应该使用哪个API
+            let aiMemorySummaryTargetAPI = 'main';
+            if (aiMemorySummaryAPIMode === 'custom') {
+                aiMemorySummaryTargetAPI = 'custom';
+            } else if (aiMemorySummaryAPIMode === 'main') {
+                aiMemorySummaryTargetAPI = 'main';
+            } else if (aiMemorySummaryAPIMode === 'auto') {
+                aiMemorySummaryTargetAPI = isGlobalCustomAPIEnabled ? 'custom' : 'main';
+            }
+
+            console.log('[CustomAPITaskQueue] 🎯 API模式配置:', {
+                tableRecords: {
+                    enabled: tableRecordsEnabled,
+                    apiMode: tableRecordsAPIMode,
+                    targetAPI: tableRecordsTargetAPI
+                },
+                aiMemorySummary: {
+                    enabled: aiMemorySummaryEnabled,
+                    apiMode: aiMemorySummaryAPIMode,
+                    targetAPI: aiMemorySummaryTargetAPI
+                },
+                globalCustomAPIEnabled: isGlobalCustomAPIEnabled
+            });
+
+            // 🔧 修复：检查是否需要添加任务（至少有一个功能配置为自定义API）
+            const needTableRecordsTask = tableRecordsEnabled && tableRecordsTargetAPI === 'custom';
+            const needAIMemorySummaryTask = aiMemorySummaryEnabled && aiMemorySummaryTargetAPI === 'custom';
+
+            if (!needTableRecordsTask && !needAIMemorySummaryTask) {
+                console.log('[CustomAPITaskQueue] ℹ️ 没有功能配置为自定义API模式，跳过任务添加');
+                return;
+            }
+
+            // 🔧 新增：获取最新的AI消息
+            const chat = context?.chat;
+            if (!chat || !Array.isArray(chat) || chat.length === 0) {
+                console.log('[CustomAPITaskQueue] ⚠️ 无法获取聊天数据');
+                return;
+            }
+
+            // 获取最后一条消息
+            const lastMessage = chat[chat.length - 1];
+            if (!lastMessage || lastMessage.is_user === true) {
+                console.log('[CustomAPITaskQueue] ℹ️ 最后一条消息不是AI消息，跳过任务添加');
+                return;
+            }
+
+            // 获取消息内容
+            const messageContent = lastMessage.mes || '';
+
+            // 检查消息字数是否达到阈值
+            const messageLength = messageContent.length;
+            const minLength = this.getMinMessageLength();
+
+            console.log(`[CustomAPITaskQueue] 📏 消息字数检查: ${messageLength}字 (阈值: ${minLength}字)`);
+
+            if (messageLength < minLength) {
+                console.log(`[CustomAPITaskQueue] ⚠️ 消息字数(${messageLength})低于阈值(${minLength})，跳过任务添加`);
+                this.showLowLengthNotification(messageLength, minLength);
+                return;
+            }
+
+            // 🔧 修复：根据配置添加相应的任务
+            if (needTableRecordsTask) {
+                console.log('[CustomAPITaskQueue] ➕ 添加数据表格自定义API任务到队列（来源：generation_ended）');
+                this.addTask({
+                    type: 'INFOBAR_DATA',
+                    data: { content: messageContent },
+                    source: 'generation_ended'
+                });
+            }
+
+            // 🔧 新增：如果AI记忆总结配置为自定义API，添加AI记忆总结任务
+            if (needAIMemorySummaryTask) {
+                console.log('[CustomAPITaskQueue] ➕ 添加AI记忆总结自定义API任务到队列（来源：generation_ended）');
+                this.addTask({
+                    type: 'AI_MEMORY_SUMMARY',
+                    data: { content: messageContent },
+                    source: 'generation_ended'
+                });
+            }
 
         } catch (error) {
             console.error('[CustomAPITaskQueue] ❌ 处理生成结束事件失败:', error);
@@ -868,8 +1067,9 @@ ${content}
 
     /**
      * 🆕 从localStorage恢复延迟生成状态
+     * @param {boolean} processImmediately - 是否立即处理延迟任务（默认false）
      */
-    async restoreDelayedGenerationState() {
+    async restoreDelayedGenerationState(processImmediately = false) {
         try {
             const context = SillyTavern?.getContext?.();
             const chatId = context?.chatId;
@@ -883,7 +1083,10 @@ ${content}
             const savedState = localStorage.getItem(stateKey);
 
             if (!savedState) {
-                console.log('[CustomAPITaskQueue] ℹ️ 未找到保存的延迟生成状态');
+                console.log('[CustomAPITaskQueue] ℹ️ 未找到保存的延迟生成状态，初始化为空');
+                // 🔧 修复：新聊天时重置计数器
+                this.aiMessageCounter = 0;
+                this.delayedTaskQueue = [];
                 return;
             }
 
@@ -895,8 +1098,8 @@ ${content}
 
             console.log(`[CustomAPITaskQueue] ✅ 延迟生成状态已恢复 (消息计数: ${this.aiMessageCounter}, 延迟任务: ${this.delayedTaskQueue.length})`);
 
-            // 如果有延迟任务，检查是否需要立即处理
-            if (this.delayedTaskQueue.length > 0) {
+            // 🔧 修复：只有明确要求时才立即处理
+            if (processImmediately && this.delayedTaskQueue.length > 0) {
                 console.log('[CustomAPITaskQueue] 🔄 检查恢复的延迟任务是否需要处理...');
 
                 const extensionSettings = context?.extensionSettings?.['Information bar integration tool'] || {};
@@ -904,11 +1107,16 @@ ${content}
                 const delayFloors = parseInt(apiConfig.delayFloors) || 1;
 
                 // 处理延迟队列
-                this.processDelayedTasks(delayFloors);
+                await this.processDelayedTasks(delayFloors);
+            } else if (this.delayedTaskQueue.length > 0) {
+                console.log('[CustomAPITaskQueue] ⏸️ 延迟任务已恢复，等待新消息触发处理');
             }
 
         } catch (error) {
             console.error('[CustomAPITaskQueue] ❌ 恢复延迟生成状态失败:', error);
+            // 🔧 修复：出错时重置为安全状态
+            this.aiMessageCounter = 0;
+            this.delayedTaskQueue = [];
         }
     }
 

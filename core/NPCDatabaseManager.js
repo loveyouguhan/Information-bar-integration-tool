@@ -1391,5 +1391,127 @@ export class NPCDatabaseManager {
     async getAllNpcsForCurrentChat() {
         return await this.getCurrentChatNpcs();
     }
+
+    /**
+     * 🆕 合并两个NPC
+     * @param {string} npcId1 - 第一个NPC的ID（保留）
+     * @param {string} npcId2 - 第二个NPC的ID（删除）
+     * @param {Object} mergedData - 合并后的数据 {name: string, fields: {}}
+     * @returns {boolean} 是否合并成功
+     */
+    async mergeNPCs(npcId1, npcId2, mergedData) {
+        try {
+            console.log('[NPCDB] 🔀 开始合并NPC:', { npcId1, npcId2, mergedData });
+
+            // 验证NPC存在
+            if (!this.db.npcs[npcId1] || !this.db.npcs[npcId2]) {
+                console.error('[NPCDB] ❌ NPC不存在:', { npcId1, npcId2 });
+                return false;
+            }
+
+            const npc1 = this.db.npcs[npcId1];
+            const npc2 = this.db.npcs[npcId2];
+
+            console.log('[NPCDB] 📊 合并前的NPC数据:', {
+                npc1: { id: npc1.id, name: npc1.name, fields: Object.keys(npc1.fields || {}).length },
+                npc2: { id: npc2.id, name: npc2.name, fields: Object.keys(npc2.fields || {}).length }
+            });
+
+            // 更新第一个NPC的数据
+            const oldName = npc1.name;
+            npc1.name = mergedData.name;
+            npc1.fields = mergedData.fields;
+            npc1.updatedAt = Date.now();
+
+            // 合并统计数据（累加出现次数，取最新的时间）
+            npc1.appearCount = (npc1.appearCount || 0) + (npc2.appearCount || 0);
+            npc1.lastSeen = Math.max(npc1.lastSeen || 0, npc2.lastSeen || 0);
+
+            // 如果npc2的最后出现时间更新，使用npc2的消息ID和聊天ID
+            if (npc2.lastSeen > (npc1.lastSeen || 0)) {
+                npc1.lastMessageId = npc2.lastMessageId;
+                npc1.lastChatId = npc2.lastChatId;
+            }
+
+            console.log('[NPCDB] ✅ 已更新NPC1数据:', {
+                id: npc1.id,
+                name: npc1.name,
+                fields: Object.keys(npc1.fields).length,
+                appearCount: npc1.appearCount
+            });
+
+            // 更新名称映射（如果名称改变了）
+            if (oldName !== mergedData.name) {
+                // 删除旧名称映射
+                if (this.db.nameToId[oldName] === npcId1) {
+                    delete this.db.nameToId[oldName];
+                }
+                // 添加新名称映射
+                this.db.nameToId[mergedData.name] = npcId1;
+                console.log('[NPCDB] 🔄 已更新名称映射:', oldName, '->', mergedData.name);
+            }
+
+            // 删除第二个NPC
+            const npc2Name = npc2.name;
+            delete this.db.npcs[npcId2];
+
+            // 从名称映射中删除npc2
+            if (this.db.nameToId[npc2Name] === npcId2) {
+                delete this.db.nameToId[npc2Name];
+            }
+
+            console.log('[NPCDB] 🗑️ 已删除NPC2:', npcId2, npc2Name);
+
+            // 🌍 同步删除世界书中的NPC2条目
+            try {
+                const worldBookManager = window.SillyTavernInfobar?.modules?.worldBookManager;
+                if (worldBookManager && typeof worldBookManager.deleteNPCWorldBookEntries === 'function') {
+                    console.log('[NPCDB] 🌍 尝试删除世界书中的NPC2条目...');
+                    const deleteResult = await worldBookManager.deleteNPCWorldBookEntries(npcId2, npc2Name);
+
+                    if (deleteResult.success && deleteResult.deletedCount > 0) {
+                        console.log(`[NPCDB] ✅ 成功删除世界书中的 ${deleteResult.deletedCount} 个NPC2相关条目`);
+                    }
+                }
+            } catch (worldBookError) {
+                console.warn('[NPCDB] ⚠️ 删除世界书条目时发生错误:', worldBookError);
+            }
+
+            // 保存数据库
+            await this.save();
+
+            console.log('[NPCDB] ✅ NPC合并完成:', {
+                mergedId: npcId1,
+                mergedName: mergedData.name,
+                deletedId: npcId2,
+                deletedName: npc2Name
+            });
+
+            // 触发事件
+            this.eventSystem?.emit('npc:merged', {
+                mergedId: npcId1,
+                mergedName: mergedData.name,
+                deletedId: npcId2,
+                deletedName: npc2Name,
+                chatId: this.currentChatId,
+                timestamp: Date.now()
+            });
+
+            this.eventSystem?.emit('npc:db:updated', {
+                action: 'merge',
+                mergedId: npcId1,
+                deletedId: npcId2,
+                count: Object.keys(this.db.npcs).length,
+                timestamp: Date.now()
+            });
+
+            return true;
+
+        } catch (error) {
+            console.error('[NPCDB] ❌ 合并NPC失败:', error);
+            this.errorCount++;
+            return false;
+        }
+    }
 }
 

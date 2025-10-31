@@ -872,6 +872,12 @@ class InformationBarIntegrationTool {
 
         console.log('[InfoBarTool] ℹ️ 消息事件由EventSystem统一处理，不再直接转发');
 
+        // 🔧 新增：监听设置更新事件，动态更新数据表格按钮
+        eventSource.on(event_types.SETTINGS_UPDATED, () => {
+            console.log('[InfoBarTool] ⚙️ 收到设置更新事件，检查数据表格按钮状态');
+            this.updateDataTableButton();
+        });
+
         console.log('[InfoBarTool] 🔗 SillyTavern事件绑定完成');
     }
 
@@ -974,6 +980,66 @@ class InformationBarIntegrationTool {
         } catch (error) {
             console.error('[InfoBarTool] ❌ 创建用户界面失败:', error);
             this.handleError(error);
+        }
+    }
+
+    /**
+     * 🔧 新增：动态更新数据表格按钮
+     */
+    updateDataTableButton() {
+        try {
+            const context = SillyTavern.getContext();
+            const extensionSettings = context.extensionSettings;
+            const configs = extensionSettings['Information bar integration tool'] || {};
+            const basicSettings = configs.basic || {};
+            const tableRecordsEnabled = basicSettings.tableRecords?.enabled !== false;
+
+            // 查找现有的数据表格菜单项
+            const existingMenuItem = document.querySelector('#infobar-table-menu-item');
+
+            if (tableRecordsEnabled && !existingMenuItem) {
+                // 需要显示按钮，但按钮不存在 - 创建按钮
+                console.log('[InfoBarTool] ➕ 数据表格功能已启用，添加菜单项');
+
+                // 查找扩展菜单
+                const extensionMenu = document.querySelector('#extensionsMenu') ||
+                                    document.querySelector('.dropdown-menu');
+
+                if (extensionMenu) {
+                    // 创建"数据表格"菜单项
+                    const tableMenuItem = document.createElement('a');
+                    tableMenuItem.id = 'infobar-table-menu-item';
+                    tableMenuItem.className = 'dropdown-item';
+                    tableMenuItem.href = '#';
+                    tableMenuItem.innerHTML = '<i class="fa-solid fa-table"></i> 数据表格';
+
+                    tableMenuItem.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        this.dataTable.show();
+                    });
+
+                    // 在"信息助手"菜单项后面插入
+                    const settingsMenuItem = document.querySelector('#infobar-settings-menu-item');
+                    if (settingsMenuItem && settingsMenuItem.nextSibling) {
+                        extensionMenu.insertBefore(tableMenuItem, settingsMenuItem.nextSibling);
+                    } else {
+                        extensionMenu.appendChild(tableMenuItem);
+                    }
+
+                    console.log('[InfoBarTool] ✅ 数据表格菜单项已添加');
+                }
+            } else if (!tableRecordsEnabled && existingMenuItem) {
+                // 需要隐藏按钮，且按钮存在 - 移除按钮
+                console.log('[InfoBarTool] ➖ 数据表格功能已禁用，移除菜单项');
+                existingMenuItem.remove();
+                console.log('[InfoBarTool] ✅ 数据表格菜单项已移除');
+            } else {
+                // 状态一致，无需更新
+                console.log('[InfoBarTool] ℹ️ 数据表格按钮状态已是最新，无需更新');
+            }
+
+        } catch (error) {
+            console.error('[InfoBarTool] ❌ 更新数据表格按钮失败:', error);
         }
     }
 

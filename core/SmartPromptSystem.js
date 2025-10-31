@@ -839,17 +839,17 @@ ${panelRulesSection}
         // 生成面板数据模板
         const panelDataTemplate = tableRecordsEnabled ? this.generatePanelDataTemplate(enabledPanels) : '';
 
-        // 🔧 修复：检查是否为自定义API模式，决定使用哪种数据信息生成方法
-        const isCustomAPIMode = this.getOutputMode() === '自定义API';
+        // 🔧 修复：检查数据表格是否为自定义API模式，决定使用哪种数据信息生成方法
+        const isCustomAPIMode = this.getOutputMode({ forTableRecords: true }) === '自定义API';
         let currentDataInfo;
 
         if (isCustomAPIMode) {
             // 自定义API模式：只生成数据状态部分，不包含记忆增强内容
-            console.log('[SmartPromptSystem] 🔧 自定义API模式：只生成数据状态部分');
+            console.log('[SmartPromptSystem] 🔧 数据表格使用自定义API模式：只生成数据状态部分');
             currentDataInfo = await this.generateDataStatusOnly(memoryEnhancedData, updateStrategy);
         } else {
             // 主API模式：生成完整的记忆增强数据信息
-            console.log('[SmartPromptSystem] 🔧 主API模式：生成完整记忆增强数据');
+            console.log('[SmartPromptSystem] 🔧 数据表格使用主API模式：生成完整记忆增强数据');
             currentDataInfo = await this.generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy);
         }
 
@@ -886,17 +886,17 @@ ${panelRulesSection}
         // 🔧 修复：只有在启用表格记录时才使用增量更新模板
         const incrementalTemplate = tableRecordsEnabled ? this.getIncrementalUpdateTemplate() : '';
 
-        // 🔧 修复：检查是否为自定义API模式，决定使用哪种数据信息生成方法
-        const isCustomAPIMode = this.getOutputMode() === '自定义API';
+        // 🔧 修复：检查数据表格是否为自定义API模式，决定使用哪种数据信息生成方法
+        const isCustomAPIMode = this.getOutputMode({ forTableRecords: true }) === '自定义API';
         let currentDataInfo;
 
         if (isCustomAPIMode) {
             // 自定义API模式：只生成数据状态部分，不包含记忆增强内容
-            console.log('[SmartPromptSystem] 🔧 自定义API模式：只生成数据状态部分');
+            console.log('[SmartPromptSystem] 🔧 数据表格使用自定义API模式：只生成数据状态部分');
             currentDataInfo = await this.generateDataStatusOnly(memoryEnhancedData, updateStrategy);
         } else {
             // 主API模式：生成完整的记忆增强数据信息
-            console.log('[SmartPromptSystem] 🔧 主API模式：生成完整记忆增强数据');
+            console.log('[SmartPromptSystem] 🔧 数据表格使用主API模式：生成完整记忆增强数据');
             currentDataInfo = await this.generateMemoryEnhancedDataInfo(memoryEnhancedData, updateStrategy);
         }
 
@@ -1403,13 +1403,14 @@ ${panelRulesSection}
                     console.log('[SmartPromptSystem] 🛡️ 破甲提示词已添加到提示词最顶部');
                 }
 
-                // 检测输出模式
-                const outputMode = this.getOutputMode();
+                // 🔧 修复：检测数据表格的输出模式
+                const outputMode = this.getOutputMode({ forTableRecords: true });
                 prompt = prompt.replace('{{OUTPUT_MODE}}', outputMode);
 
                 console.log('[SmartPromptSystem] 🔍 模板替换结果:');
                 console.log('原始模板长度:', this.promptTemplate.length);
                 console.log('更新策略:', updateStrategy.type, `(数据覆盖率: ${updateStrategy.dataPercentage}%)`);
+                console.log('数据表格输出模式:', outputMode);
                 console.log('最终提示词长度:', prompt.length);
             }
 
@@ -1508,14 +1509,41 @@ ${aiMemoryInstruction}
 
     /**
      * 检测当前输出模式（主API/自定义API）
+     * 🔧 修复：根据当前正在生成的提示词类型返回正确的输出模式
+     * @param {Object} options - 选项
+     * @param {boolean} options.forTableRecords - 是否为数据表格生成提示词
+     * @param {boolean} options.forAIMemorySummary - 是否为AI记忆总结生成提示词
      */
-    getOutputMode() {
+    getOutputMode(options = {}) {
         try {
-            // 检查是否启用了自定义API
+            const {
+                forTableRecords = false,
+                forAIMemorySummary = false
+            } = options;
+
             const extensionSettings = this.context.extensionSettings['Information bar integration tool'] || {};
             const apiConfig = extensionSettings.apiConfig || {};
+            const isGlobalCustomAPIEnabled = apiConfig.enabled && apiConfig.apiKey && apiConfig.model;
 
-            if (apiConfig.enabled && apiConfig.apiKey && apiConfig.model) {
+            // 🔧 新增：如果指定了功能类型，根据该功能的API模式配置返回
+            if (forTableRecords) {
+                const basicSettings = extensionSettings.basic || {};
+                const tableRecordsAPIMode = basicSettings.tableRecords?.apiMode || 'auto';
+                const targetAPI = this.getTargetAPI(tableRecordsAPIMode, isGlobalCustomAPIEnabled);
+                console.log('[SmartPromptSystem] 🔍 数据表格输出模式:', targetAPI === 'custom' ? '自定义API' : '主API');
+                return targetAPI === 'custom' ? '自定义API' : '主API';
+            }
+
+            if (forAIMemorySummary) {
+                const memoryEnhancementSettings = extensionSettings.memoryEnhancement?.ai || {};
+                const aiMemorySummaryAPIMode = memoryEnhancementSettings.apiMode || 'auto';
+                const targetAPI = this.getTargetAPI(aiMemorySummaryAPIMode, isGlobalCustomAPIEnabled);
+                console.log('[SmartPromptSystem] 🔍 AI记忆总结输出模式:', targetAPI === 'custom' ? '自定义API' : '主API');
+                return targetAPI === 'custom' ? '自定义API' : '主API';
+            }
+
+            // 🔧 修复：如果没有指定功能类型，返回全局配置
+            if (isGlobalCustomAPIEnabled) {
                 return '自定义API';
             } else {
                 return '主API';
@@ -2975,8 +3003,8 @@ ${aiMemoryInstruction}
         // 🔧 新增：检查是否为增量更新模式
         const isIncrementalUpdate = updateStrategy && updateStrategy.type === 'incremental';
 
-        // 🚀 新增：检查是否为自定义API模式，需要加强格式约束
-        const isCustomAPIMode = this.getOutputMode() === '自定义API';
+        // 🚀 新增：检查数据表格是否为自定义API模式，需要加强格式约束
+        const isCustomAPIMode = this.getOutputMode({ forTableRecords: true }) === '自定义API';
 
         if (isIncrementalUpdate) {
             // 增量更新模式：输出简化的约束说明
@@ -5387,28 +5415,70 @@ update plot(1 {"4":"新的剧情发展"}) ← 更新现有剧情数据
             const extensionSettings = this.context.extensionSettings['Information bar integration tool'] || {};
             const basicSettings = extensionSettings.basic || {};
             const tableRecordsEnabled = basicSettings.tableRecords?.enabled !== false;
-            
+
+            // 🔧 新增：检查数据表格的API模式配置
+            const tableRecordsAPIMode = basicSettings.tableRecords?.apiMode || 'auto';
+            const apiConfig = extensionSettings.apiConfig || {};
+            const isGlobalCustomAPIEnabled = apiConfig.enabled && apiConfig.apiKey && apiConfig.model;
+
+            // 判断数据表格应该使用哪个API
+            let tableRecordsTargetAPI = 'main';
+            if (tableRecordsAPIMode === 'custom') {
+                tableRecordsTargetAPI = 'custom';
+            } else if (tableRecordsAPIMode === 'main') {
+                tableRecordsTargetAPI = 'main';
+            } else if (tableRecordsAPIMode === 'auto') {
+                tableRecordsTargetAPI = isGlobalCustomAPIEnabled ? 'custom' : 'main';
+            }
+
+            // 🔧 新增：只有当数据表格目标API为主API时，才需要向主API注入数据表格输出规则
+            const shouldInjectTableRecordsToMainAPI = tableRecordsEnabled && tableRecordsTargetAPI === 'main';
+
             // 检查是否启用AI记忆总结
             const memoryEnhancementSettings = extensionSettings?.memoryEnhancement?.ai || {};
             const aiMemorySummaryEnabled = memoryEnhancementSettings.enabled === true;
-            
+
+            // 🔧 新增：检查AI记忆总结的API模式配置
+            const aiMemorySummaryAPIMode = memoryEnhancementSettings.apiMode || 'auto';
+
+            // 判断AI记忆总结应该使用哪个API
+            let aiMemorySummaryTargetAPI = 'main';
+            if (aiMemorySummaryAPIMode === 'custom') {
+                aiMemorySummaryTargetAPI = 'custom';
+            } else if (aiMemorySummaryAPIMode === 'main') {
+                aiMemorySummaryTargetAPI = 'main';
+            } else if (aiMemorySummaryAPIMode === 'auto') {
+                aiMemorySummaryTargetAPI = isGlobalCustomAPIEnabled ? 'custom' : 'main';
+            }
+
+            // 🔧 新增：只有当AI记忆总结目标API为主API时，才需要向主API注入AI记忆总结输出规则
+            const shouldInjectAIMemorySummaryToMainAPI = aiMemorySummaryEnabled && aiMemorySummaryTargetAPI === 'main';
+
             console.log('[SmartPromptSystem] 🔧 输出要求配置:', {
                 tableRecordsEnabled,
-                aiMemorySummaryEnabled
+                tableRecordsAPIMode,
+                tableRecordsTargetAPI,
+                shouldInjectTableRecordsToMainAPI,
+                aiMemorySummaryEnabled,
+                aiMemorySummaryAPIMode,
+                aiMemorySummaryTargetAPI,
+                shouldInjectAIMemorySummaryToMainAPI
             });
-            
-            // 🔧 修复：如果都未启用，清除主API输出规则
-            if (!tableRecordsEnabled && !aiMemorySummaryEnabled) {
-                console.log('[SmartPromptSystem] ℹ️ 表格记录和AI记忆总结都未启用，清除主API输出规则');
+
+            // 🔧 修复：如果都不需要向主API注入，清除主API输出规则
+            if (!shouldInjectTableRecordsToMainAPI && !shouldInjectAIMemorySummaryToMainAPI) {
+                console.log('[SmartPromptSystem] ℹ️ 数据表格和AI记忆总结都不需要向主API注入，清除主API输出规则');
                 await this.clearMainAPIProhibitionRules();
                 return;
             }
-            
-            // 构建必须输出规则
+
+            // 🔧 修复：构建必须输出规则（支持同时注入数据表格和AI记忆总结）
             let requiredPrompt = '';
-            
-            if (tableRecordsEnabled) {
-                requiredPrompt = `
+            const requiredSections = [];
+
+            // 🔧 修复：如果数据表格目标API为主API，添加数据表格输出规则
+            if (shouldInjectTableRecordsToMainAPI) {
+                requiredSections.push(`
 **🚨【重要要求：必须输出特定标签并遵循格式规范】🚨**
 
 请严格遵守以下输出要求：
@@ -5526,10 +5596,13 @@ update plot(1 {"4":"新的剧情发展"}) ← 更新现有剧情数据
 [剧情标签结束]
 
 aiThinkProcess标签（独立输出，必须先输出）
-infobar_data标签（独立输出，必须后输出）`;
-            } else if (aiMemorySummaryEnabled) {
-                // 如果只启用了AI记忆总结，只要求输出AI记忆总结标签
-                requiredPrompt = `
+infobar_data标签（独立输出，必须后输出）`);
+                console.log('[SmartPromptSystem] ✅ 已添加数据表格输出规则到主API');
+            }
+
+            // 🔧 修复：如果AI记忆总结目标API为主API，添加AI记忆总结输出规则
+            if (shouldInjectAIMemorySummaryToMainAPI) {
+                requiredSections.push(`
 **🚨【重要要求：必须输出AI记忆总结】🚨**
 
 请在每次回复的最后输出AI记忆总结：
@@ -5552,7 +5625,14 @@ infobar_data标签（独立输出，必须后输出）`;
 - 提取核心剧情要点和重要对话
 - 突出角色行为和情感变化
 - 保持客观中性的叙述
-- 长度控制在100-200字`;
+- 长度控制在100-200字`);
+                console.log('[SmartPromptSystem] ✅ 已添加AI记忆总结输出规则到主API');
+            }
+
+            // 🔧 修复：合并所有规则
+            if (requiredSections.length > 0) {
+                requiredPrompt = requiredSections.join('\n\n---\n\n');
+                console.log('[SmartPromptSystem] 📝 主API输出规则已合并，包含 ' + requiredSections.length + ' 个部分');
             }
             
             requiredPrompt = requiredPrompt.trim();
