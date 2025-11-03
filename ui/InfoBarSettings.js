@@ -45143,9 +45143,8 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
             // 🔧 新增：使用NovelChunkAnalyzer进行智能分析和分块
             updateProgress(10, '🧠 正在初始化智能分析器...', '准备分析小说结构');
 
-            // 动态导入NovelChunkAnalyzer（使用绝对路径）
-            const extensionPath = 'scripts/extensions/third-party/Information bar integration tool';
-            const { NovelChunkAnalyzer } = await import(`/${extensionPath}/core/NovelChunkAnalyzer.js`);
+            // 动态导入NovelChunkAnalyzer（使用相对路径）
+            const { NovelChunkAnalyzer } = await import('../core/NovelChunkAnalyzer.js');
             const chunkAnalyzer = new NovelChunkAnalyzer();
 
             // 🔧 修复:等待NovelChunkAnalyzer初始化完成(包括NovelAnalyzer的加载)
