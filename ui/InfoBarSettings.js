@@ -45148,6 +45148,9 @@ update （"张三，状态"，"愤怒"）；//因为发生了冲突
             const { NovelChunkAnalyzer } = await import(`/${extensionPath}/core/NovelChunkAnalyzer.js`);
             const chunkAnalyzer = new NovelChunkAnalyzer();
 
+            // 🔧 修复:等待NovelChunkAnalyzer初始化完成(包括NovelAnalyzer的加载)
+            await chunkAnalyzer.ensureInitialized();
+
             // 生成小说ID
             const novelId = `novel_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
