@@ -1288,23 +1288,41 @@ ${content}
         return new Promise((resolve) => {
             try {
                 console.log('[CustomAPITaskQueue] 💬 显示数据生成确认对话框');
-                
+
                 // 🔧 检测屏幕尺寸，判断是否为移动端
                 const isMobile = window.innerWidth <= 768;
                 console.log(`[CustomAPITaskQueue] 📱 检测到设备类型: ${isMobile ? '移动端' : '桌面端'}, 屏幕宽度: ${window.innerWidth}px`);
-                
+
+                // 🔧 修复：移动端使用遮罩层+Flexbox居中，避免transform导致的视口缩放问题
+                let overlay = null;
+                if (isMobile) {
+                    // 创建遮罩层
+                    overlay = document.createElement('div');
+                    overlay.className = 'custom-api-confirmation-overlay';
+                    overlay.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0, 0, 0, 0.5);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 9999;
+                        animation: fadeIn 0.2s ease-out;
+                    `;
+                }
+
                 // 创建确认对话框
                 const dialog = document.createElement('div');
                 dialog.className = 'custom-api-confirmation-toast';
-                
+
                 // 🔧 移动端和桌面端使用不同的定位策略
                 if (isMobile) {
-                    // 移动端：居中显示，尺寸更紧凑
+                    // 移动端：使用Flexbox居中，避免transform
                     dialog.style.cssText = `
-                        position: fixed;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
+                        position: relative;
                         background: var(--theme-bg-primary, #2a2a2a);
                         border: 2px solid var(--theme-primary-color, #4CAF50);
                         border-radius: 8px;
@@ -1312,8 +1330,7 @@ ${content}
                         width: calc(100vw - 40px);
                         max-width: 320px;
                         box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-                        z-index: 10000;
-                        animation: fadeInScale 0.3s ease-out;
+                        animation: scaleIn 0.3s ease-out;
                     `;
                 } else {
                     // 桌面端：右上角显示
@@ -1403,7 +1420,7 @@ ${content}
                                 transform: translateX(0);
                             }
                         }
-                        
+
                         @keyframes slideOutRight {
                             from {
                                 opacity: 1;
@@ -1414,27 +1431,46 @@ ${content}
                                 transform: translateX(100px);
                             }
                         }
-                        
-                        /* 移动端动画 */
-                        @keyframes fadeInScale {
+
+                        /* 🔧 修复：移动端动画 - 使用scale而非translate，避免视口缩放 */
+                        @keyframes scaleIn {
                             from {
                                 opacity: 0;
-                                transform: translate(-50%, -50%) scale(0.9);
+                                transform: scale(0.9);
                             }
                             to {
                                 opacity: 1;
-                                transform: translate(-50%, -50%) scale(1);
+                                transform: scale(1);
                             }
                         }
-                        
-                        @keyframes fadeOutScale {
+
+                        @keyframes scaleOut {
                             from {
                                 opacity: 1;
-                                transform: translate(-50%, -50%) scale(1);
+                                transform: scale(1);
                             }
                             to {
                                 opacity: 0;
-                                transform: translate(-50%, -50%) scale(0.9);
+                                transform: scale(0.9);
+                            }
+                        }
+
+                        /* 🔧 修复：遮罩层淡入淡出动画 */
+                        @keyframes fadeIn {
+                            from {
+                                opacity: 0;
+                            }
+                            to {
+                                opacity: 1;
+                            }
+                        }
+
+                        @keyframes fadeOut {
+                            from {
+                                opacity: 1;
+                            }
+                            to {
+                                opacity: 0;
                             }
                         }
                         
@@ -1464,24 +1500,36 @@ ${content}
                         }
                     </style>
                 `;
-                
-                // 添加到页面
-                document.body.appendChild(dialog);
-                
+
+                // 🔧 修复：移动端添加到遮罩层，桌面端直接添加到body
+                if (isMobile && overlay) {
+                    overlay.appendChild(dialog);
+                    document.body.appendChild(overlay);
+                } else {
+                    document.body.appendChild(dialog);
+                }
+
                 // 按钮事件
                 const btnCancel = dialog.querySelector('.btn-cancel');
                 const btnConfirm = dialog.querySelector('.btn-confirm');
-                
+
                 const closeDialog = (confirmed) => {
-                    // 🔧 根据设备类型使用不同的退出动画
-                    dialog.style.animation = isMobile 
-                        ? 'fadeOutScale 0.2s ease-in'
-                        : 'slideOutRight 0.2s ease-in';
-                    setTimeout(() => {
-                        if (dialog.parentNode) {
-                            dialog.remove();
-                        }
-                    }, 200);
+                    // 🔧 修复：移动端移除遮罩层，桌面端移除对话框
+                    if (isMobile && overlay) {
+                        overlay.style.animation = 'fadeOut 0.2s ease-in';
+                        setTimeout(() => {
+                            if (overlay.parentNode) {
+                                overlay.remove();
+                            }
+                        }, 200);
+                    } else {
+                        dialog.style.animation = 'slideOutRight 0.2s ease-in';
+                        setTimeout(() => {
+                            if (dialog.parentNode) {
+                                dialog.remove();
+                            }
+                        }, 200);
+                    }
                     resolve(confirmed);
                 };
                 
