@@ -57,9 +57,8 @@ export class NovelChunkAnalyzer {
         }
 
         try {
-            // 动态导入NovelAnalyzer
-            const extensionPath = 'scripts/extensions/third-party/Information bar integration tool';
-            const { NovelAnalyzer } = await import(`/${extensionPath}/core/NovelAnalyzer.js`);
+            // 动态导入NovelAnalyzer（使用相对路径）
+            const { NovelAnalyzer } = await import('./NovelAnalyzer.js');
             this.novelAnalyzer = new NovelAnalyzer();
             this._initialized = true;
             console.log('[NovelChunkAnalyzer] ✅ NovelAnalyzer已加载');
