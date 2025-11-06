@@ -1071,14 +1071,20 @@ ${messageContent}
                     throw new Error(`自定义API配置不完整，缺少：${missingConfigs.join('、')}。请在扩展设置中完整配置API信息。`);
                 }
 
+                // 🔧 修复：确保maxTokens和temperature正确传递
+                const maxTokens = apiConfig.maxTokens || 20000;
+                const temperature = apiConfig.temperature || 0.7;
+
                 console.log('[SummaryManager] 📡 使用API配置:', {
                     provider: apiConfig.provider,
                     model: apiConfig.model,
                     baseUrl: apiConfig.baseUrl,
                     endpoint: apiConfig.endpoint,
                     format: apiConfig.format,
-                    maxTokens: apiConfig.maxTokens,
-                    temperature: apiConfig.temperature,
+                    userConfiguredMaxTokens: apiConfig.maxTokens,
+                    actualMaxTokens: maxTokens,
+                    userConfiguredTemperature: apiConfig.temperature,
+                    actualTemperature: temperature,
                     attempt: attempt,
                     hasApiKey: !!apiConfig.apiKey
                 });
@@ -1101,8 +1107,8 @@ ${messageContent}
                         endpoint: apiConfig.endpoint,
                         baseUrl: apiConfig.baseUrl || apiConfig.endpoint,
                         format: apiConfig.format,
-                        maxTokens: apiConfig.maxTokens || 20000,
-                        temperature: apiConfig.temperature || 0.7,
+                        maxTokens: maxTokens,  // 🔧 修复：使用确定的maxTokens值
+                        temperature: temperature,  // 🔧 修复：使用确定的temperature值
                         headers: apiConfig.headers,
                         enabled: apiConfig.enabled,
                         retryCount: apiConfig.retryCount
